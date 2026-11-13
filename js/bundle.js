@@ -48428,6 +48428,14 @@ void main() {
       this.pointerDownScreen = { x: 0, y: 0 };
       this.activeMapUrl = "assets/maps/campus-map.jpg";
       this.groundTexture = null;
+      this.navTool = "orbit";
+      this.keysPressed = /* @__PURE__ */ new Set();
+      this.lastFrameTime = 0;
+      this.cameraAnim = null;
+      this.isLookDragging = false;
+      this.lookPrevPointer = { x: 0, y: 0 };
+      this.lookYaw = 0;
+      this.lookPitch = 0;
       this.bindGlobalListeners();
     }
     init() {
@@ -48436,7 +48444,7 @@ void main() {
       const height = this.container.clientHeight || 600;
       this.scene = new Scene();
       this.applyThemeColors();
-      this.camera = new PerspectiveCamera(48, width / height, 0.5, 2500);
+      this.camera = new PerspectiveCamera(48, width / height, 0.08, 3e3);
       this.camera.position.set(0, 140, 160);
       this.renderer = new WebGLRenderer({
         antialias: true,
@@ -48449,11 +48457,17 @@ void main() {
       this.container.appendChild(this.renderer.domElement);
       this.controls = new OrbitControls(this.camera, this.renderer.domElement);
       this.controls.enableDamping = true;
-      this.controls.dampingFactor = 0.08;
-      this.controls.maxPolarAngle = Math.PI * 0.485;
-      this.controls.minDistance = 4;
-      this.controls.maxDistance = 900;
+      this.controls.dampingFactor = 0.12;
+      this.controls.screenSpacePanning = true;
+      this.controls.zoomToCursor = true;
+      this.controls.zoomSpeed = 1.25;
+      this.controls.panSpeed = 1.05;
+      this.controls.rotateSpeed = 0.85;
+      this.controls.maxPolarAngle = Math.PI * 0.495;
+      this.controls.minDistance = 0.25;
+      this.controls.maxDistance = 1200;
       this.controls.target.set(0, 0, 0);
+      this.applyNavToolConfig();
       const hemiLight = new HemisphereLight(16776171, 3359061, 1.15);
       this.scene.add(hemiLight);
       const dirLight = new DirectionalLight(16777215, 1.1);
@@ -48468,16 +48482,59 @@ void main() {
       this.scene.add(this.devicesGroup);
       this.scene.add(this.cablesGroup);
       const dom = this.renderer.domElement;
+      dom.addEventListener("contextmenu", (e) => e.preventDefault());
       dom.addEventListener("pointerdown", (e) => {
+        if (!this.isActive) return;
+        this.cameraAnim = null;
         this.pointerDownScreen = { x: e.clientX, y: e.clientY };
+        this.container.classList.add("is-dragging");
+        if (this.navTool === "look" && e.button === 0) {
+          this.isLookDragging = true;
+          this.lookPrevPointer = { x: e.clientX, y: e.clientY };
+          const dir = new Vector3();
+          this.camera.getWorldDirection(dir);
+          this.lookYaw = Math.atan2(dir.x, dir.z);
+          this.lookPitch = Math.asin(Math.max(-0.99, Math.min(0.99, dir.y)));
+          dom.setPointerCapture?.(e.pointerId);
+        }
       });
+      dom.addEventListener("pointermove", (e) => {
+        if (!this.isActive || !this.isLookDragging) return;
+        const dx = e.clientX - this.lookPrevPointer.x;
+        const dy = e.clientY - this.lookPrevPointer.y;
+        this.lookPrevPointer = { x: e.clientX, y: e.clientY };
+        const sensitivity = 42e-4;
+        this.lookYaw -= dx * sensitivity;
+        this.lookPitch = Math.max(-Math.PI * 0.46, Math.min(Math.PI * 0.46, this.lookPitch + dy * sensitivity));
+        const lookDist = Math.max(1, this.camera.position.distanceTo(this.controls.target));
+        const newDir = new Vector3(
+          Math.cos(this.lookPitch) * Math.sin(this.lookYaw),
+          Math.sin(this.lookPitch),
+          Math.cos(this.lookPitch) * Math.cos(this.lookYaw)
+        );
+        this.controls.target.copy(this.camera.position).addScaledVector(newDir, lookDist);
+      });
+      const endDrag = (e) => {
+        this.container.classList.remove("is-dragging");
+        if (this.isLookDragging) {
+          this.isLookDragging = false;
+          dom.releasePointerCapture?.(e.pointerId);
+        }
+      };
       dom.addEventListener("pointerup", (e) => {
+        const wasLookDragging = this.isLookDragging;
+        endDrag(e);
         if (!this.isActive) return;
         const dist = Math.hypot(e.clientX - this.pointerDownScreen.x, e.clientY - this.pointerDownScreen.y);
-        if (dist > 5) return;
+        if (dist > 5 || wasLookDragging) return;
         if (e.button === 0) {
           this.handleCanvasClick(e);
         }
+      });
+      dom.addEventListener("pointercancel", endDrag);
+      dom.addEventListener("dblclick", (e) => {
+        if (!this.isActive) return;
+        this.handleCanvasDoubleClick(e);
       });
       this.resizeObserver = new ResizeObserver(() => {
         if (!this.isActive || !this.renderer || !this.camera) return;
@@ -48496,6 +48553,7 @@ void main() {
     activate() {
       this.init();
       this.isActive = true;
+      this.keysPressed.clear();
       this.container.style.display = "block";
       const w = this.container.clientWidth || 800;
       const h = this.container.clientHeight || 600;
@@ -48503,10 +48561,14 @@ void main() {
       this.camera.updateProjectionMatrix();
       this.renderer.setSize(w, h);
       this.syncAll();
+      this.lastFrameTime = performance.now();
       this.startLoop();
     }
     deactivate() {
       this.isActive = false;
+      this.keysPressed.clear();
+      this.cameraAnim = null;
+      this.isLookDragging = false;
       this.container.style.display = "none";
       if (this.animFrameId) {
         cancelAnimationFrame(this.animFrameId);
@@ -48515,13 +48577,17 @@ void main() {
     }
     startLoop() {
       if (this.animFrameId) cancelAnimationFrame(this.animFrameId);
-      const animate = () => {
+      const animate = (now) => {
         if (!this.isActive) return;
         this.animFrameId = requestAnimationFrame(animate);
+        const dt = Math.min(0.05, Math.max(1e-3, (now - (this.lastFrameTime || now)) / 1e3));
+        this.lastFrameTime = now;
+        this.updateCameraAnimation(now);
+        this.updateWalkMovement(dt);
         this.controls?.update();
         this.renderer?.render(this.scene, this.camera);
       };
-      animate();
+      this.animFrameId = requestAnimationFrame(animate);
     }
     applyThemeColors() {
       if (!this.scene) return;
@@ -48824,44 +48890,203 @@ void main() {
       this.deviceManager.deselectDevice();
       this.cableManager.deselectConnection();
     }
+    handleCanvasDoubleClick(e) {
+      const rect = this.renderer.domElement.getBoundingClientRect();
+      this.pointer.x = (e.clientX - rect.left) / rect.width * 2 - 1;
+      this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      this.raycaster.setFromCamera(this.pointer, this.camera);
+      const devHits = this.raycaster.intersectObjects(this.devicesGroup.children, true);
+      if (devHits.length > 0) {
+        const devId = devHits[0].object.userData?.deviceId;
+        if (devId) {
+          this.deviceManager.selectDevice(devId);
+          this.focusOnDevice(devId);
+          return;
+        }
+      }
+      const envHits = this.raycaster.intersectObjects(
+        [...this.roomsGroup.children, ...this.groundGroup.children],
+        true
+      );
+      let hitPoint = envHits.length > 0 ? envHits[0].point.clone() : null;
+      if (!hitPoint) {
+        const floorPlane = new Plane(new Vector3(0, 1, 0), 0);
+        const intersectPt = new Vector3();
+        if (this.raycaster.ray.intersectPlane(floorPlane, intersectPt)) {
+          hitPoint = intersectPt;
+        }
+      }
+      if (!hitPoint) return;
+      const currentDist = this.camera.position.distanceTo(this.controls.target);
+      const desiredDist = Math.max(4, Math.min(currentDist * 0.55, 36));
+      const offset = this.camera.position.clone().sub(this.controls.target).normalize().multiplyScalar(desiredDist);
+      const endPos = hitPoint.clone().add(offset);
+      endPos.y = Math.max(0.6, endPos.y);
+      this.animateCameraTo(endPos, hitPoint, 380);
+    }
+    setNavTool(tool) {
+      const validTools = ["orbit", "pan", "zoom", "look"];
+      if (!validTools.includes(tool)) return;
+      this.navTool = tool;
+      this.applyNavToolConfig();
+      eventBus.emit("map3d:navtool-changed", { tool });
+    }
+    applyNavToolConfig() {
+      if (this.container) {
+        this.container.classList.remove("tool-orbit", "tool-pan", "tool-zoom", "tool-look");
+        this.container.classList.add(`tool-${this.navTool}`);
+      }
+      if (!this.controls) return;
+      if (this.navTool === "pan") {
+        this.controls.mouseButtons = {
+          LEFT: MOUSE.PAN,
+          MIDDLE: MOUSE.ROTATE,
+          RIGHT: MOUSE.PAN
+        };
+        this.controls.maxPolarAngle = Math.PI * 0.495;
+      } else if (this.navTool === "zoom") {
+        this.controls.mouseButtons = {
+          LEFT: MOUSE.DOLLY,
+          MIDDLE: MOUSE.ROTATE,
+          RIGHT: MOUSE.PAN
+        };
+        this.controls.maxPolarAngle = Math.PI * 0.495;
+      } else if (this.navTool === "look") {
+        this.controls.mouseButtons = {
+          LEFT: -1,
+          // Custom in-place eye look handler
+          MIDDLE: MOUSE.ROTATE,
+          RIGHT: MOUSE.PAN
+        };
+        this.controls.maxPolarAngle = Math.PI * 0.92;
+      } else {
+        this.controls.mouseButtons = {
+          LEFT: MOUSE.ROTATE,
+          MIDDLE: MOUSE.ROTATE,
+          RIGHT: MOUSE.PAN
+        };
+        this.controls.maxPolarAngle = Math.PI * 0.495;
+      }
+    }
+    animateCameraTo(endPos, endTarget, duration = 380) {
+      if (!this.camera || !this.controls) return;
+      this.cameraAnim = {
+        startPos: this.camera.position.clone(),
+        endPos: endPos.clone(),
+        startTarget: this.controls.target.clone(),
+        endTarget: endTarget.clone(),
+        startTime: performance.now(),
+        duration
+      };
+    }
+    updateCameraAnimation(now) {
+      if (!this.cameraAnim || !this.camera || !this.controls) return;
+      const elapsed = now - this.cameraAnim.startTime;
+      const t = Math.min(1, elapsed / Math.max(1, this.cameraAnim.duration));
+      const ease = 1 - Math.pow(1 - t, 3);
+      this.camera.position.lerpVectors(this.cameraAnim.startPos, this.cameraAnim.endPos, ease);
+      this.controls.target.lerpVectors(this.cameraAnim.startTarget, this.cameraAnim.endTarget, ease);
+      if (t >= 1) {
+        this.cameraAnim = null;
+      }
+    }
+    updateWalkMovement(dt) {
+      if (!this.keysPressed.size || !this.camera || !this.controls) return;
+      let forward = 0;
+      let right = 0;
+      let up = 0;
+      if (this.keysPressed.has("w") || this.keysPressed.has("arrowup")) forward += 1;
+      if (this.keysPressed.has("s") || this.keysPressed.has("arrowdown")) forward -= 1;
+      if (this.keysPressed.has("d") || this.keysPressed.has("arrowright")) right += 1;
+      if (this.keysPressed.has("a") || this.keysPressed.has("arrowleft")) right -= 1;
+      if (this.keysPressed.has("e") || this.keysPressed.has("pageup")) up += 1;
+      if (this.keysPressed.has("q") || this.keysPressed.has("pagedown")) up -= 1;
+      if (forward === 0 && right === 0 && up === 0) return;
+      this.cameraAnim = null;
+      const camDist = this.camera.position.distanceTo(this.controls.target);
+      const boost = this.keysPressed.has("shift") ? 2.6 : 1;
+      const speed = Math.max(3.5, Math.min(90, camDist * 0.75)) * boost * dt;
+      const viewDir = new Vector3();
+      this.camera.getWorldDirection(viewDir);
+      viewDir.y = 0;
+      if (viewDir.lengthSq() > 1e-4) viewDir.normalize();
+      const rightDir = new Vector3().crossVectors(viewDir, new Vector3(0, 1, 0)).normalize();
+      const moveVec = new Vector3().addScaledVector(viewDir, forward * speed).addScaledVector(rightDir, right * speed);
+      moveVec.y = up * speed * 0.65;
+      if (this.camera.position.y + moveVec.y < 0.25) {
+        moveVec.y = Math.max(0, 0.25 - this.camera.position.y);
+      }
+      this.camera.position.add(moveVec);
+      this.controls.target.add(moveVec);
+    }
+    zoomExtents() {
+      if (!this.camera || !this.controls) return;
+      const box = new Box3();
+      if (this.devicesGroup.children.length > 0) box.expandByObject(this.devicesGroup);
+      if (this.roomsGroup.children.length > 0) box.expandByObject(this.roomsGroup);
+      if (box.isEmpty()) {
+        const { worldW } = this.getWorldDimensions();
+        const span = Math.max(40, worldW * 0.5);
+        this.animateCameraTo(
+          new Vector3(span * 0.72, span * 0.68, span * 0.85),
+          new Vector3(0, 0, 0),
+          420
+        );
+        return;
+      }
+      const center = new Vector3();
+      const size = new Vector3();
+      box.getCenter(center);
+      box.getSize(size);
+      const maxDim = Math.max(size.x, size.y, size.z, 8);
+      const dist = maxDim * 1.15;
+      const endPos = new Vector3(center.x + dist * 0.68, center.y + dist * 0.62, center.z + dist * 0.82);
+      this.animateCameraTo(endPos, center, 420);
+    }
     setCameraPreset(preset) {
       if (!this.camera || !this.controls) return;
+      if (preset === "extents") {
+        this.zoomExtents();
+        return;
+      }
       const { worldW } = this.getWorldDimensions();
       const span = Math.max(40, worldW * 0.45);
       if (preset === "focus") {
         const selDevId = this.deviceManager.selectedDeviceId;
         if (selDevId && this.effectivePosMap.has(selDevId)) {
-          const targetPos = this.effectivePosMap.get(selDevId);
-          this.controls.target.copy(targetPos);
-          this.camera.position.set(targetPos.x + 14, targetPos.y + 10, targetPos.z + 14);
-          this.controls.update();
+          this.focusOnDevice(selDevId);
           return;
         }
         const rooms = stateManager.getRooms3d();
         if (rooms.length > 0) {
           const rp = this.normToWorld(rooms[0].x ?? 0.5, rooms[0].y ?? 0.5);
-          this.controls.target.set(rp.x, 2, rp.z);
-          this.camera.position.set(rp.x + 18, 14, rp.z + 18);
-          this.controls.update();
+          this.animateCameraTo(
+            new Vector3(rp.x + 12, 8.5, rp.z + 12),
+            new Vector3(rp.x, 1.8, rp.z),
+            380
+          );
           return;
         }
       }
-      this.controls.target.set(0, 0, 0);
+      const target = new Vector3(0, 0, 0);
+      let pos;
       if (preset === "top") {
-        this.camera.position.set(0, span * 1.45, 0.5);
+        pos = new Vector3(0, span * 1.45, 0.5);
+      } else if (preset === "front") {
+        pos = new Vector3(0, span * 0.16, span * 1.05);
       } else if (preset === "side") {
-        this.camera.position.set(0, span * 0.18, span * 1.15);
+        pos = new Vector3(span * 1.05, span * 0.18, 0);
       } else {
-        this.camera.position.set(span * 0.72, span * 0.68, span * 0.85);
+        pos = new Vector3(span * 0.72, span * 0.68, span * 0.85);
       }
-      this.controls.update();
+      this.animateCameraTo(pos, target, 400);
     }
     focusOnDevice(deviceId) {
       if (!this.isActive || !this.effectivePosMap.has(deviceId)) return;
       const p = this.effectivePosMap.get(deviceId);
-      this.controls.target.copy(p);
-      this.camera.position.set(p.x + 12, p.y + 9, p.z + 12);
-      this.controls.update();
+      const offsetDist = Math.max(4.5, Math.min(14, this.deviceScaleMultiplier * 3.5));
+      const endPos = new Vector3(p.x + offsetDist, p.y + offsetDist * 0.72, p.z + offsetDist);
+      this.animateCameraTo(endPos, p, 360);
     }
     setDeviceScaleMultiplier(scaleVal) {
       this.deviceScaleMultiplier = Number(scaleVal) || 3;
@@ -48948,6 +49173,19 @@ void main() {
       });
       eventBus.on("theme:changed", () => {
         this.applyThemeColors();
+      });
+      window.addEventListener("keydown", (e) => {
+        if (!this.isActive) return;
+        if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) return;
+        this.keysPressed.add(e.key.toLowerCase());
+        if (e.shiftKey) this.keysPressed.add("shift");
+      });
+      window.addEventListener("keyup", (e) => {
+        this.keysPressed.delete(e.key.toLowerCase());
+        if (!e.shiftKey) this.keysPressed.delete("shift");
+      });
+      window.addEventListener("blur", () => {
+        this.keysPressed.clear();
       });
     }
   };
@@ -49553,6 +49791,7 @@ void main() {
       const konvaContainer = document.getElementById("konva-stage-container");
       const map3dContainer = document.getElementById("map-3d-container");
       const hud3d = document.getElementById("hud-3d-controls");
+      const hud3dHints = document.getElementById("hud-3d-hints");
       const hud2dZoom = document.querySelector(".map-hud-controls");
       const hudCompass = document.getElementById("hud-compass");
       const applyViewMode = (mode) => {
@@ -49567,6 +49806,7 @@ void main() {
         if (hudCompass) hudCompass.style.display = is3d ? "none" : "";
         map3dContainer?.classList.toggle("hidden", !is3d);
         hud3d?.classList.toggle("hidden", !is3d);
+        hud3dHints?.classList.toggle("hidden", !is3d);
         if (is3d) {
           this.map3DEngine?.activate();
           const coverageToggle = document.getElementById("filter-toggle-coverage");
@@ -49585,9 +49825,29 @@ void main() {
       document.getElementById("filter-toggle-coverage")?.addEventListener("change", (e) => {
         this.map3DEngine?.setShowCoverage(Boolean(e.target.checked));
       });
+      const navToolButtons = [
+        { id: "btn-3d-tool-orbit", tool: "orbit" },
+        { id: "btn-3d-tool-pan", tool: "pan" },
+        { id: "btn-3d-tool-zoom", tool: "zoom" },
+        { id: "btn-3d-tool-look", tool: "look" }
+      ];
+      navToolButtons.forEach(({ id, tool }) => {
+        document.getElementById(id)?.addEventListener("click", () => {
+          this.map3DEngine?.setNavTool(tool);
+        });
+      });
+      eventBus.on("map3d:navtool-changed", ({ tool }) => {
+        navToolButtons.forEach((b) => {
+          document.getElementById(b.id)?.classList.toggle("active", b.tool === tool);
+        });
+      });
+      document.getElementById("btn-3d-extents")?.addEventListener("click", () => {
+        this.map3DEngine?.zoomExtents();
+      });
       const presetButtons = [
         { id: "btn-3d-iso", preset: "iso" },
         { id: "btn-3d-top", preset: "top" },
+        { id: "btn-3d-front", preset: "front" },
         { id: "btn-3d-side", preset: "side" },
         { id: "btn-3d-focus", preset: "focus" }
       ];
@@ -49644,7 +49904,7 @@ void main() {
     }
     setupKeyboardShortcuts() {
       window.addEventListener("keydown", (e) => {
-        if (["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName)) {
+        if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) {
           return;
         }
         if (e.ctrlKey || e.metaKey) {
@@ -49660,6 +49920,47 @@ void main() {
           if (e.key === "y" || e.key === "Y") {
             e.preventDefault();
             this.historyManager?.redo();
+            return;
+          }
+        }
+        if (stateManager.getViewMode() === "3d") {
+          const lower = e.key.toLowerCase();
+          if (lower === "o") {
+            e.preventDefault();
+            this.map3DEngine?.setNavTool("orbit");
+            return;
+          }
+          if (lower === "h") {
+            e.preventDefault();
+            this.map3DEngine?.setNavTool("pan");
+            return;
+          }
+          if (lower === "z") {
+            e.preventDefault();
+            if (e.shiftKey) {
+              this.map3DEngine?.zoomExtents();
+            } else {
+              this.map3DEngine?.setNavTool("zoom");
+            }
+            return;
+          }
+          if (lower === "l") {
+            e.preventDefault();
+            this.map3DEngine?.setNavTool("look");
+            return;
+          }
+          if (e.key === "0") {
+            e.preventDefault();
+            this.map3DEngine?.zoomExtents();
+            return;
+          }
+          if (["w", "a", "s", "d", "q", "e", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(lower)) {
+            return;
+          }
+          if (e.key === "Escape") {
+            this.deviceManager.deselectDevice();
+            this.cableManager.deselectConnection();
+            this.map3DEngine?.setNavTool("orbit");
             return;
           }
         }

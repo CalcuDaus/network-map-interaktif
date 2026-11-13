@@ -206,8 +206,38 @@
 }
 
 #map-3d-container.hidden,
-#hud-3d-controls.hidden {
+#hud-3d-controls.hidden,
+#hud-3d-hints.hidden {
   display: none !important;
+}
+
+#map-3d-container.tool-orbit { cursor: grab; }
+#map-3d-container.tool-orbit.is-dragging { cursor: grabbing; }
+#map-3d-container.tool-pan { cursor: move; }
+#map-3d-container.tool-zoom { cursor: ns-resize; }
+#map-3d-container.tool-look { cursor: crosshair; }
+
+.hud-3d-hints {
+  position: absolute;
+  right: 16px;
+  bottom: 20px;
+  z-index: 14;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  font-size: 11px;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+.hud-3d-hints strong {
+  color: var(--text-primary);
 }
 
 #map-3d-container canvas {

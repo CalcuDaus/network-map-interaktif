@@ -296,11 +296,39 @@
         <!-- Three.js 3D Map Container -->
         <div id="map-3d-container" class="hidden" aria-label="Peta Infrastruktur 3D"></div>
 
-        <!-- Floating 3D Controls HUD (Top Left of Viewport in 3D Mode) -->
+        <!-- Floating 3D Controls HUD (SketchUp-Style Navigation Bar) -->
         <div id="hud-3d-controls" class="hud-3d-controls hidden">
+          <!-- SketchUp Camera Tool Selector -->
+          <div class="hud-3d-group" title="Alat Navigasi ala SketchUp">
+            <button id="btn-3d-tool-orbit" class="hud-3d-btn active" data-tool3d="orbit" title="Orbit (O) — Drag kiri/tengah putar kamera, Shift+Drag/Kanan untuk Pan">
+              <i data-lucide="rotate-3d" style="width: 13px; height: 13px;"></i>
+              <span>Orbit</span>
+            </button>
+            <button id="btn-3d-tool-pan" class="hud-3d-btn" data-tool3d="pan" title="Pan / Geser (H) — Drag kiri geser layar mulus sejajar pandangan">
+              <i data-lucide="hand" style="width: 13px; height: 13px;"></i>
+              <span>Pan</span>
+            </button>
+            <button id="btn-3d-tool-zoom" class="hud-3d-btn" data-tool3d="zoom" title="Zoom (Z) — Drag naik/turun atau Scroll ke arah kursor">
+              <i data-lucide="zoom-in" style="width: 13px; height: 13px;"></i>
+              <span>Zoom</span>
+            </button>
+            <button id="btn-3d-tool-look" class="hud-3d-btn" data-tool3d="look" title="Look Around (L) — Putar pandangan di tempat (bagus di dalam ruangan) + WASD/QE">
+              <i data-lucide="eye" style="width: 13px; height: 13px;"></i>
+              <span>Look</span>
+            </button>
+          </div>
+
+          <div class="hud-3d-divider"></div>
+
+          <!-- Standard Camera Views & Extents -->
           <div class="hud-3d-group">
+            <button id="btn-3d-extents" class="hud-3d-btn" title="Zoom Extents (Shift+Z) — Paskan semua perangkat & ruangan ke layar">
+              <i data-lucide="maximize-2" style="width: 12px; height: 12px;"></i>
+              <span>Extents</span>
+            </button>
             <button id="btn-3d-iso" class="hud-3d-btn active" title="Sudut Isometrik">Iso</button>
             <button id="btn-3d-top" class="hud-3d-btn" title="Tampak Atas">Atas</button>
+            <button id="btn-3d-front" class="hud-3d-btn" title="Tampak Depan">Depan</button>
             <button id="btn-3d-side" class="hud-3d-btn" title="Tampak Samping (Lihat Tumpukan)">Samping</button>
             <button id="btn-3d-focus" class="hud-3d-btn" title="Fokus ke Perangkat Terpilih">Fokus</button>
           </div>
@@ -311,10 +339,10 @@
             <span>Skala</span>
             <select id="select-3d-scale" class="hud-3d-select">
               <option value="0.6">0.6x</option>
-              <option value="1" selected>1.0x</option>
+              <option value="1">1.0x</option>
               <option value="1.5">1.5x</option>
               <option value="2">2.0x</option>
-              <option value="3">3.0x</option>
+              <option value="3" selected>3.0x</option>
             </select>
           </label>
 
@@ -334,6 +362,19 @@
             <i data-lucide="building-2" style="width: 13px; height: 13px;"></i>
             <span>Ruangan 3D</span>
           </button>
+        </div>
+
+        <!-- SketchUp Shortcut Hint Pill (Bottom Right in 3D Mode) -->
+        <div id="hud-3d-hints" class="hud-3d-hints hidden">
+          <span><strong>Tengah / Kiri:</strong> Orbit</span>
+          <span>•</span>
+          <span><strong>Shift+Drag / Kanan:</strong> Pan</span>
+          <span>•</span>
+          <span><strong>Scroll:</strong> Zoom ke Kursor</span>
+          <span>•</span>
+          <span><strong>Double-Klik:</strong> Fokus Titik</span>
+          <span>•</span>
+          <span><strong>WASD / QE:</strong> Jalan</span>
         </div>
 
         <!-- Compass / North Indicator (Top Right) -->
@@ -443,7 +484,7 @@
   </div>
 
   <!-- Application Bootstrap (Bundled for file:// and http:// compatibility) -->
-  <script src="js/bundle.js?v=20261113-3d"></script>
+  <script src="js/bundle.js?v=20261113-3d-sketchup"></script>
 </body>
 
 </html>

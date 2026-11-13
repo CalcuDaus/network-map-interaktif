@@ -392,6 +392,7 @@ class NetMapApp {
     const konvaContainer = document.getElementById('konva-stage-container');
     const map3dContainer = document.getElementById('map-3d-container');
     const hud3d = document.getElementById('hud-3d-controls');
+    const hud3dHints = document.getElementById('hud-3d-hints');
     const hud2dZoom = document.querySelector('.map-hud-controls');
     const hudCompass = document.getElementById('hud-compass');
 
@@ -408,6 +409,7 @@ class NetMapApp {
 
       map3dContainer?.classList.toggle('hidden', !is3d);
       hud3d?.classList.toggle('hidden', !is3d);
+      hud3dHints?.classList.toggle('hidden', !is3d);
 
       if (is3d) {
         this.map3DEngine?.activate();
@@ -432,10 +434,33 @@ class NetMapApp {
       this.map3DEngine?.setShowCoverage(Boolean(e.target.checked));
     });
 
-    // Camera preset buttons
+    // SketchUp Navigation Tool Buttons (Orbit, Pan, Zoom, Look)
+    const navToolButtons = [
+      { id: 'btn-3d-tool-orbit', tool: 'orbit' },
+      { id: 'btn-3d-tool-pan', tool: 'pan' },
+      { id: 'btn-3d-tool-zoom', tool: 'zoom' },
+      { id: 'btn-3d-tool-look', tool: 'look' }
+    ];
+    navToolButtons.forEach(({ id, tool }) => {
+      document.getElementById(id)?.addEventListener('click', () => {
+        this.map3DEngine?.setNavTool(tool);
+      });
+    });
+    eventBus.on('map3d:navtool-changed', ({ tool }) => {
+      navToolButtons.forEach((b) => {
+        document.getElementById(b.id)?.classList.toggle('active', b.tool === tool);
+      });
+    });
+
+    // Camera preset buttons & SketchUp Zoom Extents
+    document.getElementById('btn-3d-extents')?.addEventListener('click', () => {
+      this.map3DEngine?.zoomExtents();
+    });
+
     const presetButtons = [
       { id: 'btn-3d-iso', preset: 'iso' },
       { id: 'btn-3d-top', preset: 'top' },
+      { id: 'btn-3d-front', preset: 'front' },
       { id: 'btn-3d-side', preset: 'side' },
       { id: 'btn-3d-focus', preset: 'focus' }
     ];
@@ -507,8 +532,8 @@ class NetMapApp {
 
   setupKeyboardShortcuts() {
     window.addEventListener('keydown', (e) => {
-      // Don't trigger shortcuts if focus is inside an input or textarea
-      if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
+      // Don't trigger shortcuts if focus is inside an input, textarea, or select
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) {
         return;
       }
 
@@ -526,6 +551,49 @@ class NetMapApp {
         if (e.key === 'y' || e.key === 'Y') {
           e.preventDefault();
           this.historyManager?.redo();
+          return;
+        }
+      }
+
+      // SketchUp-style 3D Navigation Shortcuts when 3D Map is active
+      if (stateManager.getViewMode() === '3d') {
+        const lower = e.key.toLowerCase();
+        if (lower === 'o') {
+          e.preventDefault();
+          this.map3DEngine?.setNavTool('orbit');
+          return;
+        }
+        if (lower === 'h') {
+          e.preventDefault();
+          this.map3DEngine?.setNavTool('pan');
+          return;
+        }
+        if (lower === 'z') {
+          e.preventDefault();
+          if (e.shiftKey) {
+            this.map3DEngine?.zoomExtents();
+          } else {
+            this.map3DEngine?.setNavTool('zoom');
+          }
+          return;
+        }
+        if (lower === 'l') {
+          e.preventDefault();
+          this.map3DEngine?.setNavTool('look');
+          return;
+        }
+        if (e.key === '0') {
+          e.preventDefault();
+          this.map3DEngine?.zoomExtents();
+          return;
+        }
+        if (['w', 'a', 's', 'd', 'q', 'e', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(lower)) {
+          return; // Handled smoothly by Map3DEngine walk loop
+        }
+        if (e.key === 'Escape') {
+          this.deviceManager.deselectDevice();
+          this.cableManager.deselectConnection();
+          this.map3DEngine?.setNavTool('orbit');
           return;
         }
       }
