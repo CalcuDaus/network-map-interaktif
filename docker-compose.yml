@@ -7,7 +7,14 @@ services:
     container_name: netmap-app
     restart: unless-stopped
     ports:
-      - "${PORT:-8080}:80"
+      - "3020:80"
+    networks:
+      - netmap_network
     environment:
       - TZ=Asia/Jakarta
+
+networks:
+  netmap_network:
+    driver: bridge
+
 

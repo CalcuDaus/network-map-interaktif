@@ -1,6 +1,14 @@
 > **BrainSync Context Pumper** 🧠
-> Dynamically loaded for active file: `docs\phase-1-implementation-plan.md` (Domain: **Generic Logic**)
+> Dynamically loaded for active file: `docker-compose.yml` (Domain: **Config/Infrastructure**)
 
-### 📐 Generic Logic Conventions & Fixes
+### 📐 Config/Infrastructure Conventions & Fixes
+- **[what-changed] 🟢 Edited index.html (10 changes, 9min)**: Active editing session on index.html.
+10 content changes over 9 minutes.
+- **[what-changed] 🟢 Edited index.html (13 changes, 18min)**: Active editing session on index.html.
+13 content changes over 18 minutes.
+- **[what-changed] 🟢 Edited index.html (148 changes, 25min)**: Active editing session on index.html.
+148 content changes over 25 minutes.
+- **[convention] 🟢 Edited index.html (5 changes, 15min) — confirmed 3x**: Active editing session on index.html.
+5 content changes over 15 minutes.
 - **[what-changed] 🟢 Edited prd.md (12 changes, 13min)**: Active editing session on prd.md.
 12 content changes over 13 minutes.
