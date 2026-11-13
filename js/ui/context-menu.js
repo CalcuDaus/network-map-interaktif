@@ -167,7 +167,9 @@ export class ContextMenu {
         icon: 'crosshair',
         label: 'Pusatkan di Layar',
         action: () => {
-          if (this.viewportNavigator) {
+          if (stateManager.getViewMode() === '3d') {
+            eventBus.emit('map3d:focus-device', { deviceId: device.id });
+          } else if (this.viewportNavigator) {
             this.viewportNavigator.focusOnDevice(device);
           }
           this.hide();
@@ -341,7 +343,9 @@ export class ContextMenu {
         label: 'Reset Tampilan (Fit Layar)',
         action: () => {
           this.hide();
-          if (this.mapEngine?.interactions) {
+          if (stateManager.getViewMode() === '3d') {
+            eventBus.emit('map3d:zoom-extents');
+          } else if (this.mapEngine?.interactions) {
             this.mapEngine.interactions.fitToScreen(30);
           }
         }
@@ -551,8 +555,9 @@ export class ContextMenu {
     if (!device) return;
 
     stateManager.setMode('draw-cable');
-    // Selecting device after switching mode engages CableDrawingTool source selection
+    // Selecting device after switching mode engages CableDrawingTool (2D) & Map3DEngine (3D)
     this.deviceManager.selectDevice(device.id);
+    eventBus.emit('map3d:start-cable', { deviceId: device.id });
     this.showToast(`🔌 Sumber kabel: "${device.name}". Klik perangkat tujuan untuk menghubungkan.`);
   }
 

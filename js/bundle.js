@@ -9929,7 +9929,9 @@ ${dev.network?.ip || ""}`,
           icon: "crosshair",
           label: "Pusatkan di Layar",
           action: () => {
-            if (this.viewportNavigator) {
+            if (stateManager.getViewMode() === "3d") {
+              eventBus.emit("map3d:focus-device", { deviceId: device.id });
+            } else if (this.viewportNavigator) {
               this.viewportNavigator.focusOnDevice(device);
             }
             this.hide();
@@ -10085,7 +10087,9 @@ ${dev.network?.ip || ""}`,
           label: "Reset Tampilan (Fit Layar)",
           action: () => {
             this.hide();
-            if (this.mapEngine?.interactions) {
+            if (stateManager.getViewMode() === "3d") {
+              eventBus.emit("map3d:zoom-extents");
+            } else if (this.mapEngine?.interactions) {
               this.mapEngine.interactions.fitToScreen(30);
             }
           }
@@ -10265,6 +10269,7 @@ Tip: Tindakan ini dapat dibatalkan sewaktu-waktu dengan menekan Ctrl + Z (Undo).
       if (!device) return;
       stateManager.setMode("draw-cable");
       this.deviceManager.selectDevice(device.id);
+      eventBus.emit("map3d:start-cable", { deviceId: device.id });
       this.showToast(`\u{1F50C} Sumber kabel: "${device.name}". Klik perangkat tujuan untuk menghubungkan.`);
     }
     /**
@@ -48436,6 +48441,7 @@ void main() {
       this.lookPrevPointer = { x: 0, y: 0 };
       this.lookYaw = 0;
       this.lookPitch = 0;
+      this.pendingCableSourceId = null;
       this.bindGlobalListeners();
     }
     init() {
@@ -48529,6 +48535,8 @@ void main() {
         if (dist > 5 || wasLookDragging) return;
         if (e.button === 0) {
           this.handleCanvasClick(e);
+        } else if (e.button === 2) {
+          this.handleCanvasRightClick(e);
         }
       });
       dom.addEventListener("pointercancel", endDrag);
@@ -48608,6 +48616,13 @@ void main() {
       return {
         x: (normX - 0.5) * worldW,
         z: (normY - 0.5) * worldD
+      };
+    }
+    worldToNorm(worldX, worldZ) {
+      const { worldW, worldD } = this.getWorldDimensions();
+      return {
+        normX: Math.max(0.01, Math.min(0.99, worldX / worldW + 0.5)),
+        normY: Math.max(0.01, Math.min(0.99, worldZ / worldD + 0.5))
       };
     }
     rebuildGround() {
@@ -48875,6 +48890,28 @@ void main() {
       if (devHits.length > 0) {
         const devId = devHits[0].object.userData?.deviceId;
         if (devId) {
+          if (stateManager.getMode() === "draw-cable") {
+            if (!this.pendingCableSourceId) {
+              this.pendingCableSourceId = devId;
+              this.deviceManager.selectDevice(devId);
+              return;
+            }
+            if (this.pendingCableSourceId !== devId) {
+              const newCab = this.cableManager.addConnection({
+                source: this.pendingCableSourceId,
+                destination: devId,
+                type: "ethernet",
+                cableCategory: "cat6",
+                route: []
+              });
+              this.pendingCableSourceId = null;
+              stateManager.setMode("select");
+              if (newCab) {
+                this.cableManager.selectConnection(newCab.id);
+              }
+              return;
+            }
+          }
           this.deviceManager.selectDevice(devId);
           return;
         }
@@ -48887,8 +48924,60 @@ void main() {
           return;
         }
       }
+      this.pendingCableSourceId = null;
       this.deviceManager.deselectDevice();
       this.cableManager.deselectConnection();
+    }
+    handleCanvasRightClick(e) {
+      const rect = this.renderer.domElement.getBoundingClientRect();
+      this.pointer.x = (e.clientX - rect.left) / rect.width * 2 - 1;
+      this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      this.raycaster.setFromCamera(this.pointer, this.camera);
+      const devHits = this.raycaster.intersectObjects(this.devicesGroup.children, true);
+      if (devHits.length > 0) {
+        const devId = devHits[0].object.userData?.deviceId;
+        const device = devId ? this.deviceManager.getDeviceById(devId) : null;
+        if (device) {
+          eventBus.emit("contextmenu:device", {
+            device,
+            screenX: e.clientX,
+            screenY: e.clientY
+          });
+          return;
+        }
+      }
+      const cableHits = this.raycaster.intersectObjects(this.cablesGroup.children, true);
+      if (cableHits.length > 0) {
+        const cabId = cableHits[0].object.userData?.cableId;
+        const cable = cabId ? this.cableManager.getConnectionById(cabId) : null;
+        if (cable) {
+          eventBus.emit("contextmenu:cable", {
+            cable,
+            screenX: e.clientX,
+            screenY: e.clientY
+          });
+          return;
+        }
+      }
+      const envHits = this.raycaster.intersectObjects(
+        [...this.roomsGroup.children, ...this.groundGroup.children],
+        true
+      );
+      let hitPoint = envHits.length > 0 ? envHits[0].point : null;
+      if (!hitPoint) {
+        const floorPlane = new Plane(new Vector3(0, 1, 0), 0);
+        const intersectPt = new Vector3();
+        if (this.raycaster.ray.intersectPlane(floorPlane, intersectPt)) {
+          hitPoint = intersectPt;
+        }
+      }
+      const { normX, normY } = hitPoint ? this.worldToNorm(hitPoint.x, hitPoint.z) : { normX: 0.5, normY: 0.5 };
+      eventBus.emit("contextmenu:canvas", {
+        normX,
+        normY,
+        screenX: e.clientX,
+        screenY: e.clientY
+      });
     }
     handleCanvasDoubleClick(e) {
       const rect = this.renderer.domElement.getBoundingClientRect();
@@ -49173,6 +49262,17 @@ void main() {
       });
       eventBus.on("theme:changed", () => {
         this.applyThemeColors();
+      });
+      eventBus.on("mode:changed", ({ mode }) => {
+        if (mode !== "draw-cable") {
+          this.pendingCableSourceId = null;
+        }
+      });
+      eventBus.on("map3d:start-cable", ({ deviceId }) => {
+        this.pendingCableSourceId = deviceId || null;
+      });
+      eventBus.on("map3d:zoom-extents", () => {
+        if (this.isActive) this.zoomExtents();
       });
       window.addEventListener("keydown", (e) => {
         if (!this.isActive) return;
