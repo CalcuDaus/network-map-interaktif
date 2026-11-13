@@ -363,7 +363,7 @@ export class CableManager {
 
     cable.details.calculatedMetrics = calculateNetworkPerformanceMetrics({
       totalLength: accurate.totalPhysical,
-      horizontalLength,
+      horizontalLength: horizontalMeters,
       category: cable.cableCategory,
       poeSupport: cable.details.poeSupport || 'poe+'
     });

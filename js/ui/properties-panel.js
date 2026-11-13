@@ -766,6 +766,16 @@ export class PropertiesPanel {
     document.getElementById('btn-save-device')?.addEventListener('click', () => {
       this.saveForm(devId);
     });
+
+    // Live status update immediately on dropdown change
+    document.getElementById('prop-status')?.addEventListener('change', (e) => {
+      const nextStatus = e.target.value || 'unknown';
+      this.currentDevice.status = nextStatus;
+      const updated = this.deviceManager.updateDevice(devId, { status: nextStatus });
+      if (updated) {
+        this.renderDeviceForm(updated);
+      }
+    });
   }
 
   saveForm(devId) {

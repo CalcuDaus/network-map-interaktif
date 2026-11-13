@@ -4969,6 +4969,14 @@ ${device.network.ip}`;
       document.getElementById("btn-save-device")?.addEventListener("click", () => {
         this.saveForm(devId);
       });
+      document.getElementById("prop-status")?.addEventListener("change", (e) => {
+        const nextStatus = e.target.value || "unknown";
+        this.currentDevice.status = nextStatus;
+        const updated = this.deviceManager.updateDevice(devId, { status: nextStatus });
+        if (updated) {
+          this.renderDeviceForm(updated);
+        }
+      });
     }
     saveForm(devId) {
       const nameInput = document.getElementById("prop-device-name");
@@ -5308,7 +5316,7 @@ ${device.network.ip}`;
   }
   function calculateNetworkPerformanceMetrics({
     totalLength = 0,
-    horizontalLength: horizontalLength2 = 0,
+    horizontalLength = 0,
     category = "cat6",
     poeSupport = "poe+"
   } = {}) {
@@ -5391,7 +5399,7 @@ ${device.network.ip}`;
     return {
       mediaType,
       totalLength: len,
-      horizontalLength: Math.round(horizontalLength2 * 10) / 10,
+      horizontalLength: Math.round(horizontalLength * 10) / 10,
       ethernetCompliance,
       latency: {
         delayNanoseconds: Math.round(delayNs * 10) / 10,
@@ -6087,7 +6095,7 @@ ${device.network.ip}`;
       cable.details.totalPhysicalLength = accurate.totalPhysical;
       cable.details.calculatedMetrics = calculateNetworkPerformanceMetrics({
         totalLength: accurate.totalPhysical,
-        horizontalLength,
+        horizontalLength: horizontalMeters,
         category: cable.cableCategory,
         poeSupport: cable.details.poeSupport || "poe+"
       });
