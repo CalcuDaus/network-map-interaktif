@@ -1,0 +1,279 @@
+/* ==========================================================================
+   NetMap — Layout Stylesheet
+   3-Panel Technical Dashboard Layout
+   Theme: Color Hunt (2a7c13 / 76c457 / fff8cf / fbe6c2)
+   ========================================================================== */
+
+#app-container {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* --------------------------------------------------------------------------
+   Top Toolbar
+   -------------------------------------------------------------------------- */
+#app-toolbar {
+  height: var(--header-height);
+  min-height: var(--header-height);
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  z-index: 50;
+  box-shadow: var(--shadow-sm);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+#app-toolbar::-webkit-scrollbar {
+  display: none;
+}
+
+.toolbar-section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.toolbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-right: 16px;
+}
+
+.brand-logo-icon {
+  width: 28px;
+  height: 28px;
+  background: linear-gradient(135deg, var(--palette-forest), var(--palette-leaf));
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--palette-cream);
+  box-shadow: 0 0 10px rgba(118, 196, 87, 0.45);
+}
+
+.brand-text-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.brand-name {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: var(--text-primary);
+  line-height: 1.1;
+}
+
+.brand-badge {
+  font-size: 10px;
+  color: var(--palette-forest);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-weight: 700;
+}
+
+[data-theme="dark"] .brand-badge {
+  color: var(--palette-leaf);
+}
+
+/* --------------------------------------------------------------------------
+   Main Workspace (Sidebar Left, Canvas Viewport, Sidebar Right)
+   -------------------------------------------------------------------------- */
+#workspace {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  position: relative;
+  height: calc(100vh - var(--header-height) - var(--footer-height));
+}
+
+/* Sidebar Common */
+.sidebar {
+  background-color: var(--bg-secondary);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  transition: width var(--transition-normal), min-width var(--transition-normal), transform var(--transition-normal);
+  z-index: 20;
+  box-sizing: border-box;
+}
+
+.sidebar-left {
+  width: var(--sidebar-left-width);
+  min-width: var(--sidebar-left-width);
+  border-right: 1px solid var(--border-color);
+}
+
+.sidebar-right {
+  width: var(--sidebar-right-width);
+  min-width: var(--sidebar-right-width);
+  border-left: 1px solid var(--border-color);
+}
+
+/* Sidebar Collapsed State */
+.sidebar.collapsed {
+  width: 0 !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+  border: none !important;
+}
+
+.sidebar-header {
+  height: 42px;
+  min-height: 42px;
+  padding: 0 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-color);
+  background-color: var(--bg-tertiary);
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.sidebar-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.sidebar-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background-color: var(--bg-secondary);
+  box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+
+.sidebar-content::-webkit-scrollbar {
+  width: 5px;
+}
+
+.sidebar-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-content::-webkit-scrollbar-thumb {
+  background-color: var(--border-color);
+  border-radius: 4px;
+}
+
+.sidebar-content::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-muted);
+}
+
+/* --------------------------------------------------------------------------
+   Map Viewport (Canvas Container)
+   -------------------------------------------------------------------------- */
+#map-viewport {
+  flex: 1;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  background-color: #f7eed7;
+  cursor: grab;
+}
+
+#map-viewport.panning {
+  cursor: grabbing !important;
+}
+
+#konva-stage-container {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Bottom Status Bar
+   -------------------------------------------------------------------------- */
+#app-status-bar {
+  height: var(--footer-height);
+  min-height: var(--footer-height);
+  background-color: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  z-index: 50;
+}
+
+.status-group {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.status-group:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-group:last-child .status-item:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-label {
+  color: var(--text-muted);
+}
+
+.status-value {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+}

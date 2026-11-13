@@ -1,0 +1,165 @@
+/* ==========================================================================
+   NetMap — Main Stylesheet & CSS Variables
+   Theme: Color Hunt Palette (https://colorhunt.co/palette/2a7c1376c457fff8cffbe6c2)
+   - Color 1: #2a7c13 (Deep Forest Green)
+   - Color 2: #76c457 (Meadow Leaf Green)
+   - Color 3: #fff8cf (Warm Vanilla Cream)
+   - Color 4: #fbe6c2 (Warm Almond Sand)
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap');
+
+:root {
+  /* Raw Palette Colors */
+  --palette-forest: #2a7c13;
+  --palette-leaf: #76c457;
+  --palette-cream: #fff8cf;
+  --palette-sand: #fbe6c2;
+
+  /* Default Theme: Warm Botanical (Light) */
+  --bg-primary: #fff8cf;           /* Vanilla Cream Base */
+  --bg-secondary: #fbe6c2;         /* Warm Sand Sidebars & Toolbar */
+  --bg-tertiary: #f2dac8;          /* Control Surfaces & Secondary Buttons */
+  --bg-elevated: #ffffff;          /* Pure White for Input Fields & Popups */
+  --bg-hover: #ebd09e;             /* Warm Hover State */
+  --bg-active: #debe88;            /* Active Pressed State */
+
+  /* Borders & Dividers */
+  --border-color: #e5cca0;         /* Natural Sand Border */
+  --border-light: #edd8b5;         /* Soft Subtle Border */
+  --border-focus: #2a7c13;         /* Deep Forest Green Focus */
+  --border-focus-glow: rgba(42, 124, 19, 0.25);
+
+  /* Text Colors (High Contrast & Readability) */
+  --text-primary: #18350d;         /* Deep Forest Charcoal (10.5:1 contrast) */
+  --text-secondary: #2f541f;       /* Earthy Moss Green */
+  --text-muted: #678458;           /* Warm Sage */
+  --text-inverse: #fff8cf;         /* Cream Text on Forest Green */
+
+  /* Accent & Brand Colors */
+  --accent-blue: #2a7c13;          /* Primary Action & Brand (Forest Green) */
+  --accent-cyan: #76c457;          /* Secondary Accent (Fresh Leaf Green) */
+  --accent-sky: #2a7c13;           /* Interactive Highlight */
+  --accent-hover: #21630f;         /* Deeper Forest Green on Hover */
+
+  /* Status Colors */
+  --status-online: #2a7c13;
+  --status-offline: #dc2626;
+  --status-warning: #d97706;
+  --status-unknown: #788d70;
+
+  /* Cable Category Colors */
+  --cable-cat5e: #2a7c13;
+  --cable-cat6: #1b5e0c;
+  --cable-cat6a: #76c457;
+  --cable-fiber-sm: #d97706;
+  --cable-fiber-mm: #ea580c;
+  --cable-wireless: #059669;
+  --cable-coaxial: #78716c;
+
+  /* Modals & Overlays */
+  --modal-backdrop: rgba(24, 45, 18, 0.75);
+
+  /* Dimensions */
+  --header-height: 52px;
+  --footer-height: 28px;
+  --sidebar-left-width: 300px;
+  --sidebar-right-width: 360px;
+
+  /* Typography */
+  --font-family: 'Poppins', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --font-size-xs: 11px;
+  --font-size-sm: 12px;
+  --font-size-md: 13px;
+  --font-size-base: 14px;
+  --font-size-lg: 16px;
+
+  /* Transitions & Shadows */
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  --shadow-sm: 0 1px 3px 0 rgba(42, 124, 19, 0.08);
+  --shadow-md: 0 4px 6px -1px rgba(42, 124, 19, 0.12), 0 2px 4px -2px rgba(42, 124, 19, 0.08);
+  --shadow-lg: 0 10px 15px -3px rgba(42, 124, 19, 0.18), 0 4px 6px -4px rgba(42, 124, 19, 0.12);
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-full: 9999px;
+}
+
+/* Deep Forest Dark Theme (Same Palette) */
+[data-theme="dark"] {
+  --bg-primary: #0e190b;           /* Deep Pine Night */
+  --bg-secondary: #162812;         /* Dark Moss Sidebars & Toolbar */
+  --bg-tertiary: #20391a;          /* Rich Olive for Controls */
+  --bg-elevated: #284721;          /* Elevated Surface */
+  --bg-hover: #33592a;             /* Hover Highlight */
+  --bg-active: #3e6d34;            /* Active Pressed */
+
+  --border-color: #27451f;         /* Deep Forest Border */
+  --border-light: #355c2b;
+  --border-focus: #76c457;         /* Glowing Leaf Green */
+  --border-focus-glow: rgba(118, 196, 87, 0.35);
+
+  --text-primary: #fff8cf;         /* Palette Cream Text */
+  --text-secondary: #fbe6c2;       /* Palette Sand Text */
+  --text-muted: #9ab38e;           /* Sage Muted Text */
+  --text-inverse: #0e190b;
+
+  --accent-blue: #76c457;          /* Leaf Green Accent */
+  --accent-cyan: #76c457;
+  --accent-sky: #76c457;
+  --accent-hover: #8ce36b;
+
+  --status-online: #76c457;
+  --status-offline: #f87171;
+  --status-warning: #fbbf24;
+  --status-unknown: #9ab38e;
+
+  --modal-backdrop: rgba(8, 15, 6, 0.88);
+
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.6);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.7);
+}
+
+/* Reset & Box Sizing */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  user-select: none;
+}
+
+button, input, select, textarea, optgroup {
+  font-family: inherit;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: var(--radius-full);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}

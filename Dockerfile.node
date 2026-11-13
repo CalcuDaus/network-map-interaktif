@@ -1,0 +1,27 @@
+# ========================================================
+# NetMap - Alternative Node.js Dockerfile
+# Menjalankan server.js bawaan dengan Node.js Alpine
+# ========================================================
+FROM node:20-alpine
+
+LABEL maintainer="NetMap Development Team"
+LABEL description="Interactive Network Map Application (Node.js runtime)"
+
+WORKDIR /app
+
+# Salin seluruh file proyek yang dibutuhkan
+COPY index.html ./
+COPY server.js ./
+COPY css/ ./css/
+COPY js/ ./js/
+COPY assets/ ./assets/
+
+# Port server.js bawaan adalah 3000
+EXPOSE 3000
+
+ENV PORT=3000
+ENV NODE_ENV=production
+
+# Jalankan server
+CMD ["node", "server.js"]
+

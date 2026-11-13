@@ -1,0 +1,38 @@
+# Git & Version Control
+.git/
+.gitignore
+
+# Agent & AI Metadata
+.agent/
+.agent-mem/
+.agents/
+.brainsync/
+.cursor/
+.vscode/
+.mcp.json*
+.windsurfrules
+AGENT.md
+CLAUDE.md
+prd.md
+
+# Documentation
+docs/
+
+# Test & Batch Scripts
+test*
+*.bat
+
+# Node & Package Manager
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Heavy / Unused Media in Root or Maps
+Gemini_Generated_Image*.jpg
+assets/maps/campus-map-old.jpg
+
+# OS Junk
+.DS_Store
+Thumbs.db
+

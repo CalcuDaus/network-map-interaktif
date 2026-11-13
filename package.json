@@ -1,0 +1,24 @@
+{
+  "name": "network-map-interaktif",
+  "version": "1.0.0",
+  "description": "Interactive Network Infrastructure Mapper & Topology Documentation System",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "build": "esbuild js/app.js --bundle --outfile=js/bundle.js --format=iife",
+    "build:watch": "esbuild js/app.js --bundle --outfile=js/bundle.js --format=iife --watch"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  },
+  "keywords": [
+    "network-map",
+    "topology",
+    "infrastructure",
+    "canvas",
+    "konva"
+  ],
+  "author": "",
+  "license": "ISC"
+}
+

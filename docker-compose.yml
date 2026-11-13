@@ -1,0 +1,13 @@
+services:
+  netmap:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: netmap:latest
+    container_name: netmap-app
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8080}:80"
+    environment:
+      - TZ=Asia/Jakarta
+

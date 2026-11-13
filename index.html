@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NetMap — Interactive Network Infrastructure Mapper</title>
+  <meta name="description" content="Visual interactive network infrastructure mapping and documentation system">
+
+  <!-- Typography: Google Font Poppins -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap"
+    rel="stylesheet">
+
+  <!-- Core Stylesheets -->
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/map.css">
+
+  <!-- Vendor Libraries (Offline-First with CDN fallback) -->
+  <script src="assets/vendor/konva.min.js"></script>
+  <script>
+    if (!window.Konva) {
+      document.write('<script src="https://unpkg.com/konva@9.3.18/konva.min.js"><\/script>');
+    }
+  </script>
+  <script src="assets/vendor/lucide.min.js"></script>
+  <script>
+    if (!window.lucide) {
+      document.write('<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"><\/script>');
+    }
+  </script>
+  <!-- Cytoscape & Dagre for Topology -->
+  <script src="assets/vendor/cytoscape.min.js"></script>
+  <script src="assets/vendor/dagre.min.js"></script>
+  <script src="assets/vendor/cytoscape-dagre.min.js"></script>
+  <script>
+    if (window.cytoscape && window.cytoscapeDagre) {
+      window.cytoscape.use(window.cytoscapeDagre);
+    }
+  </script>
+  <!-- IndexedDB Wrapper -->
+  <script src="assets/vendor/idb.min.js"></script>
+
+  <!-- Prevent Theme FOUC -->
+  <script>
+    (function () {
+      const savedTheme = localStorage.getItem('netmap-theme') || 'light';
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    })();
+  </script>
+</head>
+
+<body>
+  <div id="app-container">
+
+    <!-- ====================================================================
+         Top Application Toolbar
+         ==================================================================== -->
+    <header id="app-toolbar">
+      <!-- Left: Brand & Project Name -->
+      <div class="toolbar-section">
+        <button id="btn-toggle-left-sidebar" class="btn btn-icon" title="Toggle Sidebar Kiri">
+          <i data-lucide="panel-left"></i>
+        </button>
+
+        <div class="toolbar-brand">
+          <div class="brand-logo-icon">
+            <i data-lucide="network" style="width: 18px; height: 18px;"></i>
+          </div>
+          <div class="brand-text-group">
+            <span class="brand-name">NetMap</span>
+            <span class="brand-badge">Campus Network</span>
+          </div>
+        </div>
+
+        <div class="divider-vertical"></div>
+
+        <!-- Mode Selectors (PRD Section 3.1) -->
+        <div class="segmented-control" role="group" aria-label="Mode Interaksi">
+          <button class="segmented-item active" data-mode="navigate" title="Mode Navigasi Peta (Geser / Pan)">
+            <i data-lucide="move" style="width: 14px; height: 14px;"></i>
+            <span>Navigate</span>
+          </button>
+          <button class="segmented-item" data-mode="select" title="Mode Seleksi & Inspeksi (Tahan Spasi untuk Geser Map)">
+            <i data-lucide="mouse-pointer" style="width: 14px; height: 14px;"></i>
+            <span>Select</span>
+          </button>
+          <button class="segmented-item" data-mode="add-device" title="Tambah Perangkat Baru (Klik pada denah)">
+            <i data-lucide="plus-circle" style="width: 14px; height: 14px;"></i>
+            <span>Add Device</span>
+          </button>
+          <button class="segmented-item" data-mode="draw-cable" title="Tarik Jalur Kabel (Hubungkan Perangkat)">
+            <i data-lucide="git-commit" style="width: 14px; height: 14px;"></i>
+            <span>Draw Cable</span>
+          </button>
+        </div>
+
+        <div class="divider-vertical"></div>
+
+        <!-- Undo / Redo Controls (Ctrl+Z / Ctrl+Y) -->
+        <button id="btn-undo" class="btn btn-icon btn-sm" title="Undo (Ctrl+Z)" disabled style="opacity: 0.4;">
+          <i data-lucide="undo-2" style="width: 14px; height: 14px;"></i>
+        </button>
+        <button id="btn-redo" class="btn btn-icon btn-sm" title="Redo (Ctrl+Y)" disabled style="opacity: 0.4;">
+          <i data-lucide="redo-2" style="width: 14px; height: 14px;"></i>
+        </button>
+
+        <div class="divider-vertical"></div>
+
+        <!-- Feature Modals Buttons -->
+        <button id="btn-open-topology" class="btn btn-secondary btn-sm"
+          title="Buka Diagram Topologi Jaringan (Fisik & Logis)">
+          <i data-lucide="git-fork" style="width: 14px; height: 14px; color: var(--accent-blue);"></i>
+          <span>Topologi</span>
+        </button>
+
+        <button id="btn-open-ip-vlan" class="btn btn-secondary btn-sm" title="Tabel Dokumentasi IP Address & VLAN">
+          <i data-lucide="file-spreadsheet" style="width: 14px; height: 14px; color: var(--accent-blue);"></i>
+          <span>IP & VLAN</span>
+        </button>
+
+        <button id="btn-open-export" class="btn btn-secondary btn-sm" title="Ekspor Data (JSON, CSV, PNG, PDF)">
+          <i data-lucide="download" style="width: 14px; height: 14px; color: var(--status-online);"></i>
+          <span>Ekspor</span>
+        </button>
+
+        <button id="btn-open-project" class="btn btn-secondary btn-sm" title="Kelola / Buka Proyek Jaringan">
+          <i data-lucide="folder" style="width: 14px; height: 14px; color: var(--status-warning);"></i>
+          <span>Proyek</span>
+        </button>
+      </div>
+
+      <!-- Right: Search, Zoom Controls & Panel Toggles -->
+      <div class="toolbar-section">
+        <!-- Smart Search bar -->
+        <div class="search-box">
+          <i data-lucide="search" style="width: 15px; height: 15px; color: var(--text-muted);"></i>
+          <input type="text" id="global-search-input" placeholder="Cari perangkat / IP / VLAN..." autocomplete="off">
+        </div>
+
+        <div class="divider-vertical"></div>
+
+        <!-- Zoom Action Buttons -->
+        <button id="btn-zoom-out" class="btn btn-icon" title="Zoom Out (Perkecil)">
+          <i data-lucide="zoom-out"></i>
+        </button>
+
+        <span id="zoom-percentage" class="status-pill"
+          style="min-width: 48px; justify-content: center; font-family: var(--font-mono);">
+          100%
+        </span>
+
+        <button id="btn-zoom-in" class="btn btn-icon" title="Zoom In (Perbesar)">
+          <i data-lucide="zoom-in"></i>
+        </button>
+
+        <button id="btn-fit-screen" class="btn btn-secondary btn-sm" title="Sesuaikan Peta ke Layar">
+          <i data-lucide="maximize" style="width: 14px; height: 14px;"></i>
+          <span>Fit</span>
+        </button>
+
+        <button id="btn-reset-view" class="btn btn-secondary btn-sm" title="Reset Skala 100%">
+          <i data-lucide="rotate-ccw" style="width: 14px; height: 14px;"></i>
+          <span>100%</span>
+        </button>
+
+        <div class="divider-vertical"></div>
+
+        <!-- Theme Toggle (Botanical Cream / Forest Dark) -->
+        <button id="btn-toggle-theme" class="btn btn-icon" title="Ganti Tema (Botanical Cream / Forest Dark)">
+          <i data-lucide="moon" id="theme-toggle-icon" style="width: 15px; height: 15px;"></i>
+        </button>
+
+        <button id="btn-toggle-right-sidebar" class="btn btn-icon" title="Toggle Panel Properti">
+          <i data-lucide="panel-right"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- ====================================================================
+         Main Workspace: Left Sidebar, Map Viewport, Right Sidebar
+         ==================================================================== -->
+    <div id="workspace">
+
+      <!-- Left Sidebar: Tools, Layers & Device Palette -->
+      <aside class="sidebar sidebar-left">
+        <div class="sidebar-header">
+          <span class="sidebar-title">
+            <i data-lucide="box" style="width: 15px; height: 15px; color: var(--accent-sky);"></i>
+            <span>Library Perangkat</span>
+          </span>
+          <span
+            style="font-size: 10px; color: var(--text-muted); background: var(--bg-primary); padding: 2px 6px; border-radius: 4px;">
+            Drag & Drop
+          </span>
+        </div>
+
+        <div class="sidebar-content">
+          <!-- Device Palette Component Container -->
+          <div id="device-palette-container"></div>
+
+          <div class="divider-horizontal"></div>
+
+          <!-- Layer Management Checklist (PRD Section 2.2 & 3.7) -->
+          <div class="panel-section">
+            <span class="section-label">Visibilitas Layer</span>
+            <div class="info-card" style="gap: 8px; font-size: 12px;">
+              <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; line-height: 1.35;">
+                <input type="checkbox" id="layer-toggle-bg" checked data-layer="background"
+                  style="accent-color: var(--accent-blue); margin-top: 2px;">
+                <span>Denah Latar Belakang</span>
+              </label>
+              <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; line-height: 1.35;">
+                <input type="checkbox" id="layer-toggle-devices" checked data-layer="devices"
+                  style="accent-color: var(--accent-blue); margin-top: 2px;">
+                <span>Perangkat Jaringan (Markers)</span>
+              </label>
+              <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; line-height: 1.35;">
+                <input type="checkbox" id="layer-toggle-connections" checked data-layer="connections"
+                  style="accent-color: var(--accent-blue); margin-top: 2px;">
+                <span>Jalur Kabel & Link</span>
+              </label>
+              <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; line-height: 1.35;">
+                <input type="checkbox" id="layer-toggle-infra" checked data-layer="infrastructure"
+                  style="accent-color: var(--accent-blue); margin-top: 2px;">
+                <span>Infrastruktur Jaringan</span>
+              </label>
+              <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; line-height: 1.35;">
+                <input type="checkbox" id="layer-toggle-buildings" checked data-layer="buildings"
+                  style="accent-color: var(--accent-blue); margin-top: 2px;">
+                <span>Objek Bangunan</span>
+              </label>
+              <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; line-height: 1.35;">
+                <input type="checkbox" id="layer-toggle-annotations" checked data-layer="annotations"
+                  style="accent-color: var(--accent-blue); margin-top: 2px;">
+                <span>Label & Anotasi</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Quick Sub-Filters (PRD Section 3.7) -->
+          <div class="panel-section">
+            <span class="section-label">Filter Cepat Komponen</span>
+            <div class="info-card" style="gap: 8px; font-size: 12px;">
+              <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; line-height: 1.35;">
+                <input type="checkbox" id="filter-toggle-cctv" checked style="accent-color: var(--status-online); margin-top: 2px;">
+                <span>Tampilkan Kamera CCTV</span>
+              </label>
+              <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; line-height: 1.35;">
+                <input type="checkbox" id="filter-toggle-fiber" checked style="accent-color: #eab308; margin-top: 2px;">
+                <span>Tampilkan Kabel Fiber Optik</span>
+              </label>
+              <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; line-height: 1.35;">
+                <input type="checkbox" id="filter-toggle-wireless" checked style="accent-color: #06b6d4; margin-top: 2px;">
+                <span>Tampilkan Link Nirkabel</span>
+              </label>
+              <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; line-height: 1.35;">
+                <input type="checkbox" id="filter-toggle-coverage" checked style="accent-color: #2a7c13; margin-top: 2px;">
+                <span>Tampilkan Cakupan Sinyal WiFi</span>
+              </label>
+              <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; line-height: 1.35; border-top: 1px dashed var(--border-color); padding-top: 6px;" title="Latar belakang peta akan sedikit transparan saat perangkat atau kabel dipilih agar objek terlihat lebih kontras dan jelas">
+                <input type="checkbox" id="toggle-dim-bg-on-select" checked style="accent-color: var(--accent-blue); margin-top: 2px;">
+                <div style="display: flex; flex-direction: column; gap: 1px;">
+                  <span style="font-weight: 600; color: var(--text-primary);">Fokus Seleksi Objek</span>
+                  <span style="font-size: 10px; color: var(--text-muted); line-height: 1.25;">Redupkan denah saat klik perangkat/kabel</span>
+                </div>
+              </label>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Main Map Viewport (Konva Canvas) -->
+      <main id="map-viewport">
+        <!-- Konva Stage Container -->
+        <div id="konva-stage-container"></div>
+
+        <!-- Compass / North Indicator (Top Right) -->
+        <button id="hud-compass" class="map-compass-hud" title="Reset Orientasi / Skala 100%">
+          <span>N</span>
+          <i data-lucide="compass" style="width: 14px; height: 14px; margin-top: -2px;"></i>
+        </button>
+
+        <!-- Floating HUD Zoom Controls (Bottom Right) -->
+        <div class="map-hud-controls">
+          <div class="hud-button-group">
+            <button id="hud-zoom-in" class="hud-btn" title="Zoom In">
+              <i data-lucide="plus" style="width: 18px; height: 18px;"></i>
+            </button>
+            <button id="hud-zoom-out" class="hud-btn" title="Zoom Out">
+              <i data-lucide="minus" style="width: 18px; height: 18px;"></i>
+            </button>
+            <button id="hud-fit-screen" class="hud-btn" title="Fit to Screen">
+              <i data-lucide="maximize-2" style="width: 16px; height: 16px;"></i>
+            </button>
+            <button id="hud-reset-view" class="hud-btn" title="Reset 100%">
+              <i data-lucide="scan" style="width: 16px; height: 16px;"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Floating Scale & Zoom Info (Bottom Left) -->
+        <div class="map-info-hud">
+          <span>Skala: <strong id="hud-zoom-badge" class="hud-badge">100%</strong></span>
+          <span style="color: var(--border-light);">|</span>
+          <span id="hud-device-count-badge">0 Perangkat • 0 Link Kabel</span>
+        </div>
+
+        <!-- Loading Overlay -->
+        <div id="map-loading-overlay" class="map-loading-overlay">
+          <div class="spinner"></div>
+          <div class="loading-text">Memuat denah infrastruktur kampus...</div>
+        </div>
+      </main>
+
+      <!-- Right Sidebar: Properties & Inspection -->
+      <aside class="sidebar sidebar-right">
+        <div class="sidebar-header">
+          <span class="sidebar-title">
+            <i data-lucide="sliders" style="width: 15px; height: 15px; color: var(--accent-sky);"></i>
+            <span>Properti & Konfigurasi</span>
+          </span>
+        </div>
+
+        <div class="sidebar-content">
+          <!-- Properties Panel Component Container -->
+          <div id="properties-panel-container"></div>
+        </div>
+      </aside>
+
+    </div>
+
+    <!-- ====================================================================
+         Bottom Status Bar
+         ==================================================================== -->
+    <footer id="app-status-bar">
+      <!-- Left: Status & Engine info -->
+      <div class="status-group">
+        <div class="status-item">
+          <span class="status-pill" style="color: var(--status-online); background: rgba(42, 124, 19, 0.12);">
+            ● TERSIMPAN (OFFLINE)
+          </span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">Inventaris:</span>
+          <span id="status-device-count" class="status-value">0 dev / 0 links</span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">Mode:</span>
+          <span id="status-active-mode" class="status-value" style="color: var(--accent-blue);">NAVIGATE</span>
+        </div>
+      </div>
+
+      <!-- Center: Normalized Coordinates & Pixels -->
+      <div class="status-group">
+        <div class="status-item">
+          <span class="status-label">Normalisasi:</span>
+          <span id="status-coord-normalized" class="status-value" style="color: var(--accent-blue);">X: -- Y: --</span>
+        </div>
+        <div class="status-item">
+          <span id="status-coord-pixel" class="status-value" style="color: var(--text-muted);">(di luar denah)</span>
+        </div>
+      </div>
+
+      <!-- Right: Scale & Navigation Hint -->
+      <div class="status-group">
+        <div class="status-item">
+          <span class="status-label">Zoom:</span>
+          <span id="status-zoom-level" class="status-value">100%</span>
+        </div>
+        <div class="status-item">
+          <button id="status-map-scale-btn" class="status-pill-btn" style="background: rgba(42, 124, 19, 0.15); color: var(--accent-green); border: 1px solid rgba(42, 124, 19, 0.35); border-radius: 4px; padding: 2px 8px; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 4px; font-family: var(--font-mono);" title="Klik untuk kalibrasi skala ukuran fisik denah peta">
+            <span id="status-map-scale-text">📐 Skala: 400m (1px = 0.39m)</span>
+          </button>
+        </div>
+        <div class="status-item" style="color: var(--text-muted); font-size: 11px;">
+          Tahan Spasi untuk Geser Map (Hand Tool) • Ctrl+Z Undo • Tekan E untuk Ekspor • Tekan T untuk Topologi
+        </div>
+      </div>
+    </footer>
+
+  </div>
+
+  <!-- Application Bootstrap (Bundled for file:// and http:// compatibility) -->
+  <script src="js/bundle.js"></script>
+</body>
+
+</html>
+<!--  -->

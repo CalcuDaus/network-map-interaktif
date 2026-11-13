@@ -1,0 +1,194 @@
+/* ==========================================================================
+   NetMap — Map Viewport & Overlay Controls Stylesheet
+   Theme: Color Hunt (2a7c13 / 76c457 / fff8cf / fbe6c2)
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Canvas & Stage
+   -------------------------------------------------------------------------- */
+#map-viewport {
+  background-color: #f7eed7;
+  background-image: 
+    radial-gradient(rgba(42, 124, 19, 0.12) 1px, transparent 0),
+    radial-gradient(rgba(42, 124, 19, 0.05) 1px, transparent 0);
+  background-size: 24px 24px, 120px 120px;
+  background-position: 0 0, 12px 12px;
+  contain: layout style paint;
+}
+
+#konva-stage-container {
+  touch-action: none;
+  will-change: transform;
+  transform: translateZ(0);
+}
+
+[data-theme="dark"] #map-viewport {
+  background-color: #0b1408;
+  background-image: 
+    radial-gradient(rgba(118, 196, 87, 0.15) 1px, transparent 0),
+    radial-gradient(rgba(118, 196, 87, 0.08) 1px, transparent 0);
+  background-size: 24px 24px, 120px 120px;
+  background-position: 0 0, 12px 12px;
+}
+
+/* Panning & Spacebar Hand Tool Cursors (Photoshop Style) */
+#konva-stage-container.space-panning-active,
+#konva-stage-container.space-panning-active canvas {
+  cursor: grab !important;
+}
+
+#konva-stage-container.panning,
+#konva-stage-container.panning canvas,
+#konva-stage-container.space-panning-active.panning,
+#konva-stage-container.space-panning-active.panning canvas {
+  cursor: grabbing !important;
+}
+
+/* --------------------------------------------------------------------------
+   Floating HUD Controls (Bottom-Right / Top-Right of Map)
+   -------------------------------------------------------------------------- */
+.map-hud-controls {
+  position: absolute;
+  right: 20px;
+  bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 10;
+  pointer-events: auto;
+}
+
+.hud-button-group {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+.hud-btn {
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  outline: none;
+}
+
+.hud-btn:hover {
+  background-color: var(--bg-hover);
+  color: var(--accent-blue);
+}
+
+.hud-btn:active {
+  background-color: var(--bg-active);
+}
+
+.hud-btn + .hud-btn {
+  border-top: 1px solid var(--border-color);
+}
+
+/* Compass / Orientation Indicator */
+.map-compass-hud {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 38px;
+  height: 38px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-full);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-md);
+  color: var(--accent-blue);
+  font-size: 11px;
+  font-weight: 700;
+  z-index: 10;
+  cursor: pointer;
+  transition: transform var(--transition-fast), border-color var(--transition-fast);
+}
+
+.map-compass-hud:hover {
+  transform: scale(1.05);
+  border-color: var(--accent-cyan);
+}
+
+/* --------------------------------------------------------------------------
+   Floating Scale & Zoom HUD
+   -------------------------------------------------------------------------- */
+.map-info-hud {
+  position: absolute;
+  left: 20px;
+  bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 14px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  font-size: var(--font-size-xs);
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  z-index: 10;
+  pointer-events: none;
+}
+
+.hud-badge {
+  color: var(--accent-blue);
+  font-weight: 700;
+}
+
+/* --------------------------------------------------------------------------
+   Loading Overlay
+   -------------------------------------------------------------------------- */
+.map-loading-overlay {
+  position: absolute;
+  inset: 0;
+  background-color: var(--modal-backdrop);
+  backdrop-filter: blur(4px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  z-index: 30;
+  transition: opacity 300ms ease, visibility 300ms ease;
+}
+
+.map-loading-overlay.hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.spinner {
+  width: 44px;
+  height: 44px;
+  border: 3px solid rgba(118, 196, 87, 0.2);
+  border-top-color: var(--palette-leaf);
+  border-radius: var(--radius-full);
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-text {
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
