@@ -27,6 +27,7 @@ import { ProjectModal } from './ui/project-modal.js';
 import { HistoryManager } from './core/history-manager.js';
 import { ContextMenu } from './ui/context-menu.js';
 import { CustomDeviceModal } from './ui/custom-device-modal.js';
+import { MikrotikQuickInsertModal } from './ui/mikrotik-quick-insert-modal.js';
 import { MapScaleModal } from './ui/map-scale-modal.js';
 
 class NetMapApp {
@@ -48,6 +49,7 @@ class NetMapApp {
     this.layerControls = null;
     this.contextMenu = null;
     this.customDeviceModal = null;
+    this.mikrotikQuickInsertModal = null;
     this.mapScaleModal = null;
     this.projectStorage = null;
     this.exportModal = null;
@@ -194,6 +196,12 @@ class NetMapApp {
     this.customDeviceModal = new CustomDeviceModal({
       deviceManager: this.deviceManager,
       devicePalette: this.devicePalette,
+      mapEngine: this.mapEngine
+    });
+
+    // 14c-2. Initialize MikroTik Quick & Batch Insert Modal
+    this.mikrotikQuickInsertModal = new MikrotikQuickInsertModal({
+      deviceManager: this.deviceManager,
       mapEngine: this.mapEngine
     });
 
@@ -348,7 +356,9 @@ class NetMapApp {
 
         const newDevice = this.deviceManager.addDevice(deviceData);
         this.deviceManager.selectDevice(newDevice.id);
-        stateManager.setMode('select');
+        if (!this.devicePalette?.multiPlaceMode) {
+          stateManager.setMode('select');
+        }
       }
     });
 

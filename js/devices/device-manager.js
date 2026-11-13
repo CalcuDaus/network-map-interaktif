@@ -58,12 +58,17 @@ export class DeviceManager {
   addDevice(deviceData) {
     // If only type is provided, lookup catalog defaults
     const def = getDeviceDefByType(deviceData.type);
+    const resolvedCoverage = deviceData.wirelessCoverage !== undefined
+      ? deviceData.wirelessCoverage
+      : (def?.defaultWirelessCoverage ? { ...def.defaultWirelessCoverage } : undefined);
+
     const enrichedData = {
       name: deviceData.name || (def ? def.name : 'New Device'),
       category: deviceData.category || (def ? def.category : 'core'),
       brand: deviceData.brand || (def ? def.defaultBrand : ''),
       model: deviceData.model || (def ? def.defaultModel : ''),
-      ...deviceData
+      ...deviceData,
+      ...(resolvedCoverage !== undefined ? { wirelessCoverage: resolvedCoverage } : {})
     };
 
     const device = DeviceSchema.create(enrichedData);

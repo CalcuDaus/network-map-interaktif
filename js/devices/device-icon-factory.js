@@ -289,6 +289,200 @@ export const NETWORK_ICON_DEFS = {
         <circle cx="16" cy="16" r="4" fill="${color}"/>
       </svg>
     `
+  },
+  'mikrotik-ccr': {
+    id: 'mikrotik-ccr',
+    name: 'MikroTik CCR Rack',
+    category: 'core',
+    svg: (color = '#2a7c13', bg = 'none') => `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
+        <rect x="2" y="9" width="28" height="14" rx="2.5" stroke="${color}" stroke-width="2" fill="${bg}"/>
+        <path d="M5.5 20V12l2.5 4.2L10.5 12v8" stroke="${color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        <rect x="13" y="13" width="2.8" height="2.6" rx="0.5" fill="${color}"/>
+        <rect x="17" y="13" width="2.8" height="2.6" rx="0.5" fill="${color}"/>
+        <rect x="21" y="13" width="2.8" height="2.6" rx="0.5" fill="${color}"/>
+        <rect x="25" y="13" width="2.8" height="2.6" rx="0.5" stroke="${color}" stroke-width="1.4"/>
+        <rect x="13" y="17.5" width="2.8" height="2.6" rx="0.5" fill="${color}"/>
+        <rect x="17" y="17.5" width="2.8" height="2.6" rx="0.5" fill="${color}"/>
+        <rect x="21" y="17.5" width="2.8" height="2.6" rx="0.5" stroke="${color}" stroke-width="1.4"/>
+        <rect x="25" y="17.5" width="2.8" height="2.6" rx="0.5" stroke="${color}" stroke-width="1.4"/>
+      </svg>
+    `
+  },
+  'mikrotik-rb': {
+    id: 'mikrotik-rb',
+    name: 'MikroTik RouterBOARD',
+    category: 'core',
+    svg: (color = '#2a7c13', bg = 'none') => `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
+        <rect x="3" y="8" width="26" height="16" rx="3" stroke="${color}" stroke-width="2" fill="${bg}"/>
+        <path d="M6 12h6M6 15.5h4" stroke="${color}" stroke-width="1.8" stroke-linecap="round"/>
+        <circle cx="24" cy="12" r="1.4" fill="${color}"/>
+        <rect x="6" y="18.5" width="3.2" height="3" rx="0.5" fill="${color}"/>
+        <rect x="10.8" y="18.5" width="3.2" height="3" rx="0.5" fill="${color}"/>
+        <rect x="15.6" y="18.5" width="3.2" height="3" rx="0.5" fill="${color}"/>
+        <rect x="20.4" y="18.5" width="3.2" height="3" rx="0.5" fill="${color}"/>
+        <rect x="24.8" y="18.5" width="2.2" height="3" rx="0.5" stroke="${color}" stroke-width="1.3"/>
+      </svg>
+    `
+  },
+  'mikrotik-crs': {
+    id: 'mikrotik-crs',
+    name: 'MikroTik CRS Switch',
+    category: 'distribution',
+    svg: (color = '#76c457', bg = 'none') => `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
+        <rect x="2" y="8" width="28" height="16" rx="2.5" stroke="${color}" stroke-width="2" fill="${bg}"/>
+        <path d="M5 12h2.2v2.2H5zm3.4 0h2.2v2.2H8.4zm3.4 0H14v2.2h-2.2zm3.4 0h2.2v2.2h-2.2z" fill="${color}"/>
+        <path d="M5 16.5h2.2v2.2H5zm3.4 0h2.2v2.2H8.4zm3.4 0H14v2.2h-2.2zm3.4 0h2.2v2.2h-2.2z" fill="${color}"/>
+        <rect x="20" y="12" width="3" height="2.6" rx="0.5" stroke="${color}" stroke-width="1.4"/>
+        <rect x="24.2" y="12" width="3" height="2.6" rx="0.5" stroke="${color}" stroke-width="1.4"/>
+        <rect x="20" y="16.4" width="3" height="2.6" rx="0.5" stroke="${color}" stroke-width="1.4"/>
+        <rect x="24.2" y="16.4" width="3" height="2.6" rx="0.5" stroke="${color}" stroke-width="1.4"/>
+        <path d="M6 21.5h12" stroke="${color}" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+    `
+  },
+  'mikrotik-cap': {
+    id: 'mikrotik-cap',
+    name: 'MikroTik cAP / hAP Wi-Fi',
+    category: 'distribution',
+    svg: (color = '#76c457', bg = 'none') => `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
+        <ellipse cx="16" cy="21" rx="11" ry="5" stroke="${color}" stroke-width="2" fill="${bg}"/>
+        <circle cx="16" cy="21" r="2" fill="${color}"/>
+        <path d="M11 14a7.5 7.5 0 0 1 10 0" stroke="${color}" stroke-width="2" stroke-linecap="round"/>
+        <path d="M7.5 10a12.5 12.5 0 0 1 17 0" stroke="${color}" stroke-width="2" stroke-linecap="round"/>
+        <path d="M4 6a17.5 17.5 0 0 1 24 0" stroke="${color}" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+    `
+  },
+  'mikrotik-lhg': {
+    id: 'mikrotik-lhg',
+    name: 'MikroTik LHG PtP Dish',
+    category: 'distribution',
+    svg: (color = '#76c457', bg = 'none') => `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
+        <path d="M6 22C6 13.5 12.5 7 21 7" stroke="${color}" stroke-width="2.2" stroke-linecap="round"/>
+        <path d="M8.5 23.5L22.5 9.5" stroke="${color}" stroke-width="1.8" stroke-linecap="round"/>
+        <path d="M14 18l5-5m0 0h3.5m-3.5 0V9.5" stroke="${color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="23" cy="9" r="2" fill="${color}"/>
+        <path d="M9 26h10M14 23v3" stroke="${color}" stroke-width="2" stroke-linecap="round"/>
+        <path d="M25.5 4.5a6 6 0 0 1 2 4.5" stroke="${color}" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+    `
+  },
+  'mikrotik-sxt': {
+    id: 'mikrotik-sxt',
+    name: 'MikroTik SXT / mANTBox',
+    category: 'distribution',
+    svg: (color = '#76c457', bg = 'none') => `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
+        <rect x="4" y="7" width="12" height="18" rx="2.5" stroke="${color}" stroke-width="2" fill="${bg}"/>
+        <path d="M8 11v10M12 11v10" stroke="${color}" stroke-width="1.6" stroke-linecap="round"/>
+        <path d="M10 25v4M6 29h8" stroke="${color}" stroke-width="2" stroke-linecap="round"/>
+        <path d="M20 12a6.5 6.5 0 0 1 0 8" stroke="${color}" stroke-width="2" stroke-linecap="round"/>
+        <path d="M23.5 9a11 11 0 0 1 0 14" stroke="${color}" stroke-width="2" stroke-linecap="round"/>
+        <path d="M27 6a15.5 15.5 0 0 1 0 20" stroke="${color}" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+    `
+  },
+  'ruijie-gateway': {
+    id: 'ruijie-gateway',
+    name: 'Ruijie EG / NBR Gateway',
+    category: 'core',
+    svg: (color = '#2a7c13', bg = 'none') => `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
+        <rect x="2" y="8" width="28" height="16" rx="3" stroke="${color}" stroke-width="2" fill="${bg}"/>
+        <path d="M5.5 20V12h3a2.5 2.5 0 0 1 0 5h-3m2.2 0L10 20" stroke="${color}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="14.5" cy="13.5" r="1.4" fill="${color}"/>
+        <circle cx="18.5" cy="13.5" r="1.4" fill="${color}"/>
+        <rect x="13" y="17.5" width="3" height="2.6" rx="0.5" fill="${color}"/>
+        <rect x="17.2" y="17.5" width="3" height="2.6" rx="0.5" fill="${color}"/>
+        <rect x="21.4" y="17.5" width="3" height="2.6" rx="0.5" fill="${color}"/>
+        <rect x="25.2" y="13" width="2.4" height="7" rx="0.5" stroke="${color}" stroke-width="1.3"/>
+      </svg>
+    `
+  },
+  'ruijie-switch': {
+    id: 'ruijie-switch',
+    name: 'Ruijie NBS / ES Switch',
+    category: 'distribution',
+    svg: (color = '#76c457', bg = 'none') => `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
+        <rect x="2" y="8" width="28" height="16" rx="2.5" stroke="${color}" stroke-width="2" fill="${bg}"/>
+        <path d="M5 12h2v2H5zm3 0h2v2H8zm3 0h2v2h-2zm3 0h2v2h-2zm3 0h2v2h-2z" fill="${color}"/>
+        <path d="M5 16h2v2H5zm3 0h2v2H8zm3 0h2v2h-2zm3 0h2v2h-2zm3 0h2v2h-2z" fill="${color}"/>
+        <rect x="21.5" y="11.8" width="2.6" height="2.6" rx="0.4" stroke="${color}" stroke-width="1.3"/>
+        <rect x="25" y="11.8" width="2.6" height="2.6" rx="0.4" stroke="${color}" stroke-width="1.3"/>
+        <rect x="21.5" y="15.8" width="2.6" height="2.6" rx="0.4" stroke="${color}" stroke-width="1.3"/>
+        <rect x="25" y="15.8" width="2.6" height="2.6" rx="0.4" stroke="${color}" stroke-width="1.3"/>
+        <path d="M5.5 21h21" stroke="${color}" stroke-width="1.4" stroke-linecap="round"/>
+      </svg>
+    `
+  },
+  'ruijie-rap': {
+    id: 'ruijie-rap',
+    name: 'Ruijie Reyee RAP AP',
+    category: 'distribution',
+    svg: (color = '#76c457', bg = 'none') => `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
+        <rect x="5" y="12" width="22" height="15" rx="5" stroke="${color}" stroke-width="2" fill="${bg}"/>
+        <circle cx="16" cy="19.5" r="2.2" fill="${color}"/>
+        <path d="M11.5 9.5a6.8 6.8 0 0 1 9 0" stroke="${color}" stroke-width="2" stroke-linecap="round"/>
+        <path d="M8 6a11.5 11.5 0 0 1 16 0" stroke="${color}" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    `
+  },
+  'ruijie-est': {
+    id: 'ruijie-est',
+    name: 'Ruijie EST Wireless Bridge',
+    category: 'distribution',
+    svg: (color = '#76c457', bg = 'none') => `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
+        <rect x="4" y="6" width="12" height="19" rx="3" stroke="${color}" stroke-width="2" fill="${bg}"/>
+        <circle cx="10" cy="12" r="2" stroke="${color}" stroke-width="1.6"/>
+        <path d="M7.5 18h5M10 25v4M6 29h8" stroke="${color}" stroke-width="1.8" stroke-linecap="round"/>
+        <path d="M20 11a7 7 0 0 1 0 9" stroke="${color}" stroke-width="2" stroke-linecap="round"/>
+        <path d="M24 8a11.5 11.5 0 0 1 0 15" stroke="${color}" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    `
+  },
+  'tplink-hub': {
+    id: 'tplink-hub',
+    name: 'TP-Link Desktop Switch / Hub',
+    category: 'distribution',
+    svg: (color = '#76c457', bg = 'none') => `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
+        <path d="M5 12h22l2 5v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7l2-5z" stroke="${color}" stroke-width="2" stroke-linejoin="round" fill="${bg}"/>
+        <path d="M3 17h26" stroke="${color}" stroke-width="1.6"/>
+        <circle cx="7" cy="14.5" r="1.1" fill="${color}"/>
+        <rect x="6" y="19.5" width="3.2" height="3.2" rx="0.5" fill="${color}"/>
+        <rect x="10.8" y="19.5" width="3.2" height="3.2" rx="0.5" fill="${color}"/>
+        <rect x="15.6" y="19.5" width="3.2" height="3.2" rx="0.5" fill="${color}"/>
+        <rect x="20.4" y="19.5" width="3.2" height="3.2" rx="0.5" fill="${color}"/>
+        <rect x="24.8" y="19.5" width="2.2" height="3.2" rx="0.5" stroke="${color}" stroke-width="1.2"/>
+      </svg>
+    `
+  },
+  'tplink-switch': {
+    id: 'tplink-switch',
+    name: 'TP-Link JetStream Switch',
+    category: 'distribution',
+    svg: (color = '#76c457', bg = 'none') => `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
+        <rect x="2" y="8" width="28" height="16" rx="2.5" stroke="${color}" stroke-width="2" fill="${bg}"/>
+        <circle cx="5.5" cy="12" r="1.2" fill="${color}"/>
+        <circle cx="5.5" cy="16" r="1.2" fill="${color}"/>
+        <path d="M8.5 11.5h2.2v2.2H8.5zm3.3 0H14v2.2h-2.2zm3.3 0h2.2v2.2h-2.2zm3.3 0h2.2v2.2h-2.2z" fill="${color}"/>
+        <path d="M8.5 15.5h2.2v2.2H8.5zm3.3 0H14v2.2h-2.2zm3.3 0h2.2v2.2h-2.2zm3.3 0h2.2v2.2h-2.2z" fill="${color}"/>
+        <rect x="22.5" y="11.5" width="2.5" height="2.5" rx="0.4" stroke="${color}" stroke-width="1.3"/>
+        <rect x="26" y="11.5" width="2.5" height="2.5" rx="0.4" stroke="${color}" stroke-width="1.3"/>
+        <rect x="22.5" y="15.5" width="2.5" height="2.5" rx="0.4" stroke="${color}" stroke-width="1.3"/>
+        <rect x="26" y="15.5" width="2.5" height="2.5" rx="0.4" stroke="${color}" stroke-width="1.3"/>
+        <path d="M5.5 21h21" stroke="${color}" stroke-width="1.4" stroke-linecap="round"/>
+      </svg>
+    `
   }
 };
 
@@ -325,7 +519,50 @@ export function getDefaultIconForType(type) {
     'nas': 'storage',
     'laptop': 'laptop',
     'iot': 'iot',
-    'custom': 'custom'
+    'custom': 'custom',
+    // MikroTik Hardware Presets
+    'mikrotik-ccr2116': 'mikrotik-ccr',
+    'mikrotik-ccr2004': 'mikrotik-ccr',
+    'mikrotik-rb5009': 'mikrotik-rb',
+    'mikrotik-rb4011': 'mikrotik-rb',
+    'mikrotik-l009': 'mikrotik-rb',
+    'mikrotik-hex': 'mikrotik-rb',
+    'mikrotik-crs317': 'mikrotik-crs',
+    'mikrotik-crs326': 'mikrotik-crs',
+    'mikrotik-crs328': 'mikrotik-crs',
+    'mikrotik-crs310': 'mikrotik-crs',
+    'mikrotik-cap-ax': 'mikrotik-cap',
+    'mikrotik-hap-ax2': 'mikrotik-cap',
+    'mikrotik-lhg5': 'mikrotik-lhg',
+    'mikrotik-sxtsq': 'mikrotik-sxt',
+    'mikrotik-mantbox': 'mikrotik-sxt',
+    // Ruijie & Reyee Hardware Presets
+    'ruijie-eg210g': 'ruijie-gateway',
+    'ruijie-eg310gh': 'ruijie-gateway',
+    'ruijie-nbr6210': 'ruijie-gateway',
+    'ruijie-s5750': 'ruijie-switch',
+    'ruijie-nbs5200': 'ruijie-switch',
+    'ruijie-nbs3100': 'ruijie-switch',
+    'ruijie-nbs3100-poe': 'ruijie-switch',
+    'ruijie-es218gc': 'ruijie-switch',
+    'ruijie-es209gc': 'ruijie-switch',
+    'ruijie-rap2260': 'ruijie-rap',
+    'ruijie-rap2200': 'ruijie-rap',
+    'ruijie-rap1200': 'ruijie-rap',
+    'ruijie-rap6260': 'ruijie-rap',
+    'ruijie-est350': 'ruijie-est',
+    // TP-Link Switch & Hub Presets
+    'tplink-ls1005g': 'tplink-hub',
+    'tplink-sg1008d': 'tplink-hub',
+    'tplink-sg108e': 'tplink-hub',
+    'tplink-sg108pe': 'tplink-hub',
+    'tplink-sg1016d': 'tplink-switch',
+    'tplink-sg1024d': 'tplink-switch',
+    'tplink-sg1218mp': 'tplink-switch',
+    'tplink-sg2210mp': 'tplink-switch',
+    'tplink-sg2428p': 'tplink-switch',
+    'tplink-sg3428x': 'tplink-switch',
+    'tplink-sx3016f': 'tplink-switch'
   };
   return map[type] || 'router';
 }

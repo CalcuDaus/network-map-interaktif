@@ -126,6 +126,52 @@ export class CustomDeviceModal {
                       <option value="iot">IoT Device</option>
                       <option value="laptop">Laptop</option>
                       <option value="custom">Perangkat Kustom Lainnya</option>
+                      <optgroup label="MikroTik Hardware">
+                        <option value="mikrotik-ccr2004">MikroTik CCR (Rack Router)</option>
+                        <option value="mikrotik-rb5009">MikroTik RB5009 / RB4011</option>
+                        <option value="mikrotik-hex">MikroTik hEX / L009</option>
+                        <option value="mikrotik-crs326">MikroTik CRS Switch</option>
+                        <option value="mikrotik-crs328">MikroTik CRS PoE Switch</option>
+                        <option value="mikrotik-cap-ax">MikroTik cAP / hAP Wi-Fi</option>
+                        <option value="mikrotik-lhg5">MikroTik LHG PtP Dish</option>
+                        <option value="mikrotik-sxtsq">MikroTik SXTsq / mANTBox</option>
+                      </optgroup>
+                      <optgroup label="Ruijie / Reyee Hardware">
+                        <option value="ruijie-eg210g">Ruijie EG210G-P / EG310GH Gateway</option>
+                        <option value="ruijie-nbr6210">Ruijie NBR6210 Enterprise Gateway</option>
+                        <option value="ruijie-s5750">Ruijie RG-S5750 Core L3 Switch</option>
+                        <option value="ruijie-nbs5200">Ruijie NBS5200 / NBS3100 Switch</option>
+                        <option value="ruijie-es218gc">Ruijie ES218GC-P / ES209GC-P PoE</option>
+                        <option value="ruijie-rap2260">Ruijie RAP2260 / RAP2200 Ceiling AP</option>
+                        <option value="ruijie-rap1200">Ruijie RAP1200 In-Wall AP</option>
+                        <option value="ruijie-rap6260">Ruijie RAP6260 Outdoor Wi-Fi 6</option>
+                        <option value="ruijie-est350">Ruijie RG-EST350 Wireless Bridge</option>
+                      </optgroup>
+                      <optgroup label="TP-Link Switch & Hub">
+                        <option value="tplink-ls1005g">TP-Link LS1005G / SG1008D Hub</option>
+                        <option value="tplink-sg108pe">TP-Link TL-SG108E / SG108PE PoE+</option>
+                        <option value="tplink-sg1016d">TP-Link TL-SG1016D / SG1024D Switch</option>
+                        <option value="tplink-sg2428p">TP-Link Omada SG2210MP / SG2428P</option>
+                        <option value="tplink-sg3428x">TP-Link JetStream SG3428X / SX3016F</option>
+                      </optgroup>
+                      <optgroup label="Ruijie / Reyee Hardware">
+                        <option value="ruijie-eg210g">Ruijie EG210G-P / EG310GH Gateway</option>
+                        <option value="ruijie-nbr6210">Ruijie NBR6210 Enterprise Gateway</option>
+                        <option value="ruijie-s5750">Ruijie RG-S5750 Core L3 Switch</option>
+                        <option value="ruijie-nbs5200">Ruijie NBS5200 / NBS3100 Switch</option>
+                        <option value="ruijie-es218gc">Ruijie ES218GC-P / ES209GC-P PoE</option>
+                        <option value="ruijie-rap2260">Ruijie RAP2260 / RAP2200 Ceiling AP</option>
+                        <option value="ruijie-rap1200">Ruijie RAP1200 In-Wall AP</option>
+                        <option value="ruijie-rap6260">Ruijie RAP6260 Outdoor Wi-Fi 6</option>
+                        <option value="ruijie-est350">Ruijie RG-EST350 Wireless Bridge</option>
+                      </optgroup>
+                      <optgroup label="TP-Link Switch & Hub">
+                        <option value="tplink-ls1005g">TP-Link LS1005G / SG1008D Hub</option>
+                        <option value="tplink-sg108pe">TP-Link TL-SG108E / SG108PE PoE+</option>
+                        <option value="tplink-sg1016d">TP-Link TL-SG1016D / SG1024D Switch</option>
+                        <option value="tplink-sg2428p">TP-Link Omada SG2210MP / SG2428P</option>
+                        <option value="tplink-sg3428x">TP-Link JetStream SG3428X / SX3016F</option>
+                      </optgroup>
                     </select>
                   </div>
                 </div>

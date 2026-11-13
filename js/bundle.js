@@ -1474,7 +1474,7 @@
       bg: "rgba(100, 116, 139, 0.15)"
     }
   };
-  var DEVICE_CATALOG = [
+  var STANDARD_DEVICE_CATALOG = [
     // --- Core Network ---
     {
       type: "router",
@@ -1677,6 +1677,548 @@
       defaultModel: "GRP2601P",
       description: "Telepon jaringan berbasis protokol SIP"
     }
+  ];
+  var MIKROTIK_CATALOG = [
+    {
+      type: "mikrotik-ccr2116",
+      brandGroup: "MikroTik",
+      badgeCode: "CCR",
+      category: "core",
+      name: "MikroTik CCR2116",
+      lucideIcon: "cpu",
+      defaultBrand: "MikroTik",
+      defaultModel: "CCR2116-12G-4S+",
+      description: "Core Router 16-Core ARM, 12x GbE + 4x 10G SFP+"
+    },
+    {
+      type: "mikrotik-ccr2004",
+      brandGroup: "MikroTik",
+      badgeCode: "CCR",
+      category: "core",
+      name: "MikroTik CCR2004",
+      lucideIcon: "cpu",
+      defaultBrand: "MikroTik",
+      defaultModel: "CCR2004-16G-2S+",
+      description: "Core / Edge Router 16x GbE + 2x 10G SFP+"
+    },
+    {
+      type: "mikrotik-rb5009",
+      brandGroup: "MikroTik",
+      badgeCode: "RB",
+      category: "core",
+      name: "MikroTik RB5009",
+      lucideIcon: "router",
+      defaultBrand: "MikroTik",
+      defaultModel: "RB5009UG+S+IN",
+      description: "Heavy Duty Router 7x GbE + 2.5G + 10G SFP+"
+    },
+    {
+      type: "mikrotik-rb4011",
+      brandGroup: "MikroTik",
+      badgeCode: "RB",
+      category: "core",
+      name: "MikroTik RB4011",
+      lucideIcon: "router",
+      defaultBrand: "MikroTik",
+      defaultModel: "RB4011iGS+RM",
+      description: "Rackmount Router 10x GbE + 10G SFP+"
+    },
+    {
+      type: "mikrotik-l009",
+      brandGroup: "MikroTik",
+      badgeCode: "L009",
+      category: "core",
+      name: "MikroTik L009",
+      lucideIcon: "router",
+      defaultBrand: "MikroTik",
+      defaultModel: "L009UiGS-RM",
+      description: "Router 8x GbE + 2.5G SFP Port (PoE Out Port 8)"
+    },
+    {
+      type: "mikrotik-hex",
+      brandGroup: "MikroTik",
+      badgeCode: "hEX",
+      category: "core",
+      name: "MikroTik hEX",
+      lucideIcon: "router",
+      defaultBrand: "MikroTik",
+      defaultModel: "RB750Gr3",
+      description: "Router Gigabit 5-Port kompak untuk cabang / gedung"
+    },
+    {
+      type: "mikrotik-crs317",
+      brandGroup: "MikroTik",
+      badgeCode: "CRS",
+      category: "core",
+      name: "MikroTik CRS317",
+      lucideIcon: "server",
+      defaultBrand: "MikroTik",
+      defaultModel: "CRS317-1G-16S+RM",
+      description: "Core Fiber Switch 16x 10G SFP+ & 1x GbE Mgmt"
+    },
+    {
+      type: "mikrotik-crs326",
+      brandGroup: "MikroTik",
+      badgeCode: "CRS",
+      category: "distribution",
+      name: "MikroTik CRS326",
+      lucideIcon: "network",
+      defaultBrand: "MikroTik",
+      defaultModel: "CRS326-24G-2S+RM",
+      description: "Managed Switch 24x GbE + 2x 10G SFP+ Uplink"
+    },
+    {
+      type: "mikrotik-crs328",
+      brandGroup: "MikroTik",
+      badgeCode: "PoE",
+      category: "distribution",
+      name: "MikroTik CRS328 PoE",
+      lucideIcon: "zap",
+      defaultBrand: "MikroTik",
+      defaultModel: "CRS328-24P-4S+RM",
+      description: "PoE+ Switch 24x GbE PoE Out + 4x 10G SFP+"
+    },
+    {
+      type: "mikrotik-crs310",
+      brandGroup: "MikroTik",
+      badgeCode: "CRS",
+      category: "distribution",
+      name: "MikroTik CRS310",
+      lucideIcon: "network",
+      defaultBrand: "MikroTik",
+      defaultModel: "CRS310-8G+2S+IN",
+      description: "Switch 8x 2.5G RJ45 + 2x 10G SFP+"
+    },
+    {
+      type: "mikrotik-cap-ax",
+      brandGroup: "MikroTik",
+      badgeCode: "cAP",
+      category: "distribution",
+      name: "MikroTik cAP ax",
+      lucideIcon: "wifi",
+      defaultBrand: "MikroTik",
+      defaultModel: "cAPGi-5HaxD2HaxD",
+      description: "Ceiling Access Point Wi-Fi 6 Dual-Band",
+      defaultWirelessCoverage: {
+        enabled: true,
+        radiusMeters: 30,
+        color: "#76c457",
+        opacity: 0.18,
+        hatch: true,
+        band: "dual-band",
+        showLabel: true
+      }
+    },
+    {
+      type: "mikrotik-hap-ax2",
+      brandGroup: "MikroTik",
+      badgeCode: "hAP",
+      category: "distribution",
+      name: "MikroTik hAP ax\xB2",
+      lucideIcon: "wifi",
+      defaultBrand: "MikroTik",
+      defaultModel: "C52iG-5HaxD2HaxD-TC",
+      description: "Indoor Wi-Fi 6 Router / Access Point 5x GbE",
+      defaultWirelessCoverage: {
+        enabled: true,
+        radiusMeters: 25,
+        color: "#76c457",
+        opacity: 0.18,
+        hatch: true,
+        band: "dual-band",
+        showLabel: true
+      }
+    },
+    {
+      type: "mikrotik-lhg5",
+      brandGroup: "MikroTik",
+      badgeCode: "LHG",
+      category: "distribution",
+      name: "MikroTik LHG 5 ac",
+      lucideIcon: "radio",
+      defaultBrand: "MikroTik",
+      defaultModel: "RBLHGG-5acD",
+      description: "Radio Dish Grid PtP Jarak Jauh 5GHz 24.5dBi",
+      defaultWirelessCoverage: {
+        enabled: true,
+        radiusMeters: 120,
+        color: "#06b6d4",
+        opacity: 0.16,
+        hatch: true,
+        band: "ptp",
+        showLabel: true
+      }
+    },
+    {
+      type: "mikrotik-sxtsq",
+      brandGroup: "MikroTik",
+      badgeCode: "SXT",
+      category: "distribution",
+      name: "MikroTik SXTsq 5 ac",
+      lucideIcon: "radio",
+      defaultBrand: "MikroTik",
+      defaultModel: "RBSXTsqG-5acD",
+      description: "Outdoor CPE / Wireless PtP Bridge 5GHz 16dBi",
+      defaultWirelessCoverage: {
+        enabled: true,
+        radiusMeters: 80,
+        color: "#06b6d4",
+        opacity: 0.16,
+        hatch: true,
+        band: "ptp",
+        showLabel: true
+      }
+    },
+    {
+      type: "mikrotik-mantbox",
+      brandGroup: "MikroTik",
+      badgeCode: "mANT",
+      category: "distribution",
+      name: "MikroTik mANTBox",
+      lucideIcon: "radio-tower",
+      defaultBrand: "MikroTik",
+      defaultModel: "RB921GS-5HPacD-15S",
+      description: "Base Station Sector AP Outdoor 120\xB0 5GHz",
+      defaultWirelessCoverage: {
+        enabled: true,
+        radiusMeters: 100,
+        color: "#0ea5e9",
+        opacity: 0.16,
+        hatch: true,
+        band: "ptp",
+        showLabel: true
+      }
+    }
+  ];
+  var RUIJIE_CATALOG = [
+    {
+      type: "ruijie-eg210g",
+      brandGroup: "Ruijie",
+      badgeCode: "EG",
+      category: "core",
+      name: "Ruijie RG-EG210G-P",
+      lucideIcon: "router",
+      defaultBrand: "Ruijie Reyee",
+      defaultModel: "RG-EG210G-P",
+      description: "Cloud Managed PoE Router 10x GbE (8x PoE+) Dual-WAN"
+    },
+    {
+      type: "ruijie-eg310gh",
+      brandGroup: "Ruijie",
+      badgeCode: "EG",
+      category: "core",
+      name: "Ruijie RG-EG310GH",
+      lucideIcon: "cpu",
+      defaultBrand: "Ruijie Reyee",
+      defaultModel: "RG-EG310GH-P-E",
+      description: "High-Perf Cloud Gateway 10x GbE + 2x SFP Multi-WAN"
+    },
+    {
+      type: "ruijie-nbr6210",
+      brandGroup: "Ruijie",
+      badgeCode: "NBR",
+      category: "core",
+      name: "Ruijie RG-NBR6210",
+      lucideIcon: "shield",
+      defaultBrand: "Ruijie",
+      defaultModel: "RG-NBR6210-E",
+      description: "Enterprise Gateway Router & Firewall Multi-WAN"
+    },
+    {
+      type: "ruijie-s5750",
+      brandGroup: "Ruijie",
+      badgeCode: "L3",
+      category: "core",
+      name: "Ruijie RG-S5750V2",
+      lucideIcon: "server",
+      defaultBrand: "Ruijie",
+      defaultModel: "RG-S5750V2-28GT4XS",
+      description: "Core L3 Switch 24x GbE + 4x 10G SFP+ Backbone"
+    },
+    {
+      type: "ruijie-nbs5200",
+      brandGroup: "Ruijie",
+      badgeCode: "NBS",
+      category: "distribution",
+      name: "Ruijie NBS5200-24GT",
+      lucideIcon: "network",
+      defaultBrand: "Ruijie Reyee",
+      defaultModel: "RG-NBS5200-24GT4XS",
+      description: "L2+ Managed Switch 24x GbE + 4x 10G SFP+ Uplink"
+    },
+    {
+      type: "ruijie-nbs3100",
+      brandGroup: "Ruijie",
+      badgeCode: "NBS",
+      category: "distribution",
+      name: "Ruijie NBS3100-24GT",
+      lucideIcon: "network",
+      defaultBrand: "Ruijie Reyee",
+      defaultModel: "RG-NBS3100-24GT4SFP",
+      description: "Cloud Managed Switch 24x GbE + 4x SFP"
+    },
+    {
+      type: "ruijie-nbs3100-poe",
+      brandGroup: "Ruijie",
+      badgeCode: "PoE",
+      category: "distribution",
+      name: "Ruijie NBS3100 PoE+",
+      lucideIcon: "zap",
+      defaultBrand: "Ruijie Reyee",
+      defaultModel: "RG-NBS3100-24GT4SFP-P",
+      description: "Cloud PoE+ Switch 24x PoE+ + 4x SFP (370W)"
+    },
+    {
+      type: "ruijie-es218gc",
+      brandGroup: "Ruijie",
+      badgeCode: "ES",
+      category: "distribution",
+      name: "Ruijie ES218GC-P",
+      lucideIcon: "zap",
+      defaultBrand: "Ruijie Reyee",
+      defaultModel: "RG-ES218GC-P",
+      description: "Smart Cloud PoE+ Switch 16x PoE+ + 2x SFP"
+    },
+    {
+      type: "ruijie-es209gc",
+      brandGroup: "Ruijie",
+      badgeCode: "ES",
+      category: "distribution",
+      name: "Ruijie ES209GC-P",
+      lucideIcon: "zap",
+      defaultBrand: "Ruijie Reyee",
+      defaultModel: "RG-ES209GC-P",
+      description: "Smart Cloud PoE+ Switch 8x PoE+ + 1x GbE Uplink"
+    },
+    {
+      type: "ruijie-rap2260",
+      brandGroup: "Ruijie",
+      badgeCode: "RAP",
+      category: "distribution",
+      name: "Ruijie RAP2260(G)",
+      lucideIcon: "wifi",
+      defaultBrand: "Ruijie Reyee",
+      defaultModel: "RG-RAP2260(G)",
+      description: "Ceiling Access Point Wi-Fi 6 AX1800 Dual-Band",
+      defaultWirelessCoverage: {
+        enabled: true,
+        radiusMeters: 30,
+        color: "#76c457",
+        opacity: 0.18,
+        hatch: true,
+        band: "dual-band",
+        showLabel: true
+      }
+    },
+    {
+      type: "ruijie-rap2200",
+      brandGroup: "Ruijie",
+      badgeCode: "RAP",
+      category: "distribution",
+      name: "Ruijie RAP2200(F)",
+      lucideIcon: "wifi",
+      defaultBrand: "Ruijie Reyee",
+      defaultModel: "RG-RAP2200(F)",
+      description: "Ceiling Access Point AC1300 Dual-Band Wi-Fi 5",
+      defaultWirelessCoverage: {
+        enabled: true,
+        radiusMeters: 25,
+        color: "#76c457",
+        opacity: 0.18,
+        hatch: true,
+        band: "dual-band",
+        showLabel: true
+      }
+    },
+    {
+      type: "ruijie-rap1200",
+      brandGroup: "Ruijie",
+      badgeCode: "Wall",
+      category: "distribution",
+      name: "Ruijie RAP1200(F)",
+      lucideIcon: "wifi",
+      defaultBrand: "Ruijie Reyee",
+      defaultModel: "RG-RAP1200(F)",
+      description: "In-Wall Access Point AC1300 untuk Ruangan / Hotel",
+      defaultWirelessCoverage: {
+        enabled: true,
+        radiusMeters: 15,
+        color: "#76c457",
+        opacity: 0.18,
+        hatch: true,
+        band: "dual-band",
+        showLabel: true
+      }
+    },
+    {
+      type: "ruijie-rap6260",
+      brandGroup: "Ruijie",
+      badgeCode: "Out",
+      category: "distribution",
+      name: "Ruijie RAP6260(G)",
+      lucideIcon: "wifi",
+      defaultBrand: "Ruijie Reyee",
+      defaultModel: "RG-RAP6260(G)",
+      description: "Outdoor Omni Access Point Wi-Fi 6 IP68",
+      defaultWirelessCoverage: {
+        enabled: true,
+        radiusMeters: 60,
+        color: "#76c457",
+        opacity: 0.16,
+        hatch: true,
+        band: "outdoor",
+        showLabel: true
+      }
+    },
+    {
+      type: "ruijie-est350",
+      brandGroup: "Ruijie",
+      badgeCode: "EST",
+      category: "distribution",
+      name: "Ruijie RG-EST350 V2",
+      lucideIcon: "radio",
+      defaultBrand: "Ruijie Reyee",
+      defaultModel: "RG-EST350 V2",
+      description: "Wireless Bridge PtP 5GHz Jarak Jauh hingga 5KM",
+      defaultWirelessCoverage: {
+        enabled: true,
+        radiusMeters: 120,
+        color: "#06b6d4",
+        opacity: 0.16,
+        hatch: true,
+        band: "ptp",
+        showLabel: true
+      }
+    }
+  ];
+  var TPLINK_CATALOG = [
+    {
+      type: "tplink-ls1005g",
+      brandGroup: "TP-Link",
+      badgeCode: "5P",
+      category: "distribution",
+      name: "TP-Link LS1005G Hub",
+      lucideIcon: "server",
+      defaultBrand: "TP-Link",
+      defaultModel: "LS1005G (5-Port GbE)",
+      description: "Desktop Switch / Hub Gigabit 5-Port Plug & Play"
+    },
+    {
+      type: "tplink-sg1008d",
+      brandGroup: "TP-Link",
+      badgeCode: "8P",
+      category: "distribution",
+      name: "TP-Link TL-SG1008D",
+      lucideIcon: "server",
+      defaultBrand: "TP-Link",
+      defaultModel: "TL-SG1008D (8-Port GbE)",
+      description: "Desktop Switch / Hub Gigabit 8-Port Unmanaged"
+    },
+    {
+      type: "tplink-sg108e",
+      brandGroup: "TP-Link",
+      badgeCode: "8E",
+      category: "distribution",
+      name: "TP-Link TL-SG108E",
+      lucideIcon: "network",
+      defaultBrand: "TP-Link",
+      defaultModel: "TL-SG108E Easy Smart",
+      description: "Easy Smart Switch 8-Port Gigabit (VLAN & QoS)"
+    },
+    {
+      type: "tplink-sg108pe",
+      brandGroup: "TP-Link",
+      badgeCode: "PoE",
+      category: "distribution",
+      name: "TP-Link TL-SG108PE",
+      lucideIcon: "zap",
+      defaultBrand: "TP-Link",
+      defaultModel: "TL-SG108PE (4x PoE+)",
+      description: "Easy Smart 8-Port Gigabit Switch dengan 4 Port PoE+"
+    },
+    {
+      type: "tplink-sg1016d",
+      brandGroup: "TP-Link",
+      badgeCode: "16P",
+      category: "distribution",
+      name: "TP-Link TL-SG1016D",
+      lucideIcon: "server",
+      defaultBrand: "TP-Link",
+      defaultModel: "TL-SG1016D (16-Port)",
+      description: "Unmanaged 16-Port Gigabit Rack/Desktop Switch"
+    },
+    {
+      type: "tplink-sg1024d",
+      brandGroup: "TP-Link",
+      badgeCode: "24P",
+      category: "distribution",
+      name: "TP-Link TL-SG1024D",
+      lucideIcon: "server",
+      defaultBrand: "TP-Link",
+      defaultModel: "TL-SG1024D (24-Port)",
+      description: "Unmanaged 24-Port Gigabit Rackmount Switch"
+    },
+    {
+      type: "tplink-sg1218mp",
+      brandGroup: "TP-Link",
+      badgeCode: "PoE",
+      category: "distribution",
+      name: "TP-Link TL-SG1218MP",
+      lucideIcon: "zap",
+      defaultBrand: "TP-Link",
+      defaultModel: "TL-SG1218MP (16 PoE+ 2SFP)",
+      description: "Switch PoE+ 16-Port + 2 Combo SFP (250W Budget)"
+    },
+    {
+      type: "tplink-sg2210mp",
+      brandGroup: "TP-Link",
+      badgeCode: "Omada",
+      category: "distribution",
+      name: "TP-Link SG2210MP",
+      lucideIcon: "zap",
+      defaultBrand: "TP-Link Omada",
+      defaultModel: "TL-SG2210MP (8 PoE+ 2SFP)",
+      description: "Omada Smart PoE+ Switch 8x GbE + 2x SFP (150W)"
+    },
+    {
+      type: "tplink-sg2428p",
+      brandGroup: "TP-Link",
+      badgeCode: "Omada",
+      category: "distribution",
+      name: "TP-Link SG2428P",
+      lucideIcon: "zap",
+      defaultBrand: "TP-Link Omada",
+      defaultModel: "TL-SG2428P (24 PoE+ 4SFP)",
+      description: "Omada JetStream 24x GbE PoE+ + 4x SFP Managed Switch"
+    },
+    {
+      type: "tplink-sg3428x",
+      brandGroup: "TP-Link",
+      badgeCode: "10G",
+      category: "core",
+      name: "TP-Link SG3428X",
+      lucideIcon: "network",
+      defaultBrand: "TP-Link Omada",
+      defaultModel: "TL-SG3428X (24G + 4x10G)",
+      description: "JetStream L2+ Switch 24x GbE + 4x 10G SFP+ Uplink"
+    },
+    {
+      type: "tplink-sx3016f",
+      brandGroup: "TP-Link",
+      badgeCode: "SFP+",
+      category: "core",
+      name: "TP-Link SX3016F",
+      lucideIcon: "server",
+      defaultBrand: "TP-Link Omada",
+      defaultModel: "TL-SX3016F (16x 10G SFP+)",
+      description: "Core Fiber L2+ Switch 16-Port Full 10G SFP+"
+    }
+  ];
+  var DEVICE_CATALOG = [
+    ...STANDARD_DEVICE_CATALOG,
+    ...MIKROTIK_CATALOG,
+    ...RUIJIE_CATALOG,
+    ...TPLINK_CATALOG
   ];
   function getDeviceDefByType(type) {
     return DEVICE_CATALOG.find((d) => d.type === type) || null;
@@ -1964,6 +2506,200 @@
         <circle cx="16" cy="16" r="4" fill="${color}"/>
       </svg>
     `
+    },
+    "mikrotik-ccr": {
+      id: "mikrotik-ccr",
+      name: "MikroTik CCR Rack",
+      category: "core",
+      svg: (color = "#2a7c13", bg = "none") => `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
+        <rect x="2" y="9" width="28" height="14" rx="2.5" stroke="${color}" stroke-width="2" fill="${bg}"/>
+        <path d="M5.5 20V12l2.5 4.2L10.5 12v8" stroke="${color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        <rect x="13" y="13" width="2.8" height="2.6" rx="0.5" fill="${color}"/>
+        <rect x="17" y="13" width="2.8" height="2.6" rx="0.5" fill="${color}"/>
+        <rect x="21" y="13" width="2.8" height="2.6" rx="0.5" fill="${color}"/>
+        <rect x="25" y="13" width="2.8" height="2.6" rx="0.5" stroke="${color}" stroke-width="1.4"/>
+        <rect x="13" y="17.5" width="2.8" height="2.6" rx="0.5" fill="${color}"/>
+        <rect x="17" y="17.5" width="2.8" height="2.6" rx="0.5" fill="${color}"/>
+        <rect x="21" y="17.5" width="2.8" height="2.6" rx="0.5" stroke="${color}" stroke-width="1.4"/>
+        <rect x="25" y="17.5" width="2.8" height="2.6" rx="0.5" stroke="${color}" stroke-width="1.4"/>
+      </svg>
+    `
+    },
+    "mikrotik-rb": {
+      id: "mikrotik-rb",
+      name: "MikroTik RouterBOARD",
+      category: "core",
+      svg: (color = "#2a7c13", bg = "none") => `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
+        <rect x="3" y="8" width="26" height="16" rx="3" stroke="${color}" stroke-width="2" fill="${bg}"/>
+        <path d="M6 12h6M6 15.5h4" stroke="${color}" stroke-width="1.8" stroke-linecap="round"/>
+        <circle cx="24" cy="12" r="1.4" fill="${color}"/>
+        <rect x="6" y="18.5" width="3.2" height="3" rx="0.5" fill="${color}"/>
+        <rect x="10.8" y="18.5" width="3.2" height="3" rx="0.5" fill="${color}"/>
+        <rect x="15.6" y="18.5" width="3.2" height="3" rx="0.5" fill="${color}"/>
+        <rect x="20.4" y="18.5" width="3.2" height="3" rx="0.5" fill="${color}"/>
+        <rect x="24.8" y="18.5" width="2.2" height="3" rx="0.5" stroke="${color}" stroke-width="1.3"/>
+      </svg>
+    `
+    },
+    "mikrotik-crs": {
+      id: "mikrotik-crs",
+      name: "MikroTik CRS Switch",
+      category: "distribution",
+      svg: (color = "#76c457", bg = "none") => `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
+        <rect x="2" y="8" width="28" height="16" rx="2.5" stroke="${color}" stroke-width="2" fill="${bg}"/>
+        <path d="M5 12h2.2v2.2H5zm3.4 0h2.2v2.2H8.4zm3.4 0H14v2.2h-2.2zm3.4 0h2.2v2.2h-2.2z" fill="${color}"/>
+        <path d="M5 16.5h2.2v2.2H5zm3.4 0h2.2v2.2H8.4zm3.4 0H14v2.2h-2.2zm3.4 0h2.2v2.2h-2.2z" fill="${color}"/>
+        <rect x="20" y="12" width="3" height="2.6" rx="0.5" stroke="${color}" stroke-width="1.4"/>
+        <rect x="24.2" y="12" width="3" height="2.6" rx="0.5" stroke="${color}" stroke-width="1.4"/>
+        <rect x="20" y="16.4" width="3" height="2.6" rx="0.5" stroke="${color}" stroke-width="1.4"/>
+        <rect x="24.2" y="16.4" width="3" height="2.6" rx="0.5" stroke="${color}" stroke-width="1.4"/>
+        <path d="M6 21.5h12" stroke="${color}" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+    `
+    },
+    "mikrotik-cap": {
+      id: "mikrotik-cap",
+      name: "MikroTik cAP / hAP Wi-Fi",
+      category: "distribution",
+      svg: (color = "#76c457", bg = "none") => `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
+        <ellipse cx="16" cy="21" rx="11" ry="5" stroke="${color}" stroke-width="2" fill="${bg}"/>
+        <circle cx="16" cy="21" r="2" fill="${color}"/>
+        <path d="M11 14a7.5 7.5 0 0 1 10 0" stroke="${color}" stroke-width="2" stroke-linecap="round"/>
+        <path d="M7.5 10a12.5 12.5 0 0 1 17 0" stroke="${color}" stroke-width="2" stroke-linecap="round"/>
+        <path d="M4 6a17.5 17.5 0 0 1 24 0" stroke="${color}" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+    `
+    },
+    "mikrotik-lhg": {
+      id: "mikrotik-lhg",
+      name: "MikroTik LHG PtP Dish",
+      category: "distribution",
+      svg: (color = "#76c457", bg = "none") => `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
+        <path d="M6 22C6 13.5 12.5 7 21 7" stroke="${color}" stroke-width="2.2" stroke-linecap="round"/>
+        <path d="M8.5 23.5L22.5 9.5" stroke="${color}" stroke-width="1.8" stroke-linecap="round"/>
+        <path d="M14 18l5-5m0 0h3.5m-3.5 0V9.5" stroke="${color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="23" cy="9" r="2" fill="${color}"/>
+        <path d="M9 26h10M14 23v3" stroke="${color}" stroke-width="2" stroke-linecap="round"/>
+        <path d="M25.5 4.5a6 6 0 0 1 2 4.5" stroke="${color}" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+    `
+    },
+    "mikrotik-sxt": {
+      id: "mikrotik-sxt",
+      name: "MikroTik SXT / mANTBox",
+      category: "distribution",
+      svg: (color = "#76c457", bg = "none") => `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
+        <rect x="4" y="7" width="12" height="18" rx="2.5" stroke="${color}" stroke-width="2" fill="${bg}"/>
+        <path d="M8 11v10M12 11v10" stroke="${color}" stroke-width="1.6" stroke-linecap="round"/>
+        <path d="M10 25v4M6 29h8" stroke="${color}" stroke-width="2" stroke-linecap="round"/>
+        <path d="M20 12a6.5 6.5 0 0 1 0 8" stroke="${color}" stroke-width="2" stroke-linecap="round"/>
+        <path d="M23.5 9a11 11 0 0 1 0 14" stroke="${color}" stroke-width="2" stroke-linecap="round"/>
+        <path d="M27 6a15.5 15.5 0 0 1 0 20" stroke="${color}" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+    `
+    },
+    "ruijie-gateway": {
+      id: "ruijie-gateway",
+      name: "Ruijie EG / NBR Gateway",
+      category: "core",
+      svg: (color = "#2a7c13", bg = "none") => `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
+        <rect x="2" y="8" width="28" height="16" rx="3" stroke="${color}" stroke-width="2" fill="${bg}"/>
+        <path d="M5.5 20V12h3a2.5 2.5 0 0 1 0 5h-3m2.2 0L10 20" stroke="${color}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="14.5" cy="13.5" r="1.4" fill="${color}"/>
+        <circle cx="18.5" cy="13.5" r="1.4" fill="${color}"/>
+        <rect x="13" y="17.5" width="3" height="2.6" rx="0.5" fill="${color}"/>
+        <rect x="17.2" y="17.5" width="3" height="2.6" rx="0.5" fill="${color}"/>
+        <rect x="21.4" y="17.5" width="3" height="2.6" rx="0.5" fill="${color}"/>
+        <rect x="25.2" y="13" width="2.4" height="7" rx="0.5" stroke="${color}" stroke-width="1.3"/>
+      </svg>
+    `
+    },
+    "ruijie-switch": {
+      id: "ruijie-switch",
+      name: "Ruijie NBS / ES Switch",
+      category: "distribution",
+      svg: (color = "#76c457", bg = "none") => `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
+        <rect x="2" y="8" width="28" height="16" rx="2.5" stroke="${color}" stroke-width="2" fill="${bg}"/>
+        <path d="M5 12h2v2H5zm3 0h2v2H8zm3 0h2v2h-2zm3 0h2v2h-2zm3 0h2v2h-2z" fill="${color}"/>
+        <path d="M5 16h2v2H5zm3 0h2v2H8zm3 0h2v2h-2zm3 0h2v2h-2zm3 0h2v2h-2z" fill="${color}"/>
+        <rect x="21.5" y="11.8" width="2.6" height="2.6" rx="0.4" stroke="${color}" stroke-width="1.3"/>
+        <rect x="25" y="11.8" width="2.6" height="2.6" rx="0.4" stroke="${color}" stroke-width="1.3"/>
+        <rect x="21.5" y="15.8" width="2.6" height="2.6" rx="0.4" stroke="${color}" stroke-width="1.3"/>
+        <rect x="25" y="15.8" width="2.6" height="2.6" rx="0.4" stroke="${color}" stroke-width="1.3"/>
+        <path d="M5.5 21h21" stroke="${color}" stroke-width="1.4" stroke-linecap="round"/>
+      </svg>
+    `
+    },
+    "ruijie-rap": {
+      id: "ruijie-rap",
+      name: "Ruijie Reyee RAP AP",
+      category: "distribution",
+      svg: (color = "#76c457", bg = "none") => `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
+        <rect x="5" y="12" width="22" height="15" rx="5" stroke="${color}" stroke-width="2" fill="${bg}"/>
+        <circle cx="16" cy="19.5" r="2.2" fill="${color}"/>
+        <path d="M11.5 9.5a6.8 6.8 0 0 1 9 0" stroke="${color}" stroke-width="2" stroke-linecap="round"/>
+        <path d="M8 6a11.5 11.5 0 0 1 16 0" stroke="${color}" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    `
+    },
+    "ruijie-est": {
+      id: "ruijie-est",
+      name: "Ruijie EST Wireless Bridge",
+      category: "distribution",
+      svg: (color = "#76c457", bg = "none") => `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
+        <rect x="4" y="6" width="12" height="19" rx="3" stroke="${color}" stroke-width="2" fill="${bg}"/>
+        <circle cx="10" cy="12" r="2" stroke="${color}" stroke-width="1.6"/>
+        <path d="M7.5 18h5M10 25v4M6 29h8" stroke="${color}" stroke-width="1.8" stroke-linecap="round"/>
+        <path d="M20 11a7 7 0 0 1 0 9" stroke="${color}" stroke-width="2" stroke-linecap="round"/>
+        <path d="M24 8a11.5 11.5 0 0 1 0 15" stroke="${color}" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    `
+    },
+    "tplink-hub": {
+      id: "tplink-hub",
+      name: "TP-Link Desktop Switch / Hub",
+      category: "distribution",
+      svg: (color = "#76c457", bg = "none") => `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
+        <path d="M5 12h22l2 5v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7l2-5z" stroke="${color}" stroke-width="2" stroke-linejoin="round" fill="${bg}"/>
+        <path d="M3 17h26" stroke="${color}" stroke-width="1.6"/>
+        <circle cx="7" cy="14.5" r="1.1" fill="${color}"/>
+        <rect x="6" y="19.5" width="3.2" height="3.2" rx="0.5" fill="${color}"/>
+        <rect x="10.8" y="19.5" width="3.2" height="3.2" rx="0.5" fill="${color}"/>
+        <rect x="15.6" y="19.5" width="3.2" height="3.2" rx="0.5" fill="${color}"/>
+        <rect x="20.4" y="19.5" width="3.2" height="3.2" rx="0.5" fill="${color}"/>
+        <rect x="24.8" y="19.5" width="2.2" height="3.2" rx="0.5" stroke="${color}" stroke-width="1.2"/>
+      </svg>
+    `
+    },
+    "tplink-switch": {
+      id: "tplink-switch",
+      name: "TP-Link JetStream Switch",
+      category: "distribution",
+      svg: (color = "#76c457", bg = "none") => `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
+        <rect x="2" y="8" width="28" height="16" rx="2.5" stroke="${color}" stroke-width="2" fill="${bg}"/>
+        <circle cx="5.5" cy="12" r="1.2" fill="${color}"/>
+        <circle cx="5.5" cy="16" r="1.2" fill="${color}"/>
+        <path d="M8.5 11.5h2.2v2.2H8.5zm3.3 0H14v2.2h-2.2zm3.3 0h2.2v2.2h-2.2zm3.3 0h2.2v2.2h-2.2z" fill="${color}"/>
+        <path d="M8.5 15.5h2.2v2.2H8.5zm3.3 0H14v2.2h-2.2zm3.3 0h2.2v2.2h-2.2zm3.3 0h2.2v2.2h-2.2z" fill="${color}"/>
+        <rect x="22.5" y="11.5" width="2.5" height="2.5" rx="0.4" stroke="${color}" stroke-width="1.3"/>
+        <rect x="26" y="11.5" width="2.5" height="2.5" rx="0.4" stroke="${color}" stroke-width="1.3"/>
+        <rect x="22.5" y="15.5" width="2.5" height="2.5" rx="0.4" stroke="${color}" stroke-width="1.3"/>
+        <rect x="26" y="15.5" width="2.5" height="2.5" rx="0.4" stroke="${color}" stroke-width="1.3"/>
+        <path d="M5.5 21h21" stroke="${color}" stroke-width="1.4" stroke-linecap="round"/>
+      </svg>
+    `
     }
   };
   function getDefaultIconForType(type) {
@@ -1994,7 +2730,50 @@
       "nas": "storage",
       "laptop": "laptop",
       "iot": "iot",
-      "custom": "custom"
+      "custom": "custom",
+      // MikroTik Hardware Presets
+      "mikrotik-ccr2116": "mikrotik-ccr",
+      "mikrotik-ccr2004": "mikrotik-ccr",
+      "mikrotik-rb5009": "mikrotik-rb",
+      "mikrotik-rb4011": "mikrotik-rb",
+      "mikrotik-l009": "mikrotik-rb",
+      "mikrotik-hex": "mikrotik-rb",
+      "mikrotik-crs317": "mikrotik-crs",
+      "mikrotik-crs326": "mikrotik-crs",
+      "mikrotik-crs328": "mikrotik-crs",
+      "mikrotik-crs310": "mikrotik-crs",
+      "mikrotik-cap-ax": "mikrotik-cap",
+      "mikrotik-hap-ax2": "mikrotik-cap",
+      "mikrotik-lhg5": "mikrotik-lhg",
+      "mikrotik-sxtsq": "mikrotik-sxt",
+      "mikrotik-mantbox": "mikrotik-sxt",
+      // Ruijie & Reyee Hardware Presets
+      "ruijie-eg210g": "ruijie-gateway",
+      "ruijie-eg310gh": "ruijie-gateway",
+      "ruijie-nbr6210": "ruijie-gateway",
+      "ruijie-s5750": "ruijie-switch",
+      "ruijie-nbs5200": "ruijie-switch",
+      "ruijie-nbs3100": "ruijie-switch",
+      "ruijie-nbs3100-poe": "ruijie-switch",
+      "ruijie-es218gc": "ruijie-switch",
+      "ruijie-es209gc": "ruijie-switch",
+      "ruijie-rap2260": "ruijie-rap",
+      "ruijie-rap2200": "ruijie-rap",
+      "ruijie-rap1200": "ruijie-rap",
+      "ruijie-rap6260": "ruijie-rap",
+      "ruijie-est350": "ruijie-est",
+      // TP-Link Switch & Hub Presets
+      "tplink-ls1005g": "tplink-hub",
+      "tplink-sg1008d": "tplink-hub",
+      "tplink-sg108e": "tplink-hub",
+      "tplink-sg108pe": "tplink-hub",
+      "tplink-sg1016d": "tplink-switch",
+      "tplink-sg1024d": "tplink-switch",
+      "tplink-sg1218mp": "tplink-switch",
+      "tplink-sg2210mp": "tplink-switch",
+      "tplink-sg2428p": "tplink-switch",
+      "tplink-sg3428x": "tplink-switch",
+      "tplink-sx3016f": "tplink-switch"
     };
     return map[type] || "router";
   }
@@ -2785,12 +3564,14 @@ ${device.network.ip}`;
      */
     addDevice(deviceData) {
       const def = getDeviceDefByType(deviceData.type);
+      const resolvedCoverage = deviceData.wirelessCoverage !== void 0 ? deviceData.wirelessCoverage : def?.defaultWirelessCoverage ? { ...def.defaultWirelessCoverage } : void 0;
       const enrichedData = {
         name: deviceData.name || (def ? def.name : "New Device"),
         category: deviceData.category || (def ? def.category : "core"),
         brand: deviceData.brand || (def ? def.defaultBrand : ""),
         model: deviceData.model || (def ? def.defaultModel : ""),
-        ...deviceData
+        ...deviceData,
+        ...resolvedCoverage !== void 0 ? { wirelessCoverage: resolvedCoverage } : {}
       };
       const device = DeviceSchema.create(enrichedData);
       const validation = DeviceSchema.validate(device);
@@ -2938,9 +3719,13 @@ ${device.network.ip}`;
       this.container = container;
       this.activeTypeToPlace = null;
       this.activeCustomTemplateToPlace = null;
+      this.multiPlaceMode = false;
+      this.searchQuery = "";
+      this.activeFilter = "all";
       this.customTemplates = this.loadCustomTemplates();
       this.render();
-      this.bindEvents();
+      this.bindStaticEvents();
+      this.bindCatalogItemEvents();
     }
     /**
      * Load saved custom device templates from localStorage
@@ -2989,11 +3774,7 @@ ${device.network.ip}`;
       };
       this.customTemplates.unshift(template);
       this.saveCustomTemplates();
-      this.render();
-      this.bindEvents();
-      if (window.lucide && typeof window.lucide.createIcons === "function") {
-        window.lucide.createIcons({ root: this.container });
-      }
+      this.renderCatalogLists();
       return template;
     }
     /**
@@ -3006,11 +3787,7 @@ ${device.network.ip}`;
         this.activeCustomTemplateToPlace = null;
       }
       this.saveCustomTemplates();
-      this.render();
-      this.bindEvents();
-      if (window.lucide && typeof window.lucide.createIcons === "function") {
-        window.lucide.createIcons({ root: this.container });
-      }
+      this.renderCatalogLists();
     }
     /**
      * Get all custom device templates
@@ -3021,145 +3798,312 @@ ${device.network.ip}`;
     }
     render() {
       if (!this.container) return;
-      let html = `<div class="device-palette-wrapper" style="display: flex; flex-direction: column; gap: 14px;">`;
-      html += `
-      <div style="padding-bottom: 2px;">
-        <button id="btn-add-custom-device" class="btn btn-secondary btn-sm" 
-                title="Buka dialog untuk membuat perangkat jaringan kustom dengan ikon atau gambar sendiri"
-                style="width: 100%; justify-content: center; gap: 8px; font-weight: 700; padding: 9px 12px; border: 1.5px dashed var(--accent-blue, #2a7c13); background: var(--bg-tertiary, #f2dac8); color: var(--accent-blue, #2a7c13); cursor: pointer; border-radius: 8px; box-shadow: var(--shadow-sm); transition: all 0.15s ease;">
-          <i data-lucide="plus-circle" style="width: 16px; height: 16px; color: var(--accent-blue, #2a7c13);"></i>
-          <span>+ Tambah Perangkat Kustom</span>
-        </button>
+      this.container.innerHTML = `
+      <div class="device-palette-wrapper" style="display: flex; flex-direction: column; gap: 10px;">
+        <!-- Quick Actions Row: Custom Device & MikroTik Batch Insert -->
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <button id="btn-add-custom-device" class="btn btn-secondary btn-sm" 
+                  title="Buka dialog untuk membuat perangkat jaringan kustom dengan ikon atau gambar sendiri"
+                  style="width: 100%; justify-content: center; gap: 6px; font-weight: 700; padding: 8px 10px; height: auto; border: 1.5px dashed var(--accent-blue, #2a7c13); background: var(--bg-tertiary, #f2dac8); color: var(--accent-blue, #2a7c13); cursor: pointer; border-radius: 8px; box-shadow: var(--shadow-sm);">
+            <i data-lucide="plus-circle" style="width: 15px; height: 15px; flex-shrink: 0;"></i>
+            <span>+ Tambah Perangkat Kustom</span>
+          </button>
+
+          <button id="btn-open-mikrotik-insert" class="btn btn-primary btn-sm"
+                  title="Sisipkan 1 atau banyak perangkat MikroTik, Ruijie, atau TP-Link sekaligus lengkap dengan auto IP"
+                  style="width: 100%; justify-content: center; gap: 6px; font-weight: 700; padding: 8px 10px; height: auto; border-radius: 8px;">
+            <i data-lucide="zap" style="width: 14px; height: 14px; flex-shrink: 0;"></i>
+            <span>Insert Cepat Vendor (Batch)</span>
+          </button>
+        </div>
+
+        <!-- Search & Brand Filter Bar -->
+        <div style="display: flex; flex-direction: column; gap: 6px; padding-bottom: 2px;">
+          <div style="position: relative; display: flex; align-items: center;">
+            <i data-lucide="search" style="width: 13px; height: 13px; color: var(--text-muted); position: absolute; left: 8px; pointer-events: none;"></i>
+            <input type="text" id="palette-search-input" placeholder="Cari MikroTik, Ruijie, TP-Link, Hub..."
+                   value="${escapeHtml(this.searchQuery)}"
+                   style="width: 100%; padding: 5px 26px 5px 26px; font-size: 11.5px; border-radius: 6px; background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-primary);">
+            <button type="button" id="btn-clear-palette-search" title="Hapus pencarian"
+                    style="position: absolute; right: 6px; background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 13px; line-height: 1; display: ${this.searchQuery ? "block" : "none"};">
+              &times;
+            </button>
+          </div>
+
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 4px; flex-wrap: wrap;">
+            <div style="display: flex; gap: 3px; flex: 1; flex-wrap: wrap; min-width: 0;">
+              ${this.renderFilterPill("all", "Semua")}
+              ${this.renderFilterPill("mikrotik", "MikroTik")}
+              ${this.renderFilterPill("ruijie", "Ruijie")}
+              ${this.renderFilterPill("tplink", "TP-Link")}
+              ${this.renderFilterPill("standard", "Umum")}
+            </div>
+            <label title="Tetap aktif di mode tambah perangkat setelah klik di peta agar bisa insert banyak unit berturut-turut"
+                   style="display: flex; align-items: center; gap: 3px; font-size: 10px; font-weight: 600; color: var(--text-secondary); cursor: pointer; white-space: nowrap; flex-shrink: 0;">
+              <input type="checkbox" id="toggle-multi-place" ${this.multiPlaceMode ? "checked" : ""} style="accent-color: var(--accent-blue); margin: 0;">
+              <span>Multi</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Dynamic Catalog Lists -->
+        <div id="palette-catalog-lists" style="display: flex; flex-direction: column; gap: 14px;">
+          ${this.buildCatalogListsHtml()}
+        </div>
       </div>
     `;
-      if (this.customTemplates.length > 0) {
-        html += `
-        <div class="palette-category-group" style="display: flex; flex-direction: column; gap: 6px;">
-          <div class="category-header" style="display: flex; align-items: center; justify-content: space-between; padding: 2px 4px;">
-            <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--accent-blue, #2a7c13); display: flex; align-items: center; gap: 5px;">
-              <i data-lucide="sparkles" style="width: 13px; height: 13px; color: var(--status-warning, #d97706);"></i>
-              <span>Perangkat Kustom</span>
-            </span>
-            <span style="font-size: 10px; color: var(--accent-blue, #2a7c13); background: rgba(42, 124, 19, 0.12); padding: 1px 6px; border-radius: 4px; font-weight: 700;">
-              ${this.customTemplates.length}
-            </span>
-          </div>
-          <div class="palette-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;">
-      `;
-        this.customTemplates.forEach((tmpl) => {
-          const cat = DEVICE_CATEGORIES[tmpl.category] || DEVICE_CATEGORIES.core;
-          const catColor = cat.color || "#2a7c13";
-          let thumbHtml = "";
-          if (tmpl.customImage) {
-            thumbHtml = `<img src="${tmpl.customImage}" style="width: 18px; height: 18px; object-fit: contain; border-radius: 2px;" alt="${escapeHtml(tmpl.name)}" />`;
-          } else {
-            const iconKey = tmpl.customIcon || getDefaultIconForType(tmpl.type || "router");
-            thumbHtml = getDeviceIconSvg(iconKey, { color: catColor, size: 16 });
-          }
-          html += `
-          <div class="palette-item palette-item-custom" 
-               draggable="true" 
-               data-custom-template-id="${tmpl.id}"
-               data-device-type="${tmpl.type || "custom"}"
-               data-category="${tmpl.category || "core"}"
-               style="background-color: var(--bg-primary); border: 1.5px solid var(--accent-cyan, #76c457); border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 4px; cursor: grab; transition: all 150ms ease; position: relative;">
-            <div style="display: flex; align-items: center; justify-content: space-between;">
-              <div style="display: flex; align-items: center; gap: 6px; min-width: 0;">
-                <div style="width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.06); border-radius: 4px; flex-shrink: 0; overflow: hidden;">
-                  ${thumbHtml}
-                </div>
-                <span style="font-size: 9px; font-weight: 700; color: ${catColor}; font-family: var(--font-mono); text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                  ${(tmpl.brand || tmpl.type || "CUST").substring(0, 4)}
-                </span>
-              </div>
-              <button class="btn-delete-template" data-template-id="${tmpl.id}" title="Hapus template kustom ini dari library" 
-                      style="background: transparent; border: none; padding: 0 2px; cursor: pointer; color: var(--text-muted); font-size: 15px; line-height: 1; border-radius: 3px; transition: color 0.1s ease;">
-                &times;
-              </button>
-            </div>
-            <div class="palette-item-name" title="${escapeHtml(tmpl.name)}">
-              ${escapeHtml(tmpl.name)}
-            </div>
-            <div class="palette-item-sub" title="${tmpl.brand || ""} ${tmpl.model || ""}">
-              ${tmpl.brand ? `${escapeHtml(tmpl.brand)} ${escapeHtml(tmpl.model || "")}` : escapeHtml(tmpl.model) || "Custom"}
-            </div>
-          </div>
-        `;
-        });
-        html += `
-          </div>
-        </div>
-      `;
-      }
-      const grouped = {
-        core: [],
-        distribution: [],
-        infrastructure: [],
-        endDevice: []
-      };
-      DEVICE_CATALOG.forEach((item) => {
-        if (grouped[item.category]) {
-          grouped[item.category].push(item);
-        }
-      });
-      Object.keys(DEVICE_CATEGORIES).forEach((catKey) => {
-        const cat = DEVICE_CATEGORIES[catKey];
-        const items = grouped[catKey] || [];
-        html += `
-        <div class="palette-category-group" style="display: flex; flex-direction: column; gap: 6px;">
-          <div class="category-header" style="display: flex; align-items: center; justify-content: space-between; padding: 2px 4px;">
-            <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: ${cat.color};">
-              ${cat.name}
-            </span>
-            <span style="font-size: 10px; color: var(--text-muted); background: var(--bg-primary); padding: 1px 6px; border-radius: 4px;">
-              ${items.length}
-            </span>
-          </div>
-          <div class="palette-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;">
-      `;
-        items.forEach((item) => {
-          html += `
-          <div class="palette-item" 
-               draggable="true" 
-               data-device-type="${item.type}"
-               data-category="${item.category}"
-               style="background-color: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 4px; cursor: grab; transition: all 150ms ease;">
-            <div style="display: flex; align-items: center; justify-content: space-between;">
-              <div style="display: flex; align-items: center; gap: 6px; min-width: 0;">
-                <div style="width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.06); border-radius: 4px; flex-shrink: 0;">
-                  ${getDeviceIconSvg(getDefaultIconForType(item.type), { color: cat.color, size: 16 })}
-                </div>
-                <span style="font-size: 9px; font-weight: 700; color: ${cat.color}; font-family: var(--font-mono); text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                  ${item.type.substring(0, 4)}
-                </span>
-              </div>
-              <span style="width: 6px; height: 6px; border-radius: 50%; background-color: ${cat.color}; opacity: 0.8; flex-shrink: 0;"></span>
-            </div>
-            <div class="palette-item-name" title="${item.name}">
-              ${item.name}
-            </div>
-            <div class="palette-item-sub" title="${item.defaultBrand} ${item.defaultModel}">
-              ${item.defaultBrand} ${item.defaultModel}
-            </div>
-          </div>
-        `;
-        });
-        html += `
-          </div>
-        </div>
-      `;
-      });
-      html += `</div>`;
-      this.container.innerHTML = html;
       if (window.lucide && typeof window.lucide.createIcons === "function") {
         window.lucide.createIcons({ root: this.container });
       }
     }
-    bindEvents() {
-      const btnAddCustom = this.container.querySelector("#btn-add-custom-device");
-      btnAddCustom?.addEventListener("click", () => {
+    renderFilterPill(filterId, label) {
+      const isActive = this.activeFilter === filterId;
+      return `
+      <button type="button" class="btn-palette-filter" data-filter="${filterId}"
+              style="flex: 1 1 auto; min-width: 46px; padding: 3px 6px; font-size: 10px; font-weight: 600; border-radius: 5px; cursor: pointer; white-space: nowrap; border: 1px solid ${isActive ? "var(--accent-blue)" : "var(--border-color)"}; background: ${isActive ? "var(--accent-blue)" : "var(--bg-primary)"}; color: ${isActive ? "var(--text-inverse)" : "var(--text-secondary)"}; transition: all 0.15s ease;">
+        ${label}
+      </button>
+    `;
+    }
+    matchesSearch(item) {
+      if (!this.searchQuery) return true;
+      const q = this.searchQuery.toLowerCase();
+      const haystack = [
+        item.name,
+        item.type,
+        item.brand,
+        item.model,
+        item.defaultBrand,
+        item.defaultModel,
+        item.badgeCode,
+        item.description
+      ].filter(Boolean).join(" ").toLowerCase();
+      return haystack.includes(q);
+    }
+    buildCatalogListsHtml() {
+      let html = "";
+      const hasFilterMatches = { count: 0 };
+      if (this.activeFilter === "all" && this.customTemplates.length > 0) {
+        const matchedCustom = this.customTemplates.filter((t) => this.matchesSearch(t));
+        if (matchedCustom.length > 0) {
+          hasFilterMatches.count += matchedCustom.length;
+          html += `
+          <div class="palette-category-group" style="display: flex; flex-direction: column; gap: 6px;">
+            <div class="category-header" style="display: flex; align-items: center; justify-content: space-between; padding: 2px 4px;">
+              <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--accent-blue, #2a7c13); display: flex; align-items: center; gap: 5px;">
+                <i data-lucide="sparkles" style="width: 13px; height: 13px; color: var(--status-warning, #d97706);"></i>
+                <span>Perangkat Kustom</span>
+              </span>
+              <span style="font-size: 10px; color: var(--accent-blue, #2a7c13); background: rgba(42, 124, 19, 0.12); padding: 1px 6px; border-radius: 4px; font-weight: 700;">
+                ${matchedCustom.length}
+              </span>
+            </div>
+            <div class="palette-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;">
+        `;
+          matchedCustom.forEach((tmpl) => {
+            const cat = DEVICE_CATEGORIES[tmpl.category] || DEVICE_CATEGORIES.core;
+            const catColor = cat.color || "#2a7c13";
+            let thumbHtml = "";
+            if (tmpl.customImage) {
+              thumbHtml = `<img src="${tmpl.customImage}" style="width: 18px; height: 18px; object-fit: contain; border-radius: 2px;" alt="${escapeHtml(tmpl.name)}" />`;
+            } else {
+              const iconKey = tmpl.customIcon || getDefaultIconForType(tmpl.type || "router");
+              thumbHtml = getDeviceIconSvg(iconKey, { color: catColor, size: 16 });
+            }
+            html += `
+            <div class="palette-item palette-item-custom" 
+                 draggable="true" 
+                 data-custom-template-id="${tmpl.id}"
+                 data-device-type="${tmpl.type || "custom"}"
+                 data-category="${tmpl.category || "core"}"
+                 style="background-color: var(--bg-primary); border: 1.5px solid var(--accent-cyan, #76c457); border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 4px; cursor: grab; transition: all 150ms ease; position: relative;">
+              <div style="display: flex; align-items: center; justify-content: space-between;">
+                <div style="display: flex; align-items: center; gap: 6px; min-width: 0;">
+                  <div style="width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.06); border-radius: 4px; flex-shrink: 0; overflow: hidden;">
+                    ${thumbHtml}
+                  </div>
+                  <span style="font-size: 9px; font-weight: 700; color: ${catColor}; font-family: var(--font-mono); text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                    ${(tmpl.brand || tmpl.type || "CUST").substring(0, 4)}
+                  </span>
+                </div>
+                <button class="btn-delete-template" data-template-id="${tmpl.id}" title="Hapus template kustom ini dari library" 
+                        style="background: transparent; border: none; padding: 0 2px; cursor: pointer; color: var(--text-muted); font-size: 15px; line-height: 1; border-radius: 3px; transition: color 0.1s ease;">
+                  &times;
+                </button>
+              </div>
+              <div class="palette-item-name" title="${escapeHtml(tmpl.name)}">
+                ${escapeHtml(tmpl.name)}
+              </div>
+              <div class="palette-item-sub" title="${escapeHtml(tmpl.brand || "")} ${escapeHtml(tmpl.model || "")}">
+                ${tmpl.brand ? `${escapeHtml(tmpl.brand)} ${escapeHtml(tmpl.model || "")}` : escapeHtml(tmpl.model) || "Custom"}
+              </div>
+            </div>
+          `;
+          });
+          html += `</div></div>`;
+        }
+      }
+      const vendorSections = [
+        { id: "mikrotik", title: "MikroTik Series", icon: "router", catalog: MIKROTIK_CATALOG, fallbackBadge: "MT" },
+        { id: "ruijie", title: "Ruijie / Reyee Series", icon: "cpu", catalog: RUIJIE_CATALOG, fallbackBadge: "RG" },
+        { id: "tplink", title: "TP-Link Switch & Hub", icon: "network", catalog: TPLINK_CATALOG, fallbackBadge: "TPL" }
+      ];
+      vendorSections.forEach((sec) => {
+        if (this.activeFilter !== "all" && this.activeFilter !== sec.id) return;
+        const matched = sec.catalog.filter((item) => this.matchesSearch(item));
+        if (matched.length === 0) return;
+        hasFilterMatches.count += matched.length;
+        html += `
+        <div class="palette-category-group" style="display: flex; flex-direction: column; gap: 6px;">
+          <div class="category-header" style="display: flex; align-items: center; justify-content: space-between; padding: 2px 4px;">
+            <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--accent-blue, #2a7c13); display: flex; align-items: center; gap: 5px;">
+              <i data-lucide="${sec.icon}" style="width: 13px; height: 13px;"></i>
+              <span>${sec.title}</span>
+            </span>
+            <span style="font-size: 10px; color: var(--accent-blue, #2a7c13); background: rgba(42, 124, 19, 0.12); padding: 1px 6px; border-radius: 4px; font-weight: 700;">
+              ${matched.length}
+            </span>
+          </div>
+          <div class="palette-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;">
+      `;
+        matched.forEach((item) => {
+          const cat = DEVICE_CATEGORIES[item.category] || DEVICE_CATEGORIES.core;
+          const isSelected = this.activeTypeToPlace === item.type && !this.activeCustomTemplateToPlace;
+          html += this.renderBuiltInItemCard(item, cat, item.badgeCode || sec.fallbackBadge, isSelected);
+        });
+        html += `</div></div>`;
+      });
+      if (this.activeFilter === "all" || this.activeFilter === "standard") {
+        const grouped = {
+          core: [],
+          distribution: [],
+          infrastructure: [],
+          endDevice: []
+        };
+        STANDARD_DEVICE_CATALOG.forEach((item) => {
+          if (grouped[item.category] && this.matchesSearch(item)) {
+            grouped[item.category].push(item);
+          }
+        });
+        Object.keys(DEVICE_CATEGORIES).forEach((catKey) => {
+          const cat = DEVICE_CATEGORIES[catKey];
+          const items = grouped[catKey] || [];
+          if (items.length === 0) return;
+          hasFilterMatches.count += items.length;
+          html += `
+          <div class="palette-category-group" style="display: flex; flex-direction: column; gap: 6px;">
+            <div class="category-header" style="display: flex; align-items: center; justify-content: space-between; padding: 2px 4px;">
+              <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: ${cat.color};">
+                ${cat.name}
+              </span>
+              <span style="font-size: 10px; color: var(--text-muted); background: var(--bg-primary); padding: 1px 6px; border-radius: 4px;">
+                ${items.length}
+              </span>
+            </div>
+            <div class="palette-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;">
+        `;
+          items.forEach((item) => {
+            const isSelected = this.activeTypeToPlace === item.type && !this.activeCustomTemplateToPlace;
+            html += this.renderBuiltInItemCard(item, cat, item.type.substring(0, 4), isSelected);
+          });
+          html += `</div></div>`;
+        });
+      }
+      if (hasFilterMatches.count === 0) {
+        html = `
+        <div style="padding: 20px 10px; text-align: center; color: var(--text-muted); font-size: 11.5px; background: var(--bg-primary); border-radius: 8px; border: 1px dashed var(--border-color);">
+          Tidak ada perangkat yang cocok dengan pencarian "<strong>${escapeHtml(this.searchQuery)}</strong>".
+        </div>
+      `;
+      }
+      return html;
+    }
+    renderBuiltInItemCard(item, cat, badgeText, isSelected = false) {
+      return `
+      <div class="palette-item ${isSelected ? "active-placement" : ""}" 
+           draggable="true" 
+           data-device-type="${item.type}"
+           data-category="${item.category}"
+           title="${escapeHtml(item.description || item.name)} \u2014 Drag ke peta atau klik lalu klik di peta"
+           style="background-color: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 4px; cursor: grab; transition: all 150ms ease;">
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+          <div style="display: flex; align-items: center; gap: 6px; min-width: 0;">
+            <div style="width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.06); border-radius: 4px; flex-shrink: 0;">
+              ${getDeviceIconSvg(getDefaultIconForType(item.type), { color: cat.color, size: 16 })}
+            </div>
+            <span style="font-size: 9px; font-weight: 700; color: ${cat.color}; font-family: var(--font-mono); text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+              ${escapeHtml(badgeText)}
+            </span>
+          </div>
+          <span style="width: 6px; height: 6px; border-radius: 50%; background-color: ${cat.color}; opacity: 0.8; flex-shrink: 0;"></span>
+        </div>
+        <div class="palette-item-name" title="${escapeHtml(item.name)}">
+          ${escapeHtml(item.name)}
+        </div>
+        <div class="palette-item-sub" title="${escapeHtml(item.defaultBrand)} ${escapeHtml(item.defaultModel)}">
+          ${item.brandGroup ? escapeHtml(item.defaultModel) : `${escapeHtml(item.defaultBrand)} ${escapeHtml(item.defaultModel)}`}
+        </div>
+      </div>
+    `;
+    }
+    renderCatalogLists() {
+      const listContainer = this.container.querySelector("#palette-catalog-lists");
+      if (!listContainer) return;
+      listContainer.innerHTML = this.buildCatalogListsHtml();
+      this.bindCatalogItemEvents();
+      if (window.lucide && typeof window.lucide.createIcons === "function") {
+        window.lucide.createIcons({ root: listContainer });
+      }
+    }
+    bindStaticEvents() {
+      this.container.querySelector("#btn-add-custom-device")?.addEventListener("click", () => {
         eventBus.emit("modal:open-custom-device");
       });
+      this.container.querySelector("#btn-open-mikrotik-insert")?.addEventListener("click", () => {
+        const targetVendor = this.activeFilter === "ruijie" || this.activeFilter === "tplink" ? this.activeFilter : "mikrotik";
+        eventBus.emit("modal:open-vendor-insert", { vendor: targetVendor });
+      });
+      const searchInput = this.container.querySelector("#palette-search-input");
+      const clearBtn = this.container.querySelector("#btn-clear-palette-search");
+      searchInput?.addEventListener("input", (e) => {
+        this.searchQuery = e.target.value || "";
+        if (clearBtn) clearBtn.style.display = this.searchQuery ? "block" : "none";
+        this.renderCatalogLists();
+      });
+      clearBtn?.addEventListener("click", () => {
+        this.searchQuery = "";
+        if (searchInput) {
+          searchInput.value = "";
+          searchInput.focus();
+        }
+        clearBtn.style.display = "none";
+        this.renderCatalogLists();
+      });
+      const filterButtons = this.container.querySelectorAll(".btn-palette-filter");
+      filterButtons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          this.activeFilter = btn.getAttribute("data-filter") || "all";
+          filterButtons.forEach((b) => {
+            const active = b.getAttribute("data-filter") === this.activeFilter;
+            b.style.borderColor = active ? "var(--accent-blue)" : "var(--border-color)";
+            b.style.background = active ? "var(--accent-blue)" : "var(--bg-primary)";
+            b.style.color = active ? "var(--text-inverse)" : "var(--text-secondary)";
+          });
+          this.renderCatalogLists();
+        });
+      });
+      this.container.querySelector("#toggle-multi-place")?.addEventListener("change", (e) => {
+        this.multiPlaceMode = Boolean(e.target.checked);
+      });
+      eventBus.on("mode:changed", ({ mode }) => {
+        if (mode !== "add-device") {
+          this.activeTypeToPlace = null;
+          this.activeCustomTemplateToPlace = null;
+          this.container.querySelectorAll(".palette-item").forEach((el) => el.classList.remove("active-placement"));
+        }
+      });
+    }
+    bindCatalogItemEvents() {
       const deleteBtns = this.container.querySelectorAll(".btn-delete-template");
       deleteBtns.forEach((btn) => {
         btn.addEventListener("click", (e) => {
@@ -3206,7 +4150,7 @@ ${device.network.ip}`;
             this.activeCustomTemplateToPlace = tmpl;
             this.activeTypeToPlace = tmpl.type || "custom";
             stateManager.setMode("add-device");
-            items.forEach((el) => el.classList.remove("active-placement"));
+            this.container.querySelectorAll(".palette-item").forEach((el) => el.classList.remove("active-placement"));
             itemEl.classList.add("active-placement");
             eventBus.emit("palette:selected-to-place", {
               type: this.activeTypeToPlace,
@@ -3217,18 +4161,11 @@ ${device.network.ip}`;
             this.activeCustomTemplateToPlace = null;
             this.activeTypeToPlace = type;
             stateManager.setMode("add-device");
-            items.forEach((el) => el.classList.remove("active-placement"));
+            this.container.querySelectorAll(".palette-item").forEach((el) => el.classList.remove("active-placement"));
             itemEl.classList.add("active-placement");
             eventBus.emit("palette:selected-to-place", { type });
           }
         });
-      });
-      eventBus.on("mode:changed", ({ mode }) => {
-        if (mode !== "add-device") {
-          this.activeTypeToPlace = null;
-          this.activeCustomTemplateToPlace = null;
-          items.forEach((el) => el.classList.remove("active-placement"));
-        }
       });
     }
   };
@@ -9258,6 +10195,34 @@ Tip: Tindakan ini dapat dibatalkan sewaktu-waktu dengan menekan Ctrl + Z (Undo).
                       <option value="iot">IoT Device</option>
                       <option value="laptop">Laptop</option>
                       <option value="custom">Perangkat Kustom Lainnya</option>
+                      <optgroup label="MikroTik Hardware">
+                        <option value="mikrotik-ccr2004">MikroTik CCR (Rack Router)</option>
+                        <option value="mikrotik-rb5009">MikroTik RB5009 / RB4011</option>
+                        <option value="mikrotik-hex">MikroTik hEX / L009</option>
+                        <option value="mikrotik-crs326">MikroTik CRS Switch</option>
+                        <option value="mikrotik-crs328">MikroTik CRS PoE Switch</option>
+                        <option value="mikrotik-cap-ax">MikroTik cAP / hAP Wi-Fi</option>
+                        <option value="mikrotik-lhg5">MikroTik LHG PtP Dish</option>
+                        <option value="mikrotik-sxtsq">MikroTik SXTsq / mANTBox</option>
+                      </optgroup>
+                      <optgroup label="Ruijie / Reyee Hardware">
+                        <option value="ruijie-eg210g">Ruijie EG210G-P / EG310GH Gateway</option>
+                        <option value="ruijie-nbr6210">Ruijie NBR6210 Enterprise Gateway</option>
+                        <option value="ruijie-s5750">Ruijie RG-S5750 Core L3 Switch</option>
+                        <option value="ruijie-nbs5200">Ruijie NBS5200 / NBS3100 Switch</option>
+                        <option value="ruijie-es218gc">Ruijie ES218GC-P / ES209GC-P PoE</option>
+                        <option value="ruijie-rap2260">Ruijie RAP2260 / RAP2200 Ceiling AP</option>
+                        <option value="ruijie-rap1200">Ruijie RAP1200 In-Wall AP</option>
+                        <option value="ruijie-rap6260">Ruijie RAP6260 Outdoor Wi-Fi 6</option>
+                        <option value="ruijie-est350">Ruijie RG-EST350 Wireless Bridge</option>
+                      </optgroup>
+                      <optgroup label="TP-Link Switch & Hub">
+                        <option value="tplink-ls1005g">TP-Link LS1005G / SG1008D Hub</option>
+                        <option value="tplink-sg108pe">TP-Link TL-SG108E / SG108PE PoE+</option>
+                        <option value="tplink-sg1016d">TP-Link TL-SG1016D / SG1024D Switch</option>
+                        <option value="tplink-sg2428p">TP-Link Omada SG2210MP / SG2428P</option>
+                        <option value="tplink-sg3428x">TP-Link JetStream SG3428X / SX3016F</option>
+                      </optgroup>
                     </select>
                   </div>
                 </div>
@@ -9843,6 +10808,492 @@ Tip: Tindakan ini dapat dibatalkan sewaktu-waktu dengan menekan Ctrl + Z (Undo).
     }
   };
 
+  // js/ui/mikrotik-quick-insert-modal.js
+  var VENDOR_PROFILES = {
+    mikrotik: {
+      id: "mikrotik",
+      label: "MikroTik",
+      title: "Insert Cepat Perangkat MikroTik",
+      subtitle: "Pilih paket atau jumlah unit MikroTik (CCR, RB, CRS, cAP, LHG) untuk langsung disisipkan ke peta",
+      catalog: MIKROTIK_CATALOG,
+      defaultIp: "192.168.88.1",
+      defaultCounts: { "mikrotik-rb5009": 1, "mikrotik-crs326": 1 },
+      stripBrandRegex: /^MikroTik\s+/i,
+      presets: [
+        {
+          id: "mt-kantor",
+          label: "Kantor / Lab",
+          hint: "1x RB5009, 1x CRS326, 2x cAP ax",
+          counts: { "mikrotik-rb5009": 1, "mikrotik-crs326": 1, "mikrotik-cap-ax": 2 }
+        },
+        {
+          id: "mt-kampus",
+          label: "Gedung / Kampus",
+          hint: "1x CCR2004, 2x CRS328 PoE, 4x cAP ax",
+          counts: { "mikrotik-ccr2004": 1, "mikrotik-crs328": 2, "mikrotik-cap-ax": 4 }
+        },
+        {
+          id: "mt-ptp",
+          label: "Link PtP Antargedung",
+          hint: "1x CCR2004, 2x LHG 5 ac, 1x CRS326",
+          counts: { "mikrotik-ccr2004": 1, "mikrotik-lhg5": 2, "mikrotik-crs326": 1 }
+        },
+        {
+          id: "mt-wisp",
+          label: "Hotspot / Base Station",
+          hint: "1x RB4011, 1x mANTBox, 3x SXTsq",
+          counts: { "mikrotik-rb4011": 1, "mikrotik-mantbox": 1, "mikrotik-sxtsq": 3 }
+        }
+      ]
+    },
+    ruijie: {
+      id: "ruijie",
+      label: "Ruijie / Reyee",
+      title: "Insert Cepat Perangkat Ruijie / Reyee",
+      subtitle: "Pilih paket atau jumlah unit Ruijie (EG, NBR, NBS, ES, RAP, EST) untuk langsung disisipkan ke peta",
+      catalog: RUIJIE_CATALOG,
+      defaultIp: "192.168.110.1",
+      defaultCounts: { "ruijie-eg210g": 1, "ruijie-nbs3100-poe": 1 },
+      stripBrandRegex: /^Ruijie\s+/i,
+      presets: [
+        {
+          id: "rj-kantor",
+          label: "Kantor / Ruko",
+          hint: "1x EG210G-P, 1x ES218GC-P, 3x RAP2200",
+          counts: { "ruijie-eg210g": 1, "ruijie-es218gc": 1, "ruijie-rap2200": 3 }
+        },
+        {
+          id: "rj-gedung",
+          label: "Gedung / Sekolah",
+          hint: "1x EG310GH, 2x NBS3100 PoE+, 6x RAP2260",
+          counts: { "ruijie-eg310gh": 1, "ruijie-nbs3100-poe": 2, "ruijie-rap2260": 6 }
+        },
+        {
+          id: "rj-hotel",
+          label: "Hotel / Asrama",
+          hint: "1x NBR6210, 1x NBS5200, 8x RAP1200 In-Wall",
+          counts: { "ruijie-nbr6210": 1, "ruijie-nbs5200": 1, "ruijie-rap1200": 8 }
+        },
+        {
+          id: "rj-outdoor",
+          label: "Outdoor & PtP Bridge",
+          hint: "1x EG210G-P, 2x EST350 V2, 2x RAP6260 Out",
+          counts: { "ruijie-eg210g": 1, "ruijie-est350": 2, "ruijie-rap6260": 2 }
+        }
+      ]
+    },
+    tplink: {
+      id: "tplink",
+      label: "TP-Link Switch & Hub",
+      title: "Insert Cepat Switch & Hub TP-Link",
+      subtitle: "Pilih paket atau jumlah unit Switch / Hub TP-Link (LS, TL-SG, Easy Smart, Omada JetStream)",
+      catalog: TPLINK_CATALOG,
+      defaultIp: "192.168.0.10",
+      defaultCounts: { "tplink-sg1008d": 1, "tplink-sg2210mp": 1 },
+      stripBrandRegex: /^TP-Link\s+/i,
+      presets: [
+        {
+          id: "tp-soho",
+          label: "Ruang Kerja / Hub",
+          hint: "2x LS1005G (5P), 2x TL-SG1008D (8P)",
+          counts: { "tplink-ls1005g": 2, "tplink-sg1008d": 2 }
+        },
+        {
+          id: "tp-poe",
+          label: "Distribusi PoE & CCTV",
+          hint: "1x TL-SG1218MP, 2x TL-SG108PE PoE+",
+          counts: { "tplink-sg1218mp": 1, "tplink-sg108pe": 2 }
+        },
+        {
+          id: "tp-omada",
+          label: "Omada Gedung / Kampus",
+          hint: "1x SG3428X 10G, 2x SG2428P PoE+",
+          counts: { "tplink-sg3428x": 1, "tplink-sg2428p": 2 }
+        },
+        {
+          id: "tp-fiber",
+          label: "Core Fiber & Rack",
+          hint: "1x SX3016F 10G, 2x TL-SG1024D",
+          counts: { "tplink-sx3016f": 1, "tplink-sg1024d": 2 }
+        }
+      ]
+    }
+  };
+  var VendorQuickInsertModal = class {
+    /**
+     * @param {Object} options
+     * @param {import('../devices/device-manager.js').DeviceManager} options.deviceManager
+     * @param {import('../map/map-engine.js').MapEngine} [options.mapEngine]
+     */
+    constructor({ deviceManager, mapEngine = null }) {
+      this.deviceManager = deviceManager;
+      this.mapEngine = mapEngine;
+      this.modalEl = null;
+      this.activeVendor = "mikrotik";
+      this.quantities = /* @__PURE__ */ new Map();
+      this.resetQuantitiesForVendor(this.activeVendor);
+      this.createModalDOM();
+      this.bindStaticEvents();
+      this.renderVendorContent();
+    }
+    getProfile() {
+      return VENDOR_PROFILES[this.activeVendor] || VENDOR_PROFILES.mikrotik;
+    }
+    resetQuantitiesForVendor(vendorId) {
+      const profile = VENDOR_PROFILES[vendorId] || VENDOR_PROFILES.mikrotik;
+      this.quantities.clear();
+      profile.catalog.forEach((item) => {
+        this.quantities.set(item.type, profile.defaultCounts[item.type] || 0);
+      });
+    }
+    createModalDOM() {
+      this.modalEl = document.createElement("div");
+      this.modalEl.id = "vendor-quick-insert-modal";
+      this.modalEl.style.cssText = `
+      position: fixed;
+      inset: 0;
+      background-color: var(--modal-backdrop, rgba(24, 45, 18, 0.75));
+      backdrop-filter: blur(8px);
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      font-family: 'Poppins', sans-serif;
+    `;
+      this.modalEl.innerHTML = `
+      <div style="background-color: var(--bg-secondary, #fbe6c2); border: 1px solid var(--border-color, #e5cca0); border-radius: 12px; width: 100%; max-width: 800px; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 20px 40px rgba(0,0,0,0.3); overflow: hidden;">
+        <!-- Header -->
+        <div style="min-height: 54px; border-bottom: 1px solid var(--border-color, #e5cca0); background: var(--bg-tertiary, #f2dac8); display: flex; align-items: center; justify-content: space-between; padding: 8px 20px; gap: 12px; flex-shrink: 0;">
+          <div style="display: flex; align-items: center; gap: 10px; min-width: 0;">
+            <div style="width: 30px; height: 30px; border-radius: 7px; background: rgba(42, 124, 19, 0.16); display: flex; align-items: center; justify-content: center; color: var(--accent-blue, #2a7c13); flex-shrink: 0;">
+              <i data-lucide="zap" style="width: 17px; height: 17px;"></i>
+            </div>
+            <div style="min-width: 0;">
+              <span id="vi-modal-title" style="font-size: 15px; font-weight: 700; color: var(--text-primary, #18350d); display: block; line-height: 1.2;">Insert Cepat Perangkat</span>
+              <span id="vi-modal-subtitle" style="font-size: 11px; color: var(--text-muted, #678458);">Pilih paket atau jumlah unit perangkat</span>
+            </div>
+          </div>
+
+          <!-- Vendor Switcher Tabs -->
+          <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
+            <div class="segmented-control" style="padding: 2px;">
+              <button type="button" class="segmented-item btn-vi-vendor active" data-vendor="mikrotik" style="font-size: 11px; padding: 4px 10px;">MikroTik</button>
+              <button type="button" class="segmented-item btn-vi-vendor" data-vendor="ruijie" style="font-size: 11px; padding: 4px 10px;">Ruijie / Reyee</button>
+              <button type="button" class="segmented-item btn-vi-vendor" data-vendor="tplink" style="font-size: 11px; padding: 4px 10px;">TP-Link</button>
+            </div>
+            <button id="btn-vi-modal-close" class="btn btn-icon btn-sm" title="Tutup">
+              <i data-lucide="x" style="width: 18px; height: 18px;"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Body -->
+        <div style="padding: 16px 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; flex: 1;">
+          <!-- Preset Bundles -->
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--accent-blue, #2a7c13);">1. Paket Topologi Cepat (Opsional)</span>
+              <button type="button" id="btn-vi-clear-all" class="btn btn-secondary btn-sm" style="font-size: 10.5px; padding: 2px 8px;">Reset 0</button>
+            </div>
+            <div id="vi-presets-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 8px;"></div>
+          </div>
+
+          <!-- Hardware List -->
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <span id="vi-catalog-heading" style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--accent-blue, #2a7c13);">2. Pilih Model & Jumlah Unit</span>
+            <div id="vi-catalog-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px;"></div>
+          </div>
+
+          <!-- Auto Configuration -->
+          <div style="background: var(--bg-primary, #fff8cf); border: 1px solid var(--border-color, #e5cca0); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 10px;">
+            <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--accent-blue, #2a7c13);">3. Pengaturan Otomatis (IP, Prefix & Status)</span>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px;">
+              <div style="display: flex; flex-direction: column; gap: 3px;">
+                <label style="font-size: 11px; font-weight: 600; color: var(--text-primary);">Prefix Nama (Opsional)</label>
+                <input type="text" id="vi-prefix-name" placeholder="misal: Gedung-A"
+                       style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 6px 8px; font-size: 12px; color: var(--text-primary);">
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 3px;">
+                <label style="font-size: 11px; font-weight: 600; color: var(--text-primary);">IP Awal (Auto Increment)</label>
+                <input type="text" id="vi-start-ip" value="192.168.88.1" placeholder="contoh: 192.168.88.1"
+                       style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 6px 8px; font-size: 12px; color: var(--text-primary); font-family: var(--font-mono);">
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 3px;">
+                <label style="font-size: 11px; font-weight: 600; color: var(--text-primary);">VLAN Default</label>
+                <input type="number" id="vi-vlan" value="1" min="1" max="4094"
+                       style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 6px 8px; font-size: 12px; color: var(--text-primary); font-family: var(--font-mono);">
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 3px;">
+                <label style="font-size: 11px; font-weight: 600; color: var(--text-primary);">Status Awal</label>
+                <select id="vi-status" style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 6px 8px; font-size: 12px; color: var(--text-primary);">
+                  <option value="online" selected>Online</option>
+                  <option value="warning">Warning</option>
+                  <option value="offline">Offline</option>
+                  <option value="unknown">Unknown</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div style="height: 58px; border-top: 1px solid var(--border-color, #e5cca0); background: var(--bg-tertiary, #f2dac8); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; flex-shrink: 0;">
+          <span id="vi-total-summary" style="font-size: 12px; font-weight: 600; color: var(--text-primary);">Total dipilih: 2 perangkat</span>
+          <div style="display: flex; gap: 8px;">
+            <button type="button" id="btn-vi-cancel" class="btn btn-secondary btn-sm">Batal</button>
+            <button type="button" id="btn-vi-insert" class="btn btn-primary btn-sm" style="padding: 6px 14px; font-weight: 700;">
+              <i data-lucide="plus-circle" style="width: 14px; height: 14px;"></i>
+              <span id="btn-vi-insert-label">Sisipkan 2 Perangkat ke Peta</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+      document.body.appendChild(this.modalEl);
+    }
+    renderVendorContent() {
+      const profile = this.getProfile();
+      const titleEl = this.modalEl.querySelector("#vi-modal-title");
+      const subEl = this.modalEl.querySelector("#vi-modal-subtitle");
+      const headingEl = this.modalEl.querySelector("#vi-catalog-heading");
+      const ipInput = this.modalEl.querySelector("#vi-start-ip");
+      if (titleEl) titleEl.textContent = profile.title;
+      if (subEl) subEl.textContent = profile.subtitle;
+      if (headingEl) headingEl.textContent = `2. Pilih Model & Jumlah Unit ${profile.label}`;
+      if (ipInput) ipInput.value = profile.defaultIp;
+      this.modalEl.querySelectorAll(".btn-vi-vendor").forEach((btn) => {
+        btn.classList.toggle("active", btn.getAttribute("data-vendor") === this.activeVendor);
+      });
+      const presetsGrid = this.modalEl.querySelector("#vi-presets-grid");
+      if (presetsGrid) {
+        presetsGrid.innerHTML = profile.presets.map((preset) => `
+        <button type="button" class="btn-vi-preset" data-preset-id="${preset.id}"
+                style="text-align: left; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border-color, #e5cca0); background: var(--bg-primary, #fff8cf); cursor: pointer; display: flex; flex-direction: column; gap: 2px; transition: all 0.15s ease;">
+          <span style="font-size: 12px; font-weight: 700; color: var(--text-primary);">${preset.label}</span>
+          <span style="font-size: 10px; color: var(--text-muted); line-height: 1.25;">${preset.hint}</span>
+        </button>
+      `).join("");
+      }
+      const catalogGrid = this.modalEl.querySelector("#vi-catalog-grid");
+      if (catalogGrid) {
+        catalogGrid.innerHTML = profile.catalog.map((item) => {
+          const cat = DEVICE_CATEGORIES[item.category] || DEVICE_CATEGORIES.core;
+          const qty = this.quantities.get(item.type) || 0;
+          const iconSvg = getDeviceIconSvg(getDefaultIconForType(item.type), { color: cat.color, size: 18 });
+          return `
+          <div class="vi-qty-card" data-type="${item.type}"
+               style="background: var(--bg-primary, #fff8cf); border: 1.5px solid ${qty > 0 ? cat.color : "var(--border-color, #e5cca0)"}; border-radius: 8px; padding: 8px 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px; transition: border-color 0.15s ease;">
+            <div style="display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1;">
+              <div style="width: 28px; height: 28px; border-radius: 6px; background: rgba(0,0,0,0.06); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                ${iconSvg}
+              </div>
+              <div style="min-width: 0; flex: 1;">
+                <div style="font-size: 11.5px; font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${item.name}">
+                  ${item.name}
+                </div>
+                <div style="font-size: 10px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${item.defaultModel} \u2014 ${item.description}">
+                  ${item.defaultModel}
+                </div>
+              </div>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 4px; flex-shrink: 0;">
+              <button type="button" class="btn btn-secondary btn-sm btn-vi-dec" data-type="${item.type}" style="width: 22px; height: 22px; padding: 0; font-weight: 700;">-</button>
+              <input type="number" class="input-vi-qty" data-type="${item.type}" min="0" max="50" value="${qty}"
+                     style="width: 36px; height: 22px; text-align: center; font-size: 11px; font-weight: 700; padding: 0 2px; font-family: var(--font-mono);">
+              <button type="button" class="btn btn-secondary btn-sm btn-vi-inc" data-type="${item.type}" style="width: 22px; height: 22px; padding: 0; font-weight: 700;">+</button>
+            </div>
+          </div>
+        `;
+        }).join("");
+      }
+      this.bindDynamicEvents();
+      this.updateSummary();
+    }
+    bindStaticEvents() {
+      this.modalEl.querySelector("#btn-vi-modal-close")?.addEventListener("click", () => this.hide());
+      this.modalEl.querySelector("#btn-vi-cancel")?.addEventListener("click", () => this.hide());
+      this.modalEl.addEventListener("click", (e) => {
+        if (e.target === this.modalEl) this.hide();
+      });
+      this.modalEl.querySelectorAll(".btn-vi-vendor").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const nextVendor = btn.getAttribute("data-vendor");
+          if (nextVendor && nextVendor !== this.activeVendor) {
+            this.switchVendor(nextVendor);
+          }
+        });
+      });
+      this.modalEl.querySelector("#btn-vi-clear-all")?.addEventListener("click", () => {
+        this.getProfile().catalog.forEach((item) => this.setQty(item.type, 0));
+      });
+      this.modalEl.querySelector("#btn-vi-insert")?.addEventListener("click", () => {
+        this.handleInsert();
+      });
+      eventBus.on("modal:open-mikrotik-insert", () => {
+        this.show("mikrotik");
+      });
+      eventBus.on("modal:open-vendor-insert", (payload) => {
+        this.show(payload?.vendor || "mikrotik");
+      });
+    }
+    bindDynamicEvents() {
+      const profile = this.getProfile();
+      this.modalEl.querySelectorAll(".btn-vi-preset").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const preset = profile.presets.find((p) => p.id === btn.getAttribute("data-preset-id"));
+          if (!preset) return;
+          profile.catalog.forEach((item) => {
+            this.setQty(item.type, preset.counts[item.type] || 0);
+          });
+        });
+      });
+      this.modalEl.querySelectorAll(".btn-vi-inc").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const type = btn.getAttribute("data-type");
+          this.setQty(type, (this.quantities.get(type) || 0) + 1);
+        });
+      });
+      this.modalEl.querySelectorAll(".btn-vi-dec").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const type = btn.getAttribute("data-type");
+          this.setQty(type, Math.max(0, (this.quantities.get(type) || 0) - 1));
+        });
+      });
+      this.modalEl.querySelectorAll(".input-vi-qty").forEach((input) => {
+        input.addEventListener("change", () => {
+          const type = input.getAttribute("data-type");
+          const parsed = Math.max(0, Math.min(50, parseInt(input.value, 10) || 0));
+          this.setQty(type, parsed);
+        });
+      });
+    }
+    switchVendor(vendorId) {
+      if (!VENDOR_PROFILES[vendorId]) return;
+      this.activeVendor = vendorId;
+      this.resetQuantitiesForVendor(vendorId);
+      this.renderVendorContent();
+    }
+    setQty(type, qty) {
+      const safeQty = Math.max(0, Math.min(50, Number(qty) || 0));
+      this.quantities.set(type, safeQty);
+      const input = this.modalEl.querySelector(`.input-vi-qty[data-type="${type}"]`);
+      if (input) input.value = String(safeQty);
+      const card = this.modalEl.querySelector(`.vi-qty-card[data-type="${type}"]`);
+      if (card) {
+        const def = this.getProfile().catalog.find((i) => i.type === type);
+        const cat = DEVICE_CATEGORIES[def?.category] || DEVICE_CATEGORIES.core;
+        card.style.borderColor = safeQty > 0 ? cat.color : "var(--border-color, #e5cca0)";
+      }
+      this.updateSummary();
+    }
+    updateSummary() {
+      let total = 0;
+      this.quantities.forEach((v) => {
+        total += v;
+      });
+      const summaryEl = this.modalEl.querySelector("#vi-total-summary");
+      const btnLabelEl = this.modalEl.querySelector("#btn-vi-insert-label");
+      const insertBtn = this.modalEl.querySelector("#btn-vi-insert");
+      if (summaryEl) {
+        summaryEl.textContent = `Total dipilih: ${total} perangkat`;
+      }
+      if (btnLabelEl) {
+        btnLabelEl.textContent = total > 0 ? `Sisipkan ${total} Perangkat ke Peta` : "Pilih Minimal 1 Perangkat";
+      }
+      if (insertBtn) {
+        insertBtn.disabled = total === 0;
+        insertBtn.style.opacity = total === 0 ? "0.6" : "1";
+      }
+    }
+    getViewportCenterNormalized() {
+      const stage = this.mapEngine?.stage;
+      if (!stage) return { x: 0.5, y: 0.5 };
+      const screenCenter = { x: stage.width() / 2, y: stage.height() / 2 };
+      return coordinateSystem.screenToNormalized(screenCenter, stage, true);
+    }
+    handleInsert() {
+      const profile = this.getProfile();
+      const selectedEntries = [];
+      profile.catalog.forEach((def) => {
+        const qty = this.quantities.get(def.type) || 0;
+        if (qty > 0) {
+          selectedEntries.push({ def, qty });
+        }
+      });
+      if (selectedEntries.length === 0) return;
+      const total = selectedEntries.reduce((acc, e) => acc + e.qty, 0);
+      const prefixName = (this.modalEl.querySelector("#vi-prefix-name")?.value || "").trim();
+      const startIpRaw = (this.modalEl.querySelector("#vi-start-ip")?.value || "").trim();
+      const vlanRaw = parseInt(this.modalEl.querySelector("#vi-vlan")?.value || "1", 10);
+      const vlan = !isNaN(vlanRaw) && vlanRaw >= 1 && vlanRaw <= 4094 ? vlanRaw : 1;
+      const status = this.modalEl.querySelector("#vi-status")?.value || "online";
+      let ipParts = null;
+      if (startIpRaw && IPv4_REGEX.test(startIpRaw)) {
+        ipParts = startIpRaw.split(".").map((n) => parseInt(n, 10));
+      }
+      const center = this.getViewportCenterNormalized();
+      const cols = Math.min(5, Math.ceil(Math.sqrt(total)));
+      const rows = Math.ceil(total / cols);
+      const stepX = 0.065;
+      const stepY = 0.075;
+      let idx = 0;
+      let lastCreated = null;
+      selectedEntries.forEach(({ def, qty }) => {
+        for (let i = 1; i <= qty; i++) {
+          const col = idx % cols;
+          const row = Math.floor(idx / cols);
+          const offsetX = (col - (cols - 1) / 2) * stepX;
+          const offsetY = (row - (rows - 1) / 2) * stepY;
+          const normX = clamp2(center.x + offsetX, 0.05, 0.95);
+          const normY = clamp2(center.y + offsetY, 0.05, 0.95);
+          const shortModel = def.name.replace(profile.stripBrandRegex, "");
+          const label = prefixName ? `${prefixName}-${shortModel}${qty > 1 ? `-${i}` : ""}` : `${def.name}${qty > 1 ? ` #${i}` : ""}`;
+          let ip = "";
+          if (ipParts) {
+            const baseNum = (ipParts[0] << 24) + (ipParts[1] << 16) + (ipParts[2] << 8) + ipParts[3] + idx;
+            const o1 = baseNum >>> 24 & 255;
+            const o2 = baseNum >>> 16 & 255;
+            const o3 = baseNum >>> 8 & 255;
+            const o4 = baseNum & 255;
+            ip = `${o1}.${o2}.${o3}.${o4}`;
+          }
+          lastCreated = this.deviceManager.addDevice({
+            type: def.type,
+            name: label,
+            category: def.category,
+            brand: def.defaultBrand,
+            model: def.defaultModel,
+            status,
+            position: { x: normX, y: normY },
+            network: {
+              ip,
+              vlan
+            }
+          });
+          idx++;
+        }
+      });
+      if (lastCreated) {
+        this.deviceManager.selectDevice(lastCreated.id);
+      }
+      this.hide();
+    }
+    show(vendorId) {
+      if (vendorId && VENDOR_PROFILES[vendorId] && vendorId !== this.activeVendor) {
+        this.switchVendor(vendorId);
+      }
+      this.modalEl.style.display = "flex";
+      if (window.lucide && typeof window.lucide.createIcons === "function") {
+        window.lucide.createIcons({ root: this.modalEl });
+      }
+    }
+    hide() {
+      this.modalEl.style.display = "none";
+    }
+  };
+
   // js/ui/map-scale-modal.js
   var MapScaleModal = class {
     /**
@@ -10104,6 +11555,7 @@ Tip: Tindakan ini dapat dibatalkan sewaktu-waktu dengan menekan Ctrl + Z (Undo).
       this.layerControls = null;
       this.contextMenu = null;
       this.customDeviceModal = null;
+      this.mikrotikQuickInsertModal = null;
       this.mapScaleModal = null;
       this.projectStorage = null;
       this.exportModal = null;
@@ -10211,6 +11663,10 @@ Tip: Tindakan ini dapat dibatalkan sewaktu-waktu dengan menekan Ctrl + Z (Undo).
       this.customDeviceModal = new CustomDeviceModal({
         deviceManager: this.deviceManager,
         devicePalette: this.devicePalette,
+        mapEngine: this.mapEngine
+      });
+      this.mikrotikQuickInsertModal = new VendorQuickInsertModal({
+        deviceManager: this.deviceManager,
         mapEngine: this.mapEngine
       });
       this.mapScaleModal = new MapScaleModal({
@@ -10323,7 +11779,9 @@ Tip: Tindakan ini dapat dibatalkan sewaktu-waktu dengan menekan Ctrl + Z (Undo).
           }
           const newDevice = this.deviceManager.addDevice(deviceData);
           this.deviceManager.selectDevice(newDevice.id);
-          stateManager.setMode("select");
+          if (!this.devicePalette?.multiPlaceMode) {
+            stateManager.setMode("select");
+          }
         }
       });
       eventBus.on("canvas:clicked-empty", () => {
