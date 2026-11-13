@@ -13,3 +13,6 @@ CLAUDE.md
 .windsurfrules
 .gemini/
 .cline/
+
+# Dependencies
+node_modules/
