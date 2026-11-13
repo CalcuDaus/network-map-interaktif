@@ -74,6 +74,7 @@ export class Map3DEngine {
     this.lookYaw = 0;
     this.lookPitch = 0;
     this.pendingCableSourceId = null;
+    this.dragMoveState = null;
 
     this.bindGlobalListeners();
   }
@@ -142,19 +143,28 @@ export class Map3DEngine {
       this.pointerDownScreen = { x: e.clientX, y: e.clientY };
       this.container.classList.add('is-dragging');
 
-      if (this.navTool === 'look' && e.button === 0) {
-        this.isLookDragging = true;
-        this.lookPrevPointer = { x: e.clientX, y: e.clientY };
-        const dir = new THREE.Vector3();
-        this.camera.getWorldDirection(dir);
-        this.lookYaw = Math.atan2(dir.x, dir.z);
-        this.lookPitch = Math.asin(Math.max(-0.99, Math.min(0.99, dir.y)));
-        dom.setPointerCapture?.(e.pointerId);
+      if (stateManager.getMode() !== 'draw-cable') {
+        if (this.navTool === 'look' && e.button === 0) {
+          this.isLookDragging = true;
+          this.lookPrevPointer = { x: e.clientX, y: e.clientY };
+          const dir = new THREE.Vector3();
+          this.camera.getWorldDirection(dir);
+          this.lookYaw = Math.atan2(dir.x, dir.z);
+          this.lookPitch = Math.asin(Math.max(-0.99, Math.min(0.99, dir.y)));
+          dom.setPointerCapture?.(e.pointerId);
+        } else if (this.navTool === 'move' && e.button === 0) {
+          this.startDeviceDragMove(e, dom);
+        }
       }
     });
 
     dom.addEventListener('pointermove', (e) => {
-      if (!this.isActive || !this.isLookDragging) return;
+      if (!this.isActive) return;
+      if (this.dragMoveState) {
+        this.updateDeviceDragMove(e);
+        return;
+      }
+      if (!this.isLookDragging) return;
       const dx = e.clientX - this.lookPrevPointer.x;
       const dy = e.clientY - this.lookPrevPointer.y;
       this.lookPrevPointer = { x: e.clientX, y: e.clientY };
@@ -178,14 +188,17 @@ export class Map3DEngine {
         this.isLookDragging = false;
         dom.releasePointerCapture?.(e.pointerId);
       }
+      if (this.dragMoveState) {
+        this.finishDeviceDragMove(e, dom);
+      }
     };
 
     dom.addEventListener('pointerup', (e) => {
-      const wasLookDragging = this.isLookDragging;
       endDrag(e);
       if (!this.isActive) return;
       const dist = Math.hypot(e.clientX - this.pointerDownScreen.x, e.clientY - this.pointerDownScreen.y);
-      if (dist > 5 || wasLookDragging) return;
+      const maxClickDist = stateManager.getMode() === 'draw-cable' ? 10 : 6;
+      if (dist > maxClickDist) return;
       if (e.button === 0) {
         this.handleCanvasClick(e);
       } else if (e.button === 2) {
@@ -489,6 +502,17 @@ export class Map3DEngine {
         holder.add(selRing);
       }
 
+      // Active Cable Source Ring (when drawing cable in 3D)
+      if (stateManager.getMode() === 'draw-cable' && this.pendingCableSourceId === dev.id) {
+        const srcRing = new THREE.Mesh(
+          new THREE.RingGeometry(1.25 * userModelScale, 1.52 * userModelScale, 32),
+          new THREE.MeshBasicMaterial({ color: 0x0ea5e9, side: THREE.DoubleSide })
+        );
+        srcRing.rotation.x = -Math.PI / 2;
+        srcRing.position.y = 0.06;
+        holder.add(srcRing);
+      }
+
       // Floating Label Sprite
       if (this.showLabels) {
         const label = create3DLabelSprite(dev, elev);
@@ -538,9 +562,14 @@ export class Map3DEngine {
 
   syncCables() {
     if (!this.isActive || !this.isInitialized) return;
+    if (this.effectivePosMap.size === 0 && this.deviceManager.getAllDevices().length > 0) {
+      this.syncDevices();
+    }
     this.clearGroup(this.cablesGroup);
     this.cableMeshMap.clear();
 
+    const { worldW } = this.getWorldDimensions();
+    const mapScaleFactor = Math.max(0.55, Math.min(2.4, worldW / 180));
     const cables = this.cableManager.getAllConnections();
 
     cables.forEach((cable) => {
@@ -555,15 +584,15 @@ export class Map3DEngine {
 
       const pts = [srcPos.clone()];
       if (Array.isArray(cable.route) && cable.route.length > 0) {
-        const trayY = Math.min(srcPos.y, dstPos.y, 0.45);
+        const trayY = Math.max(0.45, Math.min(srcPos.y, dstPos.y, 0.85));
         cable.route.forEach((wp) => {
           const wpWorld = this.normToWorld(wp.x, wp.y);
-          pts.push(new THREE.Vector3(wpWorld.x, Math.max(0.25, trayY), wpWorld.z));
+          pts.push(new THREE.Vector3(wpWorld.x, trayY, wpWorld.z));
         });
       } else if (!isWireless && srcPos.distanceTo(dstPos) > 1.5) {
-        // Gentle mid-arc sag/tray curve so close cables inside a room are visually distinct
+        // Gentle mid-arc above floor so cables never sink into ground plane
         const mid = srcPos.clone().add(dstPos).multiplyScalar(0.5);
-        mid.y = Math.max(0.2, Math.min(srcPos.y, dstPos.y) - 0.15);
+        mid.y = Math.max(0.45, Math.min(srcPos.y, dstPos.y) - 0.1);
         pts.push(mid);
       }
       pts.push(dstPos.clone());
@@ -576,19 +605,20 @@ export class Map3DEngine {
         }
       }
       if (cleanPts.length < 2) {
-        cleanPts.push(dstPos.clone().add(new THREE.Vector3(0.05, 0.1, 0.05)));
+        cleanPts.push(dstPos.clone().add(new THREE.Vector3(0.15, 0.2, 0.15)));
       }
 
       const curve = new THREE.CatmullRomCurve3(cleanPts, false, 'catmullrom', 0.25);
-      const radius = (isSelected ? 0.24 : 0.14) * Math.max(0.7, this.deviceScaleMultiplier * 0.45);
-      const tubeGeo = new THREE.TubeGeometry(curve, Math.max(16, cleanPts.length * 10), radius, 8, false);
+      const baseRadius = isSelected ? 0.34 : 0.22;
+      const radius = baseRadius * Math.max(0.85, this.deviceScaleMultiplier * 0.42) * mapScaleFactor;
+      const tubeGeo = new THREE.TubeGeometry(curve, Math.max(20, cleanPts.length * 12), radius, 8, false);
       const tubeMat = new THREE.MeshStandardMaterial({
         color: isSelected ? '#facc15' : color,
-        emissive: isSelected ? '#ca8a04' : color,
-        emissiveIntensity: isSelected ? 0.5 : (isWireless ? 0.45 : 0.18),
-        roughness: 0.35,
+        emissive: isSelected ? '#eab308' : color,
+        emissiveIntensity: isSelected ? 0.7 : (isWireless ? 0.55 : 0.32),
+        roughness: 0.3,
         transparent: isWireless,
-        opacity: isWireless ? 0.65 : 1.0
+        opacity: isWireless ? 0.72 : 1.0
       });
 
       const mesh = new THREE.Mesh(tubeGeo, tubeMat);
@@ -605,6 +635,15 @@ export class Map3DEngine {
     });
   }
 
+  findDeviceIdFromObject(obj) {
+    let cur = obj;
+    while (cur && cur !== this.devicesGroup) {
+      if (cur.userData?.deviceId) return cur.userData.deviceId;
+      cur = cur.parent;
+    }
+    return null;
+  }
+
   handleCanvasClick(e) {
     const rect = this.renderer.domElement.getBoundingClientRect();
     this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
@@ -615,29 +654,39 @@ export class Map3DEngine {
     // 1. Prioritize Device selection (or 3D cable drawing when mode === 'draw-cable')
     const devHits = this.raycaster.intersectObjects(this.devicesGroup.children, true);
     if (devHits.length > 0) {
-      const devId = devHits[0].object.userData?.deviceId;
+      const devId = this.findDeviceIdFromObject(devHits[0].object);
       if (devId) {
         if (stateManager.getMode() === 'draw-cable') {
           if (!this.pendingCableSourceId) {
             this.pendingCableSourceId = devId;
             this.deviceManager.selectDevice(devId);
+            const srcDev = this.deviceManager.getDeviceById(devId);
+            this.showStatusHint(`🔌 Sumber kabel 3D: "${srcDev?.name || devId}". Klik perangkat tujuan untuk menghubungkan.`);
             return;
           }
-          if (this.pendingCableSourceId !== devId) {
-            const newCab = this.cableManager.addConnection({
-              source: this.pendingCableSourceId,
-              destination: devId,
-              type: 'ethernet',
-              cableCategory: 'cat6',
-              route: []
-            });
-            this.pendingCableSourceId = null;
-            stateManager.setMode('select');
-            if (newCab) {
-              this.cableManager.selectConnection(newCab.id);
-            }
+          if (this.pendingCableSourceId === devId) {
+            this.showStatusHint('⚠️ Perangkat tujuan tidak boleh sama dengan perangkat sumber.');
             return;
           }
+          const srcDev = this.deviceManager.getDeviceById(this.pendingCableSourceId);
+          const dstDev = this.deviceManager.getDeviceById(devId);
+          const newCab = this.cableManager.addConnection({
+            name: `Link ${srcDev?.name || 'Source'} ➔ ${dstDev?.name || 'Dest'}`,
+            source: this.pendingCableSourceId,
+            destination: devId,
+            type: 'ethernet',
+            cableCategory: 'cat6',
+            route: [],
+            status: 'active'
+          });
+          this.pendingCableSourceId = null;
+          stateManager.setMode('select');
+          if (newCab) {
+            this.cableManager.selectConnection(newCab.id);
+            this.syncCables();
+            this.showStatusHint(`✅ Kabel terhubung: "${newCab.name}"`);
+          }
+          return;
         }
         this.deviceManager.selectDevice(devId);
         return;
@@ -669,7 +718,7 @@ export class Map3DEngine {
     // 1. Right-click on 3D Device -> Device Context Menu
     const devHits = this.raycaster.intersectObjects(this.devicesGroup.children, true);
     if (devHits.length > 0) {
-      const devId = devHits[0].object.userData?.deviceId;
+      const devId = this.findDeviceIdFromObject(devHits[0].object);
       const device = devId ? this.deviceManager.getDeviceById(devId) : null;
       if (device) {
         eventBus.emit('contextmenu:device', {
@@ -762,7 +811,7 @@ export class Map3DEngine {
   }
 
   setNavTool(tool) {
-    const validTools = ['orbit', 'pan', 'zoom', 'look'];
+    const validTools = ['orbit', 'pan', 'zoom', 'look', 'move'];
     if (!validTools.includes(tool)) return;
     this.navTool = tool;
     this.applyNavToolConfig();
@@ -771,12 +820,19 @@ export class Map3DEngine {
 
   applyNavToolConfig() {
     if (this.container) {
-      this.container.classList.remove('tool-orbit', 'tool-pan', 'tool-zoom', 'tool-look');
+      this.container.classList.remove('tool-orbit', 'tool-pan', 'tool-zoom', 'tool-look', 'tool-move');
       this.container.classList.add(`tool-${this.navTool}`);
     }
     if (!this.controls) return;
 
-    if (this.navTool === 'pan') {
+    if (this.navTool === 'move') {
+      this.controls.mouseButtons = {
+        LEFT: -1, // Dragging a 3D device moves it on horizontal X/Y plane
+        MIDDLE: THREE.MOUSE.ROTATE,
+        RIGHT: THREE.MOUSE.PAN
+      };
+      this.controls.maxPolarAngle = Math.PI * 0.495;
+    } else if (this.navTool === 'pan') {
       this.controls.mouseButtons = {
         LEFT: THREE.MOUSE.PAN,
         MIDDLE: THREE.MOUSE.ROTATE,
@@ -805,6 +861,85 @@ export class Map3DEngine {
         RIGHT: THREE.MOUSE.PAN
       };
       this.controls.maxPolarAngle = Math.PI * 0.495;
+    }
+  }
+
+  startDeviceDragMove(e, dom) {
+    const rect = dom.getBoundingClientRect();
+    this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+
+    const devHits = this.raycaster.intersectObjects(this.devicesGroup.children, true);
+    if (devHits.length === 0) return;
+
+    const devId = devHits[0].object.userData?.deviceId;
+    const device = devId ? this.deviceManager.getDeviceById(devId) : null;
+    if (!device) return;
+
+    const meshGroup = this.deviceMeshMap.get(devId);
+    const devWorld = this.normToWorld(device.position.x, device.position.y);
+    const planeY = meshGroup ? meshGroup.position.y : 0;
+    const dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -planeY);
+
+    const hitPt = new THREE.Vector3();
+    if (!this.raycaster.ray.intersectPlane(dragPlane, hitPt)) return;
+
+    const meshOffsetX = meshGroup ? (meshGroup.position.x - devWorld.x) : 0;
+    const meshOffsetZ = meshGroup ? (meshGroup.position.z - devWorld.z) : 0;
+
+    this.dragMoveState = {
+      deviceId: devId,
+      plane: dragPlane,
+      grabOffsetX: devWorld.x - hitPt.x,
+      grabOffsetZ: devWorld.z - hitPt.z,
+      meshOffsetX,
+      meshOffsetZ,
+      latestNorm: null
+    };
+
+    this.deviceManager.selectDevice(devId);
+    dom.setPointerCapture?.(e.pointerId);
+  }
+
+  updateDeviceDragMove(e) {
+    if (!this.dragMoveState) return;
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+
+    const hitPt = new THREE.Vector3();
+    if (!this.raycaster.ray.intersectPlane(this.dragMoveState.plane, hitPt)) return;
+
+    const newWorldX = hitPt.x + this.dragMoveState.grabOffsetX;
+    const newWorldZ = hitPt.z + this.dragMoveState.grabOffsetZ;
+    const { normX, normY } = this.worldToNorm(newWorldX, newWorldZ);
+    const clampedWorld = this.normToWorld(normX, normY);
+
+    const meshGroup = this.deviceMeshMap.get(this.dragMoveState.deviceId);
+    if (meshGroup) {
+      meshGroup.position.x = clampedWorld.x + this.dragMoveState.meshOffsetX;
+      meshGroup.position.z = clampedWorld.z + this.dragMoveState.meshOffsetZ;
+
+      const prevEff = this.effectivePosMap.get(this.dragMoveState.deviceId);
+      const effY = prevEff ? prevEff.y : meshGroup.position.y;
+      this.effectivePosMap.set(
+        this.dragMoveState.deviceId,
+        new THREE.Vector3(meshGroup.position.x, effY, meshGroup.position.z)
+      );
+      this.syncCables();
+    }
+
+    this.dragMoveState.latestNorm = { x: normX, y: normY };
+  }
+
+  finishDeviceDragMove(e, dom) {
+    const state = this.dragMoveState;
+    this.dragMoveState = null;
+    dom.releasePointerCapture?.(e.pointerId);
+    if (state?.latestNorm) {
+      this.deviceManager.updateDevice(state.deviceId, { position: state.latestNorm });
     }
   }
 
@@ -1004,6 +1139,13 @@ export class Map3DEngine {
     }
   }
 
+  showStatusHint(message) {
+    const statusHint = document.querySelector('#app-status-bar .status-item:last-child');
+    if (statusHint) {
+      statusHint.innerHTML = `<span style="color: var(--accent-blue); font-weight: 600;">${message}</span>`;
+    }
+  }
+
   bindGlobalListeners() {
     const syncDevAndCables = () => {
       if (!this.isActive) return;
@@ -1052,17 +1194,26 @@ export class Map3DEngine {
     });
 
     eventBus.on('mode:changed', ({ mode }) => {
+      if (this.container) {
+        this.container.classList.toggle('mode-draw-cable', mode === 'draw-cable');
+      }
       if (mode !== 'draw-cable') {
         this.pendingCableSourceId = null;
+        if (this.isActive) this.syncDevices();
       }
     });
 
     eventBus.on('map3d:start-cable', ({ deviceId }) => {
       this.pendingCableSourceId = deviceId || null;
+      if (this.isActive) this.syncDevices();
     });
 
     eventBus.on('map3d:zoom-extents', () => {
       if (this.isActive) this.zoomExtents();
+    });
+
+    eventBus.on('map3d:set-navtool', ({ tool }) => {
+      if (tool) this.setNavTool(tool);
     });
 
     // Keyboard state tracking for smooth WASD/QE SketchUp-style walk/fly in 3D mode

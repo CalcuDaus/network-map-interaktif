@@ -3926,7 +3926,7 @@ ${device.network.ip}`;
           <div style="position: relative; display: flex; align-items: center;">
             <i data-lucide="search" style="width: 13px; height: 13px; color: var(--text-muted); position: absolute; left: 8px; pointer-events: none;"></i>
             <input type="text" id="palette-search-input" placeholder="Cari MikroTik, Ruijie, TP-Link, Hub..."
-                   value="${escapeHtml(this.searchQuery)}"
+                   value="${escapeHtml2(this.searchQuery)}"
                    style="width: 100%; padding: 5px 26px 5px 26px; font-size: 11.5px; border-radius: 6px; background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-primary);">
             <button type="button" id="btn-clear-palette-search" title="Hapus pencarian"
                     style="position: absolute; right: 6px; background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 13px; line-height: 1; display: ${this.searchQuery ? "block" : "none"};">
@@ -4009,7 +4009,7 @@ ${device.network.ip}`;
             const catColor = cat.color || "#2a7c13";
             let thumbHtml = "";
             if (tmpl.customImage) {
-              thumbHtml = `<img src="${tmpl.customImage}" style="width: 18px; height: 18px; object-fit: contain; border-radius: 2px;" alt="${escapeHtml(tmpl.name)}" />`;
+              thumbHtml = `<img src="${tmpl.customImage}" style="width: 18px; height: 18px; object-fit: contain; border-radius: 2px;" alt="${escapeHtml2(tmpl.name)}" />`;
             } else {
               const iconKey = tmpl.customIcon || getDefaultIconForType(tmpl.type || "router");
               thumbHtml = getDeviceIconSvg(iconKey, { color: catColor, size: 16 });
@@ -4035,11 +4035,11 @@ ${device.network.ip}`;
                   &times;
                 </button>
               </div>
-              <div class="palette-item-name" title="${escapeHtml(tmpl.name)}">
-                ${escapeHtml(tmpl.name)}
+              <div class="palette-item-name" title="${escapeHtml2(tmpl.name)}">
+                ${escapeHtml2(tmpl.name)}
               </div>
-              <div class="palette-item-sub" title="${escapeHtml(tmpl.brand || "")} ${escapeHtml(tmpl.model || "")}">
-                ${tmpl.brand ? `${escapeHtml(tmpl.brand)} ${escapeHtml(tmpl.model || "")}` : escapeHtml(tmpl.model) || "Custom"}
+              <div class="palette-item-sub" title="${escapeHtml2(tmpl.brand || "")} ${escapeHtml2(tmpl.model || "")}">
+                ${tmpl.brand ? `${escapeHtml2(tmpl.brand)} ${escapeHtml2(tmpl.model || "")}` : escapeHtml2(tmpl.model) || "Custom"}
               </div>
             </div>
           `;
@@ -4116,7 +4116,7 @@ ${device.network.ip}`;
       if (hasFilterMatches.count === 0) {
         html = `
         <div style="padding: 20px 10px; text-align: center; color: var(--text-muted); font-size: 11.5px; background: var(--bg-primary); border-radius: 8px; border: 1px dashed var(--border-color);">
-          Tidak ada perangkat yang cocok dengan pencarian "<strong>${escapeHtml(this.searchQuery)}</strong>".
+          Tidak ada perangkat yang cocok dengan pencarian "<strong>${escapeHtml2(this.searchQuery)}</strong>".
         </div>
       `;
       }
@@ -4128,7 +4128,7 @@ ${device.network.ip}`;
            draggable="true" 
            data-device-type="${item.type}"
            data-category="${item.category}"
-           title="${escapeHtml(item.description || item.name)} \u2014 Drag ke peta atau klik lalu klik di peta"
+           title="${escapeHtml2(item.description || item.name)} \u2014 Drag ke peta atau klik lalu klik di peta"
            style="background-color: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 4px; cursor: grab; transition: all 150ms ease;">
         <div style="display: flex; align-items: center; justify-content: space-between;">
           <div style="display: flex; align-items: center; gap: 6px; min-width: 0;">
@@ -4136,16 +4136,16 @@ ${device.network.ip}`;
               ${getDeviceIconSvg(getDefaultIconForType(item.type), { color: cat.color, size: 16 })}
             </div>
             <span style="font-size: 9px; font-weight: 700; color: ${cat.color}; font-family: var(--font-mono); text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-              ${escapeHtml(badgeText)}
+              ${escapeHtml2(badgeText)}
             </span>
           </div>
           <span style="width: 6px; height: 6px; border-radius: 50%; background-color: ${cat.color}; opacity: 0.8; flex-shrink: 0;"></span>
         </div>
-        <div class="palette-item-name" title="${escapeHtml(item.name)}">
-          ${escapeHtml(item.name)}
+        <div class="palette-item-name" title="${escapeHtml2(item.name)}">
+          ${escapeHtml2(item.name)}
         </div>
-        <div class="palette-item-sub" title="${escapeHtml(item.defaultBrand)} ${escapeHtml(item.defaultModel)}">
-          ${item.brandGroup ? escapeHtml(item.defaultModel) : `${escapeHtml(item.defaultBrand)} ${escapeHtml(item.defaultModel)}`}
+        <div class="palette-item-sub" title="${escapeHtml2(item.defaultBrand)} ${escapeHtml2(item.defaultModel)}">
+          ${item.brandGroup ? escapeHtml2(item.defaultModel) : `${escapeHtml2(item.defaultBrand)} ${escapeHtml2(item.defaultModel)}`}
         </div>
       </div>
     `;
@@ -4273,7 +4273,7 @@ ${device.network.ip}`;
       });
     }
   };
-  function escapeHtml(str) {
+  function escapeHtml2(str) {
     if (!str) return "";
     return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
   }
@@ -4617,6 +4617,9 @@ ${device.network.ip}`;
                   </button>
                 ` : ""}
               </div>
+              <input type="text" id="prop-3d-glb-url" placeholder="Atau URL/path .glb (mis. assets/models/router.glb)"
+                     value="${spatial.customModelUrl && !spatial.customModelUrl.startsWith("data:") ? escapeHtml(spatial.customModelUrl) : ""}"
+                     style="background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 10.5px; padding: 4px 6px; font-family: var(--font-mono);">
               <input type="text" id="prop-3d-glb-url" placeholder="Atau URL model .glb (https://...)"
                      value="${spatial.customModelUrl && !spatial.customModelUrl.startsWith("data:") ? this.escapeHtml(spatial.customModelUrl) : ""}"
                      style="background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 11px; padding: 4px 8px;">
@@ -9919,11 +9922,31 @@ ${dev.network?.ip || ""}`,
           }
         },
         {
+          id: "device-3d-model",
+          icon: "cpu",
+          label: "Model 3D Perangkat (.glb/.gltf)...",
+          action: () => {
+            this.hide();
+            eventBus.emit("modal:open-device-3d", { deviceId: device.id });
+          }
+        },
+        {
           id: "connect-cable",
           icon: "network",
           label: "Tarik Kabel dari Sini",
           action: () => this.startCableFromDevice(device)
         },
+        ...stateManager.getViewMode() === "3d" ? [{
+          id: "move-device-3d",
+          icon: "move",
+          label: "Geser Posisi X/Y (Mode Move)",
+          shortcut: "M",
+          action: () => {
+            this.hide();
+            eventBus.emit("map3d:set-navtool", { tool: "move" });
+            this.showToast(`\u2194\uFE0F Mode Move aktif \u2014 Drag "${device.name}" di lantai 3D untuk memindahkan posisi X/Y.`);
+          }
+        }] : [],
         {
           id: "focus-device",
           icon: "crosshair",
@@ -10133,7 +10156,7 @@ ${dev.network?.ip || ""}`,
       <div class="context-menu-header">
         <div class="context-menu-header-icon">${iconHtml}</div>
         <div class="context-menu-header-info">
-          <div class="context-menu-header-title" title="${escapeHtml2(title)}">${escapeHtml2(title)}</div>
+          <div class="context-menu-header-title" title="${escapeHtml3(title)}">${escapeHtml3(title)}</div>
           <div class="context-menu-header-sub">${subtitle}</div>
         </div>
       </div>
@@ -10149,7 +10172,7 @@ ${dev.network?.ip || ""}`,
         html += `
         <div class="context-menu-item${dangerClass}" data-index="${index}" role="menuitem" tabindex="0">
           <i data-lucide="${item.icon}"></i>
-          <span class="context-menu-item-label">${escapeHtml2(item.label)}</span>
+          <span class="context-menu-item-label">${escapeHtml3(item.label)}</span>
           ${shortcutBadge}
         </div>
       `;
@@ -10337,7 +10360,7 @@ Tip: Tindakan ini dapat dibatalkan sewaktu-waktu dengan menekan Ctrl + Z (Undo).
       }, 2400);
     }
   };
-  function escapeHtml2(str) {
+  function escapeHtml3(str) {
     if (!str) return "";
     return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
   }
@@ -10667,6 +10690,38 @@ Tip: Tindakan ini dapat dibatalkan sewaktu-waktu dengan menekan Ctrl + Z (Undo).
 
               </div>
 
+              <!-- 3D Model & Elevation (Optional) -->
+              <div class="info-card" style="display: flex; flex-direction: column; gap: 8px; background: var(--bg-primary, #fff8cf); border: 1px solid var(--border-color, #e5cca0); border-radius: 8px; padding: 12px;">
+                <span class="section-label" style="font-size: 11px; font-weight: 700; color: var(--accent-blue); text-transform: uppercase; margin: 0;">
+                  4. Model 3D & Elevasi (Opsional)
+                </span>
+                <input type="file" id="cd-3d-glb-file" accept=".glb,.gltf" style="display: none;">
+                <div style="display: flex; gap: 6px;">
+                  <button type="button" id="btn-cd-upload-glb" class="btn btn-secondary btn-sm" style="font-size: 11px; padding: 5px 10px; white-space: nowrap;">
+                    Unggah .GLB...
+                  </button>
+                  <input type="text" id="cd-3d-glb-url" placeholder="Atau URL/path .glb/.gltf (kosong = otomatis)"
+                         style="flex: 1; min-width: 0; background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color); border-radius: 6px; padding: 5px 8px; font-size: 11px; color: var(--text-primary); font-family: var(--font-mono);">
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                  <div style="display: flex; flex-direction: column; gap: 2px;">
+                    <label style="font-size: 10.5px; color: var(--text-muted);">Elevasi Z (m)</label>
+                    <input type="number" id="cd-3d-elevation" min="0" max="50" step="0.1" value="0.5"
+                           style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color); border-radius: 6px; padding: 5px 7px; font-size: 11.5px; color: var(--text-primary); font-family: var(--font-mono);">
+                  </div>
+                  <div style="display: flex; flex-direction: column; gap: 2px;">
+                    <label style="font-size: 10.5px; color: var(--text-muted);">Posisi Pasang</label>
+                    <select id="cd-3d-mount" style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color); border-radius: 6px; padding: 5px 6px; font-size: 11px; color: var(--text-primary);">
+                      <option value="floor">Lantai / Meja</option>
+                      <option value="rack">Rack Cabinet</option>
+                      <option value="wall">Dinding</option>
+                      <option value="ceiling">Plafon</option>
+                      <option value="pole">Tiang / Tower</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
             </div>
 
           </div>
@@ -10842,6 +10897,22 @@ Tip: Tindakan ini dapat dibatalkan sewaktu-waktu dengan menekan Ctrl + Z (Undo).
           this.setImageSource(url);
         }
       });
+      const cdGlbInput = this.modalEl.querySelector("#cd-3d-glb-file");
+      const cdGlbUrl = this.modalEl.querySelector("#cd-3d-glb-url");
+      this.modalEl.querySelector("#btn-cd-upload-glb")?.addEventListener("click", () => cdGlbInput?.click());
+      cdGlbInput?.addEventListener("change", (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (file.size > 12 * 1024 * 1024) {
+          alert("Ukuran file model 3D terlalu besar (> 12 MB).");
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          if (cdGlbUrl) cdGlbUrl.value = ev.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
       this.modalEl.querySelector("#btn-remove-image")?.addEventListener("click", () => {
         this.uploadedImageDataUrl = "";
         const previewRow = this.modalEl.querySelector("#cd-image-preview-row");
@@ -10976,6 +11047,9 @@ Tip: Tindakan ini dapat dibatalkan sewaktu-waktu dengan menekan Ctrl + Z (Undo).
           showLabel: true
         };
       }
+      const customModelUrl = this.modalEl.querySelector("#cd-3d-glb-url")?.value?.trim() || "";
+      const elevationMeters = parseFloat(this.modalEl.querySelector("#cd-3d-elevation")?.value || "0.5") || 0;
+      const mountType = this.modalEl.querySelector("#cd-3d-mount")?.value || "floor";
       const customDeviceData = {
         name,
         category,
@@ -10991,7 +11065,15 @@ Tip: Tindakan ini dapat dibatalkan sewaktu-waktu dengan menekan Ctrl + Z (Undo).
           vlan: isNaN(vlan) ? 1 : vlan,
           subnet: "255.255.255.0"
         },
-        wirelessCoverage
+        wirelessCoverage,
+        spatial3d: {
+          elevationMeters,
+          mountType,
+          rackUnit: mountType === "rack" ? 1 : null,
+          customModelUrl,
+          modelScale: 1,
+          rotationY: 0
+        }
       };
       const saveToTemplate = Boolean(this.modalEl.querySelector("#cd-save-template-check")?.checked);
       if (saveToTemplate && this.devicePalette) {
@@ -48442,6 +48524,7 @@ void main() {
       this.lookYaw = 0;
       this.lookPitch = 0;
       this.pendingCableSourceId = null;
+      this.dragMoveState = null;
       this.bindGlobalListeners();
     }
     init() {
@@ -48494,18 +48577,27 @@ void main() {
         this.cameraAnim = null;
         this.pointerDownScreen = { x: e.clientX, y: e.clientY };
         this.container.classList.add("is-dragging");
-        if (this.navTool === "look" && e.button === 0) {
-          this.isLookDragging = true;
-          this.lookPrevPointer = { x: e.clientX, y: e.clientY };
-          const dir = new Vector3();
-          this.camera.getWorldDirection(dir);
-          this.lookYaw = Math.atan2(dir.x, dir.z);
-          this.lookPitch = Math.asin(Math.max(-0.99, Math.min(0.99, dir.y)));
-          dom.setPointerCapture?.(e.pointerId);
+        if (stateManager.getMode() !== "draw-cable") {
+          if (this.navTool === "look" && e.button === 0) {
+            this.isLookDragging = true;
+            this.lookPrevPointer = { x: e.clientX, y: e.clientY };
+            const dir = new Vector3();
+            this.camera.getWorldDirection(dir);
+            this.lookYaw = Math.atan2(dir.x, dir.z);
+            this.lookPitch = Math.asin(Math.max(-0.99, Math.min(0.99, dir.y)));
+            dom.setPointerCapture?.(e.pointerId);
+          } else if (this.navTool === "move" && e.button === 0) {
+            this.startDeviceDragMove(e, dom);
+          }
         }
       });
       dom.addEventListener("pointermove", (e) => {
-        if (!this.isActive || !this.isLookDragging) return;
+        if (!this.isActive) return;
+        if (this.dragMoveState) {
+          this.updateDeviceDragMove(e);
+          return;
+        }
+        if (!this.isLookDragging) return;
         const dx = e.clientX - this.lookPrevPointer.x;
         const dy = e.clientY - this.lookPrevPointer.y;
         this.lookPrevPointer = { x: e.clientX, y: e.clientY };
@@ -48526,13 +48618,16 @@ void main() {
           this.isLookDragging = false;
           dom.releasePointerCapture?.(e.pointerId);
         }
+        if (this.dragMoveState) {
+          this.finishDeviceDragMove(e, dom);
+        }
       };
       dom.addEventListener("pointerup", (e) => {
-        const wasLookDragging = this.isLookDragging;
         endDrag(e);
         if (!this.isActive) return;
         const dist = Math.hypot(e.clientX - this.pointerDownScreen.x, e.clientY - this.pointerDownScreen.y);
-        if (dist > 5 || wasLookDragging) return;
+        const maxClickDist = stateManager.getMode() === "draw-cable" ? 10 : 6;
+        if (dist > maxClickDist) return;
         if (e.button === 0) {
           this.handleCanvasClick(e);
         } else if (e.button === 2) {
@@ -48783,6 +48878,15 @@ void main() {
           selRing.position.y = 0.04;
           holder.add(selRing);
         }
+        if (stateManager.getMode() === "draw-cable" && this.pendingCableSourceId === dev.id) {
+          const srcRing = new Mesh(
+            new RingGeometry(1.25 * userModelScale, 1.52 * userModelScale, 32),
+            new MeshBasicMaterial({ color: 959977, side: DoubleSide })
+          );
+          srcRing.rotation.x = -Math.PI / 2;
+          srcRing.position.y = 0.06;
+          holder.add(srcRing);
+        }
         if (this.showLabels) {
           const label = create3DLabelSprite(dev, elev);
           const labelScaleFactor = Math.max(0.75, Math.min(1.6, this.deviceScaleMultiplier * 0.42));
@@ -48825,8 +48929,13 @@ void main() {
     }
     syncCables() {
       if (!this.isActive || !this.isInitialized) return;
+      if (this.effectivePosMap.size === 0 && this.deviceManager.getAllDevices().length > 0) {
+        this.syncDevices();
+      }
       this.clearGroup(this.cablesGroup);
       this.cableMeshMap.clear();
+      const { worldW } = this.getWorldDimensions();
+      const mapScaleFactor = Math.max(0.55, Math.min(2.4, worldW / 180));
       const cables = this.cableManager.getAllConnections();
       cables.forEach((cable) => {
         const srcPos = this.effectivePosMap.get(cable.source);
@@ -48838,14 +48947,14 @@ void main() {
         const isWireless = cable.type === "wireless" || cable.cableCategory === "wireless-ptp";
         const pts = [srcPos.clone()];
         if (Array.isArray(cable.route) && cable.route.length > 0) {
-          const trayY = Math.min(srcPos.y, dstPos.y, 0.45);
+          const trayY = Math.max(0.45, Math.min(srcPos.y, dstPos.y, 0.85));
           cable.route.forEach((wp) => {
             const wpWorld = this.normToWorld(wp.x, wp.y);
-            pts.push(new Vector3(wpWorld.x, Math.max(0.25, trayY), wpWorld.z));
+            pts.push(new Vector3(wpWorld.x, trayY, wpWorld.z));
           });
         } else if (!isWireless && srcPos.distanceTo(dstPos) > 1.5) {
           const mid = srcPos.clone().add(dstPos).multiplyScalar(0.5);
-          mid.y = Math.max(0.2, Math.min(srcPos.y, dstPos.y) - 0.15);
+          mid.y = Math.max(0.45, Math.min(srcPos.y, dstPos.y) - 0.1);
           pts.push(mid);
         }
         pts.push(dstPos.clone());
@@ -48856,18 +48965,19 @@ void main() {
           }
         }
         if (cleanPts.length < 2) {
-          cleanPts.push(dstPos.clone().add(new Vector3(0.05, 0.1, 0.05)));
+          cleanPts.push(dstPos.clone().add(new Vector3(0.15, 0.2, 0.15)));
         }
         const curve = new CatmullRomCurve3(cleanPts, false, "catmullrom", 0.25);
-        const radius = (isSelected ? 0.24 : 0.14) * Math.max(0.7, this.deviceScaleMultiplier * 0.45);
-        const tubeGeo = new TubeGeometry(curve, Math.max(16, cleanPts.length * 10), radius, 8, false);
+        const baseRadius = isSelected ? 0.34 : 0.22;
+        const radius = baseRadius * Math.max(0.85, this.deviceScaleMultiplier * 0.42) * mapScaleFactor;
+        const tubeGeo = new TubeGeometry(curve, Math.max(20, cleanPts.length * 12), radius, 8, false);
         const tubeMat = new MeshStandardMaterial({
           color: isSelected ? "#facc15" : color,
-          emissive: isSelected ? "#ca8a04" : color,
-          emissiveIntensity: isSelected ? 0.5 : isWireless ? 0.45 : 0.18,
-          roughness: 0.35,
+          emissive: isSelected ? "#eab308" : color,
+          emissiveIntensity: isSelected ? 0.7 : isWireless ? 0.55 : 0.32,
+          roughness: 0.3,
           transparent: isWireless,
-          opacity: isWireless ? 0.65 : 1
+          opacity: isWireless ? 0.72 : 1
         });
         const mesh = new Mesh(tubeGeo, tubeMat);
         mesh.userData.cableId = cable.id;
@@ -48881,6 +48991,14 @@ void main() {
         child.userData.deviceId = deviceId;
       });
     }
+    findDeviceIdFromObject(obj) {
+      let cur = obj;
+      while (cur && cur !== this.devicesGroup) {
+        if (cur.userData?.deviceId) return cur.userData.deviceId;
+        cur = cur.parent;
+      }
+      return null;
+    }
     handleCanvasClick(e) {
       const rect = this.renderer.domElement.getBoundingClientRect();
       this.pointer.x = (e.clientX - rect.left) / rect.width * 2 - 1;
@@ -48888,29 +49006,39 @@ void main() {
       this.raycaster.setFromCamera(this.pointer, this.camera);
       const devHits = this.raycaster.intersectObjects(this.devicesGroup.children, true);
       if (devHits.length > 0) {
-        const devId = devHits[0].object.userData?.deviceId;
+        const devId = this.findDeviceIdFromObject(devHits[0].object);
         if (devId) {
           if (stateManager.getMode() === "draw-cable") {
             if (!this.pendingCableSourceId) {
               this.pendingCableSourceId = devId;
               this.deviceManager.selectDevice(devId);
+              const srcDev2 = this.deviceManager.getDeviceById(devId);
+              this.showStatusHint(`\u{1F50C} Sumber kabel 3D: "${srcDev2?.name || devId}". Klik perangkat tujuan untuk menghubungkan.`);
               return;
             }
-            if (this.pendingCableSourceId !== devId) {
-              const newCab = this.cableManager.addConnection({
-                source: this.pendingCableSourceId,
-                destination: devId,
-                type: "ethernet",
-                cableCategory: "cat6",
-                route: []
-              });
-              this.pendingCableSourceId = null;
-              stateManager.setMode("select");
-              if (newCab) {
-                this.cableManager.selectConnection(newCab.id);
-              }
+            if (this.pendingCableSourceId === devId) {
+              this.showStatusHint("\u26A0\uFE0F Perangkat tujuan tidak boleh sama dengan perangkat sumber.");
               return;
             }
+            const srcDev = this.deviceManager.getDeviceById(this.pendingCableSourceId);
+            const dstDev = this.deviceManager.getDeviceById(devId);
+            const newCab = this.cableManager.addConnection({
+              name: `Link ${srcDev?.name || "Source"} \u2794 ${dstDev?.name || "Dest"}`,
+              source: this.pendingCableSourceId,
+              destination: devId,
+              type: "ethernet",
+              cableCategory: "cat6",
+              route: [],
+              status: "active"
+            });
+            this.pendingCableSourceId = null;
+            stateManager.setMode("select");
+            if (newCab) {
+              this.cableManager.selectConnection(newCab.id);
+              this.syncCables();
+              this.showStatusHint(`\u2705 Kabel terhubung: "${newCab.name}"`);
+            }
+            return;
           }
           this.deviceManager.selectDevice(devId);
           return;
@@ -48935,7 +49063,7 @@ void main() {
       this.raycaster.setFromCamera(this.pointer, this.camera);
       const devHits = this.raycaster.intersectObjects(this.devicesGroup.children, true);
       if (devHits.length > 0) {
-        const devId = devHits[0].object.userData?.deviceId;
+        const devId = this.findDeviceIdFromObject(devHits[0].object);
         const device = devId ? this.deviceManager.getDeviceById(devId) : null;
         if (device) {
           eventBus.emit("contextmenu:device", {
@@ -49014,7 +49142,7 @@ void main() {
       this.animateCameraTo(endPos, hitPoint, 380);
     }
     setNavTool(tool) {
-      const validTools = ["orbit", "pan", "zoom", "look"];
+      const validTools = ["orbit", "pan", "zoom", "look", "move"];
       if (!validTools.includes(tool)) return;
       this.navTool = tool;
       this.applyNavToolConfig();
@@ -49022,11 +49150,19 @@ void main() {
     }
     applyNavToolConfig() {
       if (this.container) {
-        this.container.classList.remove("tool-orbit", "tool-pan", "tool-zoom", "tool-look");
+        this.container.classList.remove("tool-orbit", "tool-pan", "tool-zoom", "tool-look", "tool-move");
         this.container.classList.add(`tool-${this.navTool}`);
       }
       if (!this.controls) return;
-      if (this.navTool === "pan") {
+      if (this.navTool === "move") {
+        this.controls.mouseButtons = {
+          LEFT: -1,
+          // Dragging a 3D device moves it on horizontal X/Y plane
+          MIDDLE: MOUSE.ROTATE,
+          RIGHT: MOUSE.PAN
+        };
+        this.controls.maxPolarAngle = Math.PI * 0.495;
+      } else if (this.navTool === "pan") {
         this.controls.mouseButtons = {
           LEFT: MOUSE.PAN,
           MIDDLE: MOUSE.ROTATE,
@@ -49055,6 +49191,70 @@ void main() {
           RIGHT: MOUSE.PAN
         };
         this.controls.maxPolarAngle = Math.PI * 0.495;
+      }
+    }
+    startDeviceDragMove(e, dom) {
+      const rect = dom.getBoundingClientRect();
+      this.pointer.x = (e.clientX - rect.left) / rect.width * 2 - 1;
+      this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      this.raycaster.setFromCamera(this.pointer, this.camera);
+      const devHits = this.raycaster.intersectObjects(this.devicesGroup.children, true);
+      if (devHits.length === 0) return;
+      const devId = devHits[0].object.userData?.deviceId;
+      const device = devId ? this.deviceManager.getDeviceById(devId) : null;
+      if (!device) return;
+      const meshGroup = this.deviceMeshMap.get(devId);
+      const devWorld = this.normToWorld(device.position.x, device.position.y);
+      const planeY = meshGroup ? meshGroup.position.y : 0;
+      const dragPlane = new Plane(new Vector3(0, 1, 0), -planeY);
+      const hitPt = new Vector3();
+      if (!this.raycaster.ray.intersectPlane(dragPlane, hitPt)) return;
+      const meshOffsetX = meshGroup ? meshGroup.position.x - devWorld.x : 0;
+      const meshOffsetZ = meshGroup ? meshGroup.position.z - devWorld.z : 0;
+      this.dragMoveState = {
+        deviceId: devId,
+        plane: dragPlane,
+        grabOffsetX: devWorld.x - hitPt.x,
+        grabOffsetZ: devWorld.z - hitPt.z,
+        meshOffsetX,
+        meshOffsetZ,
+        latestNorm: null
+      };
+      this.deviceManager.selectDevice(devId);
+      dom.setPointerCapture?.(e.pointerId);
+    }
+    updateDeviceDragMove(e) {
+      if (!this.dragMoveState) return;
+      const rect = this.renderer.domElement.getBoundingClientRect();
+      this.pointer.x = (e.clientX - rect.left) / rect.width * 2 - 1;
+      this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      this.raycaster.setFromCamera(this.pointer, this.camera);
+      const hitPt = new Vector3();
+      if (!this.raycaster.ray.intersectPlane(this.dragMoveState.plane, hitPt)) return;
+      const newWorldX = hitPt.x + this.dragMoveState.grabOffsetX;
+      const newWorldZ = hitPt.z + this.dragMoveState.grabOffsetZ;
+      const { normX, normY } = this.worldToNorm(newWorldX, newWorldZ);
+      const clampedWorld = this.normToWorld(normX, normY);
+      const meshGroup = this.deviceMeshMap.get(this.dragMoveState.deviceId);
+      if (meshGroup) {
+        meshGroup.position.x = clampedWorld.x + this.dragMoveState.meshOffsetX;
+        meshGroup.position.z = clampedWorld.z + this.dragMoveState.meshOffsetZ;
+        const prevEff = this.effectivePosMap.get(this.dragMoveState.deviceId);
+        const effY = prevEff ? prevEff.y : meshGroup.position.y;
+        this.effectivePosMap.set(
+          this.dragMoveState.deviceId,
+          new Vector3(meshGroup.position.x, effY, meshGroup.position.z)
+        );
+        this.syncCables();
+      }
+      this.dragMoveState.latestNorm = { x: normX, y: normY };
+    }
+    finishDeviceDragMove(e, dom) {
+      const state = this.dragMoveState;
+      this.dragMoveState = null;
+      dom.releasePointerCapture?.(e.pointerId);
+      if (state?.latestNorm) {
+        this.deviceManager.updateDevice(state.deviceId, { position: state.latestNorm });
       }
     }
     animateCameraTo(endPos, endTarget, duration = 380) {
@@ -49224,6 +49424,12 @@ void main() {
         });
       }
     }
+    showStatusHint(message) {
+      const statusHint = document.querySelector("#app-status-bar .status-item:last-child");
+      if (statusHint) {
+        statusHint.innerHTML = `<span style="color: var(--accent-blue); font-weight: 600;">${message}</span>`;
+      }
+    }
     bindGlobalListeners() {
       const syncDevAndCables = () => {
         if (!this.isActive) return;
@@ -49264,15 +49470,23 @@ void main() {
         this.applyThemeColors();
       });
       eventBus.on("mode:changed", ({ mode }) => {
+        if (this.container) {
+          this.container.classList.toggle("mode-draw-cable", mode === "draw-cable");
+        }
         if (mode !== "draw-cable") {
           this.pendingCableSourceId = null;
+          if (this.isActive) this.syncDevices();
         }
       });
       eventBus.on("map3d:start-cable", ({ deviceId }) => {
         this.pendingCableSourceId = deviceId || null;
+        if (this.isActive) this.syncDevices();
       });
       eventBus.on("map3d:zoom-extents", () => {
         if (this.isActive) this.zoomExtents();
+      });
+      eventBus.on("map3d:set-navtool", ({ tool }) => {
+        if (tool) this.setNavTool(tool);
       });
       window.addEventListener("keydown", (e) => {
         if (!this.isActive) return;
@@ -49618,6 +49832,282 @@ void main() {
     }
   };
 
+  // js/ui/device-3d-modal.js
+  var Device3DModelModal = class {
+    /**
+     * @param {Object} options
+     * @param {import('../devices/device-manager.js').DeviceManager} options.deviceManager
+     * @param {import('../map/map-3d-engine.js').Map3DEngine} [options.map3DEngine]
+     */
+    constructor({ deviceManager, map3DEngine = null }) {
+      this.deviceManager = deviceManager;
+      this.map3DEngine = map3DEngine;
+      this.modalEl = null;
+      this.activeDeviceId = null;
+      this.createModalDOM();
+      this.bindEvents();
+    }
+    createModalDOM() {
+      this.modalEl = document.createElement("div");
+      this.modalEl.id = "device-3d-modal";
+      this.modalEl.style.cssText = `
+      position: fixed;
+      inset: 0;
+      background-color: var(--modal-backdrop, rgba(24, 45, 18, 0.75));
+      backdrop-filter: blur(8px);
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      font-family: 'Poppins', sans-serif;
+    `;
+      this.modalEl.innerHTML = `
+      <div style="background-color: var(--bg-secondary, #fbe6c2); border: 1px solid var(--border-color, #e5cca0); border-radius: 12px; width: 100%; max-width: 640px; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 20px 40px rgba(0,0,0,0.3); overflow: hidden;">
+        <!-- Header -->
+        <div style="height: 54px; border-bottom: 1px solid var(--border-color, #e5cca0); background: var(--bg-tertiary, #f2dac8); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; flex-shrink: 0;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div style="width: 30px; height: 30px; border-radius: 7px; background: rgba(59, 130, 246, 0.16); display: flex; align-items: center; justify-content: center; color: var(--accent-blue, #2a7c13);">
+              <i data-lucide="cpu" style="width: 17px; height: 17px;"></i>
+            </div>
+            <div>
+              <span style="font-size: 15px; font-weight: 700; color: var(--text-primary, #18350d); display: block; line-height: 1.2;">Model 3D Perangkat (.GLB / .GLTF)</span>
+              <span style="font-size: 11px; color: var(--text-muted, #678458);">Pasang model 3D nyata untuk Router, Server, Switch, AP, CCTV, atau perangkat lain</span>
+            </div>
+          </div>
+          <button id="btn-dev3d-close" class="btn btn-icon btn-sm" title="Tutup">
+            <i data-lucide="x" style="width: 18px; height: 18px;"></i>
+          </button>
+        </div>
+
+        <!-- Body -->
+        <div style="padding: 18px 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px;">
+          <!-- Target Device Picker -->
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <label style="font-size: 11.5px; font-weight: 700; color: var(--text-primary);">1. Pilih Perangkat Target</label>
+            <select id="dev3d-select-device" style="background: var(--bg-primary, #fff8cf); border: 1px solid var(--border-color); border-radius: 7px; padding: 8px 10px; font-size: 12.5px; color: var(--text-primary); font-family: inherit;">
+            </select>
+          </div>
+
+          <!-- 3D Model File / URL -->
+          <div style="background: var(--bg-primary, #fff8cf); border: 1px solid var(--border-color); border-radius: 9px; padding: 12px; display: flex; flex-direction: column; gap: 10px;">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <span style="font-size: 11.5px; font-weight: 700; color: var(--text-primary);">2. Sumber Model 3D (.glb / .gltf)</span>
+              <span id="dev3d-model-badge" style="font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: rgba(100,116,139,0.14); color: var(--text-muted);">
+                Model Bawaan 3D
+              </span>
+            </div>
+
+            <input type="file" id="dev3d-file-input" accept=".glb,.gltf" style="display: none;">
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <button type="button" id="btn-dev3d-upload" class="btn btn-primary btn-sm" style="font-size: 12px; padding: 6px 12px;">
+                <i data-lucide="upload" style="width: 14px; height: 14px;"></i>
+                <span>Unggah File .GLB / .GLTF...</span>
+              </button>
+              <button type="button" id="btn-dev3d-reset-model" class="btn btn-secondary btn-sm" style="font-size: 12px; padding: 6px 12px;">
+                Pakai Bentuk 3D Bawaan
+              </button>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 3px;">
+              <label style="font-size: 11px; color: var(--text-muted);">Atau masukkan URL / path model 3D (contoh: <code style="font-size: 10.5px;">assets/models/mikrotik.glb</code>)</label>
+              <input type="text" id="dev3d-model-url" placeholder="https://... atau assets/models/device.glb (kosong = model prosedural bawaan)"
+                     style="background: var(--bg-secondary, #fbe6c2); border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 9px; font-size: 11.5px; color: var(--text-primary); font-family: var(--font-mono);">
+            </div>
+
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--text-primary); cursor: pointer; padding-top: 2px;">
+              <input type="checkbox" id="dev3d-apply-same-type" style="accent-color: var(--accent-blue); width: 15px; height: 15px;">
+              <span>Terapkan model 3D (.glb/.gltf) ini ke <strong>semua perangkat bertipe sama</strong> (<span id="dev3d-same-type-count">0</span> perangkat)</span>
+            </label>
+          </div>
+
+          <!-- Spatial 3D Transform -->
+          <div style="background: var(--bg-primary, #fff8cf); border: 1px solid var(--border-color); border-radius: 9px; padding: 12px; display: flex; flex-direction: column; gap: 10px;">
+            <span style="font-size: 11.5px; font-weight: 700; color: var(--text-primary);">3. Posisi & Ukuran di Ruang 3D</span>
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
+              <div style="display: flex; flex-direction: column; gap: 3px;">
+                <label style="font-size: 10.5px; color: var(--text-muted);">Elevasi Z (m)</label>
+                <input type="number" id="dev3d-elevation" min="0" max="50" step="0.1" value="0.5"
+                       style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px; padding: 5px 7px; font-size: 12px; color: var(--text-primary); font-family: var(--font-mono);">
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 3px;">
+                <label style="font-size: 10.5px; color: var(--text-muted);">Posisi Pasang</label>
+                <select id="dev3d-mount" style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px; padding: 5px 6px; font-size: 11.5px; color: var(--text-primary);">
+                  <option value="rack">Rack Cabinet</option>
+                  <option value="floor">Lantai / Meja</option>
+                  <option value="wall">Dinding</option>
+                  <option value="ceiling">Plafon</option>
+                  <option value="pole">Tiang / Tower</option>
+                </select>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 3px;">
+                <label style="font-size: 10.5px; color: var(--text-muted);">Skala Model</label>
+                <input type="number" id="dev3d-scale" min="0.2" max="10" step="0.1" value="1"
+                       style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px; padding: 5px 7px; font-size: 12px; color: var(--text-primary); font-family: var(--font-mono);">
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 3px;">
+                <label style="font-size: 10.5px; color: var(--text-muted);">Rotasi Y (\xB0)</label>
+                <input type="number" id="dev3d-rotation" min="0" max="360" step="15" value="0"
+                       style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px; padding: 5px 7px; font-size: 12px; color: var(--text-primary); font-family: var(--font-mono);">
+              </div>
+            </div>
+          </div>
+
+          <div style="font-size: 11px; color: var(--text-muted); line-height: 1.5;">
+            Tip: Anda bisa memakai file <strong>.glb / .gltf</strong> (ukuran ideal &lt; 5 MB) dari Sketchfab, Poly Pizza, Blender, atau ekspor SketchUp ke GLB. Model otomatis diskalakan proporsional ke ukuran perangkat.
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div style="height: 54px; border-top: 1px solid var(--border-color, #e5cca0); background: var(--bg-tertiary, #f2dac8); display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 0 20px; flex-shrink: 0;">
+          <button type="button" id="btn-dev3d-cancel" class="btn btn-secondary btn-sm">Tutup</button>
+          <button type="button" id="btn-dev3d-save-focus" class="btn btn-primary btn-sm">
+            <i data-lucide="check" style="width: 14px; height: 14px;"></i>
+            <span>Terapkan & Lihat di 3D</span>
+          </button>
+        </div>
+      </div>
+    `;
+      document.body.appendChild(this.modalEl);
+    }
+    bindEvents() {
+      this.modalEl.querySelector("#btn-dev3d-close")?.addEventListener("click", () => this.hide());
+      this.modalEl.querySelector("#btn-dev3d-cancel")?.addEventListener("click", () => this.hide());
+      this.modalEl.addEventListener("click", (e) => {
+        if (e.target === this.modalEl) this.hide();
+      });
+      const selectDev = this.modalEl.querySelector("#dev3d-select-device");
+      selectDev?.addEventListener("change", (e) => {
+        this.loadDeviceIntoForm(e.target.value);
+      });
+      const fileInput = this.modalEl.querySelector("#dev3d-file-input");
+      const urlInput = this.modalEl.querySelector("#dev3d-model-url");
+      this.modalEl.querySelector("#btn-dev3d-upload")?.addEventListener("click", () => {
+        fileInput?.click();
+      });
+      fileInput?.addEventListener("change", (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (file.size > 12 * 1024 * 1024) {
+          alert("Ukuran file model 3D terlalu besar (> 12 MB). Gunakan file .glb yang lebih ringkas (< 5 MB) agar lancar di browser.");
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          if (urlInput) urlInput.value = ev.target.result;
+          this.updateModelBadge(ev.target.result, file.name);
+        };
+        reader.readAsDataURL(file);
+      });
+      urlInput?.addEventListener("input", (e) => {
+        this.updateModelBadge(e.target.value.trim());
+      });
+      this.modalEl.querySelector("#btn-dev3d-reset-model")?.addEventListener("click", () => {
+        if (urlInput) urlInput.value = "";
+        if (fileInput) fileInput.value = "";
+        this.updateModelBadge("");
+      });
+      this.modalEl.querySelector("#btn-dev3d-save-focus")?.addEventListener("click", () => {
+        this.applyChanges(true);
+      });
+      eventBus.on("modal:open-device-3d", ({ deviceId } = {}) => {
+        this.show(deviceId);
+      });
+    }
+    updateModelBadge(url, fileName = "") {
+      const badge = this.modalEl.querySelector("#dev3d-model-badge");
+      if (!badge) return;
+      if (url) {
+        badge.textContent = fileName ? `Custom: ${fileName}` : "Model Kustom (.GLB/.GLTF)";
+        badge.style.background = "rgba(42, 124, 19, 0.16)";
+        badge.style.color = "var(--accent-blue, #2a7c13)";
+      } else {
+        badge.textContent = "Model Bawaan 3D";
+        badge.style.background = "rgba(100,116,139,0.14)";
+        badge.style.color = "var(--text-muted)";
+      }
+    }
+    loadDeviceIntoForm(deviceId) {
+      const dev = this.deviceManager.getDeviceById(deviceId);
+      if (!dev) return;
+      this.activeDeviceId = dev.id;
+      const spatial = { ...getDefaultSpatial3d(dev.type), ...dev.spatial3d || {} };
+      this.modalEl.querySelector("#dev3d-model-url").value = spatial.customModelUrl || "";
+      this.modalEl.querySelector("#dev3d-elevation").value = Number(spatial.elevationMeters ?? 0).toFixed(1);
+      this.modalEl.querySelector("#dev3d-mount").value = spatial.mountType || "floor";
+      this.modalEl.querySelector("#dev3d-scale").value = Number(spatial.modelScale || 1);
+      this.modalEl.querySelector("#dev3d-rotation").value = Number(spatial.rotationY || 0);
+      this.modalEl.querySelector("#dev3d-apply-same-type").checked = false;
+      const sameTypeCount = this.deviceManager.getAllDevices().filter((d) => d.type === dev.type).length;
+      const countSpan = this.modalEl.querySelector("#dev3d-same-type-count");
+      if (countSpan) countSpan.textContent = String(sameTypeCount);
+      this.updateModelBadge(spatial.customModelUrl || "");
+    }
+    show(preferredDeviceId = null) {
+      const devices = this.deviceManager.getAllDevices();
+      if (devices.length === 0) {
+        alert("Belum ada perangkat di peta. Tambahkan perangkat terlebih dahulu sebelum mengatur model 3D-nya.");
+        return;
+      }
+      const selectDev = this.modalEl.querySelector("#dev3d-select-device");
+      selectDev.innerHTML = devices.map((d) => {
+        const hasGlb = d.spatial3d?.customModelUrl ? " [Custom GLB]" : "";
+        return `<option value="${d.id}">${d.name} (${d.type})${hasGlb}</option>`;
+      }).join("");
+      const targetId = preferredDeviceId || this.deviceManager.selectedDeviceId || devices[0].id;
+      selectDev.value = targetId;
+      this.loadDeviceIntoForm(selectDev.value);
+      this.modalEl.style.display = "flex";
+      if (window.lucide) window.lucide.createIcons();
+    }
+    hide() {
+      this.modalEl.style.display = "none";
+    }
+    applyChanges(focusIn3d = true) {
+      const dev = this.deviceManager.getDeviceById(this.activeDeviceId);
+      if (!dev) return;
+      const customModelUrl = this.modalEl.querySelector("#dev3d-model-url").value.trim();
+      const elevationMeters = parseFloat(this.modalEl.querySelector("#dev3d-elevation").value) || 0;
+      const mountType = this.modalEl.querySelector("#dev3d-mount").value || "floor";
+      const modelScale = parseFloat(this.modalEl.querySelector("#dev3d-scale").value) || 1;
+      const rotationY = parseFloat(this.modalEl.querySelector("#dev3d-rotation").value) || 0;
+      const applySameType = Boolean(this.modalEl.querySelector("#dev3d-apply-same-type").checked);
+      const baseSpatial = {
+        ...getDefaultSpatial3d(dev.type),
+        ...dev.spatial3d || {},
+        elevationMeters,
+        mountType,
+        modelScale,
+        rotationY,
+        customModelUrl
+      };
+      this.deviceManager.updateDevice(dev.id, { spatial3d: baseSpatial });
+      if (applySameType) {
+        this.deviceManager.getAllDevices().forEach((other) => {
+          if (other.id !== dev.id && other.type === dev.type) {
+            const otherSpatial = {
+              ...getDefaultSpatial3d(other.type),
+              ...other.spatial3d || {},
+              customModelUrl,
+              modelScale
+            };
+            this.deviceManager.updateDevice(other.id, { spatial3d: otherSpatial });
+          }
+        });
+      }
+      this.deviceManager.selectDevice(dev.id);
+      this.hide();
+      if (focusIn3d) {
+        if (stateManager.getViewMode() !== "3d") {
+          stateManager.setViewMode("3d");
+        }
+        setTimeout(() => {
+          this.map3DEngine?.focusOnDevice(dev.id);
+        }, 80);
+      }
+    }
+  };
+
   // js/app.js
   var NetMapApp = class {
     constructor() {
@@ -49642,6 +50132,7 @@ void main() {
       this.mapScaleModal = null;
       this.map3DEngine = null;
       this.room3DModal = null;
+      this.device3DModelModal = null;
       this.projectStorage = null;
       this.exportModal = null;
       this.projectModal = null;
@@ -49766,6 +50257,10 @@ void main() {
         cableManager: this.cableManager
       });
       this.room3DModal = new Room3DModal({
+        deviceManager: this.deviceManager,
+        map3DEngine: this.map3DEngine
+      });
+      this.device3DModelModal = new Device3DModelModal({
         deviceManager: this.deviceManager,
         map3DEngine: this.map3DEngine
       });
@@ -49933,7 +50428,8 @@ void main() {
         { id: "btn-3d-tool-orbit", tool: "orbit" },
         { id: "btn-3d-tool-pan", tool: "pan" },
         { id: "btn-3d-tool-zoom", tool: "zoom" },
-        { id: "btn-3d-tool-look", tool: "look" }
+        { id: "btn-3d-tool-look", tool: "look" },
+        { id: "btn-3d-tool-move", tool: "move" }
       ];
       navToolButtons.forEach(({ id, tool }) => {
         document.getElementById(id)?.addEventListener("click", () => {
@@ -49982,6 +50478,9 @@ void main() {
       });
       document.getElementById("btn-3d-rooms")?.addEventListener("click", () => {
         this.room3DModal?.show();
+      });
+      document.getElementById("btn-3d-device-models")?.addEventListener("click", () => {
+        this.device3DModelModal?.show();
       });
       eventBus.on("map3d:focus-device", ({ deviceId }) => {
         if (stateManager.getViewMode() !== "3d") {
@@ -50051,6 +50550,11 @@ void main() {
           if (lower === "l") {
             e.preventDefault();
             this.map3DEngine?.setNavTool("look");
+            return;
+          }
+          if (lower === "m") {
+            e.preventDefault();
+            this.map3DEngine?.setNavTool("move");
             return;
           }
           if (e.key === "0") {

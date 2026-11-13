@@ -340,6 +340,38 @@ export class CustomDeviceModal {
 
               </div>
 
+              <!-- 3D Model & Elevation (Optional) -->
+              <div class="info-card" style="display: flex; flex-direction: column; gap: 8px; background: var(--bg-primary, #fff8cf); border: 1px solid var(--border-color, #e5cca0); border-radius: 8px; padding: 12px;">
+                <span class="section-label" style="font-size: 11px; font-weight: 700; color: var(--accent-blue); text-transform: uppercase; margin: 0;">
+                  4. Model 3D & Elevasi (Opsional)
+                </span>
+                <input type="file" id="cd-3d-glb-file" accept=".glb,.gltf" style="display: none;">
+                <div style="display: flex; gap: 6px;">
+                  <button type="button" id="btn-cd-upload-glb" class="btn btn-secondary btn-sm" style="font-size: 11px; padding: 5px 10px; white-space: nowrap;">
+                    Unggah .GLB...
+                  </button>
+                  <input type="text" id="cd-3d-glb-url" placeholder="Atau URL/path .glb/.gltf (kosong = otomatis)"
+                         style="flex: 1; min-width: 0; background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color); border-radius: 6px; padding: 5px 8px; font-size: 11px; color: var(--text-primary); font-family: var(--font-mono);">
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                  <div style="display: flex; flex-direction: column; gap: 2px;">
+                    <label style="font-size: 10.5px; color: var(--text-muted);">Elevasi Z (m)</label>
+                    <input type="number" id="cd-3d-elevation" min="0" max="50" step="0.1" value="0.5"
+                           style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color); border-radius: 6px; padding: 5px 7px; font-size: 11.5px; color: var(--text-primary); font-family: var(--font-mono);">
+                  </div>
+                  <div style="display: flex; flex-direction: column; gap: 2px;">
+                    <label style="font-size: 10.5px; color: var(--text-muted);">Posisi Pasang</label>
+                    <select id="cd-3d-mount" style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color); border-radius: 6px; padding: 5px 6px; font-size: 11px; color: var(--text-primary);">
+                      <option value="floor">Lantai / Meja</option>
+                      <option value="rack">Rack Cabinet</option>
+                      <option value="wall">Dinding</option>
+                      <option value="ceiling">Plafon</option>
+                      <option value="pole">Tiang / Tower</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
             </div>
 
           </div>
@@ -549,6 +581,24 @@ export class CustomDeviceModal {
       }
     });
 
+    // 7b. Custom 3D .GLB / .GLTF upload for custom device
+    const cdGlbInput = this.modalEl.querySelector('#cd-3d-glb-file');
+    const cdGlbUrl = this.modalEl.querySelector('#cd-3d-glb-url');
+    this.modalEl.querySelector('#btn-cd-upload-glb')?.addEventListener('click', () => cdGlbInput?.click());
+    cdGlbInput?.addEventListener('change', (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      if (file.size > 12 * 1024 * 1024) {
+        alert('Ukuran file model 3D terlalu besar (> 12 MB).');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        if (cdGlbUrl) cdGlbUrl.value = ev.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+
     // 8. Remove image button
     this.modalEl.querySelector('#btn-remove-image')?.addEventListener('click', () => {
       this.uploadedImageDataUrl = '';
@@ -716,6 +766,11 @@ export class CustomDeviceModal {
       };
     }
 
+    // 3D Spatial config (optional custom .glb / .gltf & elevation)
+    const customModelUrl = this.modalEl.querySelector('#cd-3d-glb-url')?.value?.trim() || '';
+    const elevationMeters = parseFloat(this.modalEl.querySelector('#cd-3d-elevation')?.value || '0.5') || 0;
+    const mountType = this.modalEl.querySelector('#cd-3d-mount')?.value || 'floor';
+
     // Build custom payload
     const customDeviceData = {
       name,
@@ -732,7 +787,15 @@ export class CustomDeviceModal {
         vlan: isNaN(vlan) ? 1 : vlan,
         subnet: '255.255.255.0'
       },
-      wirelessCoverage
+      wirelessCoverage,
+      spatial3d: {
+        elevationMeters,
+        mountType,
+        rackUnit: mountType === 'rack' ? 1 : null,
+        customModelUrl,
+        modelScale: 1,
+        rotationY: 0
+      }
     };
 
     // 1. Save to DevicePalette Library if checked

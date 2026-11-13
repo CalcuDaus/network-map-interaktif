@@ -31,6 +31,7 @@ import { MikrotikQuickInsertModal } from './ui/mikrotik-quick-insert-modal.js';
 import { MapScaleModal } from './ui/map-scale-modal.js';
 import { Map3DEngine } from './map/map-3d-engine.js';
 import { Room3DModal } from './ui/room-3d-modal.js';
+import { Device3DModelModal } from './ui/device-3d-modal.js';
 
 class NetMapApp {
   constructor() {
@@ -55,6 +56,7 @@ class NetMapApp {
     this.mapScaleModal = null;
     this.map3DEngine = null;
     this.room3DModal = null;
+    this.device3DModelModal = null;
     this.projectStorage = null;
     this.exportModal = null;
     this.projectModal = null;
@@ -224,6 +226,10 @@ class NetMapApp {
       cableManager: this.cableManager
     });
     this.room3DModal = new Room3DModal({
+      deviceManager: this.deviceManager,
+      map3DEngine: this.map3DEngine
+    });
+    this.device3DModelModal = new Device3DModelModal({
       deviceManager: this.deviceManager,
       map3DEngine: this.map3DEngine
     });
@@ -440,12 +446,13 @@ class NetMapApp {
       this.map3DEngine?.setShowCoverage(Boolean(e.target.checked));
     });
 
-    // SketchUp Navigation Tool Buttons (Orbit, Pan, Zoom, Look)
+    // SketchUp Navigation Tool Buttons (Orbit, Pan, Zoom, Look, Move)
     const navToolButtons = [
       { id: 'btn-3d-tool-orbit', tool: 'orbit' },
       { id: 'btn-3d-tool-pan', tool: 'pan' },
       { id: 'btn-3d-tool-zoom', tool: 'zoom' },
-      { id: 'btn-3d-tool-look', tool: 'look' }
+      { id: 'btn-3d-tool-look', tool: 'look' },
+      { id: 'btn-3d-tool-move', tool: 'move' }
     ];
     navToolButtons.forEach(({ id, tool }) => {
       document.getElementById(id)?.addEventListener('click', () => {
@@ -502,9 +509,12 @@ class NetMapApp {
       this.map3DEngine?.setShowLabels(showLabels);
     });
 
-    // Rooms & Custom 3D Modal
+    // Rooms & Device 3D Model Modals
     document.getElementById('btn-3d-rooms')?.addEventListener('click', () => {
       this.room3DModal?.show();
+    });
+    document.getElementById('btn-3d-device-models')?.addEventListener('click', () => {
+      this.device3DModelModal?.show();
     });
 
     // Focus single device in 3D from PropertiesPanel
@@ -586,6 +596,11 @@ class NetMapApp {
         if (lower === 'l') {
           e.preventDefault();
           this.map3DEngine?.setNavTool('look');
+          return;
+        }
+        if (lower === 'm') {
+          e.preventDefault();
+          this.map3DEngine?.setNavTool('move');
           return;
         }
         if (e.key === '0') {

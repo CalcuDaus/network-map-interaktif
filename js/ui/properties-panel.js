@@ -360,6 +360,9 @@ export class PropertiesPanel {
                   </button>
                 ` : ''}
               </div>
+              <input type="text" id="prop-3d-glb-url" placeholder="Atau URL/path .glb (mis. assets/models/router.glb)"
+                     value="${spatial.customModelUrl && !spatial.customModelUrl.startsWith('data:') ? escapeHtml(spatial.customModelUrl) : ''}"
+                     style="background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 10.5px; padding: 4px 6px; font-family: var(--font-mono);">
               <input type="text" id="prop-3d-glb-url" placeholder="Atau URL model .glb (https://...)"
                      value="${(spatial.customModelUrl && !spatial.customModelUrl.startsWith('data:')) ? this.escapeHtml(spatial.customModelUrl) : ''}"
                      style="background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 11px; padding: 4px 8px;">

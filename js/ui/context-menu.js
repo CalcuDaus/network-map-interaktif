@@ -157,11 +157,31 @@ export class ContextMenu {
         }
       },
       {
+        id: 'device-3d-model',
+        icon: 'cpu',
+        label: 'Model 3D Perangkat (.glb/.gltf)...',
+        action: () => {
+          this.hide();
+          eventBus.emit('modal:open-device-3d', { deviceId: device.id });
+        }
+      },
+      {
         id: 'connect-cable',
         icon: 'network',
         label: 'Tarik Kabel dari Sini',
         action: () => this.startCableFromDevice(device)
       },
+      ...(stateManager.getViewMode() === '3d' ? [{
+        id: 'move-device-3d',
+        icon: 'move',
+        label: 'Geser Posisi X/Y (Mode Move)',
+        shortcut: 'M',
+        action: () => {
+          this.hide();
+          eventBus.emit('map3d:set-navtool', { tool: 'move' });
+          this.showToast(`↔️ Mode Move aktif — Drag "${device.name}" di lantai 3D untuk memindahkan posisi X/Y.`);
+        }
+      }] : []),
       {
         id: 'focus-device',
         icon: 'crosshair',
