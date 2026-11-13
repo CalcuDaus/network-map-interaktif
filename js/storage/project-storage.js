@@ -43,6 +43,7 @@ export class ProjectStorage {
     eventBus.on('connection:added', handleMutation);
     eventBus.on('connection:updated', handleMutation);
     eventBus.on('connection:deleted', handleMutation);
+    eventBus.on('room3d:changed', handleMutation);
   }
 
   /**
@@ -68,6 +69,7 @@ export class ProjectStorage {
       scaleWidthMeters: this.cableManager.mapWidthMeters || 400,
       devices: devices,
       connections: connections,
+      rooms3d: state.project.rooms3d || [],
       customTemplates: (typeof localStorage !== 'undefined' ? JSON.parse(localStorage.getItem('netmap_custom_templates') || '[]') : []),
       updatedAt: new Date().toISOString()
     };
@@ -134,6 +136,9 @@ export class ProjectStorage {
     if (projectData.scaleWidthMeters && typeof projectData.scaleWidthMeters === 'number') {
       this.cableManager.setMapScale(projectData.scaleWidthMeters);
     }
+
+    // Load 3D custom rooms
+    stateManager.setRooms3d(Array.isArray(projectData.rooms3d) ? projectData.rooms3d : []);
 
     // Load devices
     if (Array.isArray(projectData.devices)) {

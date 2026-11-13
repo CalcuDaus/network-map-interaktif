@@ -29,6 +29,8 @@ import { ContextMenu } from './ui/context-menu.js';
 import { CustomDeviceModal } from './ui/custom-device-modal.js';
 import { MikrotikQuickInsertModal } from './ui/mikrotik-quick-insert-modal.js';
 import { MapScaleModal } from './ui/map-scale-modal.js';
+import { Map3DEngine } from './map/map-3d-engine.js';
+import { Room3DModal } from './ui/room-3d-modal.js';
 
 class NetMapApp {
   constructor() {
@@ -51,6 +53,8 @@ class NetMapApp {
     this.customDeviceModal = null;
     this.mikrotikQuickInsertModal = null;
     this.mapScaleModal = null;
+    this.map3DEngine = null;
+    this.room3DModal = null;
     this.projectStorage = null;
     this.exportModal = null;
     this.projectModal = null;
@@ -212,6 +216,19 @@ class NetMapApp {
       naturalHeight: this.mapEngine.naturalHeight
     });
 
+    // 14e. Initialize 3D Map Engine (Three.js, lazy WebGL on first 3D switch) & 3D Room Modal
+    const map3dContainer = document.getElementById('map-3d-container');
+    this.map3DEngine = new Map3DEngine({
+      container: map3dContainer,
+      deviceManager: this.deviceManager,
+      cableManager: this.cableManager
+    });
+    this.room3DModal = new Room3DModal({
+      deviceManager: this.deviceManager,
+      map3DEngine: this.map3DEngine
+    });
+    this.setup3DControls();
+
     // Global reference for modal coordination
     window.__netmapApp = this;
 
@@ -366,6 +383,107 @@ class NetMapApp {
     eventBus.on('canvas:clicked-empty', () => {
       this.deviceManager.deselectDevice();
       this.cableManager.deselectConnection();
+    });
+  }
+
+  setup3DControls() {
+    const btn2d = document.getElementById('btn-view-2d');
+    const btn3d = document.getElementById('btn-view-3d');
+    const konvaContainer = document.getElementById('konva-stage-container');
+    const map3dContainer = document.getElementById('map-3d-container');
+    const hud3d = document.getElementById('hud-3d-controls');
+    const hud2dZoom = document.querySelector('.map-hud-controls');
+    const hudCompass = document.getElementById('hud-compass');
+
+    const applyViewMode = (mode) => {
+      const is3d = mode === '3d';
+      btn2d?.classList.toggle('active', !is3d);
+      btn3d?.classList.toggle('active', is3d);
+      konvaContainer?.classList.toggle('hidden', is3d);
+      if (konvaContainer) konvaContainer.style.display = is3d ? 'none' : '';
+      hud2dZoom?.classList.toggle('hidden', is3d);
+      if (hud2dZoom) hud2dZoom.style.display = is3d ? 'none' : '';
+      hudCompass?.classList.toggle('hidden', is3d);
+      if (hudCompass) hudCompass.style.display = is3d ? 'none' : '';
+
+      map3dContainer?.classList.toggle('hidden', !is3d);
+      hud3d?.classList.toggle('hidden', !is3d);
+
+      if (is3d) {
+        this.map3DEngine?.activate();
+        const coverageToggle = document.getElementById('filter-toggle-coverage');
+        if (coverageToggle) {
+          this.map3DEngine?.setShowCoverage(Boolean(coverageToggle.checked));
+        }
+      } else {
+        this.map3DEngine?.deactivate();
+      }
+    };
+
+    btn2d?.addEventListener('click', () => stateManager.setViewMode('2d'));
+    btn3d?.addEventListener('click', () => stateManager.setViewMode('3d'));
+
+    eventBus.on('viewmode:changed', ({ viewMode }) => {
+      applyViewMode(viewMode);
+    });
+
+    // Coverage filter sync for 3D scene
+    document.getElementById('filter-toggle-coverage')?.addEventListener('change', (e) => {
+      this.map3DEngine?.setShowCoverage(Boolean(e.target.checked));
+    });
+
+    // Camera preset buttons
+    const presetButtons = [
+      { id: 'btn-3d-iso', preset: 'iso' },
+      { id: 'btn-3d-top', preset: 'top' },
+      { id: 'btn-3d-side', preset: 'side' },
+      { id: 'btn-3d-focus', preset: 'focus' }
+    ];
+    presetButtons.forEach(({ id, preset }) => {
+      document.getElementById(id)?.addEventListener('click', () => {
+        presetButtons.forEach((b) => document.getElementById(b.id)?.classList.remove('active'));
+        document.getElementById(id)?.classList.add('active');
+        this.map3DEngine?.setCameraPreset(preset);
+      });
+    });
+
+    // Object scale multiplier
+    document.getElementById('select-3d-scale')?.addEventListener('change', (e) => {
+      const val = Number(e.target.value) || 1;
+      this.map3DEngine?.setDeviceScaleMultiplier(val);
+    });
+
+    // Explode overlapping devices toggle
+    let exploded = false;
+    const btnExplode = document.getElementById('btn-3d-explode');
+    btnExplode?.addEventListener('click', () => {
+      exploded = !exploded;
+      btnExplode.classList.toggle('active', exploded);
+      this.map3DEngine?.setExplodeStacks(exploded);
+    });
+
+    // Labels toggle
+    let showLabels = true;
+    const btnLabels = document.getElementById('btn-3d-labels');
+    btnLabels?.addEventListener('click', () => {
+      showLabels = !showLabels;
+      btnLabels.classList.toggle('active', showLabels);
+      this.map3DEngine?.setShowLabels(showLabels);
+    });
+
+    // Rooms & Custom 3D Modal
+    document.getElementById('btn-3d-rooms')?.addEventListener('click', () => {
+      this.room3DModal?.show();
+    });
+
+    // Focus single device in 3D from PropertiesPanel
+    eventBus.on('map3d:focus-device', ({ deviceId }) => {
+      if (stateManager.getViewMode() !== '3d') {
+        stateManager.setViewMode('3d');
+      }
+      setTimeout(() => {
+        this.map3DEngine?.focusOnDevice(deviceId);
+      }, 60);
     });
   }
 

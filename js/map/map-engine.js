@@ -123,6 +123,8 @@ export class MapEngine {
         this.layers.bgLayer.add(this.bgImageNode);
         this.layers.bgLayer.batchDraw();
 
+        eventBus.emit('map:image-changed', { src: imageSrc });
+
         // Hide loading overlay
         const loadingOverlay = document.getElementById('map-loading-overlay');
         if (loadingOverlay) {

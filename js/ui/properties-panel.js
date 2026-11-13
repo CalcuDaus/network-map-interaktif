@@ -6,7 +6,7 @@
 import { eventBus } from '../core/event-bus.js';
 import { stateManager } from '../core/state-manager.js';
 import { DEVICE_CATEGORIES, DEVICE_STATUSES, DEVICE_CATALOG } from '../devices/device-library.js';
-import { validateIp, validateMac, validateVlan } from '../devices/device-schema.js';
+import { validateIp, validateMac, validateVlan, getDefaultSpatial3d } from '../devices/device-schema.js';
 import { formatDecimals } from '../utils/helpers.js';
 import { NETWORK_ICON_DEFS, getDeviceIconSvg, getDefaultIconForType } from '../devices/device-icon-factory.js';
 import { metersToPixels, calculateCoverageArea, formatCoverageArea } from '../devices/wireless-coverage.js';
@@ -54,6 +54,7 @@ export class PropertiesPanel {
     const radiusMeters = cov?.radiusMeters || 25;
     const radiusPixels = metersToPixels(radiusMeters);
     const areaM2 = calculateCoverageArea(radiusMeters);
+    const spatial = device.spatial3d || getDefaultSpatial3d(device.type);
 
     // Open right sidebar if collapsed
     if (!stateManager.getState().ui.rightSidebarOpen) {
@@ -293,6 +294,76 @@ export class PropertiesPanel {
               </label>
             </div>
 
+          </div>
+        </div>
+
+        <!-- Section: Dimensi 3D & Penumpukan -->
+        <div class="panel-section">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+            <span class="section-label" style="margin-bottom: 0;">Dimensi 3D & Penumpukan</span>
+            <button type="button" id="btn-focus-3d-device" class="btn btn-secondary btn-sm" style="font-size: 10px; padding: 2px 7px; height: auto;" title="Buka mode 3D & fokus ke perangkat ini">
+              Lihat di 3D
+            </button>
+          </div>
+          <div class="info-card" style="display: flex; flex-direction: column; gap: 10px;">
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <label style="font-size: 11px; font-weight: 600; color: var(--text-primary);">Ketinggian / Elevasi Z</label>
+                <div style="display: flex; align-items: center; gap: 4px;">
+                  <input type="number" id="prop-3d-elevation" min="0" max="30" step="0.1" value="${Number(spatial.elevationMeters ?? 0).toFixed(1)}"
+                         style="width: 58px; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 11px; padding: 2px 4px; text-align: right; font-family: var(--font-mono);">
+                  <span style="font-size: 11px; color: var(--text-muted);">m</span>
+                </div>
+              </div>
+              <input type="range" id="prop-3d-elevation-slider" min="0" max="10" step="0.1" value="${Math.min(10, Number(spatial.elevationMeters ?? 0))}"
+                     style="width: 100%; accent-color: var(--accent-blue); cursor: pointer;">
+              <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+                <button type="button" class="btn btn-secondary btn-sm btn-3d-elev-preset" data-elev="0.4" data-mount="rack" style="font-size: 9.5px; padding: 1px 6px; height: auto;">Rack Bawah (0.4m)</button>
+                <button type="button" class="btn btn-secondary btn-sm btn-3d-elev-preset" data-elev="1.2" data-mount="rack" style="font-size: 9.5px; padding: 1px 6px; height: auto;">Rack Tengah (1.2m)</button>
+                <button type="button" class="btn btn-secondary btn-sm btn-3d-elev-preset" data-elev="1.8" data-mount="rack" style="font-size: 9.5px; padding: 1px 6px; height: auto;">Rack Atas (1.8m)</button>
+                <button type="button" class="btn btn-secondary btn-sm btn-3d-elev-preset" data-elev="2.8" data-mount="ceiling" style="font-size: 9.5px; padding: 1px 6px; height: auto;">Plafon AP (2.8m)</button>
+              </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+              <div style="display: flex; flex-direction: column; gap: 3px;">
+                <label style="font-size: 10.5px; color: var(--text-muted);">Posisi Pasang</label>
+                <select id="prop-3d-mount" style="background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 11px; padding: 4px 6px;">
+                  <option value="rack" ${spatial.mountType === 'rack' ? 'selected' : ''}>Rack Cabinet</option>
+                  <option value="floor" ${spatial.mountType === 'floor' ? 'selected' : ''}>Lantai / Meja</option>
+                  <option value="wall" ${spatial.mountType === 'wall' ? 'selected' : ''}>Dinding</option>
+                  <option value="ceiling" ${spatial.mountType === 'ceiling' ? 'selected' : ''}>Plafon / Atap</option>
+                  <option value="pole" ${spatial.mountType === 'pole' ? 'selected' : ''}>Tiang / Tower</option>
+                </select>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 3px;">
+                <label style="font-size: 10.5px; color: var(--text-muted);">Rotasi Y (°) / Skala</label>
+                <div style="display: flex; gap: 4px;">
+                  <input type="number" id="prop-3d-rotation" min="0" max="360" step="15" value="${spatial.rotationY || 0}" title="Rotasi 3D (Derajat)"
+                         style="width: 50%; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 11px; padding: 4px; font-family: var(--font-mono);">
+                  <input type="number" id="prop-3d-scale" min="0.3" max="5" step="0.1" value="${spatial.modelScale || 1}" title="Skala Model 3D"
+                         style="width: 50%; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 11px; padding: 4px; font-family: var(--font-mono);">
+                </div>
+              </div>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 4px; border-top: 1px dashed var(--border-color); padding-top: 6px;">
+              <label style="font-size: 10.5px; color: var(--text-muted);">Model 3D Kustom (.glb / .gltf - Opsional)</label>
+              <input type="file" id="prop-3d-glb-file" accept=".glb,.gltf" style="display: none;">
+              <div style="display: flex; gap: 6px;">
+                <button type="button" id="btn-upload-3d-glb" class="btn btn-secondary btn-sm" style="flex: 1; font-size: 11px; padding: 4px 8px;">
+                  Unggah Model .GLB...
+                </button>
+                ${spatial.customModelUrl ? `
+                  <button type="button" id="btn-clear-3d-glb" class="btn btn-sm" style="background: rgba(239, 68, 68, 0.14); color: var(--status-offline); border: 1px solid rgba(239, 68, 68, 0.3); font-size: 10.5px; padding: 4px 8px;">
+                    Reset
+                  </button>
+                ` : ''}
+              </div>
+              <input type="text" id="prop-3d-glb-url" placeholder="Atau URL model .glb (https://...)"
+                     value="${(spatial.customModelUrl && !spatial.customModelUrl.startsWith('data:')) ? this.escapeHtml(spatial.customModelUrl) : ''}"
+                     style="background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 11px; padding: 4px 8px;">
+            </div>
           </div>
         </div>
 
@@ -592,6 +663,90 @@ export class PropertiesPanel {
       this.deviceManager.updateDevice(devId, { wirelessCoverage: this.currentDevice.wirelessCoverage });
     });
 
+    // 3D Spatial & Custom GLB Controls
+    const ensureSpatial = () => {
+      if (!this.currentDevice.spatial3d) {
+        this.currentDevice.spatial3d = getDefaultSpatial3d(this.currentDevice.type);
+      }
+      return this.currentDevice.spatial3d;
+    };
+
+    const elevInput = document.getElementById('prop-3d-elevation');
+    const elevSlider = document.getElementById('prop-3d-elevation-slider');
+    const updateElev = (val) => {
+      const m = Math.max(0, Math.min(30, parseFloat(val) || 0));
+      const sp = ensureSpatial();
+      sp.elevationMeters = m;
+      if (elevInput) elevInput.value = m.toFixed(1);
+      if (elevSlider) elevSlider.value = Math.min(10, m);
+      this.deviceManager.updateDevice(devId, { spatial3d: sp });
+    };
+    elevSlider?.addEventListener('input', (e) => updateElev(e.target.value));
+    elevInput?.addEventListener('change', (e) => updateElev(e.target.value));
+
+    this.container.querySelectorAll('.btn-3d-elev-preset').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const sp = ensureSpatial();
+        sp.elevationMeters = parseFloat(btn.dataset.elev) || 1.0;
+        sp.mountType = btn.dataset.mount || 'rack';
+        const updated = this.deviceManager.updateDevice(devId, { spatial3d: sp });
+        if (updated) this.renderDeviceForm(updated);
+      });
+    });
+
+    document.getElementById('prop-3d-mount')?.addEventListener('change', (e) => {
+      const sp = ensureSpatial();
+      sp.mountType = e.target.value;
+      this.deviceManager.updateDevice(devId, { spatial3d: sp });
+    });
+
+    document.getElementById('prop-3d-rotation')?.addEventListener('change', (e) => {
+      const sp = ensureSpatial();
+      sp.rotationY = parseFloat(e.target.value) || 0;
+      this.deviceManager.updateDevice(devId, { spatial3d: sp });
+    });
+
+    document.getElementById('prop-3d-scale')?.addEventListener('change', (e) => {
+      const sp = ensureSpatial();
+      sp.modelScale = Math.max(0.3, Math.min(5, parseFloat(e.target.value) || 1));
+      this.deviceManager.updateDevice(devId, { spatial3d: sp });
+    });
+
+    const glbFileInput = document.getElementById('prop-3d-glb-file');
+    document.getElementById('btn-upload-3d-glb')?.addEventListener('click', () => glbFileInput?.click());
+    glbFileInput?.addEventListener('change', (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const sp = ensureSpatial();
+        sp.customModelUrl = ev.target.result;
+        const updated = this.deviceManager.updateDevice(devId, { spatial3d: sp });
+        if (updated) this.renderDeviceForm(updated);
+      };
+      reader.readAsDataURL(file);
+    });
+
+    document.getElementById('btn-clear-3d-glb')?.addEventListener('click', () => {
+      const sp = ensureSpatial();
+      sp.customModelUrl = '';
+      const updated = this.deviceManager.updateDevice(devId, { spatial3d: sp });
+      if (updated) this.renderDeviceForm(updated);
+    });
+
+    document.getElementById('prop-3d-glb-url')?.addEventListener('change', (e) => {
+      const sp = ensureSpatial();
+      sp.customModelUrl = e.target.value.trim();
+      this.deviceManager.updateDevice(devId, { spatial3d: sp });
+    });
+
+    document.getElementById('btn-focus-3d-device')?.addEventListener('click', () => {
+      stateManager.setViewMode('3d');
+      setTimeout(() => {
+        eventBus.emit('map3d:focus-device', { deviceId: devId });
+      }, 60);
+    });
+
     // Duplicate
     document.getElementById('btn-duplicate-device')?.addEventListener('click', () => {
       this.deviceManager.duplicateDevice(devId);
@@ -663,6 +818,7 @@ export class PropertiesPanel {
       customImage: this.currentDevice.customImage,
       markerStyle: markerStyle,
       wirelessCoverage: this.currentDevice.wirelessCoverage,
+      spatial3d: this.currentDevice.spatial3d,
       network: {
         ip: ip,
         subnet: subnetInput?.value.trim() || '255.255.255.0',

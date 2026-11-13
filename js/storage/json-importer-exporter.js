@@ -157,6 +157,7 @@ export class JsonImporterExporter {
       layers: data.layers || {},
       devices: sanitizedDevices,
       connections: sanitizedConnections,
+      rooms3d: Array.isArray(data.rooms3d) ? data.rooms3d : [],
       updatedAt: new Date().toISOString()
     };
 

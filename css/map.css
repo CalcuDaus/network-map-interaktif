@@ -192,3 +192,121 @@
   font-weight: 600;
   letter-spacing: 0.5px;
 }
+
+/* --------------------------------------------------------------------------
+   3D Map Viewport & HUD Controls (No backdrop-filter for WebGL 60fps)
+   -------------------------------------------------------------------------- */
+#map-3d-container {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 5;
+  outline: none;
+}
+
+#map-3d-container.hidden,
+#hud-3d-controls.hidden {
+  display: none !important;
+}
+
+#map-3d-container canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.hud-3d-controls {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 14;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  max-width: calc(100% - 88px);
+}
+
+.hud-3d-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.hud-3d-divider {
+  width: 1px;
+  height: 18px;
+  background-color: var(--border-color);
+}
+
+.hud-3d-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 9px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.hud-3d-btn:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--accent-blue);
+}
+
+.hud-3d-btn.active {
+  background-color: var(--accent-blue);
+  color: #ffffff;
+  border-color: var(--accent-blue);
+}
+
+.hud-3d-btn-accent {
+  border-color: var(--accent-green);
+  color: var(--accent-green);
+}
+
+.hud-3d-btn-accent:hover {
+  background-color: var(--accent-green);
+  color: #ffffff;
+  border-color: var(--accent-green);
+}
+
+.hud-3d-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.hud-3d-select {
+  height: 28px;
+  padding: 0 6px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+}
+
+.view-switcher .view-switch-btn.active {
+  background-color: var(--accent-blue);
+  color: #ffffff;
+}

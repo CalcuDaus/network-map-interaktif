@@ -101,6 +101,20 @@
 
         <div class="divider-vertical"></div>
 
+        <!-- 2D / 3D Map View Switcher -->
+        <div class="segmented-control view-switcher" role="group" aria-label="Tampilan Peta">
+          <button id="btn-view-2d" class="segmented-item view-switch-btn active" data-view="2d" title="Tampilan Denah 2D (Konva)">
+            <i data-lucide="map" style="width: 14px; height: 14px;"></i>
+            <span>2D Map</span>
+          </button>
+          <button id="btn-view-3d" class="segmented-item view-switch-btn" data-view="3d" title="Tampilan Ruang & Perangkat 3D (Three.js)">
+            <i data-lucide="box" style="width: 14px; height: 14px;"></i>
+            <span>3D Map</span>
+          </button>
+        </div>
+
+        <div class="divider-vertical"></div>
+
         <!-- Undo / Redo Controls (Ctrl+Z / Ctrl+Y) -->
         <button id="btn-undo" class="btn btn-icon btn-sm" title="Undo (Ctrl+Z)" disabled style="opacity: 0.4;">
           <i data-lucide="undo-2" style="width: 14px; height: 14px;"></i>
@@ -279,6 +293,49 @@
         <!-- Konva Stage Container -->
         <div id="konva-stage-container"></div>
 
+        <!-- Three.js 3D Map Container -->
+        <div id="map-3d-container" class="hidden" aria-label="Peta Infrastruktur 3D"></div>
+
+        <!-- Floating 3D Controls HUD (Top Left of Viewport in 3D Mode) -->
+        <div id="hud-3d-controls" class="hud-3d-controls hidden">
+          <div class="hud-3d-group">
+            <button id="btn-3d-iso" class="hud-3d-btn active" title="Sudut Isometrik">Iso</button>
+            <button id="btn-3d-top" class="hud-3d-btn" title="Tampak Atas">Atas</button>
+            <button id="btn-3d-side" class="hud-3d-btn" title="Tampak Samping (Lihat Tumpukan)">Samping</button>
+            <button id="btn-3d-focus" class="hud-3d-btn" title="Fokus ke Perangkat Terpilih">Fokus</button>
+          </div>
+
+          <div class="hud-3d-divider"></div>
+
+          <label class="hud-3d-inline" title="Perbesar/perkecil ukuran objek 3D">
+            <span>Skala</span>
+            <select id="select-3d-scale" class="hud-3d-select">
+              <option value="0.6">0.6x</option>
+              <option value="1" selected>1.0x</option>
+              <option value="1.5">1.5x</option>
+              <option value="2">2.0x</option>
+              <option value="3">3.0x</option>
+            </select>
+          </label>
+
+          <button id="btn-3d-explode" class="hud-3d-btn" title="Regangkan perangkat yang bertumpuk agar terlihat semua">
+            <i data-lucide="layers" style="width: 13px; height: 13px;"></i>
+            <span>Regangkan</span>
+          </button>
+
+          <button id="btn-3d-labels" class="hud-3d-btn active" title="Tampilkan / Sembunyikan Label 3D">
+            <i data-lucide="tag" style="width: 13px; height: 13px;"></i>
+            <span>Label</span>
+          </button>
+
+          <div class="hud-3d-divider"></div>
+
+          <button id="btn-3d-rooms" class="hud-3d-btn hud-3d-btn-accent" title="Kelola Ruangan 3D & Model Custom (.glb/.gltf)">
+            <i data-lucide="building-2" style="width: 13px; height: 13px;"></i>
+            <span>Ruangan 3D</span>
+          </button>
+        </div>
+
         <!-- Compass / North Indicator (Top Right) -->
         <button id="hud-compass" class="map-compass-hud" title="Reset Orientasi / Skala 100%">
           <span>N</span>
@@ -386,7 +443,7 @@
   </div>
 
   <!-- Application Bootstrap (Bundled for file:// and http:// compatibility) -->
-  <script src="js/bundle.js?v=20261113"></script>
+  <script src="js/bundle.js?v=20261113-3d"></script>
 </body>
 
 </html>

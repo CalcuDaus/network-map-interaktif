@@ -21,8 +21,11 @@ class StateManager {
           isLoaded: false
         },
         createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date().toISOString(),
+        rooms3d: []
       },
+      // Active viewport renderer mode: '2d' | '3d'
+      viewMode: '2d',
       // Current interaction mode: 'navigate' | 'select' | 'add-device' | 'draw-cable' | 'edit' | 'delete'
       mode: 'navigate',
       // Viewport transform
@@ -83,6 +86,26 @@ class StateManager {
 
   getMode() {
     return this.state.mode;
+  }
+
+  setViewMode(viewMode) {
+    if (this.state.viewMode === viewMode) return;
+    const prevViewMode = this.state.viewMode;
+    this.state.viewMode = viewMode;
+    eventBus.emit('viewmode:changed', { viewMode, prevViewMode });
+  }
+
+  getViewMode() {
+    return this.state.viewMode;
+  }
+
+  setRooms3d(rooms) {
+    this.state.project.rooms3d = Array.isArray(rooms) ? rooms : [];
+    eventBus.emit('room3d:changed', { rooms: this.state.project.rooms3d });
+  }
+
+  getRooms3d() {
+    return this.state.project.rooms3d || [];
   }
 
   /**

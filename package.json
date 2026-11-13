@@ -9,7 +9,8 @@
     "build:watch": "esbuild js/app.js --bundle --outfile=js/bundle.js --format=iife --watch"
   },
   "devDependencies": {
-    "esbuild": "^0.25.0"
+    "esbuild": "^0.25.0",
+    "three": "^0.187.0"
   },
   "keywords": [
     "network-map",
@@ -21,4 +22,3 @@
   "author": "",
   "license": "ISC"
 }
-

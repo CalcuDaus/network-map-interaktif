@@ -39,6 +39,45 @@ export function validateVlan(vlan) {
   return !isNaN(num) && num >= 1 && num <= 4094;
 }
 
+export function getDefaultSpatial3d(type = 'router') {
+  if (['access-point', 'mikrotik-cap-ax', 'ruijie-rap2260', 'ruijie-rap2200'].includes(type)) {
+    return { elevationMeters: 2.8, mountType: 'ceiling', rackUnit: null, customModelUrl: '', modelScale: 1, rotationY: 0 };
+  }
+  if (['mikrotik-hap-ax2', 'ruijie-rap1200', 'cctv'].includes(type)) {
+    return { elevationMeters: 2.2, mountType: 'wall', rackUnit: null, customModelUrl: '', modelScale: 1, rotationY: 0 };
+  }
+  if ([
+    'wireless-bridge', 'network-pole',
+    'mikrotik-lhg5', 'mikrotik-sxtsq', 'mikrotik-mantbox',
+    'ruijie-rap6260', 'ruijie-est350'
+  ].includes(type)) {
+    return { elevationMeters: 4.5, mountType: 'pole', rackUnit: null, customModelUrl: '', modelScale: 1, rotationY: 0 };
+  }
+  if (['server', 'nvr', 'storage', 'database'].includes(type)) {
+    return { elevationMeters: 0.45, mountType: 'rack', rackUnit: 4, customModelUrl: '', modelScale: 1, rotationY: 0 };
+  }
+  if ([
+    'core-switch', 'dist-switch', 'managed-switch', 'poe-switch', 'unmanaged-switch',
+    'mikrotik-crs317', 'mikrotik-crs326', 'mikrotik-crs328', 'mikrotik-crs310',
+    'ruijie-s5750', 'ruijie-nbs5200', 'ruijie-nbs3100', 'ruijie-nbs3100-poe', 'ruijie-es218gc', 'ruijie-es209gc',
+    'tplink-ls1005g', 'tplink-sg1008d', 'tplink-sg108e', 'tplink-sg108pe', 'tplink-sg1016d',
+    'tplink-sg1024d', 'tplink-sg1218mp', 'tplink-sg2210mp', 'tplink-sg2428p', 'tplink-sg3428x', 'tplink-sx3016f'
+  ].includes(type)) {
+    return { elevationMeters: 1.0, mountType: 'rack', rackUnit: 12, customModelUrl: '', modelScale: 1, rotationY: 0 };
+  }
+  if ([
+    'router', 'main-router', 'firewall', 'gateway',
+    'mikrotik-ccr2116', 'mikrotik-ccr2004', 'mikrotik-rb5009', 'mikrotik-rb4011', 'mikrotik-l009', 'mikrotik-hex',
+    'ruijie-eg210g', 'ruijie-eg310gh', 'ruijie-nbr6210'
+  ].includes(type)) {
+    return { elevationMeters: 1.45, mountType: 'rack', rackUnit: 20, customModelUrl: '', modelScale: 1, rotationY: 0 };
+  }
+  if (['network-rack', 'patch-panel', 'odp', 'fo-terminal'].includes(type)) {
+    return { elevationMeters: 0, mountType: 'floor', rackUnit: null, customModelUrl: '', modelScale: 1, rotationY: 0 };
+  }
+  return { elevationMeters: 0.75, mountType: 'floor', rackUnit: null, customModelUrl: '', modelScale: 1, rotationY: 0 };
+}
+
 export const DeviceSchema = {
   /**
    * Factory function to create a validated device object with default values
@@ -47,16 +86,27 @@ export const DeviceSchema = {
    */
   create(params = {}) {
     const id = params.id || generateId('dev');
+    const type = params.type || 'router';
+    const defaultSpatial = getDefaultSpatial3d(type);
+    const rawSpatial = params.spatial3d || {};
     return {
       id: id,
       name: params.name || 'New Device',
-      type: params.type || 'router',           // router, switch, ap, server, cctv, etc.
+      type: type,                              // router, switch, ap, server, cctv, etc.
       category: params.category || 'core',     // core, distribution, infrastructure, end-device
       brand: params.brand || '',
       model: params.model || '',
       customIcon: params.customIcon || '',
       customImage: params.customImage || '',
       markerStyle: params.markerStyle || 'rounded',
+      spatial3d: {
+        elevationMeters: typeof rawSpatial.elevationMeters === 'number' ? rawSpatial.elevationMeters : defaultSpatial.elevationMeters,
+        mountType: rawSpatial.mountType || defaultSpatial.mountType,
+        rackUnit: rawSpatial.rackUnit !== undefined ? rawSpatial.rackUnit : defaultSpatial.rackUnit,
+        customModelUrl: rawSpatial.customModelUrl || '',
+        modelScale: typeof rawSpatial.modelScale === 'number' ? rawSpatial.modelScale : 1,
+        rotationY: typeof rawSpatial.rotationY === 'number' ? rawSpatial.rotationY : 0
+      },
       wirelessCoverage: params.wirelessCoverage ? {
         enabled: Boolean(params.wirelessCoverage.enabled),
         radiusMeters: typeof params.wirelessCoverage.radiusMeters === 'number' ? params.wirelessCoverage.radiusMeters : 25,
