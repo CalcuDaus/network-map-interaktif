@@ -15,10 +15,10 @@
     rel="stylesheet">
 
   <!-- Core Stylesheets -->
-  <link rel="stylesheet" href="css/main.css">
-  <link rel="stylesheet" href="css/layout.css">
-  <link rel="stylesheet" href="css/components.css">
-  <link rel="stylesheet" href="css/map.css">
+  <link rel="stylesheet" href="css/main.css?v=20261113-3d-sketchup">
+  <link rel="stylesheet" href="css/layout.css?v=20261113-3d-sketchup">
+  <link rel="stylesheet" href="css/components.css?v=20261113-3d-sketchup">
+  <link rel="stylesheet" href="css/map.css?v=20261113-3d-sketchup">
 
   <!-- Vendor Libraries (Offline-First with CDN fallback) -->
   <script src="assets/vendor/konva.min.js"></script>
@@ -294,10 +294,10 @@
         <div id="konva-stage-container"></div>
 
         <!-- Three.js 3D Map Container -->
-        <div id="map-3d-container" class="hidden" aria-label="Peta Infrastruktur 3D"></div>
+        <div id="map-3d-container" class="hidden" style="display: none;" aria-label="Peta Infrastruktur 3D"></div>
 
         <!-- Floating 3D Controls HUD (SketchUp-Style Navigation Bar) -->
-        <div id="hud-3d-controls" class="hud-3d-controls hidden">
+        <div id="hud-3d-controls" class="hud-3d-controls hidden" style="display: none;">
           <!-- SketchUp Camera Tool Selector -->
           <div class="hud-3d-group" title="Alat Navigasi ala SketchUp">
             <button id="btn-3d-tool-orbit" class="hud-3d-btn active" data-tool3d="orbit" title="Orbit (O) — Drag kiri/tengah putar kamera, Shift+Drag/Kanan untuk Pan">
@@ -365,7 +365,7 @@
         </div>
 
         <!-- SketchUp Shortcut Hint Pill (Bottom Right in 3D Mode) -->
-        <div id="hud-3d-hints" class="hud-3d-hints hidden">
+        <div id="hud-3d-hints" class="hud-3d-hints hidden" style="display: none;">
           <span><strong>Tengah / Kiri:</strong> Orbit</span>
           <span>•</span>
           <span><strong>Shift+Drag / Kanan:</strong> Pan</span>

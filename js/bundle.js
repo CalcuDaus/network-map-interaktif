@@ -49805,8 +49805,11 @@ void main() {
         hudCompass?.classList.toggle("hidden", is3d);
         if (hudCompass) hudCompass.style.display = is3d ? "none" : "";
         map3dContainer?.classList.toggle("hidden", !is3d);
+        if (map3dContainer) map3dContainer.style.display = is3d ? "block" : "none";
         hud3d?.classList.toggle("hidden", !is3d);
+        if (hud3d) hud3d.style.display = is3d ? "flex" : "none";
         hud3dHints?.classList.toggle("hidden", !is3d);
+        if (hud3dHints) hud3dHints.style.display = is3d ? "flex" : "none";
         if (is3d) {
           this.map3DEngine?.activate();
           const coverageToggle = document.getElementById("filter-toggle-coverage");
@@ -49817,6 +49820,7 @@ void main() {
           this.map3DEngine?.deactivate();
         }
       };
+      applyViewMode(stateManager.getViewMode());
       btn2d?.addEventListener("click", () => stateManager.setViewMode("2d"));
       btn3d?.addEventListener("click", () => stateManager.setViewMode("3d"));
       eventBus.on("viewmode:changed", ({ viewMode }) => {
