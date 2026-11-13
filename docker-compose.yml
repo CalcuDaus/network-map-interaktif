@@ -4,6 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile
     image: netmap:latest
+    pull_policy: build
     container_name: netmap-app
     restart: unless-stopped
     ports:
