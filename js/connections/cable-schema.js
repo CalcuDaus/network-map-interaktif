@@ -26,9 +26,13 @@ export const CableSchema = {
       length: typeof params.length === 'number' ? params.length : 0, // Dalam meter
       lengthMode: params.lengthMode || 'auto',         // auto | manual
       details: {
-        // Universal port endpoints
+        // Universal port endpoints & 3D diameter scale (1.0 = matches port socket)
         portSource: params.details?.portSource || '',
         portDestination: params.details?.portDestination || '',
+        cableDiameterScale: typeof params.details?.cableDiameterScale === 'number' ? params.details.cableDiameterScale : 1.0,
+        elevationZ: (typeof params.details?.elevationZ === 'number' && !isNaN(params.details.elevationZ)) ? params.details.elevationZ : null,
+        pathStyle: params.details?.pathStyle || 'curve', // 'curve' (Bezier Pen Tool) | 'straight' (Corner) | 'orthogonal' (90° Tray)
+        curveTension: typeof params.details?.curveTension === 'number' ? params.details.curveTension : 0.38,
         jacketType: params.details?.jacketType || 'indoor-pvc',
 
         // Accurate physical measurement fields (real-world network installation)
@@ -93,6 +97,10 @@ export const CableSchema = {
         const pt = cable.route[i];
         if (typeof pt.x !== 'number' || typeof pt.y !== 'number' || pt.x < 0 || pt.x > 1 || pt.y < 0 || pt.y > 1) {
           errors.push(`Waypoint at index ${i} has invalid normalized coordinates`);
+          break;
+        }
+        if (pt.z !== undefined && pt.z !== null && (typeof pt.z !== 'number' || isNaN(pt.z))) {
+          errors.push(`Waypoint at index ${i} has invalid Z elevation`);
           break;
         }
       }

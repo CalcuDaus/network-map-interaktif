@@ -61,8 +61,42 @@ export class PropertiesPanel {
       stateManager.toggleSidebar('right');
     }
 
+    const selectedDevices = this.deviceManager.getSelectedDevices?.() || [device];
+    const selectedCount = selectedDevices.length;
+    const unlockedSelectedCount = selectedDevices.filter((d) => !d.layerLocked).length;
+    this._lastRenderedSig = `${device.id}:${selectedCount}:${unlockedSelectedCount}`;
+
+    const multiBannerHtml = selectedCount > 1
+      ? `
+        <div id="prop-multiselect-banner" style="background: rgba(42, 124, 19, 0.14); border: 1px solid rgba(42, 124, 19, 0.45); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+            <span style="font-size: 12px; font-weight: 700; color: var(--accent-green); display: inline-flex; align-items: center; gap: 5px;">
+              <i data-lucide="layers" style="width: 14px; height: 14px;"></i>
+              <span>${selectedCount} Perangkat Terpilih</span>
+            </span>
+            <span style="font-size: 10px; color: var(--text-muted); font-family: var(--font-mono);">
+              ${unlockedSelectedCount}/${selectedCount} dapat digeser
+            </span>
+          </div>
+          <div style="font-size: 11px; color: var(--text-secondary); line-height: 1.35;">
+            Drag salah satu perangkat terpilih di <strong>Mode 2D</strong> atau <strong>3D Move (M)</strong> untuk memindahkan semuanya bersamaan.
+          </div>
+          <div style="display: flex; gap: 6px; margin-top: 2px;">
+            <button type="button" id="btn-multi-delete" class="btn btn-secondary btn-sm" style="flex: 1; font-size: 11px; color: var(--status-offline); border-color: rgba(239, 68, 68, 0.35);">
+              <i data-lucide="trash-2" style="width: 12px; height: 12px;"></i>
+              <span>Hapus (${selectedCount})</span>
+            </button>
+            <button type="button" id="btn-multi-clear" class="btn btn-secondary btn-sm" style="font-size: 11px;">
+              <span>Batal Pilih</span>
+            </button>
+          </div>
+        </div>
+      `
+      : '';
+
     this.container.innerHTML = `
       <div class="properties-form-wrapper" style="display: flex; flex-direction: column; gap: 14px;">
+        ${multiBannerHtml}
         
         <!-- Header Info Card -->
         <div style="background-color: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
@@ -76,9 +110,14 @@ export class PropertiesPanel {
                      onfocus="this.style.borderColor='var(--border-focus)'; this.style.backgroundColor='var(--bg-tertiary)';"
                      onblur="this.style.borderColor='transparent'; this.style.backgroundColor='transparent';">
             </div>
-            <button id="btn-prop-close" class="btn btn-icon btn-sm" title="Tutup / Batalkan Seleksi">
-              <i data-lucide="x" style="width: 14px; height: 14px;"></i>
-            </button>
+            <div style="display: flex; align-items: center; gap: 4px;">
+              <button type="button" id="btn-prop-jump-layer" class="btn btn-icon btn-sm" title="Lihat Perangkat ini di Tab Layers">
+                <i data-lucide="layers" style="width: 14px; height: 14px;"></i>
+              </button>
+              <button id="btn-prop-close" class="btn btn-icon btn-sm" title="Tutup / Batalkan Seleksi">
+                <i data-lucide="x" style="width: 14px; height: 14px;"></i>
+              </button>
+            </div>
           </div>
 
           <div style="display: flex; align-items: center; justify-content: space-between; font-size: 11px;">
@@ -361,11 +400,8 @@ export class PropertiesPanel {
                 ` : ''}
               </div>
               <input type="text" id="prop-3d-glb-url" placeholder="Atau URL/path .glb (mis. assets/models/router.glb)"
-                     value="${spatial.customModelUrl && !spatial.customModelUrl.startsWith('data:') ? escapeHtml(spatial.customModelUrl) : ''}"
-                     style="background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 10.5px; padding: 4px 6px; font-family: var(--font-mono);">
-              <input type="text" id="prop-3d-glb-url" placeholder="Atau URL model .glb (https://...)"
                      value="${(spatial.customModelUrl && !spatial.customModelUrl.startsWith('data:')) ? this.escapeHtml(spatial.customModelUrl) : ''}"
-                     style="background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 11px; padding: 4px 8px;">
+                     style="background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 11px; padding: 4px 8px; font-family: var(--font-mono);">
             </div>
           </div>
         </div>
@@ -486,9 +522,26 @@ export class PropertiesPanel {
     if (!this.currentDevice) return;
     const devId = this.currentDevice.id;
 
+    // Jump to Layers tab
+    document.getElementById('btn-prop-jump-layer')?.addEventListener('click', () => {
+      eventBus.emit('sidebar-right:switch-tab', { tab: 'layers', deviceId: devId });
+    });
+
     // Close button
     document.getElementById('btn-prop-close')?.addEventListener('click', () => {
       this.deviceManager.deselectDevice();
+    });
+
+    // Multi-Select Banner Actions
+    document.getElementById('btn-multi-clear')?.addEventListener('click', () => {
+      this.deviceManager.deselectDevice();
+    });
+
+    document.getElementById('btn-multi-delete')?.addEventListener('click', () => {
+      const count = this.deviceManager.getSelectedDeviceIds?.().length || 0;
+      if (count > 0 && confirm(`Hapus ${count} perangkat terpilih beserta seluruh kabelnya?`)) {
+        this.deviceManager.deleteSelectedDevices();
+      }
     });
 
     // Copy ID
@@ -852,16 +905,36 @@ export class PropertiesPanel {
 
   bindEvents() {
     eventBus.on('device:selected', (device) => {
+      if (!device) return;
+      const selectedDevices = this.deviceManager.getSelectedDevices?.() || [device];
+      const unlockedCount = selectedDevices.filter((d) => !d.layerLocked).length;
+      const sig = `${device.id}:${selectedDevices.length}:${unlockedCount}`;
+      if (this._lastRenderedSig === sig && this.currentDevice?.id === device.id) {
+        return;
+      }
       this.renderDeviceForm(device);
     });
 
+    eventBus.on('device:selection-changed', ({ primaryId, devices }) => {
+      const primary = primaryId ? this.deviceManager.getDeviceById(primaryId) : null;
+      if (!primary) return;
+      const list = Array.isArray(devices) ? devices : (this.deviceManager.getSelectedDevices?.() || [primary]);
+      const unlockedCount = list.filter((d) => !d.layerLocked).length;
+      const sig = `${primary.id}:${list.length}:${unlockedCount}`;
+      if (this._lastRenderedSig !== sig || this.currentDevice?.id !== primary.id) {
+        this.renderDeviceForm(primary);
+      }
+    });
+
     eventBus.on('device:deselected', () => {
+      this._lastRenderedSig = null;
       this.currentDevice = null;
       this.renderEmpty();
     });
 
     eventBus.on('device:deleted', ({ deviceId }) => {
-      if (this.currentDevice?.id === deviceId) {
+      if (this.currentDevice?.id === deviceId && !this.deviceManager?.selectedDeviceId) {
+        this._lastRenderedSig = null;
         this.currentDevice = null;
         this.renderEmpty();
       }

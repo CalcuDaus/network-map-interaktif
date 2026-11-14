@@ -26,7 +26,8 @@ export class CableRenderer {
     onSelect,
     onContextMenu = null,
     onWaypointMoved,
-    onWaypointDeleted
+    onWaypointDeleted,
+    onWaypointInserted = null
   }) {
     this.connectionLayer = connectionLayer;
     this.interactionLayer = interactionLayer;
@@ -36,6 +37,7 @@ export class CableRenderer {
     this.onContextMenu = onContextMenu;
     this.onWaypointMoved = onWaypointMoved;
     this.onWaypointDeleted = onWaypointDeleted;
+    this.onWaypointInserted = onWaypointInserted;
 
     this.selectedCableId = null;
     this.lineMap = new Map(); // cableId -> Konva.Line
@@ -133,12 +135,18 @@ export class CableRenderer {
     }
 
     const strokeWidth = isSelected ? catDef.strokeWidth + 2 : catDef.strokeWidth;
+    const pathStyle = cable.details?.pathStyle || 'curve';
+    const hasWaypoints = Array.isArray(cable.route) && cable.route.length > 0;
+    const lineTension = (pathStyle === 'curve' && hasWaypoints)
+      ? (typeof cable.details?.curveTension === 'number' ? cable.details.curveTension : 0.38)
+      : 0;
 
     if (!line) {
       line = new Konva.Line({
         id: `cable-${cable.id}`,
         name: 'cable-line',
         points: flatPoints,
+        tension: lineTension,
         stroke: strokeColor,
         strokeWidth: strokeWidth,
         dash: dashPattern,
@@ -194,6 +202,7 @@ export class CableRenderer {
     } else {
       line.setAttr('cableData', cable);
       line.points(flatPoints);
+      line.tension(lineTension);
       line.stroke(strokeColor);
       line.strokeWidth(strokeWidth);
       line.setAttr('baseStrokeWidth', strokeWidth);
@@ -310,35 +319,39 @@ export class CableRenderer {
    * @returns {number[]}
    */
   calculateFlatPixelPoints(cable, sourceDev, destDev) {
-    const points = [];
+    const rawNodes = [
+      { x: sourceDev.position.x * this.naturalWidth, y: sourceDev.position.y * this.naturalHeight },
+      ...(Array.isArray(cable.route)
+        ? cable.route.map((wp) => ({ x: wp.x * this.naturalWidth, y: wp.y * this.naturalHeight }))
+        : []),
+      { x: destDev.position.x * this.naturalWidth, y: destDev.position.y * this.naturalHeight }
+    ];
 
-    // 1. Source point
-    points.push(
-      sourceDev.position.x * this.naturalWidth,
-      sourceDev.position.y * this.naturalHeight
-    );
-
-    // 2. Intermediate waypoints
-    if (Array.isArray(cable.route)) {
-      cable.route.forEach((wp) => {
-        points.push(
-          wp.x * this.naturalWidth,
-          wp.y * this.naturalHeight
-        );
-      });
+    const pathStyle = cable.details?.pathStyle || 'curve';
+    if (pathStyle === 'orthogonal') {
+      const orthoPoints = [];
+      for (let i = 0; i < rawNodes.length; i++) {
+        const cur = rawNodes[i];
+        orthoPoints.push(cur.x, cur.y);
+        if (i < rawNodes.length - 1) {
+          const nxt = rawNodes[i + 1];
+          if (Math.abs(nxt.x - cur.x) > 2 && Math.abs(nxt.y - cur.y) > 2) {
+            orthoPoints.push(nxt.x, cur.y);
+          }
+        }
+      }
+      return orthoPoints;
     }
 
-    // 3. Destination point
-    points.push(
-      destDev.position.x * this.naturalWidth,
-      destDev.position.y * this.naturalHeight
-    );
-
+    const points = [];
+    rawNodes.forEach((pt) => {
+      points.push(pt.x, pt.y);
+    });
     return points;
   }
 
   /**
-   * Render interactive draggable waypoint handles on interactionLayer
+   * Render interactive draggable waypoint handles + mid-segment "+" Pen Tool add-anchor handles
    * @param {Object} cable 
    * @param {Object} sourceDev 
    * @param {Object} destDev 
@@ -346,12 +359,66 @@ export class CableRenderer {
   renderWaypointHandles(cable, sourceDev, destDev) {
     this.clearWaypointHandles();
 
-    if (!Array.isArray(cable.route) || cable.route.length === 0) {
+    const route = Array.isArray(cable.route) ? cable.route : [];
+    const chain = [
+      sourceDev.position,
+      ...route,
+      destDev.position
+    ];
+
+    // 1. Mid-segment "+" Ghost Anchor Handles (Pen Tool Add-Anchor on Segment)
+    for (let segIdx = 0; segIdx < chain.length - 1; segIdx++) {
+      const a = chain[segIdx];
+      const b = chain[segIdx + 1];
+      const mx = ((a.x + b.x) * 0.5) * this.naturalWidth;
+      const my = ((a.y + b.y) * 0.5) * this.naturalHeight;
+
+      const addHandle = new Konva.Circle({
+        name: 'waypoint-add-handle',
+        x: mx,
+        y: my,
+        radius: 4.5,
+        fill: '#ffffff',
+        stroke: '#0284c7',
+        strokeWidth: 1.8,
+        opacity: 0.82,
+        draggable: true,
+        perfectDrawEnabled: false,
+        shadowForStrokeEnabled: false
+      });
+
+      addHandle.on('click tap', (e) => {
+        e.cancelBubble = true;
+        if (this.onWaypointInserted) {
+          this.onWaypointInserted(cable.id, segIdx, {
+            x: clamp(mx / this.naturalWidth, 0.01, 0.99),
+            y: clamp(my / this.naturalHeight, 0.01, 0.99)
+          });
+        }
+      });
+
+      addHandle.on('dragend', () => {
+        const clampedX = clamp(addHandle.x(), 0, this.naturalWidth);
+        const clampedY = clamp(addHandle.y(), 0, this.naturalHeight);
+        if (this.onWaypointInserted) {
+          this.onWaypointInserted(cable.id, segIdx, {
+            x: clamp(clampedX / this.naturalWidth, 0.01, 0.99),
+            y: clamp(clampedY / this.naturalHeight, 0.01, 0.99)
+          });
+        }
+      });
+
+      this.interactionLayer.add(addHandle);
+      this.waypointHandles.push(addHandle);
+    }
+
+    if (route.length === 0) {
       this.interactionLayer.batchDraw();
       return;
     }
 
-    cable.route.forEach((wp, index) => {
+    // 2. Existing Anchor Handles (Drag to reshape, Double-Click/Right-Click to delete anchor)
+    route.forEach((wp, index) => {
       const px = wp.x * this.naturalWidth;
       const py = wp.y * this.naturalHeight;
 

@@ -59,13 +59,14 @@ class Database {
     return new Promise((resolve, reject) => {
       const tx = db.transaction('projects', 'readwrite');
       const store = tx.objectStore('projects');
-      const request = store.put({
+      store.put({
         ...projectData,
-        updatedAt: new Date().toISOString()
+        updatedAt: projectData.updatedAt || new Date().toISOString()
       });
 
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error || new Error('IndexedDB transaction aborted'));
     });
   }
 

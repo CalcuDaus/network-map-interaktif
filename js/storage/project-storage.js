@@ -18,18 +18,61 @@ export class ProjectStorage {
     this.deviceManager = deviceManager;
     this.cableManager = cableManager;
     this.isAutoSaveEnabled = true;
+    this.hasPendingSave = false;
 
-    // Create debounced auto-save function (1500ms)
+    // Fast debounced auto-save (300ms) so edits persist quickly to IndexedDB
     this.debouncedSave = debounce(() => {
       this.saveCurrentProject();
-    }, 1500);
+    }, 300);
 
     this.initMutationListeners();
+    this.initUnloadFlush();
+  }
+
+  initUnloadFlush() {
+    if (typeof window === 'undefined') return;
+    const flushNow = () => {
+      if (!this.isAutoSaveEnabled || !this.hasPendingSave) return;
+      const projectData = this.serializeProject();
+      this.saveLocalBackup(projectData);
+      // Best-effort async IndexedDB write
+      this.saveCurrentProject();
+    };
+
+    window.addEventListener('beforeunload', flushNow);
+    window.addEventListener('pagehide', flushNow);
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') {
+          flushNow();
+        }
+      });
+    }
+  }
+
+  saveLocalBackup(projectData) {
+    try {
+      if (typeof localStorage === 'undefined' || !projectData?.id) return;
+      localStorage.setItem(`netmap_autosave_${projectData.id}`, JSON.stringify(projectData));
+    } catch (e) {
+      // Ignore quota errors (IndexedDB remains primary)
+    }
+  }
+
+  loadLocalBackup(id) {
+    try {
+      if (typeof localStorage === 'undefined') return null;
+      const raw = localStorage.getItem(`netmap_autosave_${id}`);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      return null;
+    }
   }
 
   initMutationListeners() {
     const handleMutation = () => {
       if (!this.isAutoSaveEnabled) return;
+      this.hasPendingSave = true;
       this.updateStatusIndicator('saving');
       this.debouncedSave();
     };
@@ -44,6 +87,7 @@ export class ProjectStorage {
     eventBus.on('connection:updated', handleMutation);
     eventBus.on('connection:deleted', handleMutation);
     eventBus.on('room3d:changed', handleMutation);
+    eventBus.on('object3d:changed', handleMutation);
   }
 
   /**
@@ -70,6 +114,7 @@ export class ProjectStorage {
       devices: devices,
       connections: connections,
       rooms3d: state.project.rooms3d || [],
+      objects3d: state.project.objects3d || [],
       customTemplates: (typeof localStorage !== 'undefined' ? JSON.parse(localStorage.getItem('netmap_custom_templates') || '[]') : []),
       updatedAt: new Date().toISOString()
     };
@@ -83,7 +128,9 @@ export class ProjectStorage {
     try {
       this.updateStatusIndicator('saving');
       const projectData = this.serializeProject();
+      this.saveLocalBackup(projectData);
       await database.saveProject(projectData);
+      this.hasPendingSave = false;
       this.updateStatusIndicator('saved');
       eventBus.emit('project:saved', { id: projectData.id });
       return true;
@@ -95,19 +142,28 @@ export class ProjectStorage {
   }
 
   /**
-   * Load project from IndexedDB and populate manager collections
+   * Load project from IndexedDB (with synchronous localStorage backup fallback if newer)
    * @param {string} id 
    * @returns {Promise<boolean>}
    */
   async loadProject(id) {
     try {
-      const projectData = await database.getProject(id);
-      if (!projectData) return false;
-
-      // Layout was saved against a different base map — positions would be wrong, re-seed instead
+      const dbData = await database.getProject(id);
+      const localBackup = this.loadLocalBackup(id);
       const currentMapVersion = stateManager.getState().project.map.version;
-      if (projectData.map?.version !== currentMapVersion) {
-        console.info(`[ProjectStorage] Saved project uses map "${projectData.map?.version || 'legacy'}", current is "${currentMapVersion}". Ignoring stale layout.`);
+
+      const validDb = dbData && dbData.map?.version === currentMapVersion ? dbData : null;
+      const validLocal = localBackup && localBackup.map?.version === currentMapVersion ? localBackup : null;
+
+      let projectData = validDb;
+      if (validLocal && (!validDb || new Date(validLocal.updatedAt || 0) > new Date(validDb.updatedAt || 0))) {
+        projectData = validLocal;
+      }
+
+      if (!projectData) {
+        if (dbData && dbData.map?.version !== currentMapVersion) {
+          console.info(`[ProjectStorage] Saved project uses map "${dbData.map?.version || 'legacy'}", current is "${currentMapVersion}". Ignoring stale layout.`);
+        }
         return false;
       }
 
@@ -124,43 +180,55 @@ export class ProjectStorage {
    * @param {Object} projectData 
    */
   deserializeProject(projectData) {
-    // Clear current devices and cables
-    const currentDevs = this.deviceManager.getAllDevices();
-    currentDevs.forEach((d) => this.deviceManager.deleteDevice(d.id));
+    const prevAutoSave = this.isAutoSaveEnabled;
+    this.isAutoSaveEnabled = false;
+    try {
+      // Clear current devices and cables
+      const currentDevs = this.deviceManager.getAllDevices();
+      currentDevs.forEach((d) => this.deviceManager.deleteDevice(d.id));
 
-    // Update project state
-    stateManager.getState().project.id = projectData.id;
-    stateManager.getState().project.name = projectData.name;
+      // Update project state
+      stateManager.getState().project.id = projectData.id;
+      const loadedName = projectData.name;
+      stateManager.getState().project.name =
+        (!loadedName || loadedName === 'Campus Network Infrastructure' || loadedName === 'Campus Network')
+          ? 'SmartSchool NetMap'
+          : loadedName;
 
-    // Load scale calibration if present
-    if (projectData.scaleWidthMeters && typeof projectData.scaleWidthMeters === 'number') {
-      this.cableManager.setMapScale(projectData.scaleWidthMeters);
+      // Load scale calibration if present
+      if (projectData.scaleWidthMeters && typeof projectData.scaleWidthMeters === 'number') {
+        this.cableManager.setMapScale(projectData.scaleWidthMeters);
+      }
+
+      // Load 3D custom rooms & objects
+      stateManager.setRooms3d(Array.isArray(projectData.rooms3d) ? projectData.rooms3d : []);
+      stateManager.setObjects3d(Array.isArray(projectData.objects3d) ? projectData.objects3d : []);
+
+      // Load devices
+      if (Array.isArray(projectData.devices)) {
+        projectData.devices.forEach((dev) => {
+          this.deviceManager.addDevice(dev);
+        });
+      }
+
+      // Load cables
+      if (Array.isArray(projectData.connections)) {
+        projectData.connections.forEach((cable) => {
+          this.cableManager.addConnection(cable);
+        });
+      }
+
+      // Restore custom device templates if present
+      if (Array.isArray(projectData.customTemplates) && typeof localStorage !== 'undefined') {
+        localStorage.setItem('netmap_custom_templates', JSON.stringify(projectData.customTemplates));
+      }
+
+      this.hasPendingSave = false;
+      this.updateStatusIndicator('saved');
+      eventBus.emit('project:loaded', projectData);
+    } finally {
+      this.isAutoSaveEnabled = prevAutoSave;
     }
-
-    // Load 3D custom rooms
-    stateManager.setRooms3d(Array.isArray(projectData.rooms3d) ? projectData.rooms3d : []);
-
-    // Load devices
-    if (Array.isArray(projectData.devices)) {
-      projectData.devices.forEach((dev) => {
-        this.deviceManager.addDevice(dev);
-      });
-    }
-
-    // Load cables
-    if (Array.isArray(projectData.connections)) {
-      projectData.connections.forEach((cable) => {
-        this.cableManager.addConnection(cable);
-      });
-    }
-
-    // Restore custom device templates if present
-    if (Array.isArray(projectData.customTemplates) && typeof localStorage !== 'undefined') {
-      localStorage.setItem('netmap_custom_templates', JSON.stringify(projectData.customTemplates));
-    }
-
-    this.updateStatusIndicator('saved');
-    eventBus.emit('project:loaded', projectData);
   }
 
   updateStatusIndicator(status) {

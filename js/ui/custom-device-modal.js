@@ -8,6 +8,8 @@ import { eventBus } from '../core/event-bus.js';
 import { stateManager } from '../core/state-manager.js';
 import { DEVICE_CATEGORIES, DEVICE_STATUSES } from '../devices/device-library.js';
 import { NETWORK_ICON_DEFS, getDeviceIconSvg, getDefaultIconForType } from '../devices/device-icon-factory.js';
+import { BUILTIN_GLB_MODELS, getDefaultDevicePorts } from '../devices/device-schema.js';
+import { extractGlbCustomPorts } from '../map/map-3d-models.js';
 import { clamp } from '../utils/helpers.js';
 
 export class CustomDeviceModal {
@@ -29,6 +31,7 @@ export class CustomDeviceModal {
     this.activeVisualTab = 'icon'; // 'icon' | 'image'
     this.selectedIcon = 'router';
     this.uploadedImageDataUrl = '';
+    this.extractedGlbPorts = [];
     this.markerStyle = 'rounded'; // 'rounded' | 'circle' | 'icon-only'
     this.markerColor = '#2a7c13';
 
@@ -345,13 +348,20 @@ export class CustomDeviceModal {
                 <span class="section-label" style="font-size: 11px; font-weight: 700; color: var(--accent-blue); text-transform: uppercase; margin: 0;">
                   4. Model 3D & Elevasi (Opsional)
                 </span>
-                <input type="file" id="cd-3d-glb-file" accept=".glb,.gltf" style="display: none;">
-                <div style="display: flex; gap: 6px;">
-                  <button type="button" id="btn-cd-upload-glb" class="btn btn-secondary btn-sm" style="font-size: 11px; padding: 5px 10px; white-space: nowrap;">
-                    Unggah .GLB...
-                  </button>
-                  <input type="text" id="cd-3d-glb-url" placeholder="Atau URL/path .glb/.gltf (kosong = otomatis)"
-                         style="flex: 1; min-width: 0; background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color); border-radius: 6px; padding: 5px 8px; font-size: 11px; color: var(--text-primary); font-family: var(--font-mono);">
+                <div style="display: flex; flex-direction: column; gap: 6px; margin-bottom: 4px;">
+                  <select id="cd-3d-glb-preset" style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color); border-radius: 6px; padding: 5px 8px; font-size: 11px; color: var(--text-primary);">
+                    <option value="">-- Pilih Model .GLB Bawaan (Presisi Port 100%) atau Unggah --</option>
+                    ${BUILTIN_GLB_MODELS.map((m) => `<option value="${m.url}">${m.label}</option>`).join('')}
+                  </select>
+                  <div style="display: flex; gap: 6px;">
+                    <input type="file" id="cd-3d-glb-file" accept=".glb,.gltf" style="display: none;">
+                    <button type="button" id="btn-cd-upload-glb" class="btn btn-secondary btn-sm" style="font-size: 11px; padding: 5px 10px; white-space: nowrap;">
+                      Unggah .GLB...
+                    </button>
+                    <input type="text" id="cd-3d-glb-url" placeholder="Atau URL/path .glb/.gltf (kosong = otomatis)"
+                           style="flex: 1; min-width: 0; background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color); border-radius: 6px; padding: 5px 8px; font-size: 11px; color: var(--text-primary); font-family: var(--font-mono);">
+                  </div>
+                  <div id="cd-3d-glb-port-status" style="font-size: 10.5px; color: var(--accent-blue, #2a7c13); font-weight: 600; display: none;"></div>
                 </div>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
                   <div style="display: flex; flex-direction: column; gap: 2px;">
@@ -581,9 +591,35 @@ export class CustomDeviceModal {
       }
     });
 
-    // 7b. Custom 3D .GLB / .GLTF upload for custom device
+    // 7b. Custom 3D .GLB / .GLTF upload & built-in preset for custom device
     const cdGlbInput = this.modalEl.querySelector('#cd-3d-glb-file');
     const cdGlbUrl = this.modalEl.querySelector('#cd-3d-glb-url');
+    const cdGlbPreset = this.modalEl.querySelector('#cd-3d-glb-preset');
+    const cdGlbStatus = this.modalEl.querySelector('#cd-3d-glb-port-status');
+    const updatePortBadge = (ports) => {
+      if (!cdGlbStatus) return;
+      if (Array.isArray(ports) && ports.length > 0) {
+        cdGlbStatus.style.display = 'block';
+        cdGlbStatus.textContent = `✓ ${ports.length} port fisik terdeteksi dari model .GLB (${ports.slice(0, 4).map((p) => p.name).join(', ')}${ports.length > 4 ? '...' : ''})`;
+      } else {
+        cdGlbStatus.style.display = 'none';
+        cdGlbStatus.textContent = '';
+      }
+    };
+    cdGlbPreset?.addEventListener('change', () => {
+      const val = cdGlbPreset.value;
+      if (cdGlbUrl) cdGlbUrl.value = val;
+      if (!val) {
+        this.extractedGlbPorts = [];
+        updatePortBadge([]);
+        return;
+      }
+      const presetEntry = BUILTIN_GLB_MODELS.find((m) => m.url === val);
+      if (presetEntry) {
+        this.extractedGlbPorts = presetEntry.ports.map((p) => ({ ...p, local3d: { ...p.local3d } }));
+        updatePortBadge(this.extractedGlbPorts);
+      }
+    });
     this.modalEl.querySelector('#btn-cd-upload-glb')?.addEventListener('click', () => cdGlbInput?.click());
     cdGlbInput?.addEventListener('change', (e) => {
       const file = e.target.files?.[0];
@@ -593,8 +629,17 @@ export class CustomDeviceModal {
         return;
       }
       const reader = new FileReader();
-      reader.onload = (ev) => {
-        if (cdGlbUrl) cdGlbUrl.value = ev.target.result;
+      reader.onload = async (ev) => {
+        const dataUrl = ev.target.result;
+        if (cdGlbUrl) cdGlbUrl.value = dataUrl;
+        try {
+          const ports = await extractGlbCustomPorts(dataUrl, 1.3);
+          this.extractedGlbPorts = Array.isArray(ports) ? ports : [];
+          updatePortBadge(this.extractedGlbPorts);
+        } catch {
+          this.extractedGlbPorts = [];
+          updatePortBadge([]);
+        }
       };
       reader.readAsDataURL(file);
     });
@@ -771,6 +816,10 @@ export class CustomDeviceModal {
     const elevationMeters = parseFloat(this.modalEl.querySelector('#cd-3d-elevation')?.value || '0.5') || 0;
     const mountType = this.modalEl.querySelector('#cd-3d-mount')?.value || 'floor';
 
+    const resolvedPorts = Array.isArray(this.extractedGlbPorts) && this.extractedGlbPorts.length > 0
+      ? this.extractedGlbPorts.map((p) => ({ ...p, local3d: { ...p.local3d } }))
+      : getDefaultDevicePorts(type, model || name, customModelUrl);
+
     // Build custom payload
     const customDeviceData = {
       name,
@@ -782,6 +831,7 @@ export class CustomDeviceModal {
       markerStyle,
       customIcon: this.selectedIcon,
       customImage: this.uploadedImageDataUrl || '',
+      ports: resolvedPorts,
       network: {
         ip: ip,
         vlan: isNaN(vlan) ? 1 : vlan,

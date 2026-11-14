@@ -48,12 +48,12 @@ export class PdfReportGenerator {
     doc.setTextColor(248, 250, 252);
     doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
-    doc.text('NetMap — Laporan Dokumentasi Infrastruktur Jaringan', 14, 13);
+    doc.text('SmartSchool NetMap — Laporan Dokumentasi Infrastruktur Jaringan', 14, 13);
 
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(148, 163, 184);
-    doc.text(`Proyek: ${project.name || 'Campus Network'}   |   Tanggal: ${new Date().toLocaleDateString('id-ID')}   |   Status: Production Ready`, 14, 21);
+    doc.text(`Proyek: ${project.name || 'SmartSchool NetMap'}   |   Tanggal: ${new Date().toLocaleDateString('id-ID')}   |   Status: Production Ready`, 14, 21);
 
     // Summary Statistics Cards
     const totalDevices = devices.length;

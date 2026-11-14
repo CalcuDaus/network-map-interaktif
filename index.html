@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NetMap — Interactive Network Infrastructure Mapper</title>
+  <title>SmartSchool NetMap — Interactive Network Infrastructure Mapper</title>
   <meta name="description" content="Visual interactive network infrastructure mapping and documentation system">
 
   <!-- Typography: Google Font Poppins -->
@@ -72,8 +72,8 @@
             <i data-lucide="network" style="width: 18px; height: 18px;"></i>
           </div>
           <div class="brand-text-group">
-            <span class="brand-name">NetMap</span>
-            <span class="brand-badge">Campus Network</span>
+            <span class="brand-name">SmartSchool</span>
+            <span class="brand-badge">NetMap</span>
           </div>
         </div>
 
@@ -125,35 +125,53 @@
 
         <div class="divider-vertical"></div>
 
-        <!-- Feature Modals Buttons -->
-        <button id="btn-open-topology" class="btn btn-secondary btn-sm"
-          title="Buka Diagram Topologi Jaringan (Fisik & Logis)">
-          <i data-lucide="git-fork" style="width: 14px; height: 14px; color: var(--accent-blue);"></i>
-          <span>Topologi</span>
-        </button>
-
-        <button id="btn-open-ip-vlan" class="btn btn-secondary btn-sm" title="Tabel Dokumentasi IP Address & VLAN">
-          <i data-lucide="file-spreadsheet" style="width: 14px; height: 14px; color: var(--accent-blue);"></i>
-          <span>IP & VLAN</span>
-        </button>
-
-        <button id="btn-open-export" class="btn btn-secondary btn-sm" title="Ekspor Data (JSON, CSV, PNG, PDF)">
-          <i data-lucide="download" style="width: 14px; height: 14px; color: var(--status-online);"></i>
-          <span>Ekspor</span>
-        </button>
-
-        <button id="btn-open-project" class="btn btn-secondary btn-sm" title="Kelola / Buka Proyek Jaringan">
-          <i data-lucide="folder" style="width: 14px; height: 14px; color: var(--status-warning);"></i>
-          <span>Proyek</span>
-        </button>
+        <!-- Feature Modals Dropdown Menu -->
+        <div id="navbar-menu-wrapper" class="navbar-dropdown">
+          <button id="btn-navbar-menu" class="btn btn-secondary btn-sm navbar-dropdown-trigger"
+            title="Menu Fitur (Topologi, IP & VLAN, Ekspor, Proyek)" aria-expanded="false" aria-haspopup="true">
+            <i data-lucide="layout-grid" style="width: 14px; height: 14px; color: var(--accent-blue);"></i>
+            <span>Menu</span>
+            <i data-lucide="chevron-down" style="width: 13px; height: 13px; opacity: 0.7;"></i>
+          </button>
+          <div id="navbar-menu-dropdown" class="navbar-dropdown-panel" role="menu">
+            <button id="btn-open-topology" class="navbar-dropdown-item" role="menuitem"
+              title="Buka Diagram Topologi Jaringan (Fisik & Logis)">
+              <i data-lucide="git-fork" style="width: 14px; height: 14px; color: var(--accent-blue);"></i>
+              <span>Topologi</span>
+            </button>
+            <button id="btn-open-ip-vlan" class="navbar-dropdown-item" role="menuitem"
+              title="Tabel Dokumentasi IP Address & VLAN">
+              <i data-lucide="file-spreadsheet" style="width: 14px; height: 14px; color: var(--accent-blue);"></i>
+              <span>IP & VLAN</span>
+            </button>
+            <button id="btn-open-export" class="navbar-dropdown-item" role="menuitem"
+              title="Ekspor Data (JSON, CSV, PNG, PDF)">
+              <i data-lucide="download" style="width: 14px; height: 14px; color: var(--status-online);"></i>
+              <span>Ekspor</span>
+            </button>
+            <button id="btn-open-project" class="navbar-dropdown-item" role="menuitem"
+              title="Kelola / Buka Proyek Jaringan">
+              <i data-lucide="folder" style="width: 14px; height: 14px; color: var(--status-warning);"></i>
+              <span>Proyek</span>
+            </button>
+          </div>
+        </div>
       </div>
 
-      <!-- Right: Search, Zoom Controls & Panel Toggles -->
+      <!-- Right: Search Icon Dropdown, Zoom Controls & Panel Toggles -->
       <div class="toolbar-section">
-        <!-- Smart Search bar -->
-        <div class="search-box">
-          <i data-lucide="search" style="width: 15px; height: 15px; color: var(--text-muted);"></i>
-          <input type="text" id="global-search-input" placeholder="Cari perangkat / IP / VLAN..." autocomplete="off">
+        <!-- Compact Search Icon + Dropdown Input -->
+        <div id="navbar-search-wrapper" class="navbar-dropdown">
+          <button id="btn-toggle-search" class="btn btn-icon" title="Cari Perangkat / IP / VLAN"
+            aria-expanded="false" aria-haspopup="true">
+            <i data-lucide="search" style="width: 15px; height: 15px;"></i>
+          </button>
+          <div id="navbar-search-dropdown" class="navbar-dropdown-panel navbar-search-panel">
+            <div class="search-box">
+              <i data-lucide="search" style="width: 15px; height: 15px; color: var(--text-muted);"></i>
+              <input type="text" id="global-search-input" placeholder="Cari perangkat / IP / VLAN..." autocomplete="off">
+            </div>
+          </div>
         </div>
 
         <div class="divider-vertical"></div>
@@ -191,6 +209,11 @@
 
         <button id="btn-toggle-right-sidebar" class="btn btn-icon" title="Toggle Panel Properti">
           <i data-lucide="panel-right"></i>
+        </button>
+
+        <!-- Workspace Fullscreen Toggle -->
+        <button id="btn-toggle-fullscreen" class="btn btn-icon" title="Mode Fullscreen Workspace (Esc untuk keluar)">
+          <i data-lucide="maximize-2" style="width: 15px; height: 15px;"></i>
         </button>
       </div>
     </header>
@@ -290,6 +313,12 @@
 
       <!-- Main Map Viewport (Konva Canvas) -->
       <main id="map-viewport">
+        <!-- Floating Exit Fullscreen Button (Visible only in Workspace Fullscreen) -->
+        <button id="btn-exit-workspace-fullscreen" class="workspace-exit-fs-btn" title="Keluar dari Fullscreen Workspace (Esc)">
+          <i data-lucide="minimize-2" style="width: 14px; height: 14px;"></i>
+          <span>Keluar Fullscreen</span>
+        </button>
+
         <!-- Konva Stage Container -->
         <div id="konva-stage-container"></div>
 
@@ -319,6 +348,14 @@
             <button id="btn-3d-tool-move" class="hud-3d-btn" data-tool3d="move" title="Move Objek X/Y (M) — Drag perangkat di atas lantai untuk memindah posisi X & Y">
               <i data-lucide="move" style="width: 13px; height: 13px;"></i>
               <span>Move</span>
+            </button>
+            <button id="btn-3d-tool-box" class="hud-3d-btn" data-tool3d="box" title="Box Select Multi-Perangkat (B) — Drag kotak (atau Ctrl+Drag di Orbit) untuk memilih banyak perangkat 3D">
+              <i data-lucide="box-select" style="width: 13px; height: 13px;"></i>
+              <span>Pilih Box</span>
+            </button>
+            <button id="btn-3d-tool-draw3d" class="hud-3d-btn" data-tool3d="draw3d" title="Buat Objek 3D ala SketchUp (P) — Klik/Drag di lantai untuk buat Tiang CCTV, Rak Server, Box, dll">
+              <i data-lucide="box" style="width: 13px; height: 13px;"></i>
+              <span>Buat 3D</span>
             </button>
           </div>
 
@@ -350,6 +387,17 @@
             </select>
           </label>
 
+          <label class="hud-3d-inline" title="Ukuran diameter kabel 3D (1.0x = otomatis pas dengan ukuran lubang Port)">
+            <span>Kabel</span>
+            <select id="select-3d-cable-size" class="hud-3d-select">
+              <option value="0.6">0.6x Port</option>
+              <option value="1" selected>1.0x Port</option>
+              <option value="1.5">1.5x Port</option>
+              <option value="2.5">2.5x Port</option>
+              <option value="5">5.0x (Tebal)</option>
+            </select>
+          </label>
+
           <button id="btn-3d-explode" class="hud-3d-btn" title="Regangkan perangkat yang bertumpuk agar terlihat semua">
             <i data-lucide="layers" style="width: 13px; height: 13px;"></i>
             <span>Regangkan</span>
@@ -366,9 +414,18 @@
             <i data-lucide="building-2" style="width: 13px; height: 13px;"></i>
             <span>Ruangan 3D</span>
           </button>
+          <button id="btn-3d-objects" class="hud-3d-btn hud-3d-btn-accent" title="3D Object Studio (P) — Buat Tiang CCTV, Rak Server Custom, Tower & Bangun 3D Sederhana">
+            <i data-lucide="boxes" style="width: 13px; height: 13px;"></i>
+            <span>Objek 3D</span>
+          </button>
           <button id="btn-3d-device-models" class="hud-3d-btn hud-3d-btn-accent" title="Pasang Model 3D Kustom (.glb/.gltf) untuk Perangkat">
             <i data-lucide="cpu" style="width: 13px; height: 13px;"></i>
             <span>Model 3D Device</span>
+          </button>
+
+          <button id="btn-3d-exit-fullscreen" class="hud-3d-btn hud-3d-exit-fs-btn" title="Keluar dari Fullscreen Workspace (Esc)">
+            <i data-lucide="minimize-2" style="width: 13px; height: 13px;"></i>
+            <span>Keluar Fullscreen</span>
           </button>
         </div>
 
@@ -383,6 +440,8 @@
           <span><strong>Scroll:</strong> Zoom ke Kursor</span>
           <span>•</span>
           <span><strong>Double-Klik:</strong> Fokus Titik</span>
+          <span>•</span>
+          <span><strong>Multi-Pilih:</strong> Ctrl+Klik / Ctrl+Drag Box</span>
           <span>•</span>
           <span><strong>WASD / QE:</strong> Jalan</span>
         </div>
@@ -425,18 +484,27 @@
         </div>
       </main>
 
-      <!-- Right Sidebar: Properties & Inspection -->
+      <!-- Right Sidebar: Properties & Inspection + Photoshop-Style Device Layers -->
       <aside class="sidebar sidebar-right">
-        <div class="sidebar-header">
-          <span class="sidebar-title">
-            <i data-lucide="sliders" style="width: 15px; height: 15px; color: var(--accent-sky);"></i>
-            <span>Properti & Konfigurasi</span>
-          </span>
+        <div class="sidebar-header sidebar-tabs-header">
+          <div class="sidebar-tab-list" role="tablist">
+            <button id="tab-btn-properties" class="sidebar-tab-btn active" data-right-tab="properties" role="tab" aria-selected="true" title="Properti & Konfigurasi Objek Terpilih">
+              <i data-lucide="sliders" style="width: 14px; height: 14px;"></i>
+              <span>Properti</span>
+            </button>
+            <button id="tab-btn-layers" class="sidebar-tab-btn" data-right-tab="layers" role="tab" aria-selected="false" title="Window Layer Perangkat (Grup Library ala Adobe Photoshop)">
+              <i data-lucide="layers" style="width: 14px; height: 14px;"></i>
+              <span>Layers</span>
+              <span id="sidebar-layers-count-badge" class="sidebar-tab-badge">0</span>
+            </button>
+          </div>
         </div>
 
         <div class="sidebar-content">
-          <!-- Properties Panel Component Container -->
-          <div id="properties-panel-container"></div>
+          <!-- Tab 1: Properties Panel Component Container -->
+          <div id="properties-panel-container" data-right-tab-panel="properties"></div>
+          <!-- Tab 2: Photoshop-Style Device Layers Container -->
+          <div id="device-layers-panel-container" data-right-tab-panel="layers" style="display: none;"></div>
         </div>
       </aside>
 
@@ -482,7 +550,7 @@
         </div>
         <div class="status-item">
           <button id="status-map-scale-btn" class="status-pill-btn" style="background: rgba(42, 124, 19, 0.15); color: var(--accent-green); border: 1px solid rgba(42, 124, 19, 0.35); border-radius: 4px; padding: 2px 8px; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 4px; font-family: var(--font-mono);" title="Klik untuk kalibrasi skala ukuran fisik denah peta">
-            <span id="status-map-scale-text">📐 Skala: 400m (1px = 0.39m)</span>
+            <span id="status-map-scale-text">📐 Skala: 170m (1px = 0.17m)</span>
           </button>
         </div>
         <div class="status-item" style="color: var(--text-muted); font-size: 11px;">
@@ -494,7 +562,7 @@
   </div>
 
   <!-- Application Bootstrap (Bundled for file:// and http:// compatibility) -->
-  <script src="js/bundle.js?v=20261113-statusfix"></script>
+  <script src="js/bundle.js?v=20261114-sketchup3d"></script>
 </body>
 
 </html>

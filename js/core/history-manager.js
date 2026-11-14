@@ -4,6 +4,7 @@
  */
 
 import { eventBus } from './event-bus.js';
+import { stateManager } from './state-manager.js';
 import { debounce } from '../utils/helpers.js';
 
 export class HistoryManager {
@@ -39,7 +40,9 @@ export class HistoryManager {
   captureSnapshot() {
     return {
       devices: JSON.parse(JSON.stringify(this.deviceManager.getAllDevices())),
-      connections: JSON.parse(JSON.stringify(this.cableManager.getAllConnections()))
+      connections: JSON.parse(JSON.stringify(this.cableManager.getAllConnections())),
+      rooms3d: JSON.parse(JSON.stringify(stateManager.getRooms3d())),
+      objects3d: JSON.parse(JSON.stringify(stateManager.getObjects3d()))
     };
   }
 
@@ -69,7 +72,9 @@ export class HistoryManager {
     if (this.undoStack.length > 0) {
       const top = this.undoStack[this.undoStack.length - 1];
       if (JSON.stringify(top.devices) === JSON.stringify(current.devices) &&
-          JSON.stringify(top.connections) === JSON.stringify(current.connections)) {
+          JSON.stringify(top.connections) === JSON.stringify(current.connections) &&
+          JSON.stringify(top.objects3d || []) === JSON.stringify(current.objects3d || []) &&
+          JSON.stringify(top.rooms3d || []) === JSON.stringify(current.rooms3d || [])) {
         return;
       }
     }
@@ -119,6 +124,10 @@ export class HistoryManager {
 
     eventBus.on('connection:deleted', () => {
       handleMutation('Hapus Kabel');
+    });
+
+    eventBus.on('object3d:changed', () => {
+      handleMutation('Ubah Objek 3D');
     });
   }
 
@@ -190,6 +199,14 @@ export class HistoryManager {
     // Deselect any selected entity
     this.deviceManager.deselectDevice();
     this.cableManager.deselectConnection();
+    stateManager.deselectObject3d?.();
+
+    if (Array.isArray(snapshot.rooms3d)) {
+      stateManager.setRooms3d(JSON.parse(JSON.stringify(snapshot.rooms3d)));
+    }
+    if (Array.isArray(snapshot.objects3d)) {
+      stateManager.setObjects3d(JSON.parse(JSON.stringify(snapshot.objects3d)));
+    }
 
     // 1. Restore Devices:
     // Remove devices not in snapshot

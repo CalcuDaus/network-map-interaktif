@@ -7,6 +7,7 @@
 
 import { DEVICE_CATEGORIES, STANDARD_DEVICE_CATALOG, MIKROTIK_CATALOG, RUIJIE_CATALOG, TPLINK_CATALOG } from '../devices/device-library.js';
 import { getDeviceIconSvg, getDefaultIconForType } from '../devices/device-icon-factory.js';
+import { getBuiltinGlbCustomTemplates } from '../devices/device-schema.js';
 import { eventBus } from '../core/event-bus.js';
 import { stateManager } from '../core/state-manager.js';
 
@@ -29,17 +30,42 @@ export class DevicePalette {
   }
 
   /**
-   * Load saved custom device templates from localStorage
+   * Load saved custom device templates from localStorage and ensure user .GLB models
+   * are registered in the Perangkat Kustom category.
    * @returns {Object[]}
    */
   loadCustomTemplates() {
+    let saved = [];
+    let dismissed = [];
     try {
       const raw = localStorage.getItem('netmap_custom_templates');
-      return raw ? JSON.parse(raw) : [];
+      saved = raw ? JSON.parse(raw) : [];
+      const rawDismissed = localStorage.getItem('netmap_dismissed_builtin_glbs');
+      dismissed = rawDismissed ? JSON.parse(rawDismissed) : [];
     } catch (err) {
       console.warn('[DevicePalette] Failed to load custom templates from localStorage:', err);
-      return [];
     }
+
+    const dismissedSet = new Set(Array.isArray(dismissed) ? dismissed : []);
+    const builtinGlbs = getBuiltinGlbCustomTemplates();
+    const builtinMap = new Map(builtinGlbs.map((b) => [b.builtinGlbId, b]));
+
+    // Refresh port definitions on already-seeded builtin GLB entries
+    const merged = (Array.isArray(saved) ? saved : []).map((item) => {
+      if (item.builtinGlbId && builtinMap.has(item.builtinGlbId)) {
+        return { ...builtinMap.get(item.builtinGlbId) };
+      }
+      return item;
+    });
+
+    const existingIds = new Set(merged.map((t) => t.builtinGlbId || t.id));
+    builtinGlbs.forEach((entry) => {
+      if (!existingIds.has(entry.builtinGlbId) && !dismissedSet.has(entry.builtinGlbId)) {
+        merged.push(entry);
+      }
+    });
+
+    return merged;
   }
 
   /**
@@ -73,6 +99,8 @@ export class DevicePalette {
       customImage: data.customImage || '',
       network: data.network || {},
       wirelessCoverage: data.wirelessCoverage || null,
+      spatial3d: data.spatial3d ? { ...data.spatial3d } : null,
+      ports: Array.isArray(data.ports) ? data.ports.map((p) => ({ ...p, local3d: p.local3d ? { ...p.local3d } : undefined })) : null,
       createdAt: new Date().toISOString()
     };
 
@@ -88,6 +116,17 @@ export class DevicePalette {
    * @param {string} templateId 
    */
   removeCustomTemplate(templateId) {
+    const target = this.customTemplates.find((t) => t.id === templateId);
+    if (target?.builtinGlbId) {
+      try {
+        const raw = localStorage.getItem('netmap_dismissed_builtin_glbs');
+        const arr = raw ? JSON.parse(raw) : [];
+        if (!arr.includes(target.builtinGlbId)) {
+          arr.push(target.builtinGlbId);
+          localStorage.setItem('netmap_dismissed_builtin_glbs', JSON.stringify(arr));
+        }
+      } catch (e) { /* ignore */ }
+    }
     this.customTemplates = this.customTemplates.filter((t) => t.id !== templateId);
     if (this.activeCustomTemplateToPlace?.id === templateId) {
       this.activeCustomTemplateToPlace = null;
@@ -251,8 +290,9 @@ export class DevicePalette {
               <div class="palette-item-name" title="${escapeHtml(tmpl.name)}">
                 ${escapeHtml(tmpl.name)}
               </div>
-              <div class="palette-item-sub" title="${escapeHtml(tmpl.brand || '')} ${escapeHtml(tmpl.model || '')}">
-                ${tmpl.brand ? `${escapeHtml(tmpl.brand)} ${escapeHtml(tmpl.model || '')}` : (escapeHtml(tmpl.model) || 'Custom')}
+              <div class="palette-item-sub" style="display: flex; align-items: center; justify-content: space-between; gap: 4px;" title="${escapeHtml(tmpl.brand || '')} ${escapeHtml(tmpl.model || '')}">
+                <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${tmpl.brand ? `${escapeHtml(tmpl.brand)} ${escapeHtml(tmpl.model || '')}` : (escapeHtml(tmpl.model) || 'Custom')}</span>
+                ${tmpl.spatial3d?.customModelUrl ? `<span style="font-size: 8.5px; font-weight: 700; color: var(--accent-blue, #2a7c13); background: rgba(42,124,19,0.12); padding: 0 4px; border-radius: 3px; flex-shrink: 0;">3D .GLB</span>` : ''}
               </div>
             </div>
           `;

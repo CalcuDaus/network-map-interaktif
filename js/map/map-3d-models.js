@@ -6,9 +6,20 @@
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { BUILTIN_GLB_BASE64 } from './builtin-glb-data.js';
 
 const gltfLoader = new GLTFLoader();
 const glbCache = new Map(); // url -> Promise<THREE.Group>
+
+function base64ToArrayBuffer(base64) {
+  const binary = atob(base64);
+  const len = binary.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
 
 // Shared geometry/material helpers to minimize GPU allocations
 function makeMat(color, opts = {}) {
@@ -43,6 +54,29 @@ export function loadCustomGlbModel(url, targetSize = 1.2) {
 
   if (!glbCache.has(url)) {
     const promise = new Promise((resolve, reject) => {
+      const embeddedB64 = BUILTIN_GLB_BASE64[url];
+      if (embeddedB64) {
+        try {
+          const buffer = base64ToArrayBuffer(embeddedB64);
+          gltfLoader.parse(
+            buffer,
+            '',
+            (gltf) => {
+              const root = gltf.scene || (gltf.scenes && gltf.scenes[0]);
+              if (!root) {
+                reject(new Error('GLB does not contain a scene'));
+                return;
+              }
+              resolve(root);
+            },
+            (err) => reject(err)
+          );
+          return;
+        } catch (err) {
+          console.warn('[Map3DModels] Embedded GLB parse failed, falling back to fetch:', err);
+        }
+      }
+
       gltfLoader.load(
         url,
         (gltf) => {
@@ -83,8 +117,195 @@ export function loadCustomGlbModel(url, targetSize = 1.2) {
 
     const wrapper = new THREE.Group();
     wrapper.add(clone);
+    wrapper.updateMatrixWorld(true);
+    wrapper.userData.extractedPorts = extractPortsFromGlbWrapper(wrapper);
     return wrapper;
   });
+}
+
+/**
+ * Parse a GLB node name such as "PORT_ether1_rj45_1G" or "PORT_Gi0/1_rj45_1G"
+ * @param {string} rawName
+ * @param {Object} [userData]
+ * @returns {{name: string, type: string, speed: string}|null}
+ */
+export function parseGlbPortNodeName(rawName = '', userData = {}) {
+  if (userData && typeof userData.portName === 'string' && userData.portName.trim()) {
+    return {
+      name: userData.portName.trim(),
+      type: (userData.portType || 'rj45').toLowerCase(),
+      speed: userData.portSpeed || '1G'
+    };
+  }
+  const sourceName = (userData && typeof userData.name === 'string' && userData.name.trim())
+    ? userData.name.trim()
+    : String(rawName).trim();
+  const match = sourceName.match(/^(?:PORT|SOCKET)[_\-\s:]+(.+)$/i);
+  if (!match) return null;
+
+  const parts = match[1].split('_').filter(Boolean);
+  let speed = '1G';
+  let type = 'rj45';
+
+  if (parts.length >= 2 && /^(?:\d+(?:\.\d+)?[MG])$/i.test(parts[parts.length - 1])) {
+    speed = parts.pop().toUpperCase();
+  }
+  if (parts.length >= 2) {
+    const cand = parts[parts.length - 1].toLowerCase();
+    if (['rj45', 'sfp+', 'sfp', 'fiber', 'fo', 'coax', 'wireless', 'wlan'].includes(cand)) {
+      parts.pop();
+      type = cand === 'fo' ? 'fiber' : cand === 'wlan' ? 'wireless' : cand;
+    }
+  }
+  let name = parts.join('_') || 'port1';
+  // Restore slash if Three.js PropertyBinding.sanitizeNodeName stripped "/" from Gi0/1 -> Gi01
+  if (/^(Gi|Fa|Te|Fo)(\d)(\d+)$/i.test(name)) {
+    name = name.replace(/^(Gi|Fa|Te|Fo)(\d)(\d+)$/i, '$1$2/$3');
+  }
+  if (/sfp/i.test(name) && type === 'rj45') {
+    type = 'sfp+';
+    if (speed === '1G') speed = '10G';
+  }
+  return { name, type, speed };
+}
+
+/**
+ * Synchronously extract all embedded PORT_* / SOCKET_* nodes from a normalized GLB wrapper group.
+ * @param {THREE.Object3D} wrapper
+ * @returns {Array<{name: string, type: string, speed: string, local3d: {x: number, y: number, z: number}}>}
+ */
+export function extractPortsFromGlbWrapper(wrapper) {
+  if (!wrapper) return [];
+  wrapper.updateMatrixWorld(true);
+
+  const ports = [];
+  const seen = new Set();
+
+  wrapper.traverse((obj) => {
+    const parsed = parseGlbPortNodeName(obj.name, obj.userData);
+    if (!parsed || seen.has(parsed.name)) return;
+    seen.add(parsed.name);
+
+    const worldPos = new THREE.Vector3();
+    obj.getWorldPosition(worldPos);
+    const localPos = wrapper.worldToLocal(worldPos.clone());
+
+    ports.push({
+      name: parsed.name,
+      type: parsed.type,
+      speed: parsed.speed,
+      local3d: {
+        x: Number(localPos.x.toFixed(4)),
+        y: Number(localPos.y.toFixed(4)),
+        z: Number(localPos.z.toFixed(4))
+      }
+    });
+  });
+
+  return ports;
+}
+
+/**
+ * Inspect a custom .glb/.gltf model and extract any embedded PORT_* / SOCKET_* nodes
+ * along with the normalized 3D bounding box of the model.
+ * @param {string} url
+ * @param {number} [targetSize=1.3]
+ * @returns {Promise<{ports: Array, bounds: {width: number, height: number, depth: number, frontZ: number, midY: number}}>}
+ */
+export async function extractGlbCustomPorts(url, targetSize = 1.3) {
+  const wrapper = await loadCustomGlbModel(url, targetSize);
+  wrapper.updateMatrixWorld(true);
+
+  const box = new THREE.Box3().setFromObject(wrapper);
+  const size = new THREE.Vector3();
+  box.getSize(size);
+  const bounds = {
+    width: Number((size.x || 1).toFixed(3)),
+    height: Number((size.y || 0.25).toFixed(3)),
+    depth: Number((size.z || 0.7).toFixed(3)),
+    frontZ: Number((box.max.z || 0.35).toFixed(3)),
+    midY: Number(((box.min.y + box.max.y) * 0.5 || 0.12).toFixed(3))
+  };
+
+  const ports = Array.isArray(wrapper.userData?.extractedPorts)
+    ? wrapper.userData.extractedPorts
+    : extractPortsFromGlbWrapper(wrapper);
+
+  return { ports, bounds };
+}
+
+/**
+ * Create a 3D group of physical port sockets & status LEDs at their local3d coordinates.
+ * When `isCustomGlb` is true, the .GLB model already has sculpted 3D port cavities and gold pins,
+ * so we do NOT draw bulky procedural socket boxes over unconnected ports; we only render a compact,
+ * flush RJ45/SFP connector boot + micro link LED inside connected ports.
+ * @param {Array} ports
+ * @param {Map<string, {status: string, cableId: string}>} [portStatusMap]
+ * @param {boolean} [isCustomGlb=false]
+ * @returns {THREE.Group}
+ */
+export function create3DPortsSubGroup(ports = [], portStatusMap = new Map(), isCustomGlb = false) {
+  const group = new THREE.Group();
+  group.name = 'DevicePorts3DGroup';
+  if (!Array.isArray(ports) || ports.length === 0) return group;
+
+  const socketGeo = isCustomGlb
+    ? new THREE.BoxGeometry(0.018, 0.014, 0.020)
+    : new THREE.BoxGeometry(0.052, 0.042, 0.032);
+  const ledGeo = isCustomGlb
+    ? new THREE.SphereGeometry(0.0045, 8, 8)
+    : new THREE.SphereGeometry(0.014, 8, 8);
+
+  ports.forEach((p) => {
+    const lx = typeof p.local3d?.x === 'number' ? p.local3d.x : 0;
+    const ly = typeof p.local3d?.y === 'number' ? p.local3d.y : 0.12;
+    const lz = typeof p.local3d?.z === 'number' ? p.local3d.z : 0.36;
+    const zSign = lz < 0 ? -1 : 1;
+
+    const linkState = portStatusMap.get(p.name);
+    const isConnected = Boolean(linkState);
+    if (isCustomGlb && !isConnected) {
+      // Leave the .GLB model's own sculpted RJ45/SFP port cavity completely clean when unplugged
+      return;
+    }
+
+    const isSfpOrFiber = p.type === 'sfp+' || p.type === 'sfp' || p.type === 'fiber';
+
+    const socketColor = isConnected
+      ? (isSfpOrFiber ? 0x0284c7 : 0x1e293b)
+      : (isSfpOrFiber ? 0x0f172a : 0x334155);
+    const socketMat = new THREE.MeshStandardMaterial({
+      color: socketColor,
+      roughness: 0.4,
+      metalness: 0.45
+    });
+    const socketMesh = new THREE.Mesh(socketGeo, socketMat);
+    socketMesh.position.set(lx, ly, lz);
+    socketMesh.userData.portName = p.name;
+    group.add(socketMesh);
+
+    let ledColor = 0x475569; // unplugged
+    if (isConnected) {
+      if (linkState.status === 'damaged' || linkState.status === 'inactive') {
+        ledColor = 0xef4444;
+      } else if (linkState.status === 'maintenance') {
+        ledColor = 0xf59e0b;
+      } else {
+        ledColor = 0x22c55e;
+      }
+    }
+    const ledMat = new THREE.MeshBasicMaterial({ color: ledColor });
+    const ledMesh = new THREE.Mesh(ledGeo, ledMat);
+    if (isCustomGlb) {
+      ledMesh.position.set(lx, ly + 0.010, lz + zSign * 0.004);
+    } else {
+      ledMesh.position.set(lx, ly + 0.028, lz + zSign * 0.012);
+    }
+    ledMesh.userData.portName = p.name;
+    group.add(ledMesh);
+  });
+
+  return group;
 }
 
 /**
@@ -412,6 +633,406 @@ export function create3DRoomGroup(room, normToWorldFn) {
   labelSprite.position.set(0, h + 1.4, 0);
   labelSprite.scale.set(6.4, 1.85, 1);
   group.add(labelSprite);
+
+  return group;
+}
+
+export const OBJECT3D_PRESETS = {
+  pole: {
+    shape: 'pole',
+    name: 'Tiang CCTV',
+    widthMeters: 0.35,
+    depthMeters: 0.35,
+    heightMeters: 4.5,
+    elevationMeters: 0,
+    rotationY: 0,
+    color: '#64748b',
+    accentColor: '#2a7c13',
+    opacity: 1,
+    showEdges: true,
+    hasArm: true,
+    showLabel: true
+  },
+  'server-rack': {
+    shape: 'server-rack',
+    name: 'Rak Server Custom',
+    widthMeters: 1.2,
+    depthMeters: 1.2,
+    heightMeters: 2.4,
+    elevationMeters: 0,
+    rotationY: 0,
+    color: '#1e293b',
+    accentColor: '#2a7c13',
+    opacity: 0.45,
+    showEdges: true,
+    rackUnits: 42,
+    showLabel: true
+  },
+  'tower-lattice': {
+    shape: 'tower-lattice',
+    name: 'Tower Jaringan',
+    widthMeters: 1.8,
+    depthMeters: 1.8,
+    heightMeters: 12.0,
+    elevationMeters: 0,
+    rotationY: 0,
+    color: '#94a3b8',
+    accentColor: '#ef4444',
+    opacity: 1,
+    showEdges: true,
+    showLabel: true
+  },
+  box: {
+    shape: 'box',
+    name: 'Balok 3D',
+    widthMeters: 2.0,
+    depthMeters: 2.0,
+    heightMeters: 2.5,
+    elevationMeters: 0,
+    rotationY: 0,
+    color: '#cbd5e1',
+    accentColor: '#2a7c13',
+    opacity: 0.92,
+    showEdges: true,
+    showLabel: false
+  },
+  cylinder: {
+    shape: 'cylinder',
+    name: 'Pilar Silinder',
+    widthMeters: 1.0,
+    depthMeters: 1.0,
+    heightMeters: 3.5,
+    elevationMeters: 0,
+    rotationY: 0,
+    color: '#94a3b8',
+    accentColor: '#2a7c13',
+    opacity: 0.95,
+    showEdges: true,
+    showLabel: false
+  },
+  wall: {
+    shape: 'wall',
+    name: 'Dinding 3D',
+    widthMeters: 6.0,
+    depthMeters: 0.3,
+    heightMeters: 3.2,
+    elevationMeters: 0,
+    rotationY: 0,
+    color: '#e2e8f0',
+    accentColor: '#475569',
+    opacity: 0.85,
+    showEdges: true,
+    showLabel: false
+  },
+  table: {
+    shape: 'table',
+    name: 'Meja NOC',
+    widthMeters: 2.2,
+    depthMeters: 1.1,
+    heightMeters: 0.9,
+    elevationMeters: 0,
+    rotationY: 0,
+    color: '#78350f',
+    accentColor: '#334155',
+    opacity: 1,
+    showEdges: true,
+    showLabel: false
+  },
+  cabinet: {
+    shape: 'cabinet',
+    name: 'Box Panel ODP',
+    widthMeters: 0.8,
+    depthMeters: 0.5,
+    heightMeters: 1.4,
+    elevationMeters: 0,
+    rotationY: 0,
+    color: '#475569',
+    accentColor: '#22c55e',
+    opacity: 1,
+    showEdges: true,
+    showLabel: true
+  }
+};
+
+function attachSketchupEdges(mesh, edgeColor, showEdges = true) {
+  if (!showEdges || !mesh?.geometry) return;
+  const edges = new THREE.EdgesGeometry(mesh.geometry);
+  const lineMat = new THREE.LineBasicMaterial({ color: edgeColor, transparent: true, opacity: 0.9 });
+  const segs = new THREE.LineSegments(edges, lineMat);
+  mesh.add(segs);
+}
+
+/**
+ * Create a customizable SketchUp-style procedural 3D Object (CCTV Pole, Custom Server Rack, Tower, Box, etc.)
+ * @param {Object} obj
+ * @param {Function} normToWorldFn - (normX, normY) => { x, z }
+ * @param {boolean} [isSelected=false]
+ * @returns {THREE.Group}
+ */
+export function createCustomObject3DGroup(obj, normToWorldFn, isSelected = false) {
+  const group = new THREE.Group();
+  const pos = normToWorldFn ? normToWorldFn(obj.x ?? 0.5, obj.y ?? 0.5) : { x: 0, z: 0 };
+  const elev = Number(obj.elevationMeters) || 0;
+  group.position.set(pos.x, elev, pos.z);
+  group.rotation.y = ((Number(obj.rotationY) || 0) * Math.PI) / 180;
+
+  const shape = obj.shape || 'box';
+  const w = Math.max(0.15, Number(obj.widthMeters) || 1);
+  const d = Math.max(0.15, Number(obj.depthMeters) || 1);
+  const h = Math.max(0.15, Number(obj.heightMeters) || 2);
+  const opacity = typeof obj.opacity === 'number' ? Math.max(0.05, Math.min(1, obj.opacity)) : 1;
+  const isTransparent = opacity < 0.99;
+  const showEdges = obj.showEdges !== false;
+
+  const baseColor = obj.color || '#94a3b8';
+  const accentColor = obj.accentColor || '#2a7c13';
+  const edgeColor = isSelected ? 0xfacc15 : accentColor;
+
+  const mainMat = makeMat(baseColor, {
+    roughness: 0.42,
+    metalness: 0.35,
+    transparent: isTransparent,
+    opacity
+  });
+  const frameMat = makeMat(baseColor, { roughness: 0.35, metalness: 0.55 });
+  const accentMat = makeMat(accentColor, { roughness: 0.3, metalness: 0.45 });
+
+  if (shape === 'pole') {
+    const baseH = Math.min(0.4, h * 0.15);
+    const pedestal = addBox(group, w * 1.4, baseH, w * 1.4, 0, baseH / 2, 0, accentMat);
+    attachSketchupEdges(pedestal, edgeColor, showEdges);
+
+    const shaftGeo = new THREE.CylinderGeometry(w * 0.28, w * 0.32, h, 18);
+    const shaft = new THREE.Mesh(shaftGeo, mainMat);
+    shaft.position.y = h / 2;
+    shaft.castShadow = true;
+    shaft.receiveShadow = true;
+    group.add(shaft);
+    attachSketchupEdges(shaft, edgeColor, showEdges);
+
+    if (obj.hasArm !== false) {
+      const armLen = Math.max(0.5, d * 1.2);
+      const armThick = Math.max(0.06, w * 0.2);
+      const arm = addBox(group, armThick, armThick, armLen, 0, h - 0.15, armLen / 2, frameMat);
+      attachSketchupEdges(arm, edgeColor, showEdges);
+      const plate = addBox(group, armThick * 2.2, armThick * 0.7, armThick * 2.2, 0, h - 0.08, armLen, accentMat);
+      attachSketchupEdges(plate, edgeColor, showEdges);
+    }
+  } else if (shape === 'server-rack') {
+    const postT = Math.max(0.04, Math.min(0.1, Math.min(w, d) * 0.08));
+    const offX = Math.max(0.05, w / 2 - postT / 2);
+    const offZ = Math.max(0.05, d / 2 - postT / 2);
+
+    [
+      [-offX, -offZ],
+      [offX, -offZ],
+      [-offX, offZ],
+      [offX, offZ]
+    ].forEach(([px, pz]) => {
+      const post = addBox(group, postT, h, postT, px, h / 2, pz, frameMat);
+      attachSketchupEdges(post, edgeColor, showEdges);
+    });
+
+    // Top and bottom frame plates
+    const topPlate = addBox(group, w, postT, d, 0, h - postT / 2, 0, frameMat);
+    const botPlate = addBox(group, w, postT, d, 0, postT / 2, 0, frameMat);
+    attachSketchupEdges(topPlate, edgeColor, showEdges);
+    attachSketchupEdges(botPlate, edgeColor, showEdges);
+
+    // Horizontal shelves spaced every ~0.45m inside rack
+    const shelfMat = makeMat(accentColor, { roughness: 0.4, metalness: 0.5, transparent: true, opacity: 0.75 });
+    for (let sy = 0.45; sy < h - 0.25; sy += 0.45) {
+      addBox(group, Math.max(0.08, w - postT * 2), 0.025, Math.max(0.08, d - postT * 2), 0, sy, 0, shelfMat);
+    }
+
+    // Translucent front & side enclosure panels
+    const panelMat = makeMat(baseColor, {
+      roughness: 0.18,
+      metalness: 0.2,
+      transparent: true,
+      opacity: Math.min(0.75, opacity)
+    });
+    const frontPanel = addBox(group, Math.max(0.08, w - postT * 2), Math.max(0.1, h - postT * 2), 0.02, 0, h / 2, offZ, panelMat);
+    const leftPanel = addBox(group, 0.02, Math.max(0.1, h - postT * 2), Math.max(0.08, d - postT * 2), -offX, h / 2, 0, panelMat);
+    const rightPanel = addBox(group, 0.02, Math.max(0.1, h - postT * 2), Math.max(0.08, d - postT * 2), offX, h / 2, 0, panelMat);
+    attachSketchupEdges(frontPanel, edgeColor, showEdges);
+    attachSketchupEdges(leftPanel, edgeColor, showEdges);
+    attachSketchupEdges(rightPanel, edgeColor, showEdges);
+
+    // Top accent status bar
+    addBox(group, Math.max(0.1, w * 0.5), 0.04, 0.04, 0, h - 0.02, offZ + 0.02, accentMat);
+  } else if (shape === 'tower-lattice') {
+    const legR = Math.max(0.035, Math.min(w, d) * 0.045);
+    const botOffX = w / 2 - legR;
+    const botOffZ = d / 2 - legR;
+    const topScale = 0.58;
+    const topOffX = botOffX * topScale;
+    const topOffZ = botOffZ * topScale;
+
+    const addStrut = (p1, p2, radius, mat) => {
+      const dir = new THREE.Vector3().subVectors(p2, p1);
+      const len = dir.length();
+      if (len < 0.01) return;
+      const geo = new THREE.CylinderGeometry(radius, radius, len, 8);
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.copy(p1).addScaledVector(dir, 0.5);
+      mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+      mesh.castShadow = true;
+      group.add(mesh);
+    };
+
+    const cornersBot = [
+      new THREE.Vector3(-botOffX, 0, -botOffZ),
+      new THREE.Vector3(botOffX, 0, -botOffZ),
+      new THREE.Vector3(botOffX, 0, botOffZ),
+      new THREE.Vector3(-botOffX, 0, botOffZ)
+    ];
+    const cornersTop = [
+      new THREE.Vector3(-topOffX, h, -topOffZ),
+      new THREE.Vector3(topOffX, h, -topOffZ),
+      new THREE.Vector3(topOffX, h, topOffZ),
+      new THREE.Vector3(-topOffX, h, topOffZ)
+    ];
+
+    // 4 inclined main legs
+    for (let i = 0; i < 4; i++) {
+      addStrut(cornersBot[i], cornersTop[i], legR, mainMat);
+    }
+
+    // Horizontal & X-diagonal lattice bracing every 1.5m
+    const segments = Math.max(2, Math.round(h / 1.5));
+    const lerpCorner = (idx, t) => new THREE.Vector3().lerpVectors(cornersBot[idx], cornersTop[idx], t);
+    for (let s = 0; s < segments; s++) {
+      const t0 = s / segments;
+      const t1 = (s + 1) / segments;
+      for (let i = 0; i < 4; i++) {
+        const nextI = (i + 1) % 4;
+        const a0 = lerpCorner(i, t0);
+        const b0 = lerpCorner(nextI, t0);
+        const a1 = lerpCorner(i, t1);
+        const b1 = lerpCorner(nextI, t1);
+        addStrut(a1, b1, legR * 0.65, mainMat);
+        addStrut(a0, b1, legR * 0.45, frameMat);
+        addStrut(b0, a1, legR * 0.45, frameMat);
+      }
+    }
+
+    // Top platform + warning beacon cap
+    const plat = addBox(group, w * 0.68, 0.08, d * 0.68, 0, h, 0, frameMat);
+    attachSketchupEdges(plat, edgeColor, showEdges);
+    const beacon = new THREE.Mesh(
+      new THREE.SphereGeometry(Math.max(0.08, Math.min(w, d) * 0.08), 12, 12),
+      makeMat(accentColor, { emissive: accentColor, emissiveIntensity: 0.7 })
+    );
+    beacon.position.y = h + 0.14;
+    group.add(beacon);
+  } else if (shape === 'cylinder') {
+    const cylGeo = new THREE.CylinderGeometry(w / 2, d / 2, h, 28);
+    const cyl = new THREE.Mesh(cylGeo, mainMat);
+    cyl.position.y = h / 2;
+    cyl.castShadow = true;
+    cyl.receiveShadow = true;
+    group.add(cyl);
+    attachSketchupEdges(cyl, edgeColor, showEdges);
+  } else if (shape === 'table') {
+    const slabH = Math.min(0.1, h * 0.18);
+    const top = addBox(group, w, slabH, d, 0, h - slabH / 2, 0, mainMat);
+    attachSketchupEdges(top, edgeColor, showEdges);
+
+    const legW = Math.max(0.05, Math.min(0.12, Math.min(w, d) * 0.08));
+    const legH = Math.max(0.05, h - slabH);
+    const offX = Math.max(0.04, w / 2 - legW / 2 - 0.04);
+    const offZ = Math.max(0.04, d / 2 - legW / 2 - 0.04);
+    [
+      [-offX, -offZ],
+      [offX, -offZ],
+      [-offX, offZ],
+      [offX, offZ]
+    ].forEach(([lx, lz]) => {
+      const leg = addBox(group, legW, legH, legW, lx, legH / 2, lz, accentMat);
+      attachSketchupEdges(leg, edgeColor, showEdges);
+    });
+  } else if (shape === 'cabinet') {
+    const pedH = Math.min(0.14, h * 0.12);
+    const ped = addBox(group, w * 0.9, pedH, d * 0.9, 0, pedH / 2, 0, accentMat);
+    const bodyH = Math.max(0.1, h - pedH);
+    const cab = addBox(group, w, bodyH, d, 0, pedH + bodyH / 2, 0, mainMat);
+    const seam = addBox(group, w * 0.86, bodyH * 0.84, 0.02, 0, pedH + bodyH / 2, d / 2 + 0.005, accentMat);
+    attachSketchupEdges(ped, edgeColor, showEdges);
+    attachSketchupEdges(cab, edgeColor, showEdges);
+    attachSketchupEdges(seam, edgeColor, showEdges);
+  } else {
+    // 'box' or 'wall'
+    const box = addBox(group, w, h, d, 0, h / 2, 0, mainMat);
+    attachSketchupEdges(box, edgeColor, showEdges);
+    if (shape === 'wall') {
+      const coping = addBox(group, w + 0.04, 0.06, d + 0.04, 0, h, 0, accentMat);
+      attachSketchupEdges(coping, edgeColor, showEdges);
+    }
+  }
+
+  // Tag all geometry descendants before appending interactive gizmos
+  group.traverse((child) => {
+    child.userData.object3dId = obj.id;
+  });
+
+  if (isSelected) {
+    // Base selection halo
+    const ringInner = Math.max(0.45, Math.hypot(w, d) * 0.54);
+    const selRing = new THREE.Mesh(
+      new THREE.RingGeometry(ringInner, ringInner + 0.16, 32),
+      new THREE.MeshBasicMaterial({ color: 0xfacc15, side: THREE.DoubleSide })
+    );
+    selRing.rotation.x = -Math.PI / 2;
+    selRing.position.y = 0.03;
+    selRing.userData.object3dId = obj.id;
+    selRing.raycast = () => {};
+    group.add(selRing);
+
+    // SketchUp Push/Pull Top Extrude Gizmo (blue handle above object)
+    const gizmoGroup = new THREE.Group();
+    gizmoGroup.position.set(0, h + 0.22, 0);
+    const handleMat = makeMat(0x38bdf8, {
+      emissive: 0x0284c7,
+      emissiveIntensity: 0.55,
+      roughness: 0.2
+    });
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.3, 14), handleMat);
+    cone.position.y = 0.12;
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.08, 20), handleMat);
+    disc.position.y = -0.06;
+    [cone, disc].forEach((m) => {
+      m.userData.object3dId = obj.id;
+      m.userData.gizmoType = 'pushpull';
+      gizmoGroup.add(m);
+    });
+    group.add(gizmoGroup);
+
+    // SketchUp Corner Scale Gizmo (yellow handle at corner footprint)
+    const cornerHandle = new THREE.Mesh(
+      new THREE.BoxGeometry(0.24, 0.24, 0.24),
+      makeMat(0xfacc15, { emissive: 0xca8a04, emissiveIntensity: 0.5, roughness: 0.2 })
+    );
+    cornerHandle.position.set(w / 2 + 0.14, 0.14, d / 2 + 0.14);
+    cornerHandle.userData.object3dId = obj.id;
+    cornerHandle.userData.gizmoType = 'scale';
+    group.add(cornerHandle);
+  }
+
+  if (obj.showLabel && typeof document !== 'undefined') {
+    const labelSprite = create3DLabelSprite(
+      {
+        name: obj.name || 'Objek 3D',
+        network: { ip: `${w.toFixed(1)}×${d.toFixed(1)}×${h.toFixed(1)}m` },
+        status: 'online'
+      },
+      elev + h
+    );
+    labelSprite.position.set(0, h + 0.9, 0);
+    labelSprite.scale.set(4.8, 1.4, 1);
+    labelSprite.userData.object3dId = obj.id;
+    group.add(labelSprite);
+  }
 
   return group;
 }

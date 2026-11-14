@@ -16,20 +16,24 @@ export class DeviceRenderer {
    * @param {Konva.Layer} [options.deviceLayer]
    * @param {Function} options.onSelect
    * @param {Function} options.onMove
+   * @param {Function} [options.onGroupMove]
    * @param {Function} [options.onRadiusChange]
    * @param {Function} [options.onContextMenu]
    */
-  constructor({ naturalWidth = 1024, naturalHeight = 1024, deviceLayer = null, onSelect, onMove, onRadiusChange = null, onContextMenu = null }) {
+  constructor({ naturalWidth = 1024, naturalHeight = 1024, deviceLayer = null, onSelect, onMove, onGroupMove = null, onRadiusChange = null, onContextMenu = null }) {
     this.naturalWidth = naturalWidth;
     this.naturalHeight = naturalHeight;
     this.deviceLayer = deviceLayer;
     this.onSelect = onSelect;
     this.onMove = onMove;
+    this.onGroupMove = onGroupMove;
     this.onRadiusChange = onRadiusChange;
     this.onContextMenu = onContextMenu;
 
     this.selectedDeviceId = null;
+    this.selectedDeviceIds = new Set();
     this.markerMap = new Map(); // deviceId -> Konva.Group
+    this._groupDragState = null;
 
     // Wireless RF coverage zone renderer
     this.coverageRenderer = new WirelessCoverageRenderer({
@@ -86,7 +90,7 @@ export class DeviceRenderer {
    * @returns {Konva.Group}
    */
   createDeviceGroup(device, x, y) {
-    const isSelected = this.selectedDeviceId === device.id;
+    const isSelected = this.selectedDeviceIds.has(device.id) || this.selectedDeviceId === device.id;
     const cat = DEVICE_CATEGORIES[device.category] || DEVICE_CATEGORIES.core;
     const statusDef = DEVICE_STATUSES[device.status] || DEVICE_STATUSES.unknown;
     const def = getDeviceDefByType(device.type);
@@ -96,7 +100,8 @@ export class DeviceRenderer {
       name: 'device-marker',
       x: x,
       y: y,
-      draggable: true
+      visible: device.layerVisible !== false,
+      draggable: !device.layerLocked
     });
 
     // Custom data reference on node
@@ -224,11 +229,16 @@ export class DeviceRenderer {
 
     // --- Interaction Events ---
 
-    // Click / Tap to Select
+    // Click / Tap to Select (supports Ctrl/Cmd toggle & Shift additive)
     group.on('click tap', (e) => {
       e.cancelBubble = true; // Stop event bubbling to stage
+      if (Date.now() - (group._lastDragEndTime || 0) < 120) return;
+      const evt = e.evt || {};
       if (this.onSelect) {
-        this.onSelect(device.id);
+        this.onSelect(device.id, {
+          toggle: Boolean(evt.ctrlKey || evt.metaKey),
+          additive: Boolean(evt.shiftKey)
+        });
       }
     });
 
@@ -257,13 +267,42 @@ export class DeviceRenderer {
       this.deviceLayer?.batchDraw();
     });
 
-    // Dragging events
+    // Dragging events (supports group move when multiple devices are selected)
     group.on('dragstart', (e) => {
       e.cancelBubble = true;
       group.moveToTop();
+      const evt = e.evt || {};
+      const isAlreadyInMulti = this.selectedDeviceIds.size > 1 && this.selectedDeviceIds.has(device.id);
       if (this.onSelect) {
-        this.onSelect(device.id);
+        this.onSelect(device.id, {
+          toggle: false,
+          additive: Boolean(evt.shiftKey),
+          preserveMultiOnDrag: isAlreadyInMulti
+        });
       }
+
+      const peers = [];
+      if (this.selectedDeviceIds.has(device.id) && this.selectedDeviceIds.size > 1) {
+        this.selectedDeviceIds.forEach((peerId) => {
+          if (peerId === device.id) return;
+          const peerGroup = this.markerMap.get(peerId);
+          if (!peerGroup || !peerGroup.draggable() || !peerGroup.visible()) return;
+          peerGroup.moveToTop();
+          peers.push({
+            id: peerId,
+            group: peerGroup,
+            startX: peerGroup.x(),
+            startY: peerGroup.y()
+          });
+        });
+      }
+
+      this._groupDragState = {
+        primaryId: device.id,
+        startX: group.x(),
+        startY: group.y(),
+        peers
+      };
     });
 
     group.on('dragmove', (e) => {
@@ -272,18 +311,59 @@ export class DeviceRenderer {
       const curX = clamp(group.x(), 0, this.naturalWidth);
       const curY = clamp(group.y(), 0, this.naturalHeight);
       group.position({ x: curX, y: curY });
+
+      const state = this._groupDragState;
+      if (state && state.primaryId === device.id && state.peers.length > 0) {
+        const dx = curX - state.startX;
+        const dy = curY - state.startY;
+        state.peers.forEach((peer) => {
+          peer.group.position({
+            x: clamp(peer.startX + dx, 0, this.naturalWidth),
+            y: clamp(peer.startY + dy, 0, this.naturalHeight)
+          });
+        });
+      }
     });
 
     group.on('dragend', (e) => {
       e.cancelBubble = true;
+      group._lastDragEndTime = Date.now();
       const finalX = clamp(group.x(), 0, this.naturalWidth);
       const finalY = clamp(group.y(), 0, this.naturalHeight);
       group.position({ x: finalX, y: finalY });
 
-      const normalizedX = finalX / this.naturalWidth;
-      const normalizedY = finalY / this.naturalHeight;
+      const state = this._groupDragState;
+      this._groupDragState = null;
 
-      if (this.onMove) {
+      if (state && state.primaryId === device.id && state.peers.length > 0 && this.onGroupMove) {
+        const dx = finalX - state.startX;
+        const dy = finalY - state.startY;
+        const moves = [
+          {
+            id: device.id,
+            position: {
+              x: finalX / this.naturalWidth,
+              y: finalY / this.naturalHeight
+            }
+          }
+        ];
+        state.peers.forEach((peer) => {
+          const px = clamp(peer.startX + dx, 0, this.naturalWidth);
+          const py = clamp(peer.startY + dy, 0, this.naturalHeight);
+          peer.group.position({ x: px, y: py });
+          moves.push({
+            id: peer.id,
+            position: {
+              x: px / this.naturalWidth,
+              y: py / this.naturalHeight
+            }
+          });
+        });
+        this.deviceLayer?.batchDraw();
+        this.onGroupMove(moves);
+      } else if (this.onMove) {
+        const normalizedX = finalX / this.naturalWidth;
+        const normalizedY = finalY / this.naturalHeight;
         this.onMove(device.id, { x: normalizedX, y: normalizedY });
       }
     });
@@ -297,9 +377,13 @@ export class DeviceRenderer {
    * @param {Object} device 
    */
   updateDeviceVisuals(group, device) {
-    const isSelected = this.selectedDeviceId === device.id;
+    const isSelected = this.selectedDeviceIds.has(device.id) || this.selectedDeviceId === device.id;
     const cat = DEVICE_CATEGORIES[device.category] || DEVICE_CATEGORIES.core;
     const statusDef = DEVICE_STATUSES[device.status] || DEVICE_STATUSES.unknown;
+
+    // Layer visibility & lock state (Photoshop Layer controls)
+    group.visible(device.layerVisible !== false);
+    group.draggable(!device.layerLocked);
 
     // Selection ring
     const ring = group.findOne('.selection-ring');
@@ -383,20 +467,49 @@ export class DeviceRenderer {
   }
 
   /**
-   * Set currently selected device ID and update selection rings
-   * @param {string|null} deviceId 
+   * Synchronize marker position directly in Konva layer
+   * @param {string} deviceId
+   * @param {{x: number, y: number}} normalizedPos
    */
-  setSelectedDevice(deviceId) {
-    this.selectedDeviceId = deviceId;
+  setDevicePosition(deviceId, normalizedPos) {
+    const group = this.markerMap.get(deviceId);
+    if (!group || !normalizedPos) return;
+    group.position({
+      x: normalizedPos.x * this.naturalWidth,
+      y: normalizedPos.y * this.naturalHeight
+    });
+  }
+
+  /**
+   * Set all currently selected device IDs and update selection rings
+   * @param {Set<string>|string[]} selectedIds
+   * @param {string|null} primaryId
+   */
+  setSelectedDevices(selectedIds, primaryId = null) {
+    const nextSet = selectedIds instanceof Set
+      ? new Set(selectedIds)
+      : new Set(Array.isArray(selectedIds) ? selectedIds : (selectedIds ? [selectedIds] : []));
+    this.selectedDeviceIds = nextSet;
+    this.selectedDeviceId = primaryId || (nextSet.size > 0 ? Array.from(nextSet)[nextSet.size - 1] : null);
+
     this.markerMap.forEach((group, id) => {
-      const isSelected = (id === deviceId);
+      const isSelected = nextSet.has(id);
+      const isPrimary = id === this.selectedDeviceId;
       const ring = group.findOne('.selection-ring');
       if (ring) {
         ring.visible(isSelected);
       }
-      this.coverageRenderer.setSelection(group, isSelected);
+      this.coverageRenderer.setSelection(group, isPrimary || isSelected);
     });
     this.deviceLayer?.batchDraw();
+  }
+
+  /**
+   * Set currently selected device ID and update selection rings
+   * @param {string|null} deviceId 
+   */
+  setSelectedDevice(deviceId) {
+    this.setSelectedDevices(deviceId ? [deviceId] : [], deviceId || null);
   }
 
   /**

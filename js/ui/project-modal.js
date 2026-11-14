@@ -166,7 +166,7 @@ export class ProjectModal {
     const devCount = document.getElementById('project-dev-count');
     const cabCount = document.getElementById('project-cab-count');
 
-    if (nameInput) nameInput.value = state.project.name || 'Campus Network Infrastructure';
+    if (nameInput) nameInput.value = state.project.name || 'SmartSchool NetMap';
     if (idDisplay) idDisplay.textContent = state.project.id || 'proj-default';
     if (devCount) devCount.textContent = `${this.deviceManager.getAllDevices().length} unit`;
     if (cabCount) cabCount.textContent = `${this.cableManager.getAllConnections().length} jalur`;

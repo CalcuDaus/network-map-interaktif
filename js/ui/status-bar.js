@@ -36,11 +36,12 @@ export class StatusBar {
       this.mapSizeDisplay.textContent = `${state.project.map.naturalWidth} × ${state.project.map.naturalHeight} px`;
     }
 
-    let savedScale = 400;
+    let savedScale = 170;
     try {
       const stored = localStorage.getItem('netmap_scale_width_meters');
       if (stored && !isNaN(parseFloat(stored))) {
-        savedScale = parseFloat(stored);
+        const parsed = parseFloat(stored);
+        savedScale = parsed === 400 ? 170 : parsed;
       }
     } catch (e) {}
 
@@ -103,11 +104,12 @@ export class StatusBar {
       if (this.mapSizeDisplay) {
         this.mapSizeDisplay.textContent = `${width} × ${height} px`;
       }
-      let savedScale = 400;
+      let savedScale = 170;
       try {
         const stored = localStorage.getItem('netmap_scale_width_meters');
         if (stored && !isNaN(parseFloat(stored))) {
-          savedScale = parseFloat(stored);
+          const parsed = parseFloat(stored);
+          savedScale = parsed === 400 ? 170 : parsed;
         }
       } catch (e) {}
       if (this.scaleText && width > 0) {

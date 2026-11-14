@@ -10,7 +10,7 @@ class StateManager {
     this.state = {
       project: {
         id: 'proj-default',
-        name: 'Campus Network Infrastructure',
+        name: 'SmartSchool NetMap',
         version: '1.0',
         map: {
           image: 'assets/maps/campus-map.jpg',
@@ -22,12 +22,15 @@ class StateManager {
         },
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        rooms3d: []
+        rooms3d: [],
+        objects3d: []
       },
       // Active viewport renderer mode: '2d' | '3d'
       viewMode: '2d',
       // Current interaction mode: 'navigate' | 'select' | 'add-device' | 'draw-cable' | 'edit' | 'delete'
       mode: 'navigate',
+      // Selected 3D builder object ID
+      selectedObject3dId: null,
       // Viewport transform
       viewport: {
         x: 0,
@@ -106,6 +109,81 @@ class StateManager {
 
   getRooms3d() {
     return this.state.project.rooms3d || [];
+  }
+
+  getObjects3d() {
+    return this.state.project.objects3d || [];
+  }
+
+  setObjects3d(objects) {
+    this.state.project.objects3d = Array.isArray(objects) ? objects : [];
+    if (
+      this.state.selectedObject3dId &&
+      !this.state.project.objects3d.some((o) => o.id === this.state.selectedObject3dId)
+    ) {
+      this.state.selectedObject3dId = null;
+      eventBus.emit('object3d:deselected', {});
+    }
+    eventBus.emit('object3d:changed', { objects: this.state.project.objects3d });
+  }
+
+  getObject3dById(id) {
+    return this.getObjects3d().find((o) => o.id === id) || null;
+  }
+
+  addObject3d(objData) {
+    if (!objData || !objData.id) return null;
+    const list = [...this.getObjects3d(), objData];
+    this.state.project.objects3d = list;
+    eventBus.emit('object3d:changed', { objects: list });
+    this.selectObject3d(objData.id);
+    return objData;
+  }
+
+  updateObject3d(id, updates) {
+    const list = [...this.getObjects3d()];
+    const idx = list.findIndex((o) => o.id === id);
+    if (idx < 0) return null;
+    const updated = { ...list[idx], ...updates, id };
+    list[idx] = updated;
+    this.state.project.objects3d = list;
+    eventBus.emit('object3d:changed', { objects: list });
+    if (this.state.selectedObject3dId === id) {
+      eventBus.emit('object3d:selected', updated);
+    }
+    return updated;
+  }
+
+  deleteObject3d(id) {
+    const list = this.getObjects3d();
+    const next = list.filter((o) => o.id !== id);
+    if (next.length === list.length) return false;
+    const wasSelected = this.state.selectedObject3dId === id;
+    this.state.project.objects3d = next;
+    if (wasSelected) {
+      this.state.selectedObject3dId = null;
+      eventBus.emit('object3d:deselected', { id });
+    }
+    eventBus.emit('object3d:changed', { objects: next });
+    return true;
+  }
+
+  selectObject3d(id) {
+    const obj = this.getObject3dById(id);
+    if (!obj) return;
+    this.state.selectedObject3dId = id;
+    eventBus.emit('object3d:selected', obj);
+  }
+
+  deselectObject3d() {
+    if (!this.state.selectedObject3dId) return;
+    const prevId = this.state.selectedObject3dId;
+    this.state.selectedObject3dId = null;
+    eventBus.emit('object3d:deselected', { id: prevId });
+  }
+
+  getSelectedObject3dId() {
+    return this.state.selectedObject3dId || null;
   }
 
   /**

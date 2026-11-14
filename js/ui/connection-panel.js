@@ -101,14 +101,24 @@ export class ConnectionPanel {
 
         <!-- Section: Endpoint Koneksi -->
         <div class="panel-section">
-          <span class="section-label">Endpoint Koneksi</span>
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+            <span class="section-label" style="margin-bottom: 0;">Endpoint & Port Koneksi</span>
+            <button type="button" id="btn-open-port-picker" class="btn btn-secondary btn-sm" style="font-size: 10.5px; padding: 3px 8px;">
+              🔌 Pilih Port (3D)
+            </button>
+          </div>
           <div class="info-card" style="display: flex; flex-direction: column; gap: 8px;">
             <!-- Source Device -->
             <div style="display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; background: var(--bg-tertiary); border-radius: 6px;">
-              <div style="display: flex; flex-direction: column;">
+              <div style="display: flex; flex-direction: column; gap: 1px;">
                 <span style="font-size: 10px; color: var(--accent-sky); font-weight: 600;">SUMBER (SOURCE)</span>
                 <span style="font-size: 12px; font-weight: 600; color: var(--text-primary);">${sourceDev ? this.escapeHtml(sourceDev.name) : 'Unknown'}</span>
-                <span style="font-size: 10px; color: var(--text-muted); font-family: var(--font-mono);">${sourceDev?.network?.ip || ''}</span>
+                <div style="display: flex; align-items: center; gap: 6px; margin-top: 1px;">
+                  <span style="font-size: 10px; font-family: var(--font-mono); padding: 1px 6px; border-radius: 4px; background: rgba(2, 132, 199, 0.14); color: var(--accent-sky); font-weight: 700;">
+                    Port: ${this.escapeHtml(details.portSource || 'Auto / Belum dipilih')}
+                  </span>
+                  <span style="font-size: 10px; color: var(--text-muted); font-family: var(--font-mono);">${sourceDev?.network?.ip || ''}</span>
+                </div>
               </div>
               <button id="btn-goto-source" class="btn btn-icon btn-sm" title="Lompat ke Perangkat Sumber">
                 <i data-lucide="crosshair" style="width: 14px; height: 14px;"></i>
@@ -122,10 +132,15 @@ export class ConnectionPanel {
 
             <!-- Destination Device -->
             <div style="display: flex; align-items: center; justify-content: space-between; padding: 6px 8px; background: var(--bg-tertiary); border-radius: 6px;">
-              <div style="display: flex; flex-direction: column;">
+              <div style="display: flex; flex-direction: column; gap: 1px;">
                 <span style="font-size: 10px; color: var(--accent-blue); font-weight: 600;">TUJUAN (DESTINATION)</span>
                 <span style="font-size: 12px; font-weight: 600; color: var(--text-primary);">${destDev ? this.escapeHtml(destDev.name) : 'Unknown'}</span>
-                <span style="font-size: 10px; color: var(--text-muted); font-family: var(--font-mono);">${destDev?.network?.ip || ''}</span>
+                <div style="display: flex; align-items: center; gap: 6px; margin-top: 1px;">
+                  <span style="font-size: 10px; font-family: var(--font-mono); padding: 1px 6px; border-radius: 4px; background: rgba(42, 124, 19, 0.14); color: var(--accent-blue); font-weight: 700;">
+                    Port: ${this.escapeHtml(details.portDestination || 'Auto / Belum dipilih')}
+                  </span>
+                  <span style="font-size: 10px; color: var(--text-muted); font-family: var(--font-mono);">${destDev?.network?.ip || ''}</span>
+                </div>
               </div>
               <button id="btn-goto-dest" class="btn btn-icon btn-sm" title="Lompat ke Perangkat Tujuan">
                 <i data-lucide="crosshair" style="width: 14px; height: 14px;"></i>
@@ -308,30 +323,104 @@ export class ConnectionPanel {
               </select>
             </div>
 
-            <!-- Per-Segment Breakdown Table / Waypoint Info -->
-            ${segments.length > 1 ? `
-              <div style="grid-column: span 2; display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">
-                <div style="display: flex; align-items: center; justify-content: space-between;">
-                  <span style="font-size: 11px; font-weight: 600; color: var(--text-primary);">
-                    📏 Jarak Antar Segmen Belokan (${segments.length} segmen)
-                  </span>
-                  <button id="btn-straighten-cable" class="btn btn-secondary btn-sm" style="font-size: 10px; height: 22px; padding: 2px 6px;">
-                    Luruskan Jalur
-                  </button>
+            <!-- Ketebalan / Diameter Kabel 3D (Sesuai Port vs Custom) -->
+            <div style="grid-column: span 2; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 6px;">
+              <div style="display: flex; flex-direction: column;">
+                <label style="font-size: 11px; color: var(--text-primary); font-weight: 600;">Diameter Kabel 3D (Skala Port)</label>
+                <span style="font-size: 10px; color: var(--text-muted);">1.0x = otomatis mengikuti ukuran lubang port 3D</span>
+              </div>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <input type="number" id="prop-cable-diameter-3d" min="0.2" max="10" step="0.1"
+                       value="${typeof details.cableDiameterScale === 'number' ? details.cableDiameterScale : 1.0}"
+                       style="width: 68px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 12px; padding: 4px 6px; font-family: var(--font-mono); font-weight: 600;">
+                <span style="font-size: 11px; color: var(--text-muted); font-family: var(--font-mono);">x</span>
+              </div>
+            </div>
+
+            <!-- Gaya Jalur & Kelengkungan (Photoshop Pen Tool) -->
+            <div class="form-group">
+              <label>Gaya Jalur (Pen Tool)</label>
+              <select id="prop-cable-path-style">
+                <option value="curve" ${(details.pathStyle || 'curve') === 'curve' ? 'selected' : ''}>〰️ Bezier Curve (Lengkung)</option>
+                <option value="straight" ${details.pathStyle === 'straight' ? 'selected' : ''}>📐 Lurus (Sudut Tajam)</option>
+                <option value="orthogonal" ${details.pathStyle === 'orthogonal' ? 'selected' : ''}>🪜 Orthogonal 90° (Tray)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Kelengkungan Bezier</label>
+              <input type="number" id="prop-cable-curve-tension" min="0" max="0.8" step="0.05"
+                     value="${typeof details.curveTension === 'number' ? details.curveTension : 0.38}">
+            </div>
+
+            <!-- Elevasi Kabel 3D (Level Sumbu Z) -->
+            <div style="grid-column: span 2; display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 6px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+                <div style="display: flex; flex-direction: column;">
+                  <label style="font-size: 11px; color: var(--text-primary); font-weight: 700;">Elevasi Level Kabel 3D (Sumbu Z)</label>
+                  <span style="font-size: 10px; color: var(--text-muted);">Atur ketinggian lintasan kabel (lantai, tray, plafon, tiang)</span>
                 </div>
-                <div style="display: flex; flex-direction: column; gap: 3px; max-height: 110px; overflow-y: auto; margin-top: 2px; padding-right: 2px;">
+                <div style="display: flex; align-items: center; gap: 4px;">
+                  <button type="button" id="btn-cable-z-down" class="btn btn-secondary btn-sm" title="Turunkan kabel -0.2m" style="padding: 2px 6px; height: 24px; font-size: 11px;">▼</button>
+                  <input type="number" id="prop-cable-elev-z" min="0.02" max="50" step="0.1"
+                         placeholder="Auto"
+                         value="${typeof details.elevationZ === 'number' ? details.elevationZ : ''}"
+                         style="width: 62px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 11.5px; padding: 3px 6px; font-family: var(--font-mono); font-weight: 600; text-align: center;">
+                  <span style="font-size: 10px; color: var(--text-muted);">m</span>
+                  <button type="button" id="btn-cable-z-up" class="btn btn-secondary btn-sm" title="Naikkan kabel +0.2m" style="padding: 2px 6px; height: 24px; font-size: 11px;">▲</button>
+                </div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap;">
+                <button type="button" class="btn btn-secondary btn-sm cable-z-preset-btn" data-z="auto" style="font-size: 10px; height: 21px; padding: 1px 7px; ${details.elevationZ === null || details.elevationZ === undefined ? 'border-color: var(--accent-blue); color: var(--accent-blue); font-weight: 700;' : ''}">Auto</button>
+                <button type="button" class="btn btn-secondary btn-sm cable-z-preset-btn" data-z="0.05" style="font-size: 10px; height: 21px; padding: 1px 7px; ${details.elevationZ === 0.05 ? 'border-color: var(--accent-blue); color: var(--accent-blue); font-weight: 700;' : ''}">Lantai 0.05m</button>
+                <button type="button" class="btn btn-secondary btn-sm cable-z-preset-btn" data-z="1.2" style="font-size: 10px; height: 21px; padding: 1px 7px; ${details.elevationZ === 1.2 ? 'border-color: var(--accent-blue); color: var(--accent-blue); font-weight: 700;' : ''}">Rack 1.2m</button>
+                <button type="button" class="btn btn-secondary btn-sm cable-z-preset-btn" data-z="2.8" style="font-size: 10px; height: 21px; padding: 1px 7px; ${details.elevationZ === 2.8 ? 'border-color: var(--accent-blue); color: var(--accent-blue); font-weight: 700;' : ''}">Plafon 2.8m</button>
+                <button type="button" class="btn btn-secondary btn-sm cable-z-preset-btn" data-z="4.5" style="font-size: 10px; height: 21px; padding: 1px 7px; ${details.elevationZ === 4.5 ? 'border-color: var(--accent-blue); color: var(--accent-blue); font-weight: 700;' : ''}">Tiang 4.5m</button>
+              </div>
+            </div>
+
+            <!-- Per-Segment Breakdown & Per-Waypoint 3D Z Control -->
+            ${segments.length > 1 ? `
+              <div style="grid-column: span 2; display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 4px;">
+                  <span style="font-size: 11px; font-weight: 600; color: var(--text-primary);">
+                    📏 Segmen & Level Z Titik Belok (${(cable.route || []).length} titik)
+                  </span>
+                  <div style="display: flex; gap: 4px;">
+                    <button type="button" id="btn-add-mid-waypoint" class="btn btn-secondary btn-sm" style="font-size: 10px; height: 22px; padding: 2px 6px;" title="Tambah titik belok di tengah jalur">+ Titik</button>
+                    <button type="button" id="btn-straighten-cable" class="btn btn-secondary btn-sm" style="font-size: 10px; height: 22px; padding: 2px 6px;">
+                      Luruskan
+                    </button>
+                  </div>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 3px; max-height: 130px; overflow-y: auto; padding-right: 2px;">
+                  ${(cable.route || []).map((wp, idx) => `
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 4px; font-size: 10.5px; padding: 3px 6px; background: var(--bg-secondary); border-radius: 4px;">
+                      <span style="color: var(--text-secondary); font-weight: 600;">Titik ${idx + 1}</span>
+                      <div style="display: flex; align-items: center; gap: 3px;">
+                        <span style="font-size: 9.5px; color: var(--text-muted);">Z:</span>
+                        <button type="button" class="btn btn-secondary btn-sm btn-wp-z-step" data-wp-idx="${idx}" data-delta="-0.2" style="padding: 0 4px; height: 19px; font-size: 9.5px;">▼</button>
+                        <input type="number" class="input-wp-z" data-wp-idx="${idx}" min="0.02" max="50" step="0.1"
+                               placeholder="${typeof details.elevationZ === 'number' ? details.elevationZ : 'Auto'}"
+                               value="${typeof wp.z === 'number' ? wp.z : ''}"
+                               style="width: 48px; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 3px; color: var(--text-primary); font-size: 10.5px; padding: 1px 4px; font-family: var(--font-mono); text-align: center;">
+                        <span style="font-size: 9.5px; color: var(--text-muted);">m</span>
+                        <button type="button" class="btn btn-secondary btn-sm btn-wp-z-step" data-wp-idx="${idx}" data-delta="0.2" style="padding: 0 4px; height: 19px; font-size: 9.5px;">▲</button>
+                        <button type="button" class="btn btn-secondary btn-sm btn-wp-del" data-wp-idx="${idx}" title="Hapus titik belok ini" style="padding: 0 5px; height: 19px; font-size: 10px; color: #ef4444;">&times;</button>
+                      </div>
+                    </div>
+                  `).join('')}
                   ${segments.map((seg, idx) => `
-                    <div style="display: flex; align-items: center; justify-content: space-between; font-size: 10.5px; padding: 2px 6px; background: var(--bg-secondary); border-radius: 4px;">
-                      <span style="color: var(--text-secondary);">${idx === 0 ? 'Sumber ➔ Belokan 1' : (idx === segments.length - 1 ? `Belokan ${idx} ➔ Tujuan` : `Belokan ${idx} ➔ Belokan ${idx + 1}`)}:</span>
-                      <span style="font-family: var(--font-mono); font-weight: 600; color: var(--text-primary);">${seg.toFixed(1)} m</span>
+                    <div style="display: flex; align-items: center; justify-content: space-between; font-size: 10px; padding: 2px 6px; color: var(--text-muted);">
+                      <span>${idx === 0 ? 'Sumber ➔ Titik 1' : (idx === segments.length - 1 ? `Titik ${idx} ➔ Tujuan` : `Titik ${idx} ➔ Titik ${idx + 1}`)}:</span>
+                      <span style="font-family: var(--font-mono);">${seg.toFixed(1)} m</span>
                     </div>
                   `).join('')}
                 </div>
               </div>
             ` : `
-              <div style="grid-column: span 2; display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: var(--text-muted); background: var(--bg-secondary); padding: 6px 10px; border-radius: 4px;">
-                <span>Titik Belok (Waypoints): <strong>0 titik (Jalur Lurus)</strong></span>
-                <span style="font-size: 10px; color: var(--text-muted);">Klik jalur untuk buat belokan</span>
+              <div style="grid-column: span 2; display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 11px; color: var(--text-muted); background: var(--bg-secondary); padding: 6px 10px; border-radius: 4px;">
+                <span>Titik Belok: <strong>0 titik (Jalur Lurus)</strong></span>
+                <button type="button" id="btn-add-mid-waypoint" class="btn btn-secondary btn-sm" style="font-size: 10px; height: 22px; padding: 2px 8px;">+ Tambah Titik Belok 3D</button>
               </div>
             `}
 
@@ -387,6 +476,126 @@ export class ConnectionPanel {
     document.getElementById('btn-copy-cable-id')?.addEventListener('click', () => {
       navigator.clipboard.writeText(cableId).then(() => {
         alert(`ID Kabel "${cableId}" berhasil disalin`);
+      });
+    });
+
+    // Open Cisco Packet Tracer Port Picker
+    document.getElementById('btn-open-port-picker')?.addEventListener('click', () => {
+      eventBus.emit('cable:prompt-port-picker', { cableId });
+    });
+
+    // Live 3D cable diameter scale change
+    document.getElementById('prop-cable-diameter-3d')?.addEventListener('change', (e) => {
+      const scaleVal = Math.max(0.2, Math.min(10, parseFloat(e.target.value) || 1.0));
+      e.target.value = scaleVal;
+      const nextDetails = { ...(this.currentCable.details || {}), cableDiameterScale: scaleVal };
+      this.cableManager.updateConnection(cableId, { details: nextDetails });
+    });
+
+    // Live Pen Tool pathStyle & curveTension changes
+    document.getElementById('prop-cable-path-style')?.addEventListener('change', (e) => {
+      const nextStyle = e.target.value || 'curve';
+      const nextDetails = { ...(this.currentCable.details || {}), pathStyle: nextStyle };
+      this.cableManager.updateConnection(cableId, { details: nextDetails });
+    });
+
+    document.getElementById('prop-cable-curve-tension')?.addEventListener('change', (e) => {
+      const tensionVal = Math.max(0, Math.min(0.8, parseFloat(e.target.value) || 0.38));
+      e.target.value = tensionVal;
+      const nextDetails = { ...(this.currentCable.details || {}), curveTension: tensionVal };
+      this.cableManager.updateConnection(cableId, { details: nextDetails });
+    });
+
+    // Live 3D Cable Z-Level elevation controls
+    const applyCableElevZ = (val) => {
+      const nextZ = (val === null || val === '' || isNaN(Number(val)))
+        ? null
+        : Number(Math.max(0.02, Math.min(50, Number(val))).toFixed(2));
+      const nextDetails = { ...(this.currentCable.details || {}), elevationZ: nextZ };
+      this.cableManager.updateConnection(cableId, { details: nextDetails });
+      this.renderCableForm(this.cableManager.getConnectionById(cableId));
+    };
+
+    document.getElementById('prop-cable-elev-z')?.addEventListener('change', (e) => {
+      const raw = e.target.value.trim();
+      applyCableElevZ(raw === '' ? null : parseFloat(raw));
+    });
+
+    document.getElementById('btn-cable-z-up')?.addEventListener('click', () => {
+      const cur = typeof this.currentCable.details?.elevationZ === 'number' ? this.currentCable.details.elevationZ : 0.4;
+      applyCableElevZ(cur + 0.2);
+    });
+
+    document.getElementById('btn-cable-z-down')?.addEventListener('click', () => {
+      const cur = typeof this.currentCable.details?.elevationZ === 'number' ? this.currentCable.details.elevationZ : 0.4;
+      applyCableElevZ(Math.max(0.02, cur - 0.2));
+    });
+
+    document.querySelectorAll('.cable-z-preset-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const zAttr = btn.getAttribute('data-z');
+        applyCableElevZ(zAttr === 'auto' ? null : parseFloat(zAttr));
+      });
+    });
+
+    // Add midpoint waypoint directly from panel for 3D Z shaping
+    document.getElementById('btn-add-mid-waypoint')?.addEventListener('click', () => {
+      const cab = this.cableManager.getConnectionById(cableId);
+      const srcDev = this.deviceManager.getDeviceById(cab?.source);
+      const dstDev = this.deviceManager.getDeviceById(cab?.destination);
+      if (!cab || !srcDev || !dstDev) return;
+      const route = Array.isArray(cab.route) ? cab.route.map((p) => ({ ...p })) : [];
+      const prev = route.length > 0 ? route[route.length - 1] : srcDev.position;
+      const midX = Number(((prev.x + dstDev.position.x) * 0.5).toFixed(4));
+      const midY = Number(((prev.y + dstDev.position.y) * 0.5).toFixed(4));
+      const defaultZ = typeof cab.details?.elevationZ === 'number' ? cab.details.elevationZ : 1.2;
+      route.push({ x: midX, y: midY, z: defaultZ });
+      this.cableManager.updateConnection(cableId, { route });
+      this.renderCableForm(this.cableManager.getConnectionById(cableId));
+    });
+
+    // Per-waypoint Z controls
+    const updateWaypointZ = (idx, nextZ) => {
+      const cab = this.cableManager.getConnectionById(cableId);
+      if (!cab || !Array.isArray(cab.route) || !cab.route[idx]) return;
+      const route = cab.route.map((p) => ({ ...p }));
+      if (nextZ === null || nextZ === '' || isNaN(Number(nextZ))) {
+        delete route[idx].z;
+      } else {
+        route[idx].z = Number(Math.max(0.02, Math.min(50, Number(nextZ))).toFixed(2));
+      }
+      this.cableManager.updateConnection(cableId, { route });
+      this.renderCableForm(this.cableManager.getConnectionById(cableId));
+    };
+
+    document.querySelectorAll('.input-wp-z').forEach((inp) => {
+      inp.addEventListener('change', (e) => {
+        const idx = parseInt(inp.getAttribute('data-wp-idx'), 10);
+        const raw = e.target.value.trim();
+        updateWaypointZ(idx, raw === '' ? null : parseFloat(raw));
+      });
+    });
+
+    document.querySelectorAll('.btn-wp-z-step').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.getAttribute('data-wp-idx'), 10);
+        const delta = parseFloat(btn.getAttribute('data-delta') || '0.2');
+        const cab = this.cableManager.getConnectionById(cableId);
+        const curZ = typeof cab?.route?.[idx]?.z === 'number'
+          ? cab.route[idx].z
+          : (typeof cab?.details?.elevationZ === 'number' ? cab.details.elevationZ : 0.4);
+        updateWaypointZ(idx, curZ + delta);
+      });
+    });
+
+    document.querySelectorAll('.btn-wp-del').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.getAttribute('data-wp-idx'), 10);
+        const cab = this.cableManager.getConnectionById(cableId);
+        if (!cab || !Array.isArray(cab.route)) return;
+        const route = cab.route.filter((_, i) => i !== idx);
+        this.cableManager.updateConnection(cableId, { route });
+        this.renderCableForm(this.cableManager.getConnectionById(cableId));
       });
     });
 
@@ -604,6 +813,18 @@ export class ConnectionPanel {
       const currentCategory = catSelect?.value || 'cat6';
       const mediaType = getMediaTypeByCableCategory(currentCategory);
       const details = { ...(this.currentCable.details || {}) };
+      const diam3dInput = document.getElementById('prop-cable-diameter-3d');
+      if (diam3dInput) {
+        details.cableDiameterScale = Math.max(0.2, Math.min(10, parseFloat(diam3dInput.value) || 1.0));
+      }
+      const pathStyleSelect = document.getElementById('prop-cable-path-style');
+      if (pathStyleSelect) {
+        details.pathStyle = pathStyleSelect.value || 'curve';
+      }
+      const tensionInput = document.getElementById('prop-cable-curve-tension');
+      if (tensionInput) {
+        details.curveTension = Math.max(0, Math.min(0.8, parseFloat(tensionInput.value) || 0.38));
+      }
 
       // Collect technical media properties
       if (mediaType === 'fiber') {

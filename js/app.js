@@ -12,6 +12,7 @@ import { StatusBar } from './ui/status-bar.js';
 import { DeviceManager } from './devices/device-manager.js';
 import { DevicePalette } from './ui/device-palette.js';
 import { PropertiesPanel } from './ui/properties-panel.js';
+import { DeviceLayersPanel } from './ui/device-layers-panel.js';
 import { CableManager } from './connections/cable-manager.js';
 import { CableDrawingTool } from './connections/cable-drawing-tool.js';
 import { ConnectionPanel } from './ui/connection-panel.js';
@@ -31,7 +32,9 @@ import { MikrotikQuickInsertModal } from './ui/mikrotik-quick-insert-modal.js';
 import { MapScaleModal } from './ui/map-scale-modal.js';
 import { Map3DEngine } from './map/map-3d-engine.js';
 import { Room3DModal } from './ui/room-3d-modal.js';
+import { Object3DModal } from './ui/object-3d-modal.js';
 import { Device3DModelModal } from './ui/device-3d-modal.js';
+import { PortPickerModal } from './ui/port-picker-modal.js';
 
 class NetMapApp {
   constructor() {
@@ -56,6 +59,7 @@ class NetMapApp {
     this.mapScaleModal = null;
     this.map3DEngine = null;
     this.room3DModal = null;
+    this.object3DModal = null;
     this.device3DModelModal = null;
     this.projectStorage = null;
     this.exportModal = null;
@@ -133,6 +137,16 @@ class NetMapApp {
     if (propertiesContainer) {
       this.propertiesPanel = new PropertiesPanel(propertiesContainer, this.deviceManager);
       this.connectionPanel = new ConnectionPanel(propertiesContainer, this.cableManager, this.deviceManager);
+    }
+
+    const layersPanelContainer = document.getElementById('device-layers-panel-container');
+    if (layersPanelContainer) {
+      this.deviceLayersPanel = new DeviceLayersPanel({
+        container: layersPanelContainer,
+        deviceManager: this.deviceManager,
+        viewportNavigator: this.viewportNavigator,
+        getMap3DEngine: () => this.map3DEngine
+      });
     }
 
     // 11. Initialize Search Engine & Search UI
@@ -222,6 +236,7 @@ class NetMapApp {
     const map3dContainer = document.getElementById('map-3d-container');
     this.map3DEngine = new Map3DEngine({
       container: map3dContainer,
+      mapEngine: this.mapEngine,
       deviceManager: this.deviceManager,
       cableManager: this.cableManager
     });
@@ -229,9 +244,17 @@ class NetMapApp {
       deviceManager: this.deviceManager,
       map3DEngine: this.map3DEngine
     });
+    this.object3DModal = new Object3DModal({
+      deviceManager: this.deviceManager,
+      map3DEngine: this.map3DEngine
+    });
     this.device3DModelModal = new Device3DModelModal({
       deviceManager: this.deviceManager,
       map3DEngine: this.map3DEngine
+    });
+    this.portPickerModal = new PortPickerModal({
+      deviceManager: this.deviceManager,
+      cableManager: this.cableManager
     });
     this.setup3DControls();
 
@@ -390,6 +413,27 @@ class NetMapApp {
       this.deviceManager.deselectDevice();
       this.cableManager.deselectConnection();
     });
+
+    // Handle 2D Box/Marquee Selection
+    eventBus.on('canvas:marquee-select', ({ minNormX, maxNormX, minNormY, maxNormY, additive }) => {
+      const matchedIds = [];
+      this.deviceManager.getAllDevices().forEach((dev) => {
+        if (dev.layerVisible === false) return;
+        const px = dev.position?.x ?? 0;
+        const py = dev.position?.y ?? 0;
+        if (px >= minNormX && px <= maxNormX && py >= minNormY && py <= maxNormY) {
+          matchedIds.push(dev.id);
+        }
+      });
+
+      if (matchedIds.length > 0) {
+        this.cableManager.deselectConnection();
+        this.deviceManager.selectMultipleDevices(matchedIds, { additive });
+      } else if (!additive) {
+        this.deviceManager.deselectDevice();
+        this.cableManager.deselectConnection();
+      }
+    });
   }
 
   setup3DControls() {
@@ -446,17 +490,22 @@ class NetMapApp {
       this.map3DEngine?.setShowCoverage(Boolean(e.target.checked));
     });
 
-    // SketchUp Navigation Tool Buttons (Orbit, Pan, Zoom, Look, Move)
+    // SketchUp Navigation Tool Buttons (Orbit, Pan, Zoom, Look, Move, Box Select, Draw 3D)
     const navToolButtons = [
       { id: 'btn-3d-tool-orbit', tool: 'orbit' },
       { id: 'btn-3d-tool-pan', tool: 'pan' },
       { id: 'btn-3d-tool-zoom', tool: 'zoom' },
       { id: 'btn-3d-tool-look', tool: 'look' },
-      { id: 'btn-3d-tool-move', tool: 'move' }
+      { id: 'btn-3d-tool-move', tool: 'move' },
+      { id: 'btn-3d-tool-box', tool: 'box' },
+      { id: 'btn-3d-tool-draw3d', tool: 'draw3d' }
     ];
     navToolButtons.forEach(({ id, tool }) => {
       document.getElementById(id)?.addEventListener('click', () => {
         this.map3DEngine?.setNavTool(tool);
+        if (tool === 'draw3d') {
+          this.object3DModal?.show();
+        }
       });
     });
     eventBus.on('map3d:navtool-changed', ({ tool }) => {
@@ -491,6 +540,12 @@ class NetMapApp {
       this.map3DEngine?.setDeviceScaleMultiplier(val);
     });
 
+    // 3D Cable diameter multiplier (1.0 = matched to port socket size)
+    document.getElementById('select-3d-cable-size')?.addEventListener('change', (e) => {
+      const val = Number(e.target.value) || 1;
+      this.map3DEngine?.setCableDiameterMultiplier(val);
+    });
+
     // Explode overlapping devices toggle
     let exploded = false;
     const btnExplode = document.getElementById('btn-3d-explode');
@@ -509,9 +564,12 @@ class NetMapApp {
       this.map3DEngine?.setShowLabels(showLabels);
     });
 
-    // Rooms & Device 3D Model Modals
+    // Rooms, 3D Object Studio & Device 3D Model Modals
     document.getElementById('btn-3d-rooms')?.addEventListener('click', () => {
       this.room3DModal?.show();
+    });
+    document.getElementById('btn-3d-objects')?.addEventListener('click', () => {
+      this.object3DModal?.toggle();
     });
     document.getElementById('btn-3d-device-models')?.addEventListener('click', () => {
       this.device3DModelModal?.show();
@@ -553,8 +611,14 @@ class NetMapApp {
         return;
       }
 
-      // Undo / Redo Shortcuts (Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y)
+      // Undo / Redo & Select-All Shortcuts (Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y, Ctrl+A)
       if (e.ctrlKey || e.metaKey) {
+        if (e.key === 'a' || e.key === 'A') {
+          e.preventDefault();
+          this.cableManager?.deselectConnection();
+          this.deviceManager?.selectAllDevices({ onlyVisible: true });
+          return;
+        }
         if (e.key === 'z' || e.key === 'Z') {
           e.preventDefault();
           if (e.shiftKey) {
@@ -603,6 +667,17 @@ class NetMapApp {
           this.map3DEngine?.setNavTool('move');
           return;
         }
+        if (lower === 'b') {
+          e.preventDefault();
+          this.map3DEngine?.setNavTool('box');
+          return;
+        }
+        if (lower === 'p') {
+          e.preventDefault();
+          this.map3DEngine?.setNavTool('draw3d');
+          this.object3DModal?.show();
+          return;
+        }
         if (e.key === '0') {
           e.preventDefault();
           this.map3DEngine?.zoomExtents();
@@ -614,6 +689,7 @@ class NetMapApp {
         if (e.key === 'Escape') {
           this.deviceManager.deselectDevice();
           this.cableManager.deselectConnection();
+          stateManager.deselectObject3d?.();
           this.map3DEngine?.setNavTool('orbit');
           return;
         }
@@ -683,8 +759,14 @@ class NetMapApp {
           this.mapScaleModal.show();
           break;
         case 'Delete':
-        case 'Backspace':
-          if (this.deviceManager?.selectedDeviceId) {
+        case 'Backspace': {
+          const selectedIds = this.deviceManager?.getSelectedDeviceIds?.() || [];
+          if (selectedIds.length > 1) {
+            e.preventDefault();
+            if (confirm(`Hapus ${selectedIds.length} perangkat terpilih beserta seluruh kabelnya?`)) {
+              this.deviceManager.deleteSelectedDevices();
+            }
+          } else if (this.deviceManager?.selectedDeviceId) {
             e.preventDefault();
             const curDev = this.deviceManager.getDeviceById(this.deviceManager.selectedDeviceId);
             if (curDev && confirm(`Hapus perangkat "${curDev.name}" beserta seluruh kabelnya?`)) {
@@ -696,8 +778,18 @@ class NetMapApp {
             if (curCab && confirm(`Hapus jalur kabel "${curCab.name}"?`)) {
               this.cableManager.deleteConnection(curCab.id);
             }
+          } else {
+            const selObj3dId = stateManager.getSelectedObject3dId?.();
+            if (selObj3dId) {
+              e.preventDefault();
+              const curObj3d = stateManager.getObject3dById?.(selObj3dId);
+              if (curObj3d && confirm(`Hapus objek 3D "${curObj3d.name || selObj3dId}"?`)) {
+                stateManager.deleteObject3d(selObj3dId);
+              }
+            }
           }
           break;
+        }
         case 'Escape':
           this.deviceManager.deselectDevice();
           this.cableManager.deselectConnection();

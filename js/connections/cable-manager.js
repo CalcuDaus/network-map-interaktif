@@ -33,12 +33,13 @@ export class CableManager {
     this.connections = new Map(); // id -> cable
     this.selectedCableId = null;
 
-    // Scale calibration: load saved map width in meters or default to 400m
-    let savedScale = 400;
+    // Scale calibration: calibrated to Google Maps SMK Negeri 1 Beringin (170m width, 1px = 0.166m)
+    let savedScale = 170;
     try {
       const stored = localStorage.getItem('netmap_scale_width_meters');
       if (stored && !isNaN(parseFloat(stored))) {
-        savedScale = parseFloat(stored);
+        const parsed = parseFloat(stored);
+        savedScale = parsed === 400 ? 170 : parsed;
       }
     } catch (e) {}
     this.mapWidthMeters = savedScale;
@@ -55,7 +56,8 @@ export class CableManager {
         eventBus.emit('contextmenu:cable', { cable, screenX: clientX, screenY: clientY });
       },
       onWaypointMoved: (id, idx, norm) => this.updateWaypoint(id, idx, norm),
-      onWaypointDeleted: (id, idx) => this.deleteWaypoint(id, idx)
+      onWaypointDeleted: (id, idx) => this.deleteWaypoint(id, idx),
+      onWaypointInserted: (id, idx, norm) => this.insertWaypoint(id, idx, norm)
     });
 
     this.initDeviceSyncListeners();
@@ -173,6 +175,34 @@ export class CableManager {
     if (!cable || !Array.isArray(cable.route) || !cable.route[waypointIndex]) return;
 
     cable.route[waypointIndex] = newNormalized;
+    cable.updatedAt = new Date().toISOString();
+
+    const sourceDev = this.deviceManager.getDeviceById(cable.source);
+    const destDev = this.deviceManager.getDeviceById(cable.destination);
+
+    if (cable.lengthMode === 'auto') {
+      cable.length = this.calculateEstimatedLength(cable, sourceDev, destDev);
+    }
+
+    this.renderer.renderCable(cable, sourceDev, destDev);
+    this.connectionLayer.batchDraw();
+
+    eventBus.emit('connection:updated', cable);
+  }
+
+  /**
+   * Insert a new intermediate anchor/waypoint at a specific segment index (Pen Tool add-anchor)
+   * @param {string} cableId
+   * @param {number} insertIndex
+   * @param {{x: number, y: number}} newNormalized
+   */
+  insertWaypoint(cableId, insertIndex, newNormalized) {
+    const cable = this.connections.get(cableId);
+    if (!cable) return;
+    if (!Array.isArray(cable.route)) cable.route = [];
+
+    const clampedIdx = Math.max(0, Math.min(cable.route.length, insertIndex));
+    cable.route.splice(clampedIdx, 0, { x: newNormalized.x, y: newNormalized.y });
     cable.updatedAt = new Date().toISOString();
 
     const sourceDev = this.deviceManager.getDeviceById(cable.source);

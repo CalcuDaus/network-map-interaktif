@@ -34,6 +34,17 @@ export class Toolbar {
     this.btnToggleTheme = document.getElementById('btn-toggle-theme');
     this.initTheme();
 
+    // Workspace Fullscreen Toggles
+    this.btnToggleFullscreen = document.getElementById('btn-toggle-fullscreen');
+    this.btnExitWorkspaceFullscreen = document.getElementById('btn-exit-workspace-fullscreen');
+
+    // Navbar Dropdowns (Feature Menu & Compact Search)
+    this.navbarMenuWrapper = document.getElementById('navbar-menu-wrapper');
+    this.btnNavbarMenu = document.getElementById('btn-navbar-menu');
+    this.navbarSearchWrapper = document.getElementById('navbar-search-wrapper');
+    this.btnToggleSearch = document.getElementById('btn-toggle-search');
+    this.globalSearchInput = document.getElementById('global-search-input');
+
     // Mode Selector Items
     this.modeButtons = document.querySelectorAll('[data-mode]');
 
@@ -91,6 +102,80 @@ export class Toolbar {
     this.btnToggleTheme?.addEventListener('click', () => {
       this.toggleTheme();
     });
+
+    // Workspace Fullscreen Toggles
+    this.btnToggleFullscreen?.addEventListener('click', () => {
+      this.toggleWorkspaceFullscreen();
+    });
+    this.btnExitWorkspaceFullscreen?.addEventListener('click', () => {
+      this.setWorkspaceFullscreen(false);
+    });
+    document.getElementById('btn-3d-exit-fullscreen')?.addEventListener('click', () => {
+      this.setWorkspaceFullscreen(false);
+    });
+
+    document.addEventListener('fullscreenchange', () => {
+      const isNativeFs = Boolean(document.fullscreenElement);
+      if (!isNativeFs && document.body.classList.contains('workspace-fullscreen')) {
+        this.syncWorkspaceFullscreenUI(false);
+      }
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        this.closeNavbarDropdowns();
+        if (document.body.classList.contains('workspace-fullscreen') && !document.fullscreenElement) {
+          this.setWorkspaceFullscreen(false);
+        }
+      }
+    });
+
+    // Navbar Feature Menu Dropdown
+    this.btnNavbarMenu?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const willOpen = !this.navbarMenuWrapper?.classList.contains('open');
+      this.closeNavbarDropdowns();
+      if (willOpen && this.navbarMenuWrapper) {
+        this.navbarMenuWrapper.classList.add('open');
+        this.btnNavbarMenu?.setAttribute('aria-expanded', 'true');
+      }
+    });
+
+    this.navbarMenuWrapper?.querySelectorAll('.navbar-dropdown-item').forEach((item) => {
+      item.addEventListener('click', () => {
+        this.closeNavbarDropdowns();
+      });
+    });
+
+    // Navbar Compact Search Dropdown
+    this.btnToggleSearch?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const willOpen = !this.navbarSearchWrapper?.classList.contains('open');
+      this.closeNavbarDropdowns();
+      if (willOpen && this.navbarSearchWrapper) {
+        this.navbarSearchWrapper.classList.add('open');
+        this.btnToggleSearch?.setAttribute('aria-expanded', 'true');
+        setTimeout(() => this.globalSearchInput?.focus(), 20);
+      }
+    });
+
+    this.navbarSearchWrapper?.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+
+    document.addEventListener('click', (e) => {
+      const target = e.target;
+      if (!this.navbarMenuWrapper?.contains(target) && !this.navbarSearchWrapper?.contains(target)) {
+        this.closeNavbarDropdowns();
+      }
+    });
+  }
+
+  closeNavbarDropdowns() {
+    this.navbarMenuWrapper?.classList.remove('open');
+    this.btnNavbarMenu?.setAttribute('aria-expanded', 'false');
+    this.navbarSearchWrapper?.classList.remove('open');
+    this.btnToggleSearch?.setAttribute('aria-expanded', 'false');
   }
 
   initTheme() {
@@ -116,6 +201,43 @@ export class Toolbar {
     const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
     const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
     this.applyTheme(nextTheme);
+  }
+
+  toggleWorkspaceFullscreen() {
+    const isActive = document.body.classList.contains('workspace-fullscreen');
+    this.setWorkspaceFullscreen(!isActive);
+  }
+
+  setWorkspaceFullscreen(enabled) {
+    this.syncWorkspaceFullscreenUI(enabled);
+
+    if (enabled) {
+      if (!document.fullscreenElement && document.documentElement?.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      }
+    } else if (document.fullscreenElement && document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {});
+    }
+  }
+
+  syncWorkspaceFullscreenUI(enabled) {
+    document.body.classList.toggle('workspace-fullscreen', enabled);
+    if (this.btnToggleFullscreen) {
+      this.btnToggleFullscreen.classList.toggle('active', enabled);
+      this.btnToggleFullscreen.innerHTML = `<i data-lucide="${enabled ? 'minimize-2' : 'maximize-2'}" style="width: 15px; height: 15px;"></i>`;
+      this.btnToggleFullscreen.title = enabled
+        ? 'Keluar dari Fullscreen Workspace (Esc)'
+        : 'Mode Fullscreen Workspace (Esc untuk keluar)';
+      if (window.lucide && typeof window.lucide.createIcons === 'function') {
+        window.lucide.createIcons();
+      }
+    }
+
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => {
+        window.dispatchEvent(new Event('resize'));
+      });
+    }
   }
 
   bindStateListeners() {

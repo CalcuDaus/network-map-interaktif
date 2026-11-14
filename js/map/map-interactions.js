@@ -26,6 +26,8 @@ export class MapInteractions {
     this.isSpacePressed = false;
     this.hitSuspendReasons = new Set();
     this.scaleBy = 1.15; // Zoom scale factor per discrete wheel step / button click
+    this._marqueeState = null;
+    this._suppressNextEmptyClickUntil = 0;
 
     // rAF coalescing state for wheel zoom & UI updates
     this._uiSyncRafId = null;
@@ -227,10 +229,176 @@ export class MapInteractions {
       }
     });
 
-    // --- 4. Stage Click / Tap (Empty canvas click or placement) ---
+    // --- 4. Marquee / Box Selection on Empty Canvas (Select mode drag or Shift+Drag) ---
+    const cleanupMarquee = () => {
+      if (!this._marqueeState) return;
+      const state = this._marqueeState;
+      this._marqueeState = null;
+      if (state.rect) {
+        state.rect.destroy();
+        this.layers?.interactionLayer?.batchDraw();
+      }
+      if (state.restoreStageDraggable) {
+        this.stage.draggable(stateManager.getMode() === 'navigate' && !this.isSpacePressed);
+      }
+      window.removeEventListener('mousemove', handleWindowMarqueeMove);
+      window.removeEventListener('mouseup', handleWindowMarqueeUp);
+    };
+
+    const getStageImagePoint = () => {
+      const pointer = this.stage.getPointerPosition();
+      if (!pointer) return null;
+      const scale = this.stage.scaleX() || 1;
+      return {
+        pointer,
+        x: (pointer.x - this.stage.x()) / scale,
+        y: (pointer.y - this.stage.y()) / scale,
+        scale
+      };
+    };
+
+    const handleWindowMarqueeMove = (domEvt) => {
+      const state = this._marqueeState;
+      if (!state || !this.layers?.interactionLayer) return;
+      // Update Konva stage pointer manually when mouse moves across stage/container
+      this.stage.setPointersPositions(domEvt);
+      const pt = getStageImagePoint();
+      if (!pt) return;
+
+      const rx = Math.min(state.startX, pt.x);
+      const ry = Math.min(state.startY, pt.y);
+      const rw = Math.abs(pt.x - state.startX);
+      const rh = Math.abs(pt.y - state.startY);
+
+      if (!state.active && Math.hypot(pt.pointer.x - state.startScreenX, pt.pointer.y - state.startScreenY) > 4) {
+        state.active = true;
+        this._suppressNextEmptyClickUntil = Date.now() + 400;
+        const invScale = 1 / (this.stage.scaleX() || 1);
+        state.rect = new Konva.Rect({
+          x: rx,
+          y: ry,
+          width: rw,
+          height: rh,
+          fill: 'rgba(118, 196, 87, 0.16)',
+          stroke: '#2a7c13',
+          strokeWidth: 1.75 * invScale,
+          dash: [6 * invScale, 4 * invScale],
+          listening: false,
+          perfectDrawEnabled: false
+        });
+        this.layers.interactionLayer.add(state.rect);
+      }
+
+      if (state.active && state.rect) {
+        state.rect.setAttrs({ x: rx, y: ry, width: rw, height: rh });
+        this.layers.interactionLayer.batchDraw();
+        state.endX = pt.x;
+        state.endY = pt.y;
+      }
+    };
+
+    const handleWindowMarqueeUp = (domEvt) => {
+      const state = this._marqueeState;
+      if (!state) return;
+
+      this.stage.setPointersPositions(domEvt);
+      const pt = getStageImagePoint();
+      const endX = pt ? pt.x : state.endX;
+      const endY = pt ? pt.y : state.endY;
+
+      if (state.active) {
+        this._suppressNextEmptyClickUntil = Date.now() + 250;
+        const w = this.mapDimensions.width || 1024;
+        const h = this.mapDimensions.height || 1024;
+        const minNormX = Math.min(state.startX, endX) / w;
+        const maxNormX = Math.max(state.startX, endX) / w;
+        const minNormY = Math.min(state.startY, endY) / h;
+        const maxNormY = Math.max(state.startY, endY) / h;
+
+        eventBus.emit('canvas:marquee-select', {
+          minNormX,
+          maxNormX,
+          minNormY,
+          maxNormY,
+          additive: Boolean(state.additive || domEvt.shiftKey || domEvt.ctrlKey || domEvt.metaKey)
+        });
+      }
+
+      cleanupMarquee();
+    };
+
+    this._temporarilyDisabledDragForShift = false;
+    this.container.addEventListener('mousedown', (domEvt) => {
+      if (this.isSpacePressed || domEvt.button !== 0 || !domEvt.shiftKey) return;
+      if (stateManager.getMode() !== 'navigate' || !this.stage.draggable()) return;
+      const rect = this.container.getBoundingClientRect();
+      const hit = this.stage.getIntersection({
+        x: domEvt.clientX - rect.left,
+        y: domEvt.clientY - rect.top
+      });
+      if (!hit) {
+        this.stage.draggable(false);
+        this._temporarilyDisabledDragForShift = true;
+      }
+    }, { capture: true });
+
+    this.stage.on('mousedown touchstart', (e) => {
+      if (this.isSpacePressed) return;
+      const evt = e.evt || {};
+      if (evt.button !== undefined && evt.button !== 0) return;
+
+      const mode = stateManager.getMode();
+      if (mode === 'draw-cable' || mode === 'add-device') {
+        if (this._temporarilyDisabledDragForShift) {
+          this._temporarilyDisabledDragForShift = false;
+        }
+        return;
+      }
+
+      const isBg = e.target === this.stage || e.target.hasName('bg-layer') || e.target.hasName('background');
+      if (!isBg) {
+        if (this._temporarilyDisabledDragForShift) {
+          this.stage.draggable(mode === 'navigate' && !this.isSpacePressed);
+          this._temporarilyDisabledDragForShift = false;
+        }
+        return;
+      }
+
+      // In Select mode: any left-drag starts marquee; in Navigate mode: Shift+left-drag starts marquee
+      const canMarquee = mode === 'select' || (mode === 'navigate' && Boolean(evt.shiftKey));
+      if (!canMarquee || !this.layers?.interactionLayer) return;
+
+      const pt = getStageImagePoint();
+      if (!pt) return;
+
+      let restoreStageDraggable = this._temporarilyDisabledDragForShift;
+      this._temporarilyDisabledDragForShift = false;
+      if (this.stage.draggable()) {
+        this.stage.draggable(false);
+        restoreStageDraggable = true;
+      }
+
+      this._marqueeState = {
+        startX: pt.x,
+        startY: pt.y,
+        endX: pt.x,
+        endY: pt.y,
+        startScreenX: pt.pointer.x,
+        startScreenY: pt.pointer.y,
+        additive: Boolean(evt.shiftKey || evt.ctrlKey || evt.metaKey),
+        restoreStageDraggable,
+        active: false,
+        rect: null
+      };
+
+      window.addEventListener('mousemove', handleWindowMarqueeMove);
+      window.addEventListener('mouseup', handleWindowMarqueeUp);
+    });
+
+    // --- 5. Stage Click / Tap (Empty canvas click or placement) ---
     this.stage.on('click tap', (e) => {
-      // If Spacebar is currently pressed or was just dragging, ignore click selection
-      if (this.isSpacePressed) {
+      // If Spacebar is currently pressed or just finished marquee drag, ignore click selection
+      if (this.isSpacePressed || Date.now() < this._suppressNextEmptyClickUntil) {
         return;
       }
 
@@ -249,7 +417,7 @@ export class MapInteractions {
             normalizedY: norm.y,
             isInside: norm.isInside
           });
-        } else {
+        } else if (!e.evt?.ctrlKey && !e.evt?.metaKey && !e.evt?.shiftKey) {
           eventBus.emit('canvas:clicked-empty');
         }
       }

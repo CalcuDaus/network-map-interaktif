@@ -107,13 +107,13 @@ export class MapScaleModal {
                 <span style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">1 px ≈ 0.146 m (Riser & Shaft)</span>
               </button>
 
-              <button type="button" class="scale-preset-btn" data-meters="400" style="display: flex; flex-direction: column; align-items: flex-start; text-align: left; padding: 10px; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; transition: all 0.15s ease;">
+              <button type="button" class="scale-preset-btn" data-meters="170" style="display: flex; flex-direction: column; align-items: flex-start; text-align: left; padding: 10px; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; transition: all 0.15s ease;">
                 <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
-                  <span style="font-size: 12px; font-weight: 700; color: var(--text-primary);">Kampus / Kantor Wilayah</span>
+                  <span style="font-size: 12px; font-weight: 700; color: var(--text-primary);">Kampus Sekolah (Google Maps)</span>
                   <span style="font-size: 9px; padding: 1px 4px; border-radius: 3px; background: rgba(42, 124, 19, 0.2); color: var(--accent-green); font-weight: 700;">DEFAULT</span>
                 </div>
-                <span style="font-size: 11px; font-family: var(--font-mono); color: var(--accent-green); font-weight: 600; margin-top: 2px;">400 Meter</span>
-                <span style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">1 px ≈ 0.39 m (Antargedung)</span>
+                <span style="font-size: 11px; font-family: var(--font-mono); color: var(--accent-green); font-weight: 600; margin-top: 2px;">170 Meter</span>
+                <span style="font-size: 10px; color: var(--text-muted); margin-top: 2px;">1 px ≈ 0.166 m (SMK N 1 Beringin)</span>
               </button>
 
               <button type="button" class="scale-preset-btn" data-meters="800" style="display: flex; flex-direction: column; align-items: flex-start; text-align: left; padding: 10px; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; transition: all 0.15s ease; grid-column: span 2;">
@@ -132,7 +132,7 @@ export class MapScaleModal {
             </label>
             <div style="display: flex; align-items: center; gap: 8px;">
               <input type="number" id="scale-input-custom-meters" min="5" max="10000" step="1" 
-                     value="${this.cableManager.mapWidthMeters || 400}" 
+                     value="${this.cableManager.mapWidthMeters || 170}" 
                      style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 14px; font-weight: 700; font-family: var(--font-mono); padding: 6px 10px; width: 140px;">
               <span style="font-size: 12px; font-weight: 600; color: var(--text-muted);">Meter</span>
               <span style="font-size: 11px; color: var(--text-muted); margin-left: auto;">(Rentang 5 - 10,000m)</span>

@@ -342,3 +342,17 @@
   background-color: var(--accent-blue);
   color: #ffffff;
 }
+
+.map-3d-marquee {
+  position: absolute;
+  pointer-events: none;
+  border: 1.75px dashed #2a7c13;
+  background-color: rgba(118, 196, 87, 0.16);
+  border-radius: 4px;
+  z-index: 12;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25) inset;
+}
+
+#map-3d-container.tool-box canvas {
+  cursor: crosshair !important;
+}
