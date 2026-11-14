@@ -1,7 +1,7 @@
 
 
 # Project Memory — network-map-interaktif
-> 41 notes | Score threshold: >40
+> 42 notes | Score threshold: >40
 
 ## Safety — Never Run Destructive Commands
 
@@ -23,8 +23,8 @@
 - **🟢 Edited docker-compose.yml (73 changes, 8min) — confirmed 3x**
 - **🟢 Edited index.html (5 changes, 15min) — confirmed 3x**
 - **convention in .gitignore**
+- **convention in .gitignore**
 - **🟢 Edited docker-compose.yml (72 changes, 57min)**
-- **🟢 Edited docker-compose.yml (150 changes, 28min)**
 
 ## Project Standards
 

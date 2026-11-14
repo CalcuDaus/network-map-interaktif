@@ -110,8 +110,8 @@ export class Device3DModelModal {
 
           <!-- Spatial 3D Transform -->
           <div style="background: var(--bg-primary, #fff8cf); border: 1px solid var(--border-color); border-radius: 9px; padding: 12px; display: flex; flex-direction: column; gap: 10px;">
-            <span style="font-size: 11.5px; font-weight: 700; color: var(--text-primary);">3. Posisi & Ukuran di Ruang 3D</span>
-            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
+            <span style="font-size: 11.5px; font-weight: 700; color: var(--text-primary);">3. Posisi, Ukuran &amp; Rotasi 3D</span>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
               <div style="display: flex; flex-direction: column; gap: 3px;">
                 <label style="font-size: 10.5px; color: var(--text-muted);">Elevasi Z (m)</label>
                 <input type="number" id="dev3d-elevation" min="0" max="50" step="0.1" value="0.5"
@@ -133,10 +133,26 @@ export class Device3DModelModal {
                        style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px; padding: 5px 7px; font-size: 12px; color: var(--text-primary); font-family: var(--font-mono);">
               </div>
               <div style="display: flex; flex-direction: column; gap: 3px;">
-                <label style="font-size: 10.5px; color: var(--text-muted);">Rotasi Y (°)</label>
-                <input type="number" id="dev3d-rotation" min="0" max="360" step="15" value="0"
+                <label style="font-size: 10.5px; color: var(--text-muted);">Rotasi X / Dinding (°)</label>
+                <input type="number" id="dev3d-rotation-x" min="-180" max="180" step="5" value="0"
                        style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px; padding: 5px 7px; font-size: 12px; color: var(--text-primary); font-family: var(--font-mono);">
               </div>
+              <div style="display: flex; flex-direction: column; gap: 3px;">
+                <label style="font-size: 10.5px; color: var(--text-muted);">Rotasi Y / Hadap (°)</label>
+                <input type="number" id="dev3d-rotation" min="0" max="360" step="5" value="0"
+                       style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px; padding: 5px 7px; font-size: 12px; color: var(--text-primary); font-family: var(--font-mono);">
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 3px;">
+                <label style="font-size: 10.5px; color: var(--text-muted);">Rotasi Z / Roll (°)</label>
+                <input type="number" id="dev3d-rotation-z" min="-180" max="180" step="5" value="0"
+                       style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px; padding: 5px 7px; font-size: 12px; color: var(--text-primary); font-family: var(--font-mono);">
+              </div>
+            </div>
+            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+              <button type="button" class="btn btn-secondary btn-sm btn-dev3d-orient" data-rx="0" data-ry="0" data-rz="0" data-mount="floor" style="font-size: 10.5px; padding: 3px 8px;">Datar 0°</button>
+              <button type="button" class="btn btn-secondary btn-sm btn-dev3d-orient" data-rx="90" data-ry="0" data-rz="0" data-mount="wall" style="font-size: 10.5px; padding: 3px 8px;">Tempel Dinding X:90°</button>
+              <button type="button" class="btn btn-secondary btn-sm btn-dev3d-orient" data-rx="180" data-ry="0" data-rz="0" data-mount="ceiling" style="font-size: 10.5px; padding: 3px 8px;">Plafon X:180°</button>
+              <button type="button" class="btn btn-secondary btn-sm btn-dev3d-orient" data-delta-y="90" style="font-size: 10.5px; padding: 3px 8px;">Putar Y +90°</button>
             </div>
           </div>
 
@@ -299,6 +315,24 @@ export class Device3DModelModal {
       this.updateModelBadge('');
     });
 
+    this.modalEl.querySelectorAll('.btn-dev3d-orient').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const rxEl = this.modalEl.querySelector('#dev3d-rotation-x');
+        const ryEl = this.modalEl.querySelector('#dev3d-rotation');
+        const rzEl = this.modalEl.querySelector('#dev3d-rotation-z');
+        const mEl = this.modalEl.querySelector('#dev3d-mount');
+        if (btn.hasAttribute('data-delta-y')) {
+          const delta = parseFloat(btn.getAttribute('data-delta-y')) || 90;
+          if (ryEl) ryEl.value = ((parseFloat(ryEl.value) || 0) + delta) % 360;
+          return;
+        }
+        if (rxEl) rxEl.value = btn.getAttribute('data-rx') || '0';
+        if (ryEl) ryEl.value = btn.getAttribute('data-ry') || '0';
+        if (rzEl) rzEl.value = btn.getAttribute('data-rz') || '0';
+        if (mEl && btn.getAttribute('data-mount')) mEl.value = btn.getAttribute('data-mount');
+      });
+    });
+
     this.modalEl.querySelector('#btn-dev3d-save-focus')?.addEventListener('click', () => {
       this.applyChanges(true);
     });
@@ -332,7 +366,9 @@ export class Device3DModelModal {
     this.modalEl.querySelector('#dev3d-elevation').value = Number(spatial.elevationMeters ?? 0).toFixed(1);
     this.modalEl.querySelector('#dev3d-mount').value = spatial.mountType || 'floor';
     this.modalEl.querySelector('#dev3d-scale').value = Number(spatial.modelScale || 1);
+    this.modalEl.querySelector('#dev3d-rotation-x').value = Number(spatial.rotationX || 0);
     this.modalEl.querySelector('#dev3d-rotation').value = Number(spatial.rotationY || 0);
+    this.modalEl.querySelector('#dev3d-rotation-z').value = Number(spatial.rotationZ || 0);
     this.modalEl.querySelector('#dev3d-apply-same-type').checked = false;
 
     const sameTypeCount = this.deviceManager.getAllDevices().filter((d) => d.type === dev.type).length;
@@ -507,7 +543,9 @@ export class Device3DModelModal {
     const elevationMeters = parseFloat(this.modalEl.querySelector('#dev3d-elevation').value) || 0;
     const mountType = this.modalEl.querySelector('#dev3d-mount').value || 'floor';
     const modelScale = parseFloat(this.modalEl.querySelector('#dev3d-scale').value) || 1;
-    const rotationY = parseFloat(this.modalEl.querySelector('#dev3d-rotation').value) || 0;
+    const rotationX = Math.max(-180, Math.min(180, parseFloat(this.modalEl.querySelector('#dev3d-rotation-x')?.value) || 0));
+    const rotationY = (((parseFloat(this.modalEl.querySelector('#dev3d-rotation').value) || 0) % 360) + 360) % 360;
+    const rotationZ = Math.max(-180, Math.min(180, parseFloat(this.modalEl.querySelector('#dev3d-rotation-z')?.value) || 0));
     const applySameType = Boolean(this.modalEl.querySelector('#dev3d-apply-same-type').checked);
 
     const baseSpatial = {
@@ -516,7 +554,9 @@ export class Device3DModelModal {
       elevationMeters,
       mountType,
       modelScale,
+      rotationX,
       rotationY,
+      rotationZ,
       customModelUrl
     };
 

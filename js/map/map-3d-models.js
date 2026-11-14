@@ -645,7 +645,9 @@ export const OBJECT3D_PRESETS = {
     depthMeters: 0.35,
     heightMeters: 4.5,
     elevationMeters: 0,
+    rotationX: 0,
     rotationY: 0,
+    rotationZ: 0,
     color: '#64748b',
     accentColor: '#2a7c13',
     opacity: 1,
@@ -660,7 +662,9 @@ export const OBJECT3D_PRESETS = {
     depthMeters: 1.2,
     heightMeters: 2.4,
     elevationMeters: 0,
+    rotationX: 0,
     rotationY: 0,
+    rotationZ: 0,
     color: '#1e293b',
     accentColor: '#2a7c13',
     opacity: 0.45,
@@ -675,7 +679,9 @@ export const OBJECT3D_PRESETS = {
     depthMeters: 1.8,
     heightMeters: 12.0,
     elevationMeters: 0,
+    rotationX: 0,
     rotationY: 0,
+    rotationZ: 0,
     color: '#94a3b8',
     accentColor: '#ef4444',
     opacity: 1,
@@ -689,7 +695,9 @@ export const OBJECT3D_PRESETS = {
     depthMeters: 2.0,
     heightMeters: 2.5,
     elevationMeters: 0,
+    rotationX: 0,
     rotationY: 0,
+    rotationZ: 0,
     color: '#cbd5e1',
     accentColor: '#2a7c13',
     opacity: 0.92,
@@ -703,7 +711,9 @@ export const OBJECT3D_PRESETS = {
     depthMeters: 1.0,
     heightMeters: 3.5,
     elevationMeters: 0,
+    rotationX: 0,
     rotationY: 0,
+    rotationZ: 0,
     color: '#94a3b8',
     accentColor: '#2a7c13',
     opacity: 0.95,
@@ -717,7 +727,9 @@ export const OBJECT3D_PRESETS = {
     depthMeters: 0.3,
     heightMeters: 3.2,
     elevationMeters: 0,
+    rotationX: 0,
     rotationY: 0,
+    rotationZ: 0,
     color: '#e2e8f0',
     accentColor: '#475569',
     opacity: 0.85,
@@ -731,7 +743,9 @@ export const OBJECT3D_PRESETS = {
     depthMeters: 1.1,
     heightMeters: 0.9,
     elevationMeters: 0,
+    rotationX: 0,
     rotationY: 0,
+    rotationZ: 0,
     color: '#78350f',
     accentColor: '#334155',
     opacity: 1,
@@ -745,7 +759,9 @@ export const OBJECT3D_PRESETS = {
     depthMeters: 0.5,
     heightMeters: 1.4,
     elevationMeters: 0,
+    rotationX: 0,
     rotationY: 0,
+    rotationZ: 0,
     color: '#475569',
     accentColor: '#22c55e',
     opacity: 1,
@@ -774,7 +790,10 @@ export function createCustomObject3DGroup(obj, normToWorldFn, isSelected = false
   const pos = normToWorldFn ? normToWorldFn(obj.x ?? 0.5, obj.y ?? 0.5) : { x: 0, z: 0 };
   const elev = Number(obj.elevationMeters) || 0;
   group.position.set(pos.x, elev, pos.z);
-  group.rotation.y = ((Number(obj.rotationY) || 0) * Math.PI) / 180;
+  const rotX = ((Number(obj.rotationX) || 0) * Math.PI) / 180;
+  const rotY = ((Number(obj.rotationY ?? obj.rotationDeg) || 0) * Math.PI) / 180;
+  const rotZ = ((Number(obj.rotationZ) || 0) * Math.PI) / 180;
+  group.rotation.set(rotX, rotY, rotZ, 'YXZ');
 
   const shape = obj.shape || 'box';
   const w = Math.max(0.15, Number(obj.widthMeters) || 1);
@@ -1017,6 +1036,32 @@ export function createCustomObject3DGroup(obj, normToWorldFn, isSelected = false
     cornerHandle.userData.object3dId = obj.id;
     cornerHandle.userData.gizmoType = 'scale';
     group.add(cornerHandle);
+
+    // SketchUp Green Rotate Ring + Handle (gizmoType: 'rotate')
+    const rotateRingRadius = ringInner + 0.28;
+    const rotateMat = makeMat(0x22c55e, {
+      emissive: 0x16a34a,
+      emissiveIntensity: 0.48,
+      roughness: 0.25
+    });
+    const rotateRing = new THREE.Mesh(
+      new THREE.TorusGeometry(rotateRingRadius, 0.035, 10, 36),
+      rotateMat
+    );
+    rotateRing.rotation.x = Math.PI / 2;
+    rotateRing.position.y = 0.08;
+    rotateRing.userData.object3dId = obj.id;
+    rotateRing.userData.gizmoType = 'rotate';
+    group.add(rotateRing);
+
+    const rotateKnob = new THREE.Mesh(
+      new THREE.SphereGeometry(0.16, 14, 14),
+      rotateMat
+    );
+    rotateKnob.position.set(0, 0.14, rotateRingRadius);
+    rotateKnob.userData.object3dId = obj.id;
+    rotateKnob.userData.gizmoType = 'rotate';
+    group.add(rotateKnob);
   }
 
   if (obj.showLabel && typeof document !== 'undefined') {

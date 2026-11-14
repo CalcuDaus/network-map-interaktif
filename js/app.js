@@ -490,13 +490,14 @@ class NetMapApp {
       this.map3DEngine?.setShowCoverage(Boolean(e.target.checked));
     });
 
-    // SketchUp Navigation Tool Buttons (Orbit, Pan, Zoom, Look, Move, Box Select, Draw 3D)
+    // SketchUp Navigation Tool Buttons (Orbit, Pan, Zoom, Look, Move, Rotate, Box Select, Draw 3D)
     const navToolButtons = [
       { id: 'btn-3d-tool-orbit', tool: 'orbit' },
       { id: 'btn-3d-tool-pan', tool: 'pan' },
       { id: 'btn-3d-tool-zoom', tool: 'zoom' },
       { id: 'btn-3d-tool-look', tool: 'look' },
       { id: 'btn-3d-tool-move', tool: 'move' },
+      { id: 'btn-3d-tool-rotate', tool: 'rotate' },
       { id: 'btn-3d-tool-box', tool: 'box' },
       { id: 'btn-3d-tool-draw3d', tool: 'draw3d' }
     ];
@@ -665,6 +666,21 @@ class NetMapApp {
         if (lower === 'm') {
           e.preventDefault();
           this.map3DEngine?.setNavTool('move');
+          return;
+        }
+        if (lower === 'r') {
+          e.preventDefault();
+          this.map3DEngine?.setNavTool('rotate');
+          return;
+        }
+        if (e.key === '[' || e.key === '{') {
+          e.preventDefault();
+          this.map3DEngine?.rotateSelectedIn3D(e.shiftKey ? { dX: -15 } : { dY: -15 });
+          return;
+        }
+        if (e.key === ']' || e.key === '}') {
+          e.preventDefault();
+          this.map3DEngine?.rotateSelectedIn3D(e.shiftKey ? { dX: 15 } : { dY: 15 });
           return;
         }
         if (lower === 'b') {

@@ -217,6 +217,7 @@
 #map-3d-container.tool-zoom { cursor: ns-resize; }
 #map-3d-container.tool-look { cursor: crosshair; }
 #map-3d-container.tool-move { cursor: move; }
+#map-3d-container.tool-rotate { cursor: ew-resize; }
 #map-3d-container.mode-draw-cable { cursor: crosshair !important; }
 
 .hud-3d-hints {

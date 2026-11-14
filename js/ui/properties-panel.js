@@ -376,13 +376,74 @@ export class PropertiesPanel {
                 </select>
               </div>
               <div style="display: flex; flex-direction: column; gap: 3px;">
-                <label style="font-size: 10.5px; color: var(--text-muted);">Rotasi Y (°) / Skala</label>
-                <div style="display: flex; gap: 4px;">
-                  <input type="number" id="prop-3d-rotation" min="0" max="360" step="15" value="${spatial.rotationY || 0}" title="Rotasi 3D (Derajat)"
-                         style="width: 50%; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 11px; padding: 4px; font-family: var(--font-mono);">
-                  <input type="number" id="prop-3d-scale" min="0.3" max="5" step="0.1" value="${spatial.modelScale || 1}" title="Skala Model 3D"
-                         style="width: 50%; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 11px; padding: 4px; font-family: var(--font-mono);">
+                <label style="font-size: 10.5px; color: var(--text-muted);">Skala Model 3D</label>
+                <input type="number" id="prop-3d-scale" min="0.3" max="5" step="0.1" value="${spatial.modelScale || 1}" title="Skala Model 3D"
+                       style="width: 100%; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 11px; padding: 4px 6px; font-family: var(--font-mono);">
+              </div>
+            </div>
+
+            <!-- Rotasi & Orientasi 3D (X / Y / Z) -->
+            <div style="display: flex; flex-direction: column; gap: 8px; border-top: 1px dashed var(--border-color); padding-top: 8px;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 11px; font-weight: 700; color: var(--text-primary);">Rotasi &amp; Orientasi 3D (X / Y / Z)</span>
+                <button type="button" id="btn-3d-rot-reset" class="btn btn-secondary btn-sm" style="font-size: 9.5px; padding: 1px 6px; height: auto;" title="Kembalikan semua sudut rotasi ke 0°">
+                  Reset 0°
+                </button>
+              </div>
+
+              <!-- Preset Orientasi Pasang -->
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <span style="font-size: 10px; color: var(--text-muted);">Preset Cepat Tempel Dinding / Plafon</span>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;">
+                  <button type="button" class="btn btn-secondary btn-sm btn-3d-orient-preset" data-rx="0" data-ry="0" data-rz="0" data-mount="floor" style="font-size: 9.5px; padding: 3px 4px; height: auto;" title="Datar di lantai atau meja">Lantai / Meja (0°)</button>
+                  <button type="button" class="btn btn-secondary btn-sm btn-3d-orient-preset" data-rx="90" data-ry="0" data-rz="0" data-mount="wall" style="font-size: 9.5px; padding: 3px 4px; height: auto;" title="Menghadap Depan (+Z) tegak pada dinding">Dinding Depan (+Z)</button>
+                  <button type="button" class="btn btn-secondary btn-sm btn-3d-orient-preset" data-rx="90" data-ry="180" data-rz="0" data-mount="wall" style="font-size: 9.5px; padding: 3px 4px; height: auto;" title="Menghadap Belakang (-Z) tegak pada dinding">Dinding Belakang (-Z)</button>
+                  <button type="button" class="btn btn-secondary btn-sm btn-3d-orient-preset" data-rx="90" data-ry="90" data-rz="0" data-mount="wall" style="font-size: 9.5px; padding: 3px 4px; height: auto;" title="Menghadap Kanan (+X) tegak pada dinding">Dinding Kanan (+X)</button>
+                  <button type="button" class="btn btn-secondary btn-sm btn-3d-orient-preset" data-rx="90" data-ry="270" data-rz="0" data-mount="wall" style="font-size: 9.5px; padding: 3px 4px; height: auto;" title="Menghadap Kiri (-X) tegak pada dinding">Dinding Kiri (-X)</button>
+                  <button type="button" class="btn btn-secondary btn-sm btn-3d-orient-preset" data-rx="180" data-ry="0" data-rz="0" data-mount="ceiling" style="font-size: 9.5px; padding: 3px 4px; height: auto;" title="Terbalik menghadap bawah (Plafon AP)">Plafon Terbalik (180°)</button>
                 </div>
+              </div>
+
+              <!-- Rotasi Y (Yaw / Arah Hadap) -->
+              <div style="display: flex; flex-direction: column; gap: 3px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <label style="font-size: 10.5px; color: var(--text-muted);">Rotasi Y — Arah Hadap (°)</label>
+                  <div style="display: flex; align-items: center; gap: 4px;">
+                    <button type="button" class="btn btn-secondary btn-sm btn-3d-rot-y" data-delta="45" style="font-size: 9.5px; padding: 1px 5px; height: auto;">+45°</button>
+                    <button type="button" class="btn btn-secondary btn-sm btn-3d-rot-y" data-delta="90" style="font-size: 9.5px; padding: 1px 5px; height: auto;">+90°</button>
+                    <input type="number" id="prop-3d-rotation" min="0" max="360" step="5" value="${Number(spatial.rotationY || 0)}"
+                           style="width: 52px; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 11px; padding: 2px 4px; text-align: right; font-family: var(--font-mono);">
+                  </div>
+                </div>
+                <input type="range" id="prop-3d-rotation-slider" min="0" max="360" step="5" value="${Number(spatial.rotationY || 0)}"
+                       style="width: 100%; accent-color: var(--accent-blue); cursor: pointer;">
+              </div>
+
+              <!-- Rotasi X (Pitch / Kemiringan Tempel Dinding) -->
+              <div style="display: flex; flex-direction: column; gap: 3px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <label style="font-size: 10.5px; color: var(--text-muted);">Rotasi X — Kemiringan / Dinding (°)</label>
+                  <div style="display: flex; align-items: center; gap: 3px;">
+                    <button type="button" class="btn btn-secondary btn-sm btn-3d-rot-x-set" data-val="0" style="font-size: 9.5px; padding: 1px 5px; height: auto;">0°</button>
+                    <button type="button" class="btn btn-secondary btn-sm btn-3d-rot-x-set" data-val="90" style="font-size: 9.5px; padding: 1px 5px; height: auto;">90°</button>
+                    <button type="button" class="btn btn-secondary btn-sm btn-3d-rot-x-set" data-val="-90" style="font-size: 9.5px; padding: 1px 5px; height: auto;">-90°</button>
+                    <input type="number" id="prop-3d-rotation-x" min="-180" max="180" step="5" value="${Number(spatial.rotationX || 0)}"
+                           style="width: 52px; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 11px; padding: 2px 4px; text-align: right; font-family: var(--font-mono);">
+                  </div>
+                </div>
+                <input type="range" id="prop-3d-rotation-x-slider" min="-180" max="180" step="5" value="${Number(spatial.rotationX || 0)}"
+                       style="width: 100%; accent-color: var(--accent-blue); cursor: pointer;">
+              </div>
+
+              <!-- Rotasi Z (Roll Samping) -->
+              <div style="display: flex; flex-direction: column; gap: 3px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <label style="font-size: 10.5px; color: var(--text-muted);">Rotasi Z — Roll Samping (°)</label>
+                  <input type="number" id="prop-3d-rotation-z" min="-180" max="180" step="5" value="${Number(spatial.rotationZ || 0)}"
+                         style="width: 52px; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 11px; padding: 2px 4px; text-align: right; font-family: var(--font-mono);">
+                </div>
+                <input type="range" id="prop-3d-rotation-z-slider" min="-180" max="180" step="5" value="${Number(spatial.rotationZ || 0)}"
+                       style="width: 100%; accent-color: var(--accent-blue); cursor: pointer;">
               </div>
             </div>
 
@@ -756,10 +817,73 @@ export class PropertiesPanel {
       this.deviceManager.updateDevice(devId, { spatial3d: sp });
     });
 
-    document.getElementById('prop-3d-rotation')?.addEventListener('change', (e) => {
+    const rotYInput = document.getElementById('prop-3d-rotation');
+    const rotYSlider = document.getElementById('prop-3d-rotation-slider');
+    const rotXInput = document.getElementById('prop-3d-rotation-x');
+    const rotXSlider = document.getElementById('prop-3d-rotation-x-slider');
+    const rotZInput = document.getElementById('prop-3d-rotation-z');
+    const rotZSlider = document.getElementById('prop-3d-rotation-z-slider');
+    const mountSelect = document.getElementById('prop-3d-mount');
+
+    const applyRotationPatch = (patch) => {
       const sp = ensureSpatial();
-      sp.rotationY = parseFloat(e.target.value) || 0;
-      this.deviceManager.updateDevice(devId, { spatial3d: sp });
+      Object.assign(sp, patch);
+      if (rotYInput && patch.rotationY !== undefined) rotYInput.value = patch.rotationY;
+      if (rotYSlider && patch.rotationY !== undefined) rotYSlider.value = patch.rotationY;
+      if (rotXInput && patch.rotationX !== undefined) rotXInput.value = patch.rotationX;
+      if (rotXSlider && patch.rotationX !== undefined) rotXSlider.value = patch.rotationX;
+      if (rotZInput && patch.rotationZ !== undefined) rotZInput.value = patch.rotationZ;
+      if (rotZSlider && patch.rotationZ !== undefined) rotZSlider.value = patch.rotationZ;
+      if (mountSelect && patch.mountType !== undefined) mountSelect.value = patch.mountType;
+
+      const selectedList = this.deviceManager.getSelectedDevices?.() || [];
+      const targets = selectedList.length > 1 ? selectedList : [this.currentDevice];
+      targets.forEach((tDev) => {
+        if (!tDev || tDev.layerLocked) return;
+        const baseSp = tDev.id === devId
+          ? sp
+          : { ...getDefaultSpatial3d(tDev.type), ...(tDev.spatial3d || {}), ...patch };
+        this.deviceManager.updateDevice(tDev.id, { spatial3d: baseSp });
+      });
+    };
+
+    const normY = (val) => ((Math.round(parseFloat(val) || 0) % 360) + 360) % 360;
+    const normXZ = (val) => Math.max(-180, Math.min(180, Math.round(parseFloat(val) || 0)));
+
+    rotYSlider?.addEventListener('input', (e) => applyRotationPatch({ rotationY: normY(e.target.value) }));
+    rotYInput?.addEventListener('change', (e) => applyRotationPatch({ rotationY: normY(e.target.value) }));
+    rotXSlider?.addEventListener('input', (e) => applyRotationPatch({ rotationX: normXZ(e.target.value) }));
+    rotXInput?.addEventListener('change', (e) => applyRotationPatch({ rotationX: normXZ(e.target.value) }));
+    rotZSlider?.addEventListener('input', (e) => applyRotationPatch({ rotationZ: normXZ(e.target.value) }));
+    rotZInput?.addEventListener('change', (e) => applyRotationPatch({ rotationZ: normXZ(e.target.value) }));
+
+    this.container.querySelectorAll('.btn-3d-rot-y').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const delta = parseFloat(btn.dataset.delta) || 45;
+        const sp = ensureSpatial();
+        applyRotationPatch({ rotationY: normY((sp.rotationY || 0) + delta) });
+      });
+    });
+
+    this.container.querySelectorAll('.btn-3d-rot-x-set').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        applyRotationPatch({ rotationX: normXZ(btn.dataset.val) });
+      });
+    });
+
+    this.container.querySelectorAll('.btn-3d-orient-preset').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        applyRotationPatch({
+          rotationX: normXZ(btn.dataset.rx),
+          rotationY: normY(btn.dataset.ry),
+          rotationZ: normXZ(btn.dataset.rz),
+          mountType: btn.dataset.mount || 'wall'
+        });
+      });
+    });
+
+    document.getElementById('btn-3d-rot-reset')?.addEventListener('click', () => {
+      applyRotationPatch({ rotationX: 0, rotationY: 0, rotationZ: 0 });
     });
 
     document.getElementById('prop-3d-scale')?.addEventListener('change', (e) => {
@@ -940,7 +1064,7 @@ export class PropertiesPanel {
       }
     });
 
-    // Update coordinates display if moved while panel is open
+    // Update coordinates & 3D rotation display if modified externally (e.g. canvas Rotate tool)
     eventBus.on('device:moved', ({ deviceId, position }) => {
       if (this.currentDevice?.id === deviceId) {
         this.currentDevice.position = position;
@@ -948,6 +1072,23 @@ export class PropertiesPanel {
         if (coordEl) {
           coordEl.textContent = `Koordinat: X=${formatDecimals(position.x, 4)}, Y=${formatDecimals(position.y, 4)}`;
         }
+      }
+    });
+
+    eventBus.on('device:updated', (dev) => {
+      if (dev && this.currentDevice?.id === dev.id) {
+        this.currentDevice = dev;
+        const sp = dev.spatial3d || {};
+        [
+          ['prop-3d-rotation', 'prop-3d-rotation-slider', sp.rotationY ?? 0],
+          ['prop-3d-rotation-x', 'prop-3d-rotation-x-slider', sp.rotationX ?? 0],
+          ['prop-3d-rotation-z', 'prop-3d-rotation-z-slider', sp.rotationZ ?? 0]
+        ].forEach(([numId, sldId, val]) => {
+          const numEl = document.getElementById(numId);
+          const sldEl = document.getElementById(sldId);
+          if (numEl && document.activeElement !== numEl) numEl.value = val;
+          if (sldEl && document.activeElement !== sldEl) sldEl.value = val;
+        });
       }
     });
   }

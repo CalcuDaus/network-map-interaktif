@@ -1656,10 +1656,10 @@
   }
   function getDefaultSpatial3d(type = "router") {
     if (["access-point", "mikrotik-cap-ax", "ruijie-rap2260", "ruijie-rap2200"].includes(type)) {
-      return { elevationMeters: 2.8, mountType: "ceiling", rackUnit: null, customModelUrl: "", modelScale: 1, rotationY: 0 };
+      return { elevationMeters: 2.8, mountType: "ceiling", rackUnit: null, customModelUrl: "", modelScale: 1, rotationX: 0, rotationY: 0, rotationZ: 0 };
     }
     if (["mikrotik-hap-ax2", "ruijie-rap1200", "cctv"].includes(type)) {
-      return { elevationMeters: 2.2, mountType: "wall", rackUnit: null, customModelUrl: "", modelScale: 1, rotationY: 0 };
+      return { elevationMeters: 2.2, mountType: "wall", rackUnit: null, customModelUrl: "", modelScale: 1, rotationX: 0, rotationY: 0, rotationZ: 0 };
     }
     if ([
       "wireless-bridge",
@@ -1670,10 +1670,10 @@
       "ruijie-rap6260",
       "ruijie-est350"
     ].includes(type)) {
-      return { elevationMeters: 4.5, mountType: "pole", rackUnit: null, customModelUrl: "", modelScale: 1, rotationY: 0 };
+      return { elevationMeters: 4.5, mountType: "pole", rackUnit: null, customModelUrl: "", modelScale: 1, rotationX: 0, rotationY: 0, rotationZ: 0 };
     }
     if (["server", "nvr", "storage", "database"].includes(type)) {
-      return { elevationMeters: 0.45, mountType: "rack", rackUnit: 4, customModelUrl: "", modelScale: 1, rotationY: 0 };
+      return { elevationMeters: 0.45, mountType: "rack", rackUnit: 4, customModelUrl: "", modelScale: 1, rotationX: 0, rotationY: 0, rotationZ: 0 };
     }
     if ([
       "core-switch",
@@ -1703,7 +1703,7 @@
       "tplink-sg3428x",
       "tplink-sx3016f"
     ].includes(type)) {
-      return { elevationMeters: 1, mountType: "rack", rackUnit: 12, customModelUrl: "", modelScale: 1, rotationY: 0 };
+      return { elevationMeters: 1, mountType: "rack", rackUnit: 12, customModelUrl: "", modelScale: 1, rotationX: 0, rotationY: 0, rotationZ: 0 };
     }
     if ([
       "router",
@@ -1720,12 +1720,12 @@
       "ruijie-eg310gh",
       "ruijie-nbr6210"
     ].includes(type)) {
-      return { elevationMeters: 1.45, mountType: "rack", rackUnit: 20, customModelUrl: "", modelScale: 1, rotationY: 0 };
+      return { elevationMeters: 1.45, mountType: "rack", rackUnit: 20, customModelUrl: "", modelScale: 1, rotationX: 0, rotationY: 0, rotationZ: 0 };
     }
     if (["network-rack", "patch-panel", "odp", "fo-terminal"].includes(type)) {
-      return { elevationMeters: 0, mountType: "floor", rackUnit: null, customModelUrl: "", modelScale: 1, rotationY: 0 };
+      return { elevationMeters: 0, mountType: "floor", rackUnit: null, customModelUrl: "", modelScale: 1, rotationX: 0, rotationY: 0, rotationZ: 0 };
     }
-    return { elevationMeters: 0.75, mountType: "floor", rackUnit: null, customModelUrl: "", modelScale: 1, rotationY: 0 };
+    return { elevationMeters: 0.75, mountType: "floor", rackUnit: null, customModelUrl: "", modelScale: 1, rotationX: 0, rotationY: 0, rotationZ: 0 };
   }
   var BUILTIN_GLB_MODELS = [
     {
@@ -5638,13 +5638,74 @@ ${device.network.ip}`;
                 </select>
               </div>
               <div style="display: flex; flex-direction: column; gap: 3px;">
-                <label style="font-size: 10.5px; color: var(--text-muted);">Rotasi Y (\xB0) / Skala</label>
-                <div style="display: flex; gap: 4px;">
-                  <input type="number" id="prop-3d-rotation" min="0" max="360" step="15" value="${spatial.rotationY || 0}" title="Rotasi 3D (Derajat)"
-                         style="width: 50%; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 11px; padding: 4px; font-family: var(--font-mono);">
-                  <input type="number" id="prop-3d-scale" min="0.3" max="5" step="0.1" value="${spatial.modelScale || 1}" title="Skala Model 3D"
-                         style="width: 50%; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 11px; padding: 4px; font-family: var(--font-mono);">
+                <label style="font-size: 10.5px; color: var(--text-muted);">Skala Model 3D</label>
+                <input type="number" id="prop-3d-scale" min="0.3" max="5" step="0.1" value="${spatial.modelScale || 1}" title="Skala Model 3D"
+                       style="width: 100%; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 11px; padding: 4px 6px; font-family: var(--font-mono);">
+              </div>
+            </div>
+
+            <!-- Rotasi & Orientasi 3D (X / Y / Z) -->
+            <div style="display: flex; flex-direction: column; gap: 8px; border-top: 1px dashed var(--border-color); padding-top: 8px;">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-size: 11px; font-weight: 700; color: var(--text-primary);">Rotasi &amp; Orientasi 3D (X / Y / Z)</span>
+                <button type="button" id="btn-3d-rot-reset" class="btn btn-secondary btn-sm" style="font-size: 9.5px; padding: 1px 6px; height: auto;" title="Kembalikan semua sudut rotasi ke 0\xB0">
+                  Reset 0\xB0
+                </button>
+              </div>
+
+              <!-- Preset Orientasi Pasang -->
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <span style="font-size: 10px; color: var(--text-muted);">Preset Cepat Tempel Dinding / Plafon</span>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;">
+                  <button type="button" class="btn btn-secondary btn-sm btn-3d-orient-preset" data-rx="0" data-ry="0" data-rz="0" data-mount="floor" style="font-size: 9.5px; padding: 3px 4px; height: auto;" title="Datar di lantai atau meja">Lantai / Meja (0\xB0)</button>
+                  <button type="button" class="btn btn-secondary btn-sm btn-3d-orient-preset" data-rx="90" data-ry="0" data-rz="0" data-mount="wall" style="font-size: 9.5px; padding: 3px 4px; height: auto;" title="Menghadap Depan (+Z) tegak pada dinding">Dinding Depan (+Z)</button>
+                  <button type="button" class="btn btn-secondary btn-sm btn-3d-orient-preset" data-rx="90" data-ry="180" data-rz="0" data-mount="wall" style="font-size: 9.5px; padding: 3px 4px; height: auto;" title="Menghadap Belakang (-Z) tegak pada dinding">Dinding Belakang (-Z)</button>
+                  <button type="button" class="btn btn-secondary btn-sm btn-3d-orient-preset" data-rx="90" data-ry="90" data-rz="0" data-mount="wall" style="font-size: 9.5px; padding: 3px 4px; height: auto;" title="Menghadap Kanan (+X) tegak pada dinding">Dinding Kanan (+X)</button>
+                  <button type="button" class="btn btn-secondary btn-sm btn-3d-orient-preset" data-rx="90" data-ry="270" data-rz="0" data-mount="wall" style="font-size: 9.5px; padding: 3px 4px; height: auto;" title="Menghadap Kiri (-X) tegak pada dinding">Dinding Kiri (-X)</button>
+                  <button type="button" class="btn btn-secondary btn-sm btn-3d-orient-preset" data-rx="180" data-ry="0" data-rz="0" data-mount="ceiling" style="font-size: 9.5px; padding: 3px 4px; height: auto;" title="Terbalik menghadap bawah (Plafon AP)">Plafon Terbalik (180\xB0)</button>
                 </div>
+              </div>
+
+              <!-- Rotasi Y (Yaw / Arah Hadap) -->
+              <div style="display: flex; flex-direction: column; gap: 3px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <label style="font-size: 10.5px; color: var(--text-muted);">Rotasi Y \u2014 Arah Hadap (\xB0)</label>
+                  <div style="display: flex; align-items: center; gap: 4px;">
+                    <button type="button" class="btn btn-secondary btn-sm btn-3d-rot-y" data-delta="45" style="font-size: 9.5px; padding: 1px 5px; height: auto;">+45\xB0</button>
+                    <button type="button" class="btn btn-secondary btn-sm btn-3d-rot-y" data-delta="90" style="font-size: 9.5px; padding: 1px 5px; height: auto;">+90\xB0</button>
+                    <input type="number" id="prop-3d-rotation" min="0" max="360" step="5" value="${Number(spatial.rotationY || 0)}"
+                           style="width: 52px; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 11px; padding: 2px 4px; text-align: right; font-family: var(--font-mono);">
+                  </div>
+                </div>
+                <input type="range" id="prop-3d-rotation-slider" min="0" max="360" step="5" value="${Number(spatial.rotationY || 0)}"
+                       style="width: 100%; accent-color: var(--accent-blue); cursor: pointer;">
+              </div>
+
+              <!-- Rotasi X (Pitch / Kemiringan Tempel Dinding) -->
+              <div style="display: flex; flex-direction: column; gap: 3px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <label style="font-size: 10.5px; color: var(--text-muted);">Rotasi X \u2014 Kemiringan / Dinding (\xB0)</label>
+                  <div style="display: flex; align-items: center; gap: 3px;">
+                    <button type="button" class="btn btn-secondary btn-sm btn-3d-rot-x-set" data-val="0" style="font-size: 9.5px; padding: 1px 5px; height: auto;">0\xB0</button>
+                    <button type="button" class="btn btn-secondary btn-sm btn-3d-rot-x-set" data-val="90" style="font-size: 9.5px; padding: 1px 5px; height: auto;">90\xB0</button>
+                    <button type="button" class="btn btn-secondary btn-sm btn-3d-rot-x-set" data-val="-90" style="font-size: 9.5px; padding: 1px 5px; height: auto;">-90\xB0</button>
+                    <input type="number" id="prop-3d-rotation-x" min="-180" max="180" step="5" value="${Number(spatial.rotationX || 0)}"
+                           style="width: 52px; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 11px; padding: 2px 4px; text-align: right; font-family: var(--font-mono);">
+                  </div>
+                </div>
+                <input type="range" id="prop-3d-rotation-x-slider" min="-180" max="180" step="5" value="${Number(spatial.rotationX || 0)}"
+                       style="width: 100%; accent-color: var(--accent-blue); cursor: pointer;">
+              </div>
+
+              <!-- Rotasi Z (Roll Samping) -->
+              <div style="display: flex; flex-direction: column; gap: 3px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <label style="font-size: 10.5px; color: var(--text-muted);">Rotasi Z \u2014 Roll Samping (\xB0)</label>
+                  <input type="number" id="prop-3d-rotation-z" min="-180" max="180" step="5" value="${Number(spatial.rotationZ || 0)}"
+                         style="width: 52px; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 11px; padding: 2px 4px; text-align: right; font-family: var(--font-mono);">
+                </div>
+                <input type="range" id="prop-3d-rotation-z-slider" min="-180" max="180" step="5" value="${Number(spatial.rotationZ || 0)}"
+                       style="width: 100%; accent-color: var(--accent-blue); cursor: pointer;">
               </div>
             </div>
 
@@ -5970,10 +6031,63 @@ ${device.network.ip}`;
         sp.mountType = e.target.value;
         this.deviceManager.updateDevice(devId, { spatial3d: sp });
       });
-      document.getElementById("prop-3d-rotation")?.addEventListener("change", (e) => {
+      const rotYInput = document.getElementById("prop-3d-rotation");
+      const rotYSlider = document.getElementById("prop-3d-rotation-slider");
+      const rotXInput = document.getElementById("prop-3d-rotation-x");
+      const rotXSlider = document.getElementById("prop-3d-rotation-x-slider");
+      const rotZInput = document.getElementById("prop-3d-rotation-z");
+      const rotZSlider = document.getElementById("prop-3d-rotation-z-slider");
+      const mountSelect = document.getElementById("prop-3d-mount");
+      const applyRotationPatch = (patch) => {
         const sp = ensureSpatial();
-        sp.rotationY = parseFloat(e.target.value) || 0;
-        this.deviceManager.updateDevice(devId, { spatial3d: sp });
+        Object.assign(sp, patch);
+        if (rotYInput && patch.rotationY !== void 0) rotYInput.value = patch.rotationY;
+        if (rotYSlider && patch.rotationY !== void 0) rotYSlider.value = patch.rotationY;
+        if (rotXInput && patch.rotationX !== void 0) rotXInput.value = patch.rotationX;
+        if (rotXSlider && patch.rotationX !== void 0) rotXSlider.value = patch.rotationX;
+        if (rotZInput && patch.rotationZ !== void 0) rotZInput.value = patch.rotationZ;
+        if (rotZSlider && patch.rotationZ !== void 0) rotZSlider.value = patch.rotationZ;
+        if (mountSelect && patch.mountType !== void 0) mountSelect.value = patch.mountType;
+        const selectedList = this.deviceManager.getSelectedDevices?.() || [];
+        const targets = selectedList.length > 1 ? selectedList : [this.currentDevice];
+        targets.forEach((tDev) => {
+          if (!tDev || tDev.layerLocked) return;
+          const baseSp = tDev.id === devId ? sp : { ...getDefaultSpatial3d(tDev.type), ...tDev.spatial3d || {}, ...patch };
+          this.deviceManager.updateDevice(tDev.id, { spatial3d: baseSp });
+        });
+      };
+      const normY = (val) => (Math.round(parseFloat(val) || 0) % 360 + 360) % 360;
+      const normXZ = (val) => Math.max(-180, Math.min(180, Math.round(parseFloat(val) || 0)));
+      rotYSlider?.addEventListener("input", (e) => applyRotationPatch({ rotationY: normY(e.target.value) }));
+      rotYInput?.addEventListener("change", (e) => applyRotationPatch({ rotationY: normY(e.target.value) }));
+      rotXSlider?.addEventListener("input", (e) => applyRotationPatch({ rotationX: normXZ(e.target.value) }));
+      rotXInput?.addEventListener("change", (e) => applyRotationPatch({ rotationX: normXZ(e.target.value) }));
+      rotZSlider?.addEventListener("input", (e) => applyRotationPatch({ rotationZ: normXZ(e.target.value) }));
+      rotZInput?.addEventListener("change", (e) => applyRotationPatch({ rotationZ: normXZ(e.target.value) }));
+      this.container.querySelectorAll(".btn-3d-rot-y").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const delta = parseFloat(btn.dataset.delta) || 45;
+          const sp = ensureSpatial();
+          applyRotationPatch({ rotationY: normY((sp.rotationY || 0) + delta) });
+        });
+      });
+      this.container.querySelectorAll(".btn-3d-rot-x-set").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          applyRotationPatch({ rotationX: normXZ(btn.dataset.val) });
+        });
+      });
+      this.container.querySelectorAll(".btn-3d-orient-preset").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          applyRotationPatch({
+            rotationX: normXZ(btn.dataset.rx),
+            rotationY: normY(btn.dataset.ry),
+            rotationZ: normXZ(btn.dataset.rz),
+            mountType: btn.dataset.mount || "wall"
+          });
+        });
+      });
+      document.getElementById("btn-3d-rot-reset")?.addEventListener("click", () => {
+        applyRotationPatch({ rotationX: 0, rotationY: 0, rotationZ: 0 });
       });
       document.getElementById("prop-3d-scale")?.addEventListener("change", (e) => {
         const sp = ensureSpatial();
@@ -6133,6 +6247,22 @@ ${device.network.ip}`;
           if (coordEl) {
             coordEl.textContent = `Koordinat: X=${formatDecimals(position.x, 4)}, Y=${formatDecimals(position.y, 4)}`;
           }
+        }
+      });
+      eventBus.on("device:updated", (dev) => {
+        if (dev && this.currentDevice?.id === dev.id) {
+          this.currentDevice = dev;
+          const sp = dev.spatial3d || {};
+          [
+            ["prop-3d-rotation", "prop-3d-rotation-slider", sp.rotationY ?? 0],
+            ["prop-3d-rotation-x", "prop-3d-rotation-x-slider", sp.rotationX ?? 0],
+            ["prop-3d-rotation-z", "prop-3d-rotation-z-slider", sp.rotationZ ?? 0]
+          ].forEach(([numId, sldId, val]) => {
+            const numEl = document.getElementById(numId);
+            const sldEl = document.getElementById(sldId);
+            if (numEl && document.activeElement !== numEl) numEl.value = val;
+            if (sldEl && document.activeElement !== sldEl) sldEl.value = val;
+          });
         }
       });
     }
@@ -48837,7 +48967,9 @@ void main() {
       depthMeters: 0.35,
       heightMeters: 4.5,
       elevationMeters: 0,
+      rotationX: 0,
       rotationY: 0,
+      rotationZ: 0,
       color: "#64748b",
       accentColor: "#2a7c13",
       opacity: 1,
@@ -48852,7 +48984,9 @@ void main() {
       depthMeters: 1.2,
       heightMeters: 2.4,
       elevationMeters: 0,
+      rotationX: 0,
       rotationY: 0,
+      rotationZ: 0,
       color: "#1e293b",
       accentColor: "#2a7c13",
       opacity: 0.45,
@@ -48867,7 +49001,9 @@ void main() {
       depthMeters: 1.8,
       heightMeters: 12,
       elevationMeters: 0,
+      rotationX: 0,
       rotationY: 0,
+      rotationZ: 0,
       color: "#94a3b8",
       accentColor: "#ef4444",
       opacity: 1,
@@ -48881,7 +49017,9 @@ void main() {
       depthMeters: 2,
       heightMeters: 2.5,
       elevationMeters: 0,
+      rotationX: 0,
       rotationY: 0,
+      rotationZ: 0,
       color: "#cbd5e1",
       accentColor: "#2a7c13",
       opacity: 0.92,
@@ -48895,7 +49033,9 @@ void main() {
       depthMeters: 1,
       heightMeters: 3.5,
       elevationMeters: 0,
+      rotationX: 0,
       rotationY: 0,
+      rotationZ: 0,
       color: "#94a3b8",
       accentColor: "#2a7c13",
       opacity: 0.95,
@@ -48909,7 +49049,9 @@ void main() {
       depthMeters: 0.3,
       heightMeters: 3.2,
       elevationMeters: 0,
+      rotationX: 0,
       rotationY: 0,
+      rotationZ: 0,
       color: "#e2e8f0",
       accentColor: "#475569",
       opacity: 0.85,
@@ -48923,7 +49065,9 @@ void main() {
       depthMeters: 1.1,
       heightMeters: 0.9,
       elevationMeters: 0,
+      rotationX: 0,
       rotationY: 0,
+      rotationZ: 0,
       color: "#78350f",
       accentColor: "#334155",
       opacity: 1,
@@ -48937,7 +49081,9 @@ void main() {
       depthMeters: 0.5,
       heightMeters: 1.4,
       elevationMeters: 0,
+      rotationX: 0,
       rotationY: 0,
+      rotationZ: 0,
       color: "#475569",
       accentColor: "#22c55e",
       opacity: 1,
@@ -48957,7 +49103,10 @@ void main() {
     const pos = normToWorldFn ? normToWorldFn(obj.x ?? 0.5, obj.y ?? 0.5) : { x: 0, z: 0 };
     const elev = Number(obj.elevationMeters) || 0;
     group.position.set(pos.x, elev, pos.z);
-    group.rotation.y = (Number(obj.rotationY) || 0) * Math.PI / 180;
+    const rotX = (Number(obj.rotationX) || 0) * Math.PI / 180;
+    const rotY = (Number(obj.rotationY ?? obj.rotationDeg) || 0) * Math.PI / 180;
+    const rotZ = (Number(obj.rotationZ) || 0) * Math.PI / 180;
+    group.rotation.set(rotX, rotY, rotZ, "YXZ");
     const shape = obj.shape || "box";
     const w = Math.max(0.15, Number(obj.widthMeters) || 1);
     const d = Math.max(0.15, Number(obj.depthMeters) || 1);
@@ -49168,6 +49317,29 @@ void main() {
       cornerHandle.userData.object3dId = obj.id;
       cornerHandle.userData.gizmoType = "scale";
       group.add(cornerHandle);
+      const rotateRingRadius = ringInner + 0.28;
+      const rotateMat = makeMat(2278750, {
+        emissive: 1483594,
+        emissiveIntensity: 0.48,
+        roughness: 0.25
+      });
+      const rotateRing = new Mesh(
+        new TorusGeometry(rotateRingRadius, 0.035, 10, 36),
+        rotateMat
+      );
+      rotateRing.rotation.x = Math.PI / 2;
+      rotateRing.position.y = 0.08;
+      rotateRing.userData.object3dId = obj.id;
+      rotateRing.userData.gizmoType = "rotate";
+      group.add(rotateRing);
+      const rotateKnob = new Mesh(
+        new SphereGeometry(0.16, 14, 14),
+        rotateMat
+      );
+      rotateKnob.position.set(0, 0.14, rotateRingRadius);
+      rotateKnob.userData.object3dId = obj.id;
+      rotateKnob.userData.gizmoType = "rotate";
+      group.add(rotateKnob);
     }
     if (obj.showLabel && typeof document !== "undefined") {
       const labelSprite = create3DLabelSprite(
@@ -51758,6 +51930,7 @@ void main() {
       this.pen3dPathStyle = "curve";
       this.pen3dCategory = "cat6";
       this.dragMoveState = null;
+      this.dragRotateState = null;
       this.boxSelectState = null;
       this.activeDraw3dTemplate = { ...OBJECT3D_PRESETS.pole };
       this.object3dDragState = null;
@@ -51815,7 +51988,7 @@ void main() {
       dom.addEventListener("pointerdown", (e) => {
         if (!this.isActive) return;
         if (stateManager.getMode() !== "draw-cable" && e.button === 0) {
-          const shouldBlockOrbit = this.navTool === "box" || this.navTool === "draw3d" || e.ctrlKey || e.metaKey || Boolean(this.checkGizmoHitAtEvent(e));
+          const shouldBlockOrbit = this.navTool === "box" || this.navTool === "draw3d" || this.navTool === "rotate" || e.ctrlKey || e.metaKey || Boolean(this.checkGizmoHitAtEvent(e));
           if (shouldBlockOrbit && this.controls && this.controls.enabled) {
             this.controls.enabled = false;
             this._temporarilyDisabledControlsForBox = true;
@@ -51845,6 +52018,8 @@ void main() {
             dom.setPointerCapture?.(e.pointerId);
           } else if (this.navTool === "move") {
             this.startDeviceDragMove(e, dom);
+          } else if (this.navTool === "rotate") {
+            this.startRotateDrag(e, dom);
           }
         }
       });
@@ -51860,6 +52035,10 @@ void main() {
         }
         if (this.dragMoveState) {
           this.updateDeviceDragMove(e);
+          return;
+        }
+        if (this.dragRotateState) {
+          this.updateDeviceDragRotate(e);
           return;
         }
         if (!this.isLookDragging) return;
@@ -51895,6 +52074,9 @@ void main() {
         }
         if (this.dragMoveState) {
           this.finishDeviceDragMove(e, dom);
+        }
+        if (this.dragRotateState) {
+          this.finishDeviceDragRotate(e, dom);
         }
       };
       dom.addEventListener("pointerup", (e) => {
@@ -52175,7 +52357,7 @@ void main() {
         holder.visible = dev.layerVisible !== false;
         holder.userData.deviceId = dev.id;
         const userModelScale = (dev.spatial3d?.modelScale || 1) * this.deviceScaleMultiplier;
-        const rotYRad = (dev.spatial3d?.rotationY || 0) * Math.PI / 180;
+        const devEuler = this.getDeviceEuler(dev);
         const modelDefaults = getDefaultDevicePorts(dev.type, dev.model, dev.spatial3d?.customModelUrl);
         let devPorts = Array.isArray(dev.ports) && dev.ports.length > 0 ? dev.ports : modelDefaults;
         if (this.isLegacyProceduralPortSet(devPorts) && !this.isLegacyProceduralPortSet(modelDefaults)) {
@@ -52184,16 +52366,19 @@ void main() {
         }
         this.reconcileDeviceCablePorts(dev.id, devPorts, allCables);
         const portStatusMap = this.buildPortStatusMap(dev.id, allCables);
-        this.registerDevicePortTransforms(dev, devPorts, finalX, finalY, finalZ, userModelScale, rotYRad);
+        this.registerDevicePortTransforms(dev, devPorts, finalX, finalY, finalZ, userModelScale, devEuler);
         const hasCustomGlb = Boolean(dev.spatial3d?.customModelUrl);
         const modelContainer = new Group();
+        modelContainer.name = "DeviceModelContainer";
         modelContainer.scale.setScalar(userModelScale);
-        modelContainer.rotation.y = rotYRad;
+        modelContainer.rotation.copy(devEuler);
         const proceduralMesh = createDevice3DMesh(dev, cat.color, statusDef.color);
         modelContainer.add(proceduralMesh);
         if (!hasCustomGlb) {
           modelContainer.add(create3DPortsSubGroup(devPorts, portStatusMap, false));
         }
+        holder.userData.devPorts = devPorts;
+        holder.userData.userModelScale = userModelScale;
         holder.add(modelContainer);
         if (hasCustomGlb) {
           loadCustomGlbModel(dev.spatial3d.customModelUrl, 1.3).then((glb) => {
@@ -52206,7 +52391,8 @@ void main() {
             const latestCables = this.cableManager.getAllConnections();
             this.reconcileDeviceCablePorts(dev.id, devPorts, latestCables);
             const updatedStatusMap = this.buildPortStatusMap(dev.id, latestCables);
-            this.registerDevicePortTransforms(dev, devPorts, finalX, finalY, finalZ, userModelScale, rotYRad);
+            holder.userData.devPorts = devPorts;
+            this.registerDevicePortTransforms(dev, devPorts, finalX, finalY, finalZ, userModelScale, this.getDeviceEuler(dev));
             modelContainer.clear();
             modelContainer.add(glb);
             modelContainer.add(create3DPortsSubGroup(devPorts, updatedStatusMap, true));
@@ -52395,23 +52581,28 @@ void main() {
       });
       return portStatusMap;
     }
-    registerDevicePortTransforms(dev, devPorts, finalX, finalY, finalZ, userModelScale, rotYRad) {
-      const cosR = Math.cos(rotYRad);
-      const sinR = Math.sin(rotYRad);
+    getDeviceEuler(dev) {
+      const rx = (Number(dev?.spatial3d?.rotationX) || 0) * Math.PI / 180;
+      const ry = (Number(dev?.spatial3d?.rotationY) || 0) * Math.PI / 180;
+      const rz = (Number(dev?.spatial3d?.rotationZ) || 0) * Math.PI / 180;
+      return new Euler(rx, ry, rz, "YXZ");
+    }
+    registerDevicePortTransforms(dev, devPorts, finalX, finalY, finalZ, userModelScale, rotOrEuler) {
+      const euler = rotOrEuler && rotOrEuler.isEuler ? rotOrEuler : new Euler(0, Number(rotOrEuler) || 0, 0, "YXZ");
       devPorts.forEach((p) => {
         const rawLx = typeof p.local3d?.x === "number" ? p.local3d.x : 0;
         const rawLy = typeof p.local3d?.y === "number" ? p.local3d.y : 0.12;
         const rawLz = typeof p.local3d?.z === "number" ? p.local3d.z : 0.36;
-        const lx = rawLx * userModelScale;
-        const ly = rawLy * userModelScale;
-        const lz = rawLz * userModelScale;
-        const wx = finalX + (lx * cosR + lz * sinR);
-        const wy = finalY + ly;
-        const wz = finalZ + (-lx * sinR + lz * cosR);
+        const localVec = new Vector3(
+          rawLx * userModelScale,
+          rawLy * userModelScale,
+          rawLz * userModelScale
+        ).applyEuler(euler);
         const key = `${dev.id}::${p.name}`;
-        this.portWorldPosMap.set(key, new Vector3(wx, wy, wz));
+        this.portWorldPosMap.set(key, new Vector3(finalX + localVec.x, finalY + localVec.y, finalZ + localVec.z));
         const zSign = rawLz < -0.015 ? -1 : 1;
-        this.portWorldDirMap.set(key, new Vector3(sinR * zSign, 0, cosR * zSign).normalize());
+        const dirVec = new Vector3(0, 0, zSign).applyEuler(euler).normalize();
+        this.portWorldDirMap.set(key, dirVec);
       });
     }
     resolveDevicePortKey(deviceId, requestedPortName, fallbackIdx = 0) {
@@ -52450,10 +52641,8 @@ void main() {
         const color = cable.customColor || catDef?.color || "#3b82f6";
         const isSelected = this.cableManager.selectedCableId === cable.id;
         const isWireless = cable.type === "wireless" || cable.cableCategory === "wireless-ptp";
-        const sRot = (srcDev?.spatial3d?.rotationY || 0) * Math.PI / 180;
-        const dRot = (dstDev?.spatial3d?.rotationY || 0) * Math.PI / 180;
-        const srcDir = hasSrcPort && this.portWorldDirMap.get(srcPortKey) || new Vector3(Math.sin(sRot), 0, Math.cos(sRot));
-        const dstDir = hasDstPort && this.portWorldDirMap.get(dstPortKey) || new Vector3(Math.sin(dRot), 0, Math.cos(dRot));
+        const srcDir = hasSrcPort && this.portWorldDirMap.get(srcPortKey) || new Vector3(0, 0, 1).applyEuler(this.getDeviceEuler(srcDev)).normalize();
+        const dstDir = hasDstPort && this.portWorldDirMap.get(dstPortKey) || new Vector3(0, 0, 1).applyEuler(this.getDeviceEuler(dstDev)).normalize();
         const pts = [];
         if (hasSrcPort && !isWireless) {
           pts.push(srcPos.clone().addScaledVector(srcDir, -8e-3 * srcScale));
@@ -52829,7 +53018,7 @@ void main() {
       this.animateCameraTo(endPos, hitPoint, 380);
     }
     setNavTool(tool) {
-      const validTools = ["orbit", "pan", "zoom", "look", "move", "box", "draw3d"];
+      const validTools = ["orbit", "pan", "zoom", "look", "move", "rotate", "box", "draw3d"];
       if (!validTools.includes(tool)) return;
       this.navTool = tool;
       this.applyNavToolConfig();
@@ -52837,7 +53026,7 @@ void main() {
     }
     applyNavToolConfig() {
       if (this.container) {
-        this.container.classList.remove("tool-orbit", "tool-pan", "tool-zoom", "tool-look", "tool-move", "tool-box", "tool-draw3d");
+        this.container.classList.remove("tool-orbit", "tool-pan", "tool-zoom", "tool-look", "tool-move", "tool-rotate", "tool-box", "tool-draw3d");
         this.container.classList.add(`tool-${this.navTool}`);
       }
       if (!this.controls) return;
@@ -52845,6 +53034,14 @@ void main() {
         this.controls.mouseButtons = {
           LEFT: -1,
           // Click or drag on 3D floor to place/draw SketchUp 3D objects
+          MIDDLE: MOUSE.ROTATE,
+          RIGHT: MOUSE.PAN
+        };
+        this.controls.maxPolarAngle = Math.PI * 0.495;
+      } else if (this.navTool === "rotate") {
+        this.controls.mouseButtons = {
+          LEFT: -1,
+          // Drag left button rotates 3D device / custom object along X/Y/Z
           MIDDLE: MOUSE.ROTATE,
           RIGHT: MOUSE.PAN
         };
@@ -53064,6 +53261,28 @@ void main() {
           draftObj: { ...obj }
         };
         dom.setPointerCapture?.(e.pointerId);
+      } else if (gizmoHit.gizmoType === "rotate") {
+        stateManager.selectObject3d(obj.id);
+        this.deviceManager.deselectDevice();
+        this.cableManager.deselectConnection();
+        const startRx = Number(obj.rotationX) || 0;
+        const startRy = Number(obj.rotationY ?? obj.rotationDeg) || 0;
+        const startRz = Number(obj.rotationZ) || 0;
+        this.object3dDragState = {
+          kind: "rotate-obj3d",
+          objId: obj.id,
+          startClientX: e.clientX,
+          startClientY: e.clientY,
+          startRx,
+          startRy,
+          startRz,
+          latestRx: startRx,
+          latestRy: startRy,
+          latestRz: startRz,
+          moved: false,
+          draftObj: { ...obj }
+        };
+        dom.setPointerCapture?.(e.pointerId);
       }
     }
     startObject3dCreateDraw(e, dom) {
@@ -53204,6 +53423,36 @@ void main() {
         this.showStatusHint(`\u{1F4D0} Ukuran "${state.draftObj.name}": ${nextW.toFixed(2)}m \xD7 ${nextD.toFixed(2)}m`);
         return;
       }
+      if (state.kind === "rotate-obj3d") {
+        if (Math.hypot(e.clientX - state.startClientX, e.clientY - state.startClientY) > 3) {
+          state.moved = true;
+        }
+        const { rx, ry, rz } = this._computeDragAngles(
+          state.startRx,
+          state.startRy,
+          state.startRz,
+          state.startClientX,
+          state.startClientY,
+          e
+        );
+        state.latestRx = rx;
+        state.latestRy = ry;
+        state.latestRz = rz;
+        state.draftObj = { ...state.draftObj, rotationX: rx, rotationY: ry, rotationZ: rz };
+        const meshGroup = this.object3dMeshMap.get(state.objId);
+        if (meshGroup) {
+          meshGroup.rotation.set(
+            rx * Math.PI / 180,
+            ry * Math.PI / 180,
+            rz * Math.PI / 180,
+            "YXZ"
+          );
+        }
+        this.showStatusHint(
+          `\u{1F504} Rotasi "${state.draftObj.name}": X:${rx}\xB0 Y:${ry}\xB0 Z:${rz}\xB0 (Drag=Y \u2022 Shift=Miring X/Dinding \u2022 Alt=Roll Z \u2022 Ctrl=Snap 15\xB0)`
+        );
+        return;
+      }
       if (state.kind === "create-draw") {
         const hitPt = new Vector3();
         if (!this.raycaster.ray.intersectPlane(state.dragPlane, hitPt)) return;
@@ -53285,6 +53534,17 @@ void main() {
           widthMeters: state.latestWidth,
           depthMeters: state.latestDepth
         });
+        return;
+      }
+      if (state.kind === "rotate-obj3d") {
+        if (state.moved) {
+          this._suppressNextClick = true;
+          stateManager.updateObject3d(state.objId, {
+            rotationX: state.latestRx,
+            rotationY: state.latestRy,
+            rotationZ: state.latestRz
+          });
+        }
         return;
       }
       if (state.kind === "create-draw") {
@@ -53456,6 +53716,182 @@ void main() {
         }
       });
       this.deviceManager.moveDeviceGroup(moves, { syncRenderer: true });
+    }
+    _computeDragAngles(startRx, startRy, startRz, startClientX, startClientY, e) {
+      const dx = e.clientX - startClientX;
+      const dy = startClientY - e.clientY;
+      const snap = Boolean(e.ctrlKey || e.metaKey);
+      const snapFn = (val) => snap ? Math.round(val / 15) * 15 : Math.round(val);
+      let rx = Number(startRx) || 0;
+      let ry = Number(startRy) || 0;
+      let rz = Number(startRz) || 0;
+      if (e.altKey) {
+        rz = clamp2(snapFn(rz + dx * 0.65), -180, 180);
+      } else if (e.shiftKey) {
+        rx = clamp2(snapFn(rx + dy * 0.65), -180, 180);
+      } else {
+        ry = (snapFn(ry + dx * 0.65) % 360 + 360) % 360;
+      }
+      return { rx, ry, rz };
+    }
+    startRotateDrag(e, dom) {
+      const rect = dom.getBoundingClientRect();
+      this.pointer.x = (e.clientX - rect.left) / rect.width * 2 - 1;
+      this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      this.raycaster.setFromCamera(this.pointer, this.camera);
+      const devHits = this.raycaster.intersectObjects(this.devicesGroup.children, true);
+      if (devHits.length === 0) {
+        const objHit = this.findObject3dHit(this.raycaster);
+        if (objHit?.object3dId) {
+          this.startObject3dGizmoDrag(e, dom, { ...objHit, gizmoType: "rotate" });
+        }
+        return;
+      }
+      const devId = this.findDeviceIdFromObject(devHits[0].object);
+      const device = devId ? this.deviceManager.getDeviceById(devId) : null;
+      if (!device) return;
+      const preserveMulti = this.deviceManager.getSelectedDeviceIds().length > 1 && this.deviceManager.isDeviceSelected?.(devId);
+      this.deviceManager.selectDevice(devId, {
+        additive: false,
+        preserveMultiOnDrag: preserveMulti
+      });
+      stateManager.deselectObject3d?.();
+      const targetIds = preserveMulti ? this.deviceManager.getSelectedDeviceIds() : [devId];
+      const items = [];
+      targetIds.forEach((id) => {
+        const d = this.deviceManager.getDeviceById(id);
+        const holder = this.deviceMeshMap.get(id);
+        if (!d || !holder || d.layerLocked) return;
+        const modelContainer = holder.getObjectByName("DeviceModelContainer");
+        if (!modelContainer) return;
+        const startRx = Number(d.spatial3d?.rotationX) || 0;
+        const startRy = Number(d.spatial3d?.rotationY) || 0;
+        const startRz = Number(d.spatial3d?.rotationZ) || 0;
+        items.push({
+          dev: d,
+          holder,
+          modelContainer,
+          finalX: holder.position.x,
+          finalY: holder.position.y,
+          finalZ: holder.position.z,
+          userModelScale: holder.userData.userModelScale || (d.spatial3d?.modelScale || 1) * this.deviceScaleMultiplier,
+          devPorts: holder.userData.devPorts || getDefaultDevicePorts(d.type, d.model, d.spatial3d?.customModelUrl),
+          startRx,
+          startRy,
+          startRz,
+          latestRx: startRx,
+          latestRy: startRy,
+          latestRz: startRz
+        });
+      });
+      if (items.length === 0) return;
+      this.dragRotateState = {
+        primaryName: device.name,
+        startClientX: e.clientX,
+        startClientY: e.clientY,
+        moved: false,
+        items
+      };
+      dom.setPointerCapture?.(e.pointerId);
+    }
+    updateDeviceDragRotate(e) {
+      const state = this.dragRotateState;
+      if (!state) return;
+      if (Math.hypot(e.clientX - state.startClientX, e.clientY - state.startClientY) > 3) {
+        state.moved = true;
+      }
+      let firstAngles = null;
+      state.items.forEach((item) => {
+        const { rx, ry, rz } = this._computeDragAngles(
+          item.startRx,
+          item.startRy,
+          item.startRz,
+          state.startClientX,
+          state.startClientY,
+          e
+        );
+        item.latestRx = rx;
+        item.latestRy = ry;
+        item.latestRz = rz;
+        if (!firstAngles) firstAngles = { rx, ry, rz };
+        const euler = new Euler(
+          rx * Math.PI / 180,
+          ry * Math.PI / 180,
+          rz * Math.PI / 180,
+          "YXZ"
+        );
+        item.modelContainer.rotation.copy(euler);
+        this.registerDevicePortTransforms(
+          item.dev,
+          item.devPorts,
+          item.finalX,
+          item.finalY,
+          item.finalZ,
+          item.userModelScale,
+          euler
+        );
+      });
+      this.syncCables();
+      if (firstAngles) {
+        const suffix = state.items.length > 1 ? ` (${state.items.length} perangkat)` : "";
+        this.showStatusHint(
+          `\u{1F504} Rotasi "${state.primaryName}"${suffix}: X:${firstAngles.rx}\xB0 Y:${firstAngles.ry}\xB0 Z:${firstAngles.rz}\xB0 (Drag=Y \u2022 Shift=Miring X/Dinding \u2022 Alt=Roll Z \u2022 Ctrl=Snap 15\xB0)`
+        );
+      }
+    }
+    finishDeviceDragRotate(e, dom) {
+      const state = this.dragRotateState;
+      this.dragRotateState = null;
+      dom.releasePointerCapture?.(e.pointerId);
+      if (!state || !state.moved) return;
+      this._suppressNextClick = true;
+      state.items.forEach((item) => {
+        const latestDev = this.deviceManager.getDeviceById(item.dev.id) || item.dev;
+        const nextSpatial = {
+          ...getDefaultSpatial3d(latestDev.type),
+          ...latestDev.spatial3d || {},
+          rotationX: item.latestRx,
+          rotationY: item.latestRy,
+          rotationZ: item.latestRz
+        };
+        this.deviceManager.updateDevice(item.dev.id, { spatial3d: nextSpatial });
+      });
+      this.syncDevices();
+      this.syncCables();
+    }
+    rotateSelectedIn3D({ dX = 0, dY = 0, dZ = 0, reset = false } = {}) {
+      const selectedIds = this.deviceManager?.getSelectedDeviceIds?.() || [];
+      if (selectedIds.length > 0) {
+        let summary = null;
+        selectedIds.forEach((id) => {
+          const dev = this.deviceManager.getDeviceById(id);
+          if (!dev || dev.layerLocked) return;
+          const base = { ...getDefaultSpatial3d(dev.type), ...dev.spatial3d || {} };
+          const rx = reset ? 0 : clamp2((Number(base.rotationX) || 0) + dX, -180, 180);
+          const ry = reset ? 0 : (((Number(base.rotationY) || 0) + dY) % 360 + 360) % 360;
+          const rz = reset ? 0 : clamp2((Number(base.rotationZ) || 0) + dZ, -180, 180);
+          this.deviceManager.updateDevice(id, {
+            spatial3d: { ...base, rotationX: rx, rotationY: ry, rotationZ: rz }
+          });
+          if (!summary) summary = { name: dev.name, rx, ry, rz };
+        });
+        if (summary) {
+          this.showStatusHint(`\u{1F504} Rotasi "${summary.name}": X:${summary.rx}\xB0 Y:${summary.ry}\xB0 Z:${summary.rz}\xB0`);
+        }
+        return true;
+      }
+      const selObjId = stateManager.getSelectedObject3dId?.();
+      if (selObjId) {
+        const obj = stateManager.getObject3dById(selObjId);
+        if (!obj) return false;
+        const rx = reset ? 0 : clamp2((Number(obj.rotationX) || 0) + dX, -180, 180);
+        const ry = reset ? 0 : (((Number(obj.rotationY ?? obj.rotationDeg) || 0) + dY) % 360 + 360) % 360;
+        const rz = reset ? 0 : clamp2((Number(obj.rotationZ) || 0) + dZ, -180, 180);
+        stateManager.updateObject3d(selObjId, { rotationX: rx, rotationY: ry, rotationZ: rz });
+        this.showStatusHint(`\u{1F504} Rotasi "${obj.name}": X:${rx}\xB0 Y:${ry}\xB0 Z:${rz}\xB0`);
+        return true;
+      }
+      return false;
     }
     syncSelectionRings() {
       if (!this.isInitialized || !this.deviceMeshMap) return;
@@ -53655,11 +54091,11 @@ void main() {
     }
     bindGlobalListeners() {
       const scheduleSyncDevAndCables = () => {
-        if (!this.isActive || this.dragMoveState) return;
+        if (!this.isActive || this.dragMoveState || this.dragRotateState) return;
         if (this._pendingSyncRaf) return;
         this._pendingSyncRaf = requestAnimationFrame(() => {
           this._pendingSyncRaf = null;
-          if (!this.isActive || this.dragMoveState) return;
+          if (!this.isActive || this.dragMoveState || this.dragRotateState) return;
           this.syncDevices();
           this.syncCables();
         });
@@ -54266,10 +54702,10 @@ void main() {
           ${this.renderSliderRow("o3d-height", "Tinggi Push/Pull (m)", 0.2, 40, 0.1)}
           ${this.renderSliderRow("o3d-elev", "Elevasi Dasar (m)", 0, 30, 0.1)}
 
-          <!-- Rotation -->
-          <div style="display: flex; flex-direction: column; gap: 3px;">
+          <!-- 3-Axis Rotation (Y / X / Z) -->
+          <div style="display: flex; flex-direction: column; gap: 6px; padding-top: 4px; border-top: 1px dashed var(--border-color);">
             <div style="display: flex; align-items: center; justify-content: space-between; font-size: 10px; font-weight: 600;">
-              <span>Rotasi (\xB0)</span>
+              <span>Rotasi Y / Hadap (\xB0)</span>
               <div style="display: flex; align-items: center; gap: 4px;">
                 <button type="button" id="btn-o3d-rot-45" class="btn btn-secondary btn-sm" style="font-size: 9.5px; padding: 1px 5px;">+45\xB0</button>
                 <button type="button" id="btn-o3d-rot-90" class="btn btn-secondary btn-sm" style="font-size: 9.5px; padding: 1px 5px;">+90\xB0</button>
@@ -54277,6 +54713,12 @@ void main() {
               </div>
             </div>
             <input type="range" id="o3d-rot-range" min="0" max="360" step="5" style="accent-color: var(--accent-blue, #2a7c13); width: 100%;">
+            <div style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap;">
+              <button type="button" id="btn-o3d-wall-90" class="btn btn-secondary btn-sm" style="font-size: 9.5px; padding: 2px 6px;">Dinding X:90\xB0</button>
+              <button type="button" id="btn-o3d-rot-reset" class="btn btn-secondary btn-sm" style="font-size: 9.5px; padding: 2px 6px;">Reset 0\xB0</button>
+            </div>
+            ${this.renderSliderRow("o3d-rotx", "Rotasi X / Miring Dinding (\xB0)", -180, 180, 5)}
+            ${this.renderSliderRow("o3d-rotz", "Rotasi Z / Roll Samping (\xB0)", -180, 180, 5)}
           </div>
 
           <!-- Material & Options -->
@@ -54427,7 +54869,9 @@ void main() {
         ["o3d-depth", "depthMeters", 0.15, 120],
         ["o3d-height", "heightMeters", 0.15, 80],
         ["o3d-elev", "elevationMeters", 0, 50],
-        ["o3d-rot", "rotationY", 0, 360]
+        ["o3d-rot", "rotationY", 0, 360],
+        ["o3d-rotx", "rotationX", -180, 180],
+        ["o3d-rotz", "rotationZ", -180, 180]
       ];
       sliderConfigs.forEach(([baseId, field, min, max]) => {
         const rangeEl = this.panelEl.querySelector(`#${baseId}-range`);
@@ -54455,6 +54899,30 @@ void main() {
       };
       this.panelEl.querySelector("#btn-o3d-rot-45")?.addEventListener("click", () => rotateBy(45));
       this.panelEl.querySelector("#btn-o3d-rot-90")?.addEventListener("click", () => rotateBy(90));
+      this.panelEl.querySelector("#btn-o3d-wall-90")?.addEventListener("click", () => {
+        const rxNum = this.panelEl.querySelector("#o3d-rotx-num");
+        const rxRange = this.panelEl.querySelector("#o3d-rotx-range");
+        const rzNum = this.panelEl.querySelector("#o3d-rotz-num");
+        const rzRange = this.panelEl.querySelector("#o3d-rotz-range");
+        if (rxNum) rxNum.value = 90;
+        if (rxRange) rxRange.value = 90;
+        if (rzNum) rzNum.value = 0;
+        if (rzRange) rzRange.value = 0;
+        this.commitFormPatch({ rotationX: 90, rotationZ: 0 });
+      });
+      this.panelEl.querySelector("#btn-o3d-rot-reset")?.addEventListener("click", () => {
+        [
+          ["#o3d-rot-num", "#o3d-rot-range"],
+          ["#o3d-rotx-num", "#o3d-rotx-range"],
+          ["#o3d-rotz-num", "#o3d-rotz-range"]
+        ].forEach(([n, r]) => {
+          const nEl = this.panelEl.querySelector(n);
+          const rEl = this.panelEl.querySelector(r);
+          if (nEl) nEl.value = 0;
+          if (rEl) rEl.value = 0;
+        });
+        this.commitFormPatch({ rotationX: 0, rotationY: 0, rotationZ: 0 });
+      });
       eventBus.on("object3d:selected", () => {
         this.syncFormFromSelectionOrDraft();
         this.renderObjectList();
@@ -54579,8 +55047,12 @@ void main() {
       setVal("#o3d-height-range", Math.min(40, src.heightMeters ?? 2));
       setVal("#o3d-elev-num", src.elevationMeters ?? 0);
       setVal("#o3d-elev-range", Math.min(30, src.elevationMeters ?? 0));
-      setVal("#o3d-rot-num", src.rotationY ?? 0);
-      setVal("#o3d-rot-range", src.rotationY ?? 0);
+      setVal("#o3d-rot-num", src.rotationY ?? src.rotationDeg ?? 0);
+      setVal("#o3d-rot-range", src.rotationY ?? src.rotationDeg ?? 0);
+      setVal("#o3d-rotx-num", src.rotationX ?? 0);
+      setVal("#o3d-rotx-range", src.rotationX ?? 0);
+      setVal("#o3d-rotz-num", src.rotationZ ?? 0);
+      setVal("#o3d-rotz-range", src.rotationZ ?? 0);
       setVal("#o3d-color", src.color || "#64748b");
       setVal("#o3d-accent", src.accentColor || "#2a7c13");
       setVal("#o3d-opacity", Math.round((src.opacity ?? 1) * 100));
@@ -54829,8 +55301,8 @@ void main() {
 
           <!-- Spatial 3D Transform -->
           <div style="background: var(--bg-primary, #fff8cf); border: 1px solid var(--border-color); border-radius: 9px; padding: 12px; display: flex; flex-direction: column; gap: 10px;">
-            <span style="font-size: 11.5px; font-weight: 700; color: var(--text-primary);">3. Posisi & Ukuran di Ruang 3D</span>
-            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
+            <span style="font-size: 11.5px; font-weight: 700; color: var(--text-primary);">3. Posisi, Ukuran &amp; Rotasi 3D</span>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
               <div style="display: flex; flex-direction: column; gap: 3px;">
                 <label style="font-size: 10.5px; color: var(--text-muted);">Elevasi Z (m)</label>
                 <input type="number" id="dev3d-elevation" min="0" max="50" step="0.1" value="0.5"
@@ -54852,10 +55324,26 @@ void main() {
                        style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px; padding: 5px 7px; font-size: 12px; color: var(--text-primary); font-family: var(--font-mono);">
               </div>
               <div style="display: flex; flex-direction: column; gap: 3px;">
-                <label style="font-size: 10.5px; color: var(--text-muted);">Rotasi Y (\xB0)</label>
-                <input type="number" id="dev3d-rotation" min="0" max="360" step="15" value="0"
+                <label style="font-size: 10.5px; color: var(--text-muted);">Rotasi X / Dinding (\xB0)</label>
+                <input type="number" id="dev3d-rotation-x" min="-180" max="180" step="5" value="0"
                        style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px; padding: 5px 7px; font-size: 12px; color: var(--text-primary); font-family: var(--font-mono);">
               </div>
+              <div style="display: flex; flex-direction: column; gap: 3px;">
+                <label style="font-size: 10.5px; color: var(--text-muted);">Rotasi Y / Hadap (\xB0)</label>
+                <input type="number" id="dev3d-rotation" min="0" max="360" step="5" value="0"
+                       style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px; padding: 5px 7px; font-size: 12px; color: var(--text-primary); font-family: var(--font-mono);">
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 3px;">
+                <label style="font-size: 10.5px; color: var(--text-muted);">Rotasi Z / Roll (\xB0)</label>
+                <input type="number" id="dev3d-rotation-z" min="-180" max="180" step="5" value="0"
+                       style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px; padding: 5px 7px; font-size: 12px; color: var(--text-primary); font-family: var(--font-mono);">
+              </div>
+            </div>
+            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+              <button type="button" class="btn btn-secondary btn-sm btn-dev3d-orient" data-rx="0" data-ry="0" data-rz="0" data-mount="floor" style="font-size: 10.5px; padding: 3px 8px;">Datar 0\xB0</button>
+              <button type="button" class="btn btn-secondary btn-sm btn-dev3d-orient" data-rx="90" data-ry="0" data-rz="0" data-mount="wall" style="font-size: 10.5px; padding: 3px 8px;">Tempel Dinding X:90\xB0</button>
+              <button type="button" class="btn btn-secondary btn-sm btn-dev3d-orient" data-rx="180" data-ry="0" data-rz="0" data-mount="ceiling" style="font-size: 10.5px; padding: 3px 8px;">Plafon X:180\xB0</button>
+              <button type="button" class="btn btn-secondary btn-sm btn-dev3d-orient" data-delta-y="90" style="font-size: 10.5px; padding: 3px 8px;">Putar Y +90\xB0</button>
             </div>
           </div>
 
@@ -55005,6 +55493,23 @@ void main() {
         if (fileInput) fileInput.value = "";
         this.updateModelBadge("");
       });
+      this.modalEl.querySelectorAll(".btn-dev3d-orient").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const rxEl = this.modalEl.querySelector("#dev3d-rotation-x");
+          const ryEl = this.modalEl.querySelector("#dev3d-rotation");
+          const rzEl = this.modalEl.querySelector("#dev3d-rotation-z");
+          const mEl = this.modalEl.querySelector("#dev3d-mount");
+          if (btn.hasAttribute("data-delta-y")) {
+            const delta = parseFloat(btn.getAttribute("data-delta-y")) || 90;
+            if (ryEl) ryEl.value = ((parseFloat(ryEl.value) || 0) + delta) % 360;
+            return;
+          }
+          if (rxEl) rxEl.value = btn.getAttribute("data-rx") || "0";
+          if (ryEl) ryEl.value = btn.getAttribute("data-ry") || "0";
+          if (rzEl) rzEl.value = btn.getAttribute("data-rz") || "0";
+          if (mEl && btn.getAttribute("data-mount")) mEl.value = btn.getAttribute("data-mount");
+        });
+      });
       this.modalEl.querySelector("#btn-dev3d-save-focus")?.addEventListener("click", () => {
         this.applyChanges(true);
       });
@@ -55034,7 +55539,9 @@ void main() {
       this.modalEl.querySelector("#dev3d-elevation").value = Number(spatial.elevationMeters ?? 0).toFixed(1);
       this.modalEl.querySelector("#dev3d-mount").value = spatial.mountType || "floor";
       this.modalEl.querySelector("#dev3d-scale").value = Number(spatial.modelScale || 1);
+      this.modalEl.querySelector("#dev3d-rotation-x").value = Number(spatial.rotationX || 0);
       this.modalEl.querySelector("#dev3d-rotation").value = Number(spatial.rotationY || 0);
+      this.modalEl.querySelector("#dev3d-rotation-z").value = Number(spatial.rotationZ || 0);
       this.modalEl.querySelector("#dev3d-apply-same-type").checked = false;
       const sameTypeCount = this.deviceManager.getAllDevices().filter((d) => d.type === dev.type).length;
       const countSpan = this.modalEl.querySelector("#dev3d-same-type-count");
@@ -55190,7 +55697,9 @@ void main() {
       const elevationMeters = parseFloat(this.modalEl.querySelector("#dev3d-elevation").value) || 0;
       const mountType = this.modalEl.querySelector("#dev3d-mount").value || "floor";
       const modelScale = parseFloat(this.modalEl.querySelector("#dev3d-scale").value) || 1;
-      const rotationY = parseFloat(this.modalEl.querySelector("#dev3d-rotation").value) || 0;
+      const rotationX = Math.max(-180, Math.min(180, parseFloat(this.modalEl.querySelector("#dev3d-rotation-x")?.value) || 0));
+      const rotationY = ((parseFloat(this.modalEl.querySelector("#dev3d-rotation").value) || 0) % 360 + 360) % 360;
+      const rotationZ = Math.max(-180, Math.min(180, parseFloat(this.modalEl.querySelector("#dev3d-rotation-z")?.value) || 0));
       const applySameType = Boolean(this.modalEl.querySelector("#dev3d-apply-same-type").checked);
       const baseSpatial = {
         ...getDefaultSpatial3d(dev.type),
@@ -55198,7 +55707,9 @@ void main() {
         elevationMeters,
         mountType,
         modelScale,
+        rotationX,
         rotationY,
+        rotationZ,
         customModelUrl
       };
       const cleanPorts = this.editingPorts.filter((p) => p && String(p.name || "").trim()).map((p) => ({
@@ -55921,6 +56432,7 @@ void main() {
         { id: "btn-3d-tool-zoom", tool: "zoom" },
         { id: "btn-3d-tool-look", tool: "look" },
         { id: "btn-3d-tool-move", tool: "move" },
+        { id: "btn-3d-tool-rotate", tool: "rotate" },
         { id: "btn-3d-tool-box", tool: "box" },
         { id: "btn-3d-tool-draw3d", tool: "draw3d" }
       ];
@@ -56064,6 +56576,21 @@ void main() {
           if (lower === "m") {
             e.preventDefault();
             this.map3DEngine?.setNavTool("move");
+            return;
+          }
+          if (lower === "r") {
+            e.preventDefault();
+            this.map3DEngine?.setNavTool("rotate");
+            return;
+          }
+          if (e.key === "[" || e.key === "{") {
+            e.preventDefault();
+            this.map3DEngine?.rotateSelectedIn3D(e.shiftKey ? { dX: -15 } : { dY: -15 });
+            return;
+          }
+          if (e.key === "]" || e.key === "}") {
+            e.preventDefault();
+            this.map3DEngine?.rotateSelectedIn3D(e.shiftKey ? { dX: 15 } : { dY: 15 });
             return;
           }
           if (lower === "b") {

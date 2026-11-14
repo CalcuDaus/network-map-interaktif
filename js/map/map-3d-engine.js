@@ -77,7 +77,7 @@ export class Map3DEngine {
     this.groundTexture = null;
 
     // SketchUp-style navigation state
-    this.navTool = 'orbit'; // 'orbit' | 'pan' | 'zoom' | 'look' | 'move' | 'box' | 'draw3d'
+    this.navTool = 'orbit'; // 'orbit' | 'pan' | 'zoom' | 'look' | 'move' | 'rotate' | 'box' | 'draw3d'
     this.keysPressed = new Set();
     this.lastFrameTime = 0;
     this.cameraAnim = null; // { startPos, endPos, startTarget, endTarget, startTime, duration }
@@ -90,6 +90,7 @@ export class Map3DEngine {
     this.pen3dPathStyle = 'curve';
     this.pen3dCategory = 'cat6';
     this.dragMoveState = null;
+    this.dragRotateState = null;
     this.boxSelectState = null;
     this.activeDraw3dTemplate = { ...OBJECT3D_PRESETS.pole };
     this.object3dDragState = null;
@@ -166,6 +167,7 @@ export class Map3DEngine {
         const shouldBlockOrbit =
           this.navTool === 'box' ||
           this.navTool === 'draw3d' ||
+          this.navTool === 'rotate' ||
           e.ctrlKey ||
           e.metaKey ||
           Boolean(this.checkGizmoHitAtEvent(e));
@@ -200,6 +202,8 @@ export class Map3DEngine {
           dom.setPointerCapture?.(e.pointerId);
         } else if (this.navTool === 'move') {
           this.startDeviceDragMove(e, dom);
+        } else if (this.navTool === 'rotate') {
+          this.startRotateDrag(e, dom);
         }
       }
     });
@@ -216,6 +220,10 @@ export class Map3DEngine {
       }
       if (this.dragMoveState) {
         this.updateDeviceDragMove(e);
+        return;
+      }
+      if (this.dragRotateState) {
+        this.updateDeviceDragRotate(e);
         return;
       }
       if (!this.isLookDragging) return;
@@ -254,6 +262,9 @@ export class Map3DEngine {
       }
       if (this.dragMoveState) {
         this.finishDeviceDragMove(e, dom);
+      }
+      if (this.dragRotateState) {
+        this.finishDeviceDragRotate(e, dom);
       }
     };
 
@@ -581,7 +592,7 @@ export class Map3DEngine {
       holder.userData.deviceId = dev.id;
 
       const userModelScale = (dev.spatial3d?.modelScale || 1) * this.deviceScaleMultiplier;
-      const rotYRad = ((dev.spatial3d?.rotationY || 0) * Math.PI) / 180;
+      const devEuler = this.getDeviceEuler(dev);
 
       // Resolve device ports and auto-upgrade legacy procedural ports if a specific model/GLB preset exists
       const modelDefaults = getDefaultDevicePorts(dev.type, dev.model, dev.spatial3d?.customModelUrl);
@@ -595,17 +606,20 @@ export class Map3DEngine {
 
       this.reconcileDeviceCablePorts(dev.id, devPorts, allCables);
       const portStatusMap = this.buildPortStatusMap(dev.id, allCables);
-      this.registerDevicePortTransforms(dev, devPorts, finalX, finalY, finalZ, userModelScale, rotYRad);
+      this.registerDevicePortTransforms(dev, devPorts, finalX, finalY, finalZ, userModelScale, devEuler);
 
       const hasCustomGlb = Boolean(dev.spatial3d?.customModelUrl);
       const modelContainer = new THREE.Group();
+      modelContainer.name = 'DeviceModelContainer';
       modelContainer.scale.setScalar(userModelScale);
-      modelContainer.rotation.y = rotYRad;
+      modelContainer.rotation.copy(devEuler);
       const proceduralMesh = createDevice3DMesh(dev, cat.color, statusDef.color);
       modelContainer.add(proceduralMesh);
       if (!hasCustomGlb) {
         modelContainer.add(create3DPortsSubGroup(devPorts, portStatusMap, false));
       }
+      holder.userData.devPorts = devPorts;
+      holder.userData.userModelScale = userModelScale;
       holder.add(modelContainer);
 
       // Load custom GLB asynchronously if configured
@@ -621,7 +635,8 @@ export class Map3DEngine {
             const latestCables = this.cableManager.getAllConnections();
             this.reconcileDeviceCablePorts(dev.id, devPorts, latestCables);
             const updatedStatusMap = this.buildPortStatusMap(dev.id, latestCables);
-            this.registerDevicePortTransforms(dev, devPorts, finalX, finalY, finalZ, userModelScale, rotYRad);
+            holder.userData.devPorts = devPorts;
+            this.registerDevicePortTransforms(dev, devPorts, finalX, finalY, finalZ, userModelScale, this.getDeviceEuler(dev));
 
             modelContainer.clear();
             modelContainer.add(glb);
@@ -838,23 +853,31 @@ export class Map3DEngine {
     return portStatusMap;
   }
 
-  registerDevicePortTransforms(dev, devPorts, finalX, finalY, finalZ, userModelScale, rotYRad) {
-    const cosR = Math.cos(rotYRad);
-    const sinR = Math.sin(rotYRad);
+  getDeviceEuler(dev) {
+    const rx = ((Number(dev?.spatial3d?.rotationX) || 0) * Math.PI) / 180;
+    const ry = ((Number(dev?.spatial3d?.rotationY) || 0) * Math.PI) / 180;
+    const rz = ((Number(dev?.spatial3d?.rotationZ) || 0) * Math.PI) / 180;
+    return new THREE.Euler(rx, ry, rz, 'YXZ');
+  }
+
+  registerDevicePortTransforms(dev, devPorts, finalX, finalY, finalZ, userModelScale, rotOrEuler) {
+    const euler = (rotOrEuler && rotOrEuler.isEuler)
+      ? rotOrEuler
+      : new THREE.Euler(0, Number(rotOrEuler) || 0, 0, 'YXZ');
     devPorts.forEach((p) => {
       const rawLx = typeof p.local3d?.x === 'number' ? p.local3d.x : 0;
       const rawLy = typeof p.local3d?.y === 'number' ? p.local3d.y : 0.12;
       const rawLz = typeof p.local3d?.z === 'number' ? p.local3d.z : 0.36;
-      const lx = rawLx * userModelScale;
-      const ly = rawLy * userModelScale;
-      const lz = rawLz * userModelScale;
-      const wx = finalX + (lx * cosR + lz * sinR);
-      const wy = finalY + ly;
-      const wz = finalZ + (-lx * sinR + lz * cosR);
+      const localVec = new THREE.Vector3(
+        rawLx * userModelScale,
+        rawLy * userModelScale,
+        rawLz * userModelScale
+      ).applyEuler(euler);
       const key = `${dev.id}::${p.name}`;
-      this.portWorldPosMap.set(key, new THREE.Vector3(wx, wy, wz));
+      this.portWorldPosMap.set(key, new THREE.Vector3(finalX + localVec.x, finalY + localVec.y, finalZ + localVec.z));
       const zSign = rawLz < -0.015 ? -1 : 1;
-      this.portWorldDirMap.set(key, new THREE.Vector3(sinR * zSign, 0, cosR * zSign).normalize());
+      const dirVec = new THREE.Vector3(0, 0, zSign).applyEuler(euler).normalize();
+      this.portWorldDirMap.set(key, dirVec);
     });
   }
 
@@ -900,12 +923,10 @@ export class Map3DEngine {
       const isSelected = this.cableManager.selectedCableId === cable.id;
       const isWireless = cable.type === 'wireless' || cable.cableCategory === 'wireless-ptp';
 
-      const sRot = ((srcDev?.spatial3d?.rotationY || 0) * Math.PI) / 180;
-      const dRot = ((dstDev?.spatial3d?.rotationY || 0) * Math.PI) / 180;
       const srcDir = (hasSrcPort && this.portWorldDirMap.get(srcPortKey))
-        || new THREE.Vector3(Math.sin(sRot), 0, Math.cos(sRot));
+        || new THREE.Vector3(0, 0, 1).applyEuler(this.getDeviceEuler(srcDev)).normalize();
       const dstDir = (hasDstPort && this.portWorldDirMap.get(dstPortKey))
-        || new THREE.Vector3(Math.sin(dRot), 0, Math.cos(dRot));
+        || new THREE.Vector3(0, 0, 1).applyEuler(this.getDeviceEuler(dstDev)).normalize();
 
       const pts = [];
       if (hasSrcPort && !isWireless) {
@@ -1338,7 +1359,7 @@ export class Map3DEngine {
   }
 
   setNavTool(tool) {
-    const validTools = ['orbit', 'pan', 'zoom', 'look', 'move', 'box', 'draw3d'];
+    const validTools = ['orbit', 'pan', 'zoom', 'look', 'move', 'rotate', 'box', 'draw3d'];
     if (!validTools.includes(tool)) return;
     this.navTool = tool;
     this.applyNavToolConfig();
@@ -1347,7 +1368,7 @@ export class Map3DEngine {
 
   applyNavToolConfig() {
     if (this.container) {
-      this.container.classList.remove('tool-orbit', 'tool-pan', 'tool-zoom', 'tool-look', 'tool-move', 'tool-box', 'tool-draw3d');
+      this.container.classList.remove('tool-orbit', 'tool-pan', 'tool-zoom', 'tool-look', 'tool-move', 'tool-rotate', 'tool-box', 'tool-draw3d');
       this.container.classList.add(`tool-${this.navTool}`);
     }
     if (!this.controls) return;
@@ -1355,6 +1376,13 @@ export class Map3DEngine {
     if (this.navTool === 'draw3d') {
       this.controls.mouseButtons = {
         LEFT: -1, // Click or drag on 3D floor to place/draw SketchUp 3D objects
+        MIDDLE: THREE.MOUSE.ROTATE,
+        RIGHT: THREE.MOUSE.PAN
+      };
+      this.controls.maxPolarAngle = Math.PI * 0.495;
+    } else if (this.navTool === 'rotate') {
+      this.controls.mouseButtons = {
+        LEFT: -1, // Drag left button rotates 3D device / custom object along X/Y/Z
         MIDDLE: THREE.MOUSE.ROTATE,
         RIGHT: THREE.MOUSE.PAN
       };
@@ -1585,6 +1613,28 @@ export class Map3DEngine {
         draftObj: { ...obj }
       };
       dom.setPointerCapture?.(e.pointerId);
+    } else if (gizmoHit.gizmoType === 'rotate') {
+      stateManager.selectObject3d(obj.id);
+      this.deviceManager.deselectDevice();
+      this.cableManager.deselectConnection();
+      const startRx = Number(obj.rotationX) || 0;
+      const startRy = Number(obj.rotationY ?? obj.rotationDeg) || 0;
+      const startRz = Number(obj.rotationZ) || 0;
+      this.object3dDragState = {
+        kind: 'rotate-obj3d',
+        objId: obj.id,
+        startClientX: e.clientX,
+        startClientY: e.clientY,
+        startRx,
+        startRy,
+        startRz,
+        latestRx: startRx,
+        latestRy: startRy,
+        latestRz: startRz,
+        moved: false,
+        draftObj: { ...obj }
+      };
+      dom.setPointerCapture?.(e.pointerId);
     }
   }
 
@@ -1751,6 +1801,37 @@ export class Map3DEngine {
       return;
     }
 
+    if (state.kind === 'rotate-obj3d') {
+      if (Math.hypot(e.clientX - state.startClientX, e.clientY - state.startClientY) > 3) {
+        state.moved = true;
+      }
+      const { rx, ry, rz } = this._computeDragAngles(
+        state.startRx,
+        state.startRy,
+        state.startRz,
+        state.startClientX,
+        state.startClientY,
+        e
+      );
+      state.latestRx = rx;
+      state.latestRy = ry;
+      state.latestRz = rz;
+      state.draftObj = { ...state.draftObj, rotationX: rx, rotationY: ry, rotationZ: rz };
+      const meshGroup = this.object3dMeshMap.get(state.objId);
+      if (meshGroup) {
+        meshGroup.rotation.set(
+          (rx * Math.PI) / 180,
+          (ry * Math.PI) / 180,
+          (rz * Math.PI) / 180,
+          'YXZ'
+        );
+      }
+      this.showStatusHint(
+        `🔄 Rotasi "${state.draftObj.name}": X:${rx}° Y:${ry}° Z:${rz}° (Drag=Y • Shift=Miring X/Dinding • Alt=Roll Z • Ctrl=Snap 15°)`
+      );
+      return;
+    }
+
     if (state.kind === 'create-draw') {
       const hitPt = new THREE.Vector3();
       if (!this.raycaster.ray.intersectPlane(state.dragPlane, hitPt)) return;
@@ -1836,6 +1917,17 @@ export class Map3DEngine {
         widthMeters: state.latestWidth,
         depthMeters: state.latestDepth
       });
+      return;
+    }
+    if (state.kind === 'rotate-obj3d') {
+      if (state.moved) {
+        this._suppressNextClick = true;
+        stateManager.updateObject3d(state.objId, {
+          rotationX: state.latestRx,
+          rotationY: state.latestRy,
+          rotationZ: state.latestRz
+        });
+      }
       return;
     }
     if (state.kind === 'create-draw') {
@@ -2035,6 +2127,203 @@ export class Map3DEngine {
       }
     });
     this.deviceManager.moveDeviceGroup(moves, { syncRenderer: true });
+  }
+
+  _computeDragAngles(startRx, startRy, startRz, startClientX, startClientY, e) {
+    const dx = e.clientX - startClientX;
+    const dy = startClientY - e.clientY;
+    const snap = Boolean(e.ctrlKey || e.metaKey);
+    const snapFn = (val) => (snap ? Math.round(val / 15) * 15 : Math.round(val));
+
+    let rx = Number(startRx) || 0;
+    let ry = Number(startRy) || 0;
+    let rz = Number(startRz) || 0;
+
+    if (e.altKey) {
+      rz = clamp(snapFn(rz + dx * 0.65), -180, 180);
+    } else if (e.shiftKey) {
+      rx = clamp(snapFn(rx + dy * 0.65), -180, 180);
+    } else {
+      ry = ((snapFn(ry + dx * 0.65) % 360) + 360) % 360;
+    }
+    return { rx, ry, rz };
+  }
+
+  startRotateDrag(e, dom) {
+    const rect = dom.getBoundingClientRect();
+    this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+
+    const devHits = this.raycaster.intersectObjects(this.devicesGroup.children, true);
+    if (devHits.length === 0) {
+      const objHit = this.findObject3dHit(this.raycaster);
+      if (objHit?.object3dId) {
+        this.startObject3dGizmoDrag(e, dom, { ...objHit, gizmoType: 'rotate' });
+      }
+      return;
+    }
+
+    const devId = this.findDeviceIdFromObject(devHits[0].object);
+    const device = devId ? this.deviceManager.getDeviceById(devId) : null;
+    if (!device) return;
+
+    const preserveMulti = this.deviceManager.getSelectedDeviceIds().length > 1
+      && this.deviceManager.isDeviceSelected?.(devId);
+
+    this.deviceManager.selectDevice(devId, {
+      additive: false,
+      preserveMultiOnDrag: preserveMulti
+    });
+    stateManager.deselectObject3d?.();
+
+    const targetIds = preserveMulti ? this.deviceManager.getSelectedDeviceIds() : [devId];
+    const items = [];
+    targetIds.forEach((id) => {
+      const d = this.deviceManager.getDeviceById(id);
+      const holder = this.deviceMeshMap.get(id);
+      if (!d || !holder || d.layerLocked) return;
+      const modelContainer = holder.getObjectByName('DeviceModelContainer');
+      if (!modelContainer) return;
+      const startRx = Number(d.spatial3d?.rotationX) || 0;
+      const startRy = Number(d.spatial3d?.rotationY) || 0;
+      const startRz = Number(d.spatial3d?.rotationZ) || 0;
+      items.push({
+        dev: d,
+        holder,
+        modelContainer,
+        finalX: holder.position.x,
+        finalY: holder.position.y,
+        finalZ: holder.position.z,
+        userModelScale: holder.userData.userModelScale || ((d.spatial3d?.modelScale || 1) * this.deviceScaleMultiplier),
+        devPorts: holder.userData.devPorts || getDefaultDevicePorts(d.type, d.model, d.spatial3d?.customModelUrl),
+        startRx,
+        startRy,
+        startRz,
+        latestRx: startRx,
+        latestRy: startRy,
+        latestRz: startRz
+      });
+    });
+
+    if (items.length === 0) return;
+
+    this.dragRotateState = {
+      primaryName: device.name,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      moved: false,
+      items
+    };
+    dom.setPointerCapture?.(e.pointerId);
+  }
+
+  updateDeviceDragRotate(e) {
+    const state = this.dragRotateState;
+    if (!state) return;
+    if (Math.hypot(e.clientX - state.startClientX, e.clientY - state.startClientY) > 3) {
+      state.moved = true;
+    }
+
+    let firstAngles = null;
+    state.items.forEach((item) => {
+      const { rx, ry, rz } = this._computeDragAngles(
+        item.startRx,
+        item.startRy,
+        item.startRz,
+        state.startClientX,
+        state.startClientY,
+        e
+      );
+      item.latestRx = rx;
+      item.latestRy = ry;
+      item.latestRz = rz;
+      if (!firstAngles) firstAngles = { rx, ry, rz };
+
+      const euler = new THREE.Euler(
+        (rx * Math.PI) / 180,
+        (ry * Math.PI) / 180,
+        (rz * Math.PI) / 180,
+        'YXZ'
+      );
+      item.modelContainer.rotation.copy(euler);
+      this.registerDevicePortTransforms(
+        item.dev,
+        item.devPorts,
+        item.finalX,
+        item.finalY,
+        item.finalZ,
+        item.userModelScale,
+        euler
+      );
+    });
+
+    this.syncCables();
+    if (firstAngles) {
+      const suffix = state.items.length > 1 ? ` (${state.items.length} perangkat)` : '';
+      this.showStatusHint(
+        `🔄 Rotasi "${state.primaryName}"${suffix}: X:${firstAngles.rx}° Y:${firstAngles.ry}° Z:${firstAngles.rz}° (Drag=Y • Shift=Miring X/Dinding • Alt=Roll Z • Ctrl=Snap 15°)`
+      );
+    }
+  }
+
+  finishDeviceDragRotate(e, dom) {
+    const state = this.dragRotateState;
+    this.dragRotateState = null;
+    dom.releasePointerCapture?.(e.pointerId);
+    if (!state || !state.moved) return;
+
+    this._suppressNextClick = true;
+    state.items.forEach((item) => {
+      const latestDev = this.deviceManager.getDeviceById(item.dev.id) || item.dev;
+      const nextSpatial = {
+        ...getDefaultSpatial3d(latestDev.type),
+        ...(latestDev.spatial3d || {}),
+        rotationX: item.latestRx,
+        rotationY: item.latestRy,
+        rotationZ: item.latestRz
+      };
+      this.deviceManager.updateDevice(item.dev.id, { spatial3d: nextSpatial });
+    });
+    this.syncDevices();
+    this.syncCables();
+  }
+
+  rotateSelectedIn3D({ dX = 0, dY = 0, dZ = 0, reset = false } = {}) {
+    const selectedIds = this.deviceManager?.getSelectedDeviceIds?.() || [];
+    if (selectedIds.length > 0) {
+      let summary = null;
+      selectedIds.forEach((id) => {
+        const dev = this.deviceManager.getDeviceById(id);
+        if (!dev || dev.layerLocked) return;
+        const base = { ...getDefaultSpatial3d(dev.type), ...(dev.spatial3d || {}) };
+        const rx = reset ? 0 : clamp((Number(base.rotationX) || 0) + dX, -180, 180);
+        const ry = reset ? 0 : (((Number(base.rotationY) || 0) + dY) % 360 + 360) % 360;
+        const rz = reset ? 0 : clamp((Number(base.rotationZ) || 0) + dZ, -180, 180);
+        this.deviceManager.updateDevice(id, {
+          spatial3d: { ...base, rotationX: rx, rotationY: ry, rotationZ: rz }
+        });
+        if (!summary) summary = { name: dev.name, rx, ry, rz };
+      });
+      if (summary) {
+        this.showStatusHint(`🔄 Rotasi "${summary.name}": X:${summary.rx}° Y:${summary.ry}° Z:${summary.rz}°`);
+      }
+      return true;
+    }
+
+    const selObjId = stateManager.getSelectedObject3dId?.();
+    if (selObjId) {
+      const obj = stateManager.getObject3dById(selObjId);
+      if (!obj) return false;
+      const rx = reset ? 0 : clamp((Number(obj.rotationX) || 0) + dX, -180, 180);
+      const ry = reset ? 0 : (((Number(obj.rotationY ?? obj.rotationDeg) || 0) + dY) % 360 + 360) % 360;
+      const rz = reset ? 0 : clamp((Number(obj.rotationZ) || 0) + dZ, -180, 180);
+      stateManager.updateObject3d(selObjId, { rotationX: rx, rotationY: ry, rotationZ: rz });
+      this.showStatusHint(`🔄 Rotasi "${obj.name}": X:${rx}° Y:${ry}° Z:${rz}°`);
+      return true;
+    }
+
+    return false;
   }
 
   syncSelectionRings() {
@@ -2267,11 +2556,11 @@ export class Map3DEngine {
 
   bindGlobalListeners() {
     const scheduleSyncDevAndCables = () => {
-      if (!this.isActive || this.dragMoveState) return;
+      if (!this.isActive || this.dragMoveState || this.dragRotateState) return;
       if (this._pendingSyncRaf) return;
       this._pendingSyncRaf = requestAnimationFrame(() => {
         this._pendingSyncRaf = null;
-        if (!this.isActive || this.dragMoveState) return;
+        if (!this.isActive || this.dragMoveState || this.dragRotateState) return;
         this.syncDevices();
         this.syncCables();
       });

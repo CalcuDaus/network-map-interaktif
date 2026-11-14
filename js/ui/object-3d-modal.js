@@ -196,10 +196,10 @@ export class Object3DModal {
           ${this.renderSliderRow('o3d-height', 'Tinggi Push/Pull (m)', 0.2, 40, 0.1)}
           ${this.renderSliderRow('o3d-elev', 'Elevasi Dasar (m)', 0, 30, 0.1)}
 
-          <!-- Rotation -->
-          <div style="display: flex; flex-direction: column; gap: 3px;">
+          <!-- 3-Axis Rotation (Y / X / Z) -->
+          <div style="display: flex; flex-direction: column; gap: 6px; padding-top: 4px; border-top: 1px dashed var(--border-color);">
             <div style="display: flex; align-items: center; justify-content: space-between; font-size: 10px; font-weight: 600;">
-              <span>Rotasi (°)</span>
+              <span>Rotasi Y / Hadap (°)</span>
               <div style="display: flex; align-items: center; gap: 4px;">
                 <button type="button" id="btn-o3d-rot-45" class="btn btn-secondary btn-sm" style="font-size: 9.5px; padding: 1px 5px;">+45°</button>
                 <button type="button" id="btn-o3d-rot-90" class="btn btn-secondary btn-sm" style="font-size: 9.5px; padding: 1px 5px;">+90°</button>
@@ -207,6 +207,12 @@ export class Object3DModal {
               </div>
             </div>
             <input type="range" id="o3d-rot-range" min="0" max="360" step="5" style="accent-color: var(--accent-blue, #2a7c13); width: 100%;">
+            <div style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap;">
+              <button type="button" id="btn-o3d-wall-90" class="btn btn-secondary btn-sm" style="font-size: 9.5px; padding: 2px 6px;">Dinding X:90°</button>
+              <button type="button" id="btn-o3d-rot-reset" class="btn btn-secondary btn-sm" style="font-size: 9.5px; padding: 2px 6px;">Reset 0°</button>
+            </div>
+            ${this.renderSliderRow('o3d-rotx', 'Rotasi X / Miring Dinding (°)', -180, 180, 5)}
+            ${this.renderSliderRow('o3d-rotz', 'Rotasi Z / Roll Samping (°)', -180, 180, 5)}
           </div>
 
           <!-- Material & Options -->
@@ -375,7 +381,9 @@ export class Object3DModal {
       ['o3d-depth', 'depthMeters', 0.15, 120],
       ['o3d-height', 'heightMeters', 0.15, 80],
       ['o3d-elev', 'elevationMeters', 0, 50],
-      ['o3d-rot', 'rotationY', 0, 360]
+      ['o3d-rot', 'rotationY', 0, 360],
+      ['o3d-rotx', 'rotationX', -180, 180],
+      ['o3d-rotz', 'rotationZ', -180, 180]
     ];
 
     sliderConfigs.forEach(([baseId, field, min, max]) => {
@@ -405,6 +413,30 @@ export class Object3DModal {
     };
     this.panelEl.querySelector('#btn-o3d-rot-45')?.addEventListener('click', () => rotateBy(45));
     this.panelEl.querySelector('#btn-o3d-rot-90')?.addEventListener('click', () => rotateBy(90));
+    this.panelEl.querySelector('#btn-o3d-wall-90')?.addEventListener('click', () => {
+      const rxNum = this.panelEl.querySelector('#o3d-rotx-num');
+      const rxRange = this.panelEl.querySelector('#o3d-rotx-range');
+      const rzNum = this.panelEl.querySelector('#o3d-rotz-num');
+      const rzRange = this.panelEl.querySelector('#o3d-rotz-range');
+      if (rxNum) rxNum.value = 90;
+      if (rxRange) rxRange.value = 90;
+      if (rzNum) rzNum.value = 0;
+      if (rzRange) rzRange.value = 0;
+      this.commitFormPatch({ rotationX: 90, rotationZ: 0 });
+    });
+    this.panelEl.querySelector('#btn-o3d-rot-reset')?.addEventListener('click', () => {
+      [
+        ['#o3d-rot-num', '#o3d-rot-range'],
+        ['#o3d-rotx-num', '#o3d-rotx-range'],
+        ['#o3d-rotz-num', '#o3d-rotz-range']
+      ].forEach(([n, r]) => {
+        const nEl = this.panelEl.querySelector(n);
+        const rEl = this.panelEl.querySelector(r);
+        if (nEl) nEl.value = 0;
+        if (rEl) rEl.value = 0;
+      });
+      this.commitFormPatch({ rotationX: 0, rotationY: 0, rotationZ: 0 });
+    });
 
     // Global state synchronization
     eventBus.on('object3d:selected', () => {
@@ -544,8 +576,12 @@ export class Object3DModal {
     setVal('#o3d-height-range', Math.min(40, src.heightMeters ?? 2));
     setVal('#o3d-elev-num', src.elevationMeters ?? 0);
     setVal('#o3d-elev-range', Math.min(30, src.elevationMeters ?? 0));
-    setVal('#o3d-rot-num', src.rotationY ?? 0);
-    setVal('#o3d-rot-range', src.rotationY ?? 0);
+    setVal('#o3d-rot-num', src.rotationY ?? src.rotationDeg ?? 0);
+    setVal('#o3d-rot-range', src.rotationY ?? src.rotationDeg ?? 0);
+    setVal('#o3d-rotx-num', src.rotationX ?? 0);
+    setVal('#o3d-rotx-range', src.rotationX ?? 0);
+    setVal('#o3d-rotz-num', src.rotationZ ?? 0);
+    setVal('#o3d-rotz-range', src.rotationZ ?? 0);
     setVal('#o3d-color', src.color || '#64748b');
     setVal('#o3d-accent', src.accentColor || '#2a7c13');
     setVal('#o3d-opacity', Math.round((src.opacity ?? 1) * 100));
