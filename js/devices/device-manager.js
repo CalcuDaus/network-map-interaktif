@@ -103,15 +103,23 @@ export class DeviceManager {
     const existing = this.devices.get(id);
     if (!existing) return null;
 
-    // Deep merge network fields if provided
+    // Deep merge network, inventory, and specs fields if provided
     const updatedNetwork = updates.network
-      ? { ...existing.network, ...updates.network }
+      ? { ...(existing.network || {}), ...updates.network }
       : existing.network;
+    const updatedInventory = updates.inventory
+      ? { ...(existing.inventory || {}), ...updates.inventory }
+      : existing.inventory;
+    const updatedSpecs = updates.specs
+      ? { ...(existing.specs || {}), ...updates.specs }
+      : existing.specs;
 
     const updatedDevice = {
       ...existing,
       ...updates,
       network: updatedNetwork,
+      inventory: updatedInventory,
+      specs: updatedSpecs,
       updatedAt: new Date().toISOString()
     };
 

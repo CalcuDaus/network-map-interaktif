@@ -1,12 +1,12 @@
 /**
  * NetMap — Device Properties Panel (Right Sidebar Component)
- * Comprehensive inspection and editing panel for network devices
+ * Comprehensive inspection, school inventory, and editing panel for network devices
  */
 
 import { eventBus } from '../core/event-bus.js';
 import { stateManager } from '../core/state-manager.js';
 import { DEVICE_CATEGORIES, DEVICE_STATUSES, DEVICE_CATALOG } from '../devices/device-library.js';
-import { validateIp, validateMac, validateVlan, getDefaultSpatial3d } from '../devices/device-schema.js';
+import { validateIp, validateMac, validateVlan, getDefaultSpatial3d, FUNDING_SOURCE_PRESETS } from '../devices/device-schema.js';
 import { formatDecimals } from '../utils/helpers.js';
 import { NETWORK_ICON_DEFS, getDeviceIconSvg, getDefaultIconForType } from '../devices/device-icon-factory.js';
 import { metersToPixels, calculateCoverageArea, formatCoverageArea } from '../devices/wireless-coverage.js';
@@ -55,6 +55,8 @@ export class PropertiesPanel {
     const radiusPixels = metersToPixels(radiusMeters);
     const areaM2 = calculateCoverageArea(radiusMeters);
     const spatial = device.spatial3d || getDefaultSpatial3d(device.type);
+    const inv = device.inventory || {};
+    const specs = device.specs || {};
 
     // Open right sidebar if collapsed
     if (!stateManager.getState().ui.rightSidebarOpen) {
@@ -122,7 +124,7 @@ export class PropertiesPanel {
 
           <div style="display: flex; align-items: center; justify-content: space-between; font-size: 11px;">
             <span style="font-family: var(--font-mono); color: var(--text-muted); cursor: pointer;" id="btn-copy-id" title="Klik untuk salin ID">
-              ID: ${device.id} 📋
+              ID: ${device.id} <i data-lucide="copy" style="width: 11px; height: 11px; vertical-align: middle;"></i>
             </span>
             <div style="display: flex; align-items: center; gap: 6px;">
               <span style="width: 8px; height: 8px; border-radius: 50%; background-color: ${statusDef.color};"></span>
@@ -136,6 +138,18 @@ export class PropertiesPanel {
           </div>
         </div>
 
+        <!-- Quick Actions: Detail & Konfigurasi -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+          <button type="button" id="btn-open-device-detail" class="btn btn-primary btn-sm" style="width: 100%; justify-content: center; font-size: 11.5px; padding: 7px 10px;" title="Detail Lengkap, Spesifikasi &amp; Anggaran (DAK/BOS) — Pintasan: D">
+            <i data-lucide="file-text" style="width: 14px; height: 14px; flex-shrink: 0;"></i>
+            <span>Detail</span>
+          </button>
+          <button type="button" id="btn-open-device-net-config" class="btn btn-secondary btn-sm" style="width: 100%; justify-content: center; font-size: 11.5px; padding: 7px 10px;" title="Konfigurasi Detail IP, VLAN &amp; SSID">
+            <i data-lucide="wifi" style="width: 14px; height: 14px; flex-shrink: 0; color: var(--accent-blue);"></i>
+            <span>Konfigurasi</span>
+          </button>
+        </div>
+
         <!-- Section: Ikon & Tampilan Marker -->
         <div class="panel-section">
           <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
@@ -147,10 +161,10 @@ export class PropertiesPanel {
             <!-- Live Marker Preview & Style Selector -->
             <div style="display: flex; align-items: center; gap: 12px; background: var(--bg-tertiary); padding: 10px; border-radius: 6px; border: 1px solid var(--border-color);">
               <div id="prop-marker-preview" style="width: 52px; height: 52px; display: flex; align-items: center; justify-content: center; background: #18350d; border: 2px solid ${cat.color}; border-radius: ${device.markerStyle === 'circle' ? '50%' : device.markerStyle === 'icon-only' ? '4px' : '10px'}; position: relative; flex-shrink: 0; box-shadow: 0 4px 10px rgba(0,0,0,0.35);">
-                ${device.customImage 
-                  ? `<img src="${device.customImage}" style="width: 32px; height: 32px; object-fit: contain; border-radius: 4px;" alt="Custom">`
-                  : `<div style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">${getDeviceIconSvg(device.customIcon || getDefaultIconForType(device.type), { color: cat.color, size: 28 })}</div>`
-                }
+                ${device.customImage
+        ? `<img src="${device.customImage}" style="width: 32px; height: 32px; object-fit: contain; border-radius: 4px;" alt="Custom">`
+        : `<div style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">${getDeviceIconSvg(device.customIcon || getDefaultIconForType(device.type), { color: cat.color, size: 28 })}</div>`
+      }
                 <span style="position: absolute; top: -3px; right: -3px; width: 10px; height: 10px; border-radius: 50%; background-color: ${statusDef.color}; border: 2px solid #18350d;"></span>
               </div>
 
@@ -173,9 +187,9 @@ export class PropertiesPanel {
               </div>
               <div id="prop-icon-gallery" style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; max-height: 140px; overflow-y: auto; padding: 6px; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 6px;">
                 ${Object.keys(NETWORK_ICON_DEFS).map(key => {
-                  const def = NETWORK_ICON_DEFS[key];
-                  const isCurrent = (!device.customImage && (device.customIcon || getDefaultIconForType(device.type)) === key);
-                  return `
+        const def = NETWORK_ICON_DEFS[key];
+        const isCurrent = (!device.customImage && (device.customIcon || getDefaultIconForType(device.type)) === key);
+        return `
                     <button type="button" class="btn-icon-choice ${isCurrent ? 'active' : ''}" 
                             data-icon-key="${key}" title="${def.name}"
                             style="display: flex; align-items: center; justify-content: center; width: 100%; aspect-ratio: 1; border-radius: 5px; border: 1px solid ${isCurrent ? 'var(--accent-sky)' : 'transparent'}; background: ${isCurrent ? 'rgba(118, 196, 87, 0.25)' : 'var(--bg-primary)'}; cursor: pointer; padding: 4px; transition: all 120ms ease;">
@@ -184,7 +198,7 @@ export class PropertiesPanel {
                       </div>
                     </button>
                   `;
-                }).join('')}
+      }).join('')}
               </div>
             </div>
 
@@ -281,19 +295,19 @@ export class PropertiesPanel {
               <label style="font-size: 11px; font-weight: 600; color: var(--text-primary);">Preset Cepat Jangkauan</label>
               <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
                 <button type="button" class="btn btn-secondary btn-sm btn-preset-cov" data-meters="15" data-band="5ghz" title="Indoor 15m (Luas: 707 m²)" style="font-size: 10px; padding: 4px 6px; justify-content: flex-start;">
-                  🏢 Indoor 15m
+                  Indoor 15m
                 </button>
                 <button type="button" class="btn btn-secondary btn-sm btn-preset-cov" data-meters="25" data-band="dual-band" title="Standar AP 25m (Luas: 1.964 m²)" style="font-size: 10px; padding: 4px 6px; justify-content: flex-start;">
-                  📶 Standar AP 25m
+                  Standar AP 25m
                 </button>
                 <button type="button" class="btn btn-secondary btn-sm btn-preset-cov" data-meters="40" data-band="dual-band" title="Gedung 40m (Luas: 5.027 m²)" style="font-size: 10px; padding: 4px 6px; justify-content: flex-start;">
-                  🏛 Gedung 40m
+                  Gedung 40m
                 </button>
                 <button type="button" class="btn btn-secondary btn-sm btn-preset-cov" data-meters="60" data-band="2.4ghz" title="Outdoor 60m (Luas: 11.310 m²)" style="font-size: 10px; padding: 4px 6px; justify-content: flex-start;">
-                  🌳 Outdoor 60m
+                  Outdoor 60m
                 </button>
                 <button type="button" class="btn btn-secondary btn-sm btn-preset-cov" data-meters="100" data-band="ptp" title="PtP Wireless Bridge 100m (Luas: 31.416 m²)" style="grid-column: span 2; font-size: 10px; padding: 4px 6px; justify-content: center;">
-                  📡 PtP Wireless Bridge 100m
+                  PtP Wireless Bridge 100m
                 </button>
               </div>
             </div>
@@ -467,9 +481,9 @@ export class PropertiesPanel {
           </div>
         </div>
 
-        <!-- Section: Identitas & Hardware -->
+        <!-- Section: Identitas & Inventaris Sekolah -->
         <div class="panel-section">
-          <span class="section-label">Identitas Perangkat</span>
+          <span class="section-label">Identitas, Spesifikasi &amp; Inventaris</span>
           <div class="info-card" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
             <div style="display: flex; flex-direction: column; gap: 4px;">
               <label style="font-size: 11px; color: var(--text-muted);">Merek / Brand</label>
@@ -481,17 +495,35 @@ export class PropertiesPanel {
               <input type="text" id="prop-model" value="${this.escapeHtml(device.model || '')}" placeholder="RB4011, SG300..."
                      style="background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 12px; padding: 5px 8px;">
             </div>
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+              <label style="font-size: 11px; color: var(--text-muted);">Tahun Beli</label>
+              <input type="text" id="prop-purchase-year" value="${this.escapeHtml(inv.purchaseYear || '')}" placeholder="cth: 2020"
+                     style="background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 12px; padding: 5px 8px;">
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+              <label style="font-size: 11px; color: var(--text-muted);">Anggaran (DAK/BOS)</label>
+              <input type="text" id="prop-funding-source" list="prop-funding-datalist" value="${this.escapeHtml(inv.fundingSource || '')}" placeholder="DAK, BOS..."
+                     style="background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 12px; padding: 5px 8px;">
+              <datalist id="prop-funding-datalist">
+                ${FUNDING_SOURCE_PRESETS.map((src) => `<option value="${this.escapeHtml(src)}"></option>`).join('')}
+              </datalist>
+            </div>
             <div style="grid-column: span 2; display: flex; flex-direction: column; gap: 4px;">
               <label style="font-size: 11px; color: var(--text-muted);">Lokasi Fisik / Ruangan</label>
               <input type="text" id="prop-location" value="${this.escapeHtml(device.location || '')}" placeholder="Gedung Utama Lt. 2 Ruang Server..."
                      style="background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 12px; padding: 5px 8px;">
+            </div>
+            <div style="grid-column: span 2; display: flex; flex-direction: column; gap: 4px;">
+              <label style="font-size: 11px; color: var(--text-muted);">Spesifikasi Ringkas</label>
+              <textarea id="prop-spec-summary" rows="2" placeholder="CPU, RAM, jumlah port, daya PoE, atau keterangan tipe unit..."
+                        style="background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 12px; padding: 5px 8px; resize: vertical;">${this.escapeHtml(specs.summary || '')}</textarea>
             </div>
           </div>
         </div>
 
         <!-- Section: Konfigurasi Jaringan -->
         <div class="panel-section">
-          <span class="section-label">Konfigurasi Jaringan</span>
+          <span class="section-label">Konfigurasi Jaringan &amp; Wireless</span>
           <div class="info-card" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
             <div style="grid-column: span 2; display: flex; flex-direction: column; gap: 4px;">
               <label style="font-size: 11px; color: var(--text-muted);">IP Address</label>
@@ -508,6 +540,16 @@ export class PropertiesPanel {
               <label style="font-size: 11px; color: var(--text-muted);">VLAN ID</label>
               <input type="number" id="prop-vlan" min="1" max="4094" value="${device.network?.vlan || 1}"
                      style="background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 12px; padding: 5px 8px; font-family: var(--font-mono);">
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+              <label style="font-size: 11px; color: var(--text-muted);">Gateway</label>
+              <input type="text" id="prop-gateway" value="${this.escapeHtml(device.network?.gateway || '')}" placeholder="192.168.1.254"
+                     style="background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 12px; padding: 5px 8px; font-family: var(--font-mono);">
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+              <label style="font-size: 11px; color: var(--text-muted);">SSID Wi-Fi</label>
+              <input type="text" id="prop-ssid" value="${this.escapeHtml(device.network?.ssid || '')}" placeholder="SMK_HOTSPOT"
+                     style="background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 12px; padding: 5px 8px;">
             </div>
             <div style="grid-column: span 2; display: flex; flex-direction: column; gap: 4px;">
               <label style="font-size: 11px; color: var(--text-muted);">MAC Address</label>
@@ -586,6 +628,15 @@ export class PropertiesPanel {
     // Jump to Layers tab
     document.getElementById('btn-prop-jump-layer')?.addEventListener('click', () => {
       eventBus.emit('sidebar-right:switch-tab', { tab: 'layers', deviceId: devId });
+    });
+
+    // Open Device Detail Modal
+    document.getElementById('btn-open-device-detail')?.addEventListener('click', () => {
+      eventBus.emit('modal:open-device-detail', { deviceId: devId, tab: 'overview' });
+    });
+
+    document.getElementById('btn-open-device-net-config')?.addEventListener('click', () => {
+      eventBus.emit('modal:open-device-detail', { deviceId: devId, tab: 'network' });
     });
 
     // Close button
@@ -960,10 +1011,15 @@ export class PropertiesPanel {
     const brandInput = document.getElementById('prop-brand');
     const modelInput = document.getElementById('prop-model');
     const locInput = document.getElementById('prop-location');
+    const purchaseYearInput = document.getElementById('prop-purchase-year');
+    const fundingSourceInput = document.getElementById('prop-funding-source');
+    const specSummaryInput = document.getElementById('prop-spec-summary');
     const statusSelect = document.getElementById('prop-status');
     const ipInput = document.getElementById('prop-ip');
     const subnetInput = document.getElementById('prop-subnet');
     const vlanInput = document.getElementById('prop-vlan');
+    const gatewayInput = document.getElementById('prop-gateway');
+    const ssidInput = document.getElementById('prop-ssid');
     const macInput = document.getElementById('prop-mac');
     const hostnameInput = document.getElementById('prop-hostname');
     const fwInput = document.getElementById('prop-firmware');
@@ -1009,10 +1065,19 @@ export class PropertiesPanel {
       markerStyle: markerStyle,
       wirelessCoverage: this.currentDevice.wirelessCoverage,
       spatial3d: this.currentDevice.spatial3d,
+      inventory: {
+        purchaseYear: purchaseYearInput?.value.trim() || '',
+        fundingSource: fundingSourceInput?.value.trim() || ''
+      },
+      specs: {
+        summary: specSummaryInput?.value.trim() || ''
+      },
       network: {
         ip: ip,
         subnet: subnetInput?.value.trim() || '255.255.255.0',
         vlan: vlan,
+        gateway: gatewayInput?.value.trim() || '',
+        ssid: ssidInput?.value.trim() || '',
         mac: mac,
         hostname: hostnameInput?.value.trim() || ''
       },
@@ -1089,6 +1154,34 @@ export class PropertiesPanel {
           if (numEl && document.activeElement !== numEl) numEl.value = val;
           if (sldEl && document.activeElement !== sldEl) sldEl.value = val;
         });
+
+        const inv = dev.inventory || {};
+        const specs = dev.specs || {};
+        const net = dev.network || {};
+        [
+          ['prop-device-name', dev.name || ''],
+          ['prop-brand', dev.brand || ''],
+          ['prop-model', dev.model || ''],
+          ['prop-purchase-year', inv.purchaseYear || ''],
+          ['prop-funding-source', inv.fundingSource || ''],
+          ['prop-location', dev.location || ''],
+          ['prop-spec-summary', specs.summary || ''],
+          ['prop-ip', net.ip || ''],
+          ['prop-subnet', net.subnet || '255.255.255.0'],
+          ['prop-vlan', net.vlan || 1],
+          ['prop-gateway', net.gateway || ''],
+          ['prop-ssid', net.ssid || ''],
+          ['prop-mac', net.mac || ''],
+          ['prop-hostname', net.hostname || ''],
+          ['prop-firmware', dev.firmware || ''],
+          ['prop-installed', dev.installedAt || ''],
+          ['prop-notes', dev.notes || '']
+        ].forEach(([fieldId, val]) => {
+          const el = document.getElementById(fieldId);
+          if (el && document.activeElement !== el) {
+            el.value = val;
+          }
+        });
       }
     });
   }
@@ -1096,8 +1189,8 @@ export class PropertiesPanel {
   escapeHtml(str) {
     if (!str) return '';
     return str.replace(/&/g, '&amp;')
-              .replace(/</g, '&lt;')
-              .replace(/>/g, '&gt;')
-              .replace(/"/g, '&quot;');
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
   }
 }

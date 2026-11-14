@@ -1431,10 +1431,8 @@
         e.stopPropagation();
         const willOpen = !this.navbarSearchWrapper?.classList.contains("open");
         this.closeNavbarDropdowns();
-        if (willOpen && this.navbarSearchWrapper) {
-          this.navbarSearchWrapper.classList.add("open");
-          this.btnToggleSearch?.setAttribute("aria-expanded", "true");
-          setTimeout(() => this.globalSearchInput?.focus(), 20);
+        if (willOpen) {
+          this.openSearchDropdown();
         }
       });
       this.navbarSearchWrapper?.addEventListener("click", (e) => {
@@ -1446,6 +1444,25 @@
           this.closeNavbarDropdowns();
         }
       });
+      window.addEventListener("keydown", (e) => {
+        const isCtrlK = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k";
+        const inInput = ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName) || document.activeElement?.isContentEditable;
+        const isSlash = !inInput && !e.ctrlKey && !e.metaKey && !e.altKey && e.key === "/";
+        if (isCtrlK || isSlash) {
+          e.preventDefault();
+          this.closeNavbarDropdowns();
+          this.openSearchDropdown();
+        }
+      });
+    }
+    openSearchDropdown() {
+      if (!this.navbarSearchWrapper) return;
+      this.navbarSearchWrapper.classList.add("open");
+      this.btnToggleSearch?.setAttribute("aria-expanded", "true");
+      setTimeout(() => {
+        this.globalSearchInput?.focus();
+        eventBus.emit("search:opened");
+      }, 20);
     }
     closeNavbarDropdowns() {
       this.navbarMenuWrapper?.classList.remove("open");
@@ -2077,6 +2094,286 @@
       { name: "port1", type: "rj45", speed: "1G" }
     ], 0.1, 0.28, 0.3);
   }
+  var FUNDING_SOURCE_PRESETS = [
+    "DAK",
+    "BOS Reguler",
+    "BOS Kinerja",
+    "APBD",
+    "APBN",
+    "Komite / Yayasan",
+    "Hibah",
+    "Mandiri"
+  ];
+  var DEVICE_CONDITION_OPTIONS = [
+    { id: "baik", label: "Baik / Layak Pakai", color: "#22c55e" },
+    { id: "cukup", label: "Cukup (Perlu Perhatian)", color: "#f59e0b" },
+    { id: "rusak-ringan", label: "Rusak Ringan", color: "#f97316" },
+    { id: "rusak-berat", label: "Rusak Berat / Non-Aktif", color: "#ef4444" }
+  ];
+  var MODEL_HARDWARE_SPEC_PRESETS = [
+    {
+      keywords: ["rb1100ahx4", "rb1100"],
+      specs: {
+        processor: "Annapurna Alpine AL21400 Quad-Core 1.4 GHz (ARM 32-bit)",
+        ramStorage: "1 GB RAM \u2022 128 MB NAND + SATA/M.2 Slot",
+        portsSummary: "13x Gigabit Ethernet (Port 13 PoE-Out Pasif), RS232, Dual PSU Redundan",
+        powerSupply: "Dual AC 100-240V / DC 12-57V + PoE-In",
+        throughput: "Up to 7.5 Gbps Routing / 1.8 Gbps IPsec",
+        dimensions: "443 x 148 x 44 mm (1U Rackmount)",
+        summary: "Router Core Sekolah 13x Gigabit LAN, Quad-Core 1.4GHz, 1GB RAM, Dual PSU 1U Rackmount."
+      }
+    },
+    {
+      keywords: ["rb750gr3", "hex"],
+      specs: {
+        processor: "MT7621A Dual-Core 880 MHz (4 Thread)",
+        ramStorage: "256 MB RAM \u2022 16 MB Flash + microSD",
+        portsSummary: "5x Gigabit Ethernet, 1x USB 2.0 Type-A",
+        powerSupply: "DC Jack 8-30V / Passive PoE-In Ether1",
+        throughput: "Up to 1.9 Gbps",
+        dimensions: "113 x 89 x 28 mm (Desktop)",
+        summary: "Router MikroTik hEX 5x Gigabit Port, Dual-Core 880MHz, 256MB RAM."
+      }
+    },
+    {
+      keywords: ["ccr2116"],
+      specs: {
+        processor: "AL73400 16-Core 2.0 GHz (ARM 64-bit)",
+        ramStorage: "16 GB DDR4 RAM \u2022 128 MB NAND",
+        portsSummary: "13x Gigabit Ethernet, 4x 10G SFP+, 2x M.2 PCIe",
+        powerSupply: "Dual Hot-Swap AC Power Supply",
+        throughput: "Up to 45 Gbps+",
+        dimensions: "443 x 224 x 44 mm (1U Rackmount)",
+        summary: "Cloud Core Router 16-Core 2GHz, 16GB RAM, 4x SFP+ 10G + 13x Gigabit."
+      }
+    },
+    {
+      keywords: ["ccr2004"],
+      specs: {
+        processor: "AL32400 Quad-Core 1.7 GHz (ARM 64-bit)",
+        ramStorage: "4 GB DDR4 RAM \u2022 128 MB NAND",
+        portsSummary: "16x Gigabit Ethernet, 2x 10G SFP+ Cage",
+        powerSupply: "Dual AC PSU",
+        throughput: "Up to 18 Gbps",
+        dimensions: "443 x 210 x 44 mm (1U Rackmount)",
+        summary: "MikroTik CCR2004 Quad-Core 1.7GHz, 4GB RAM, 16x Gigabit + 2x SFP+ 10G."
+      }
+    },
+    {
+      keywords: ["rb5009"],
+      specs: {
+        processor: "Marvell Armada 88F7040 Quad-Core 1.4 GHz",
+        ramStorage: "1 GB DDR4 RAM \u2022 1 GB NAND",
+        portsSummary: "7x Gigabit Ethernet, 1x 2.5G Ethernet (PoE-In), 1x 10G SFP+, 1x USB 3.0",
+        powerSupply: "DC 24-57V / 802.3af/at PoE-In",
+        throughput: "Up to 9.4 Gbps",
+        dimensions: "220 x 125 x 22 mm",
+        summary: "Router RB5009UPr 7x 1G + 1x 2.5G + 1x 10G SFP+, Quad-Core 1.4GHz, 1GB RAM."
+      }
+    },
+    {
+      keywords: ["rb4011"],
+      specs: {
+        processor: "AL21400 Quad-Core 1.4 GHz",
+        ramStorage: "1 GB RAM \u2022 512 MB NAND",
+        portsSummary: "10x Gigabit Ethernet (Ether10 PoE-Out), 1x 10G SFP+",
+        powerSupply: "DC 12-57V / PoE-In",
+        throughput: "Up to 9.7 Gbps",
+        dimensions: "228 x 120 x 30 mm (Metal Enclosure)",
+        summary: "MikroTik RB4011 10x Gigabit Port + 1x SFP+ 10G, Quad-Core 1.4GHz."
+      }
+    },
+    {
+      keywords: ["crs326"],
+      specs: {
+        processor: "98DX3236 800 MHz (Switch Chip Marvell)",
+        ramStorage: "512 MB RAM \u2022 16 MB Flash",
+        portsSummary: "24x Gigabit Ethernet, 2x 10G SFP+ Cage",
+        powerSupply: "DC Jack 10-30V / Passive PoE-In",
+        throughput: "Non-Blocking L2/L3 Hardware Switching 88 Gbps",
+        dimensions: "443 x 144 x 44 mm (1U Rackmount)",
+        summary: "Cloud Router Switch 24x Gigabit LAN + 2x 10G SFP+, Dual Boot SwOS/RouterOS."
+      }
+    },
+    {
+      keywords: ["crs328"],
+      specs: {
+        processor: "98DX3236 800 MHz",
+        ramStorage: "512 MB RAM \u2022 16 MB Flash",
+        portsSummary: "24x Gigabit Ethernet (802.3af/at PoE-Out 450W), 4x 10G SFP+",
+        powerSupply: "Internal AC PSU 500W",
+        throughput: "Switching Capacity 128 Gbps",
+        dimensions: "443 x 305 x 44 mm (1U Rackmount)",
+        summary: "Switch PoE+ 24x Gigabit (450W Total) + 4x 10G SFP+ Uplink."
+      }
+    },
+    {
+      keywords: ["rap2260"],
+      specs: {
+        processor: "Quad-Core Wireless SoC Wi-Fi 6",
+        ramStorage: "512 MB RAM \u2022 128 MB Flash",
+        portsSummary: "1x 2.5G Multi-Gigabit PoE-In + 1x 1G LAN",
+        powerSupply: "IEEE 802.3at PoE+ / DC 12V 2A (Max 18W)",
+        throughput: "AX1800 Dual-Band (574 Mbps @2.4G + 1201 Mbps @5G)",
+        dimensions: "194 x 194 x 41.5 mm (Ceiling Mount)",
+        summary: "Ruijie Reyee Wi-Fi 6 AX1800 Ceiling AP, 2.5G PoE-In, MU-MIMO & Mesh Cloud."
+      }
+    },
+    {
+      keywords: ["ew1200g"],
+      specs: {
+        processor: "Dual-Core 880 MHz SoC",
+        ramStorage: "128 MB DDR3 RAM \u2022 16 MB Flash",
+        portsSummary: "1x Gigabit WAN + 3x Gigabit LAN, 6x Antena 6dBi",
+        powerSupply: "DC 12V 1.5A",
+        throughput: "AC1300 Dual-Band (400 Mbps @2.4G + 867 Mbps @5G)",
+        dimensions: "220 x 140 x 36 mm (Desktop / Wall)",
+        summary: "Ruijie Reyee RG-EW1200G PRO AC1300 Dual-Band Full Gigabit Wireless Router."
+      }
+    },
+    {
+      keywords: ["es216gc", "es218gc"],
+      specs: {
+        processor: "Realtek Managed Switch ASIC",
+        ramStorage: "Packet Buffer 4.1 Mbit",
+        portsSummary: "16x Gigabit RJ45 Smart Cloud Managed",
+        powerSupply: "Internal AC 100-240V (Max 12W)",
+        throughput: "Switching Capacity 32 Gbps (Non-Blocking)",
+        dimensions: "440 x 165 x 44 mm (1U Rackmount / Desktop)",
+        summary: "Ruijie Reyee Smart Managed Switch 16-Port Gigabit, VLAN 802.1Q, Loop Prevention."
+      }
+    },
+    {
+      keywords: ["sg1024d"],
+      specs: {
+        processor: "Unmanaged Gigabit Switch Controller",
+        ramStorage: "Packet Buffer 4 Mbit",
+        portsSummary: "24x 10/100/1000 Mbps Auto-Negotiation RJ45",
+        powerSupply: "Internal AC 100-240V (Green Ethernet)",
+        throughput: "Switching Capacity 48 Gbps",
+        dimensions: "294 x 180 x 44 mm (1U Rackmount / Desktop)",
+        summary: "TP-Link TL-SG1024D 24-Port Gigabit Unmanaged Switch, Plug & Play."
+      }
+    },
+    {
+      keywords: ["sg108"],
+      specs: {
+        processor: "Realtek 8-Port Gigabit Switch",
+        ramStorage: "Packet Buffer 1.5 Mbit",
+        portsSummary: "8x 10/100/1000 Mbps RJ45 Steel Casing",
+        powerSupply: "DC 9V 0.6A",
+        throughput: "Switching Capacity 16 Gbps",
+        dimensions: "158 x 101 x 25 mm (Desktop / Wall)",
+        summary: "TP-Link TL-SG108 8-Port Gigabit Metal Switch, IGMP Snooping & QoS."
+      }
+    },
+    {
+      keywords: ["poe160s"],
+      specs: {
+        processor: "IEEE 802.3at/af PoE+ Controller",
+        ramStorage: "Passive Hardware Injector",
+        portsSummary: "1x Gigabit Data-In + 1x Gigabit PoE-Out",
+        powerSupply: "AC 100-240V (Output PoE+ Max 30W)",
+        throughput: "1 Gbps Full-Duplex Pass-Through",
+        dimensions: "125 x 59 x 36 mm",
+        summary: "TP-Link TL-PoE160S Gigabit PoE+ Injector hingga 30W untuk AP/CCTV jarak jauh."
+      }
+    },
+    {
+      keywords: ["dl380p"],
+      specs: {
+        processor: "Dual Intel Xeon E5-2600 v2 Series (Up to 24 Core)",
+        ramStorage: "ECC DDR3 Registered RAM (Up to 768 GB) \u2022 SAS/SATA RAID",
+        portsSummary: "4x Gigabit FlexibleLOM + 4x Additional NIC + 1x iLO 4 Mgmt",
+        powerSupply: "Dual Hot-Plug Redundant PSU 460W / 750W",
+        throughput: "PCIe 3.0 High-I/O Enterprise Server",
+        dimensions: "2U Rackmount Server Chassis",
+        summary: "HPE ProLiant DL380p Gen8 Server Aplikasi Sekolah (E-Rapor, CBT, Dapodik, LMS)."
+      }
+    },
+    {
+      keywords: ["dahua_nvr", "nvr"],
+      specs: {
+        processor: "Quad-Core Embedded NVR Processor",
+        ramStorage: "Dual/Single SATA HDD Bay (Up to 10TB)",
+        portsSummary: "1x Gigabit LAN, HDMI + VGA Simultaneous, 2x USB",
+        powerSupply: "DC 12V 2A",
+        throughput: "80 Mbps Incoming Bandwidth (Up to 8CH IP Cam 8MP)",
+        dimensions: "260 x 225 x 48 mm (Compact 1U)",
+        summary: "Dahua NVR Network Video Recorder 8-Channel H.265+, Pemantauan CCTV Sekolah."
+      }
+    },
+    {
+      keywords: ["dahua_ip_cam", "cctv", "ipc"],
+      specs: {
+        processor: "CMOS Image Sensor Full HD / 4MP IR Night Vision",
+        ramStorage: "MicroSD Slot (Up to 256 GB)",
+        portsSummary: "1x RJ45 100Mbps PoE (802.3af)",
+        powerSupply: "PoE 802.3af / DC 12V (< 5.5W)",
+        throughput: "H.265 / H.264 Dual-Stream RTSP/ONVIF",
+        dimensions: "Dome / Bullet IP67 Weatherproof",
+        summary: "Kamera CCTV IP PoE Resolusi Tinggi dengan Infrared Night Vision & ONVIF."
+      }
+    }
+  ];
+  function getDefaultHardwareSpecs(device = {}) {
+    const haystack = [
+      device.model,
+      device.name,
+      device.brand,
+      device.type,
+      device.spatial3d?.customModelUrl
+    ].filter(Boolean).join(" ").toLowerCase();
+    for (const entry of MODEL_HARDWARE_SPEC_PRESETS) {
+      if (entry.keywords.some((kw) => haystack.includes(kw))) {
+        return { ...entry.specs };
+      }
+    }
+    const portCount = Array.isArray(device.ports) ? device.ports.length : 0;
+    const type = device.type || "custom";
+    if (type.includes("switch") || type.includes("crs") || type.includes("sg") || type.includes("es2")) {
+      return {
+        processor: "Embedded L2/L3 Switch ASIC",
+        ramStorage: "Buffer & Flash Standar",
+        portsSummary: `${portCount || 8}x Port RJ45 / SFP+`,
+        powerSupply: "AC 100-240V / DC Adapter",
+        throughput: "Wire-Speed Non-Blocking Switching",
+        dimensions: "Rackmount / Desktop Enclosure",
+        summary: `${device.brand || ""} ${device.model || "Network Switch"} (${portCount || 8} Port) untuk distribusi jaringan sekolah.`.trim()
+      };
+    }
+    if (type.includes("ap") || type.includes("access-point") || type.includes("wireless")) {
+      return {
+        processor: "Dual-Core / Quad-Core Wireless SoC",
+        ramStorage: "128-512 MB RAM",
+        portsSummary: `${portCount || 2}x LAN/PoE + Antena Dual-Band Wi-Fi`,
+        powerSupply: "PoE 802.3af/at / DC 12V",
+        throughput: "Dual-Band 2.4 GHz & 5 GHz",
+        dimensions: "Ceiling / Wall Mount Enclosure",
+        summary: `${device.brand || ""} ${device.model || "Access Point"} Wireless hotspot ruang kelas/area sekolah.`.trim()
+      };
+    }
+    if (["server", "nvr", "storage", "database"].includes(type)) {
+      return {
+        processor: "Multi-Core Server / Storage CPU",
+        ramStorage: "Server RAM & Storage Array",
+        portsSummary: `${portCount || 2}x Gigabit/10G NIC`,
+        powerSupply: "Redundant / AC Power Supply",
+        throughput: "High-Availability LAN/Service",
+        dimensions: "Rackmount / Tower Chassis",
+        summary: `${device.brand || ""} ${device.model || "Server"} layanan sistem & database sekolah.`.trim()
+      };
+    }
+    return {
+      processor: "Embedded Network Processor",
+      ramStorage: "Standar Pabrikan",
+      portsSummary: portCount > 0 ? `${portCount}x Port Jaringan` : "Standar RJ45 / Wireless",
+      powerSupply: "AC / DC / PoE",
+      throughput: "Gigabit / Fast Ethernet",
+      dimensions: "Standar Perangkat Jaringan",
+      summary: `${device.brand || ""} ${device.model || device.name || "Perangkat Jaringan"} infrastruktur jaringan sekolah.`.trim()
+    };
+  }
   var DeviceSchema = {
     /**
      * Factory function to create a validated device object with default values
@@ -2119,7 +2416,9 @@
           rackUnit: rawSpatial.rackUnit !== void 0 ? rawSpatial.rackUnit : defaultSpatial.rackUnit,
           customModelUrl: resolvedModelUrl,
           modelScale: typeof rawSpatial.modelScale === "number" ? rawSpatial.modelScale : 1,
-          rotationY: typeof rawSpatial.rotationY === "number" ? rawSpatial.rotationY : 0
+          rotationX: typeof rawSpatial.rotationX === "number" ? rawSpatial.rotationX : defaultSpatial.rotationX || 0,
+          rotationY: typeof rawSpatial.rotationY === "number" ? rawSpatial.rotationY : defaultSpatial.rotationY || 0,
+          rotationZ: typeof rawSpatial.rotationZ === "number" ? rawSpatial.rotationZ : defaultSpatial.rotationZ || 0
         },
         wirelessCoverage: params.wirelessCoverage ? {
           enabled: Boolean(params.wirelessCoverage.enabled),
@@ -2142,12 +2441,45 @@
           x: typeof params.position?.x === "number" ? params.position.x : 0.5,
           y: typeof params.position?.y === "number" ? params.position.y : 0.5
         },
+        inventory: {
+          purchaseYear: String(params.inventory?.purchaseYear ?? params.purchaseYear ?? ""),
+          fundingSource: String(params.inventory?.fundingSource ?? params.fundingSource ?? ""),
+          inventoryCode: String(params.inventory?.inventoryCode ?? params.inventoryCode ?? ""),
+          condition: params.inventory?.condition || params.condition || "baik",
+          serialNumber: String(params.inventory?.serialNumber ?? params.serialNumber ?? ""),
+          unitPrice: String(params.inventory?.unitPrice ?? params.unitPrice ?? ""),
+          vendor: String(params.inventory?.vendor ?? params.vendor ?? ""),
+          responsiblePerson: String(params.inventory?.responsiblePerson ?? params.responsiblePerson ?? "")
+        },
+        specs: {
+          processor: String(params.specs?.processor ?? ""),
+          ramStorage: String(params.specs?.ramStorage ?? ""),
+          portsSummary: String(params.specs?.portsSummary ?? ""),
+          powerSupply: String(params.specs?.powerSupply ?? ""),
+          throughput: String(params.specs?.throughput ?? ""),
+          dimensions: String(params.specs?.dimensions ?? ""),
+          summary: String(params.specs?.summary ?? params.specifications ?? "")
+        },
         network: {
           ip: params.network?.ip || params.ip || "",
           mac: params.network?.mac || params.mac || "",
           subnet: params.network?.subnet || params.subnet || "255.255.255.0",
+          gateway: params.network?.gateway || params.gateway || "",
+          dns: params.network?.dns || params.dns || "",
+          connectionMode: params.network?.connectionMode || "static",
           vlan: params.network?.vlan !== void 0 ? Number(params.network.vlan) : params.vlan !== void 0 ? Number(params.vlan) : 1,
-          hostname: params.network?.hostname || params.hostname || ""
+          vlanList: params.network?.vlanList || "",
+          hostname: params.network?.hostname || params.hostname || "",
+          ssid: params.network?.ssid || params.ssid || "",
+          ssidSecondary: params.network?.ssidSecondary || "",
+          wifiBand: params.network?.wifiBand || "",
+          wifiChannel: params.network?.wifiChannel || "",
+          wifiSecurity: params.network?.wifiSecurity || "",
+          wifiPasswordHint: params.network?.wifiPasswordHint || "",
+          managementAccess: params.network?.managementAccess || "",
+          managementUser: params.network?.managementUser || "",
+          services: params.network?.services || "",
+          configSnippet: params.network?.configSnippet || ""
         },
         status: params.status || "unknown",
         // online, offline, warning, unknown
@@ -4484,11 +4816,15 @@ ${device.network.ip}`;
     updateDevice(id, updates) {
       const existing = this.devices.get(id);
       if (!existing) return null;
-      const updatedNetwork = updates.network ? { ...existing.network, ...updates.network } : existing.network;
+      const updatedNetwork = updates.network ? { ...existing.network || {}, ...updates.network } : existing.network;
+      const updatedInventory = updates.inventory ? { ...existing.inventory || {}, ...updates.inventory } : existing.inventory;
+      const updatedSpecs = updates.specs ? { ...existing.specs || {}, ...updates.specs } : existing.specs;
       const updatedDevice = {
         ...existing,
         ...updates,
         network: updatedNetwork,
+        inventory: updatedInventory,
+        specs: updatedSpecs,
         updatedAt: (/* @__PURE__ */ new Date()).toISOString()
       };
       this.devices.set(id, updatedDevice);
@@ -5327,6 +5663,8 @@ ${device.network.ip}`;
       const radiusPixels = metersToPixels(radiusMeters);
       const areaM2 = calculateCoverageArea(radiusMeters);
       const spatial = device.spatial3d || getDefaultSpatial3d(device.type);
+      const inv = device.inventory || {};
+      const specs = device.specs || {};
       if (!stateManager.getState().ui.rightSidebarOpen) {
         stateManager.toggleSidebar("right");
       }
@@ -5387,7 +5725,7 @@ ${device.network.ip}`;
 
           <div style="display: flex; align-items: center; justify-content: space-between; font-size: 11px;">
             <span style="font-family: var(--font-mono); color: var(--text-muted); cursor: pointer;" id="btn-copy-id" title="Klik untuk salin ID">
-              ID: ${device.id} \u{1F4CB}
+              ID: ${device.id} <i data-lucide="copy" style="width: 11px; height: 11px; vertical-align: middle;"></i>
             </span>
             <div style="display: flex; align-items: center; gap: 6px;">
               <span style="width: 8px; height: 8px; border-radius: 50%; background-color: ${statusDef.color};"></span>
@@ -5399,6 +5737,18 @@ ${device.network.ip}`;
               </select>
             </div>
           </div>
+        </div>
+
+        <!-- Quick Actions: Detail & Konfigurasi -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+          <button type="button" id="btn-open-device-detail" class="btn btn-primary btn-sm" style="width: 100%; justify-content: center; font-size: 11.5px; padding: 7px 10px;" title="Detail Lengkap, Spesifikasi &amp; Anggaran (DAK/BOS) \u2014 Pintasan: D">
+            <i data-lucide="file-text" style="width: 14px; height: 14px; flex-shrink: 0;"></i>
+            <span>Detail</span>
+          </button>
+          <button type="button" id="btn-open-device-net-config" class="btn btn-secondary btn-sm" style="width: 100%; justify-content: center; font-size: 11.5px; padding: 7px 10px;" title="Konfigurasi Detail IP, VLAN &amp; SSID">
+            <i data-lucide="wifi" style="width: 14px; height: 14px; flex-shrink: 0; color: var(--accent-blue);"></i>
+            <span>Konfigurasi</span>
+          </button>
         </div>
 
         <!-- Section: Ikon & Tampilan Marker -->
@@ -5543,19 +5893,19 @@ ${device.network.ip}`;
               <label style="font-size: 11px; font-weight: 600; color: var(--text-primary);">Preset Cepat Jangkauan</label>
               <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px;">
                 <button type="button" class="btn btn-secondary btn-sm btn-preset-cov" data-meters="15" data-band="5ghz" title="Indoor 15m (Luas: 707 m\xB2)" style="font-size: 10px; padding: 4px 6px; justify-content: flex-start;">
-                  \u{1F3E2} Indoor 15m
+                  Indoor 15m
                 </button>
                 <button type="button" class="btn btn-secondary btn-sm btn-preset-cov" data-meters="25" data-band="dual-band" title="Standar AP 25m (Luas: 1.964 m\xB2)" style="font-size: 10px; padding: 4px 6px; justify-content: flex-start;">
-                  \u{1F4F6} Standar AP 25m
+                  Standar AP 25m
                 </button>
                 <button type="button" class="btn btn-secondary btn-sm btn-preset-cov" data-meters="40" data-band="dual-band" title="Gedung 40m (Luas: 5.027 m\xB2)" style="font-size: 10px; padding: 4px 6px; justify-content: flex-start;">
-                  \u{1F3DB} Gedung 40m
+                  Gedung 40m
                 </button>
                 <button type="button" class="btn btn-secondary btn-sm btn-preset-cov" data-meters="60" data-band="2.4ghz" title="Outdoor 60m (Luas: 11.310 m\xB2)" style="font-size: 10px; padding: 4px 6px; justify-content: flex-start;">
-                  \u{1F333} Outdoor 60m
+                  Outdoor 60m
                 </button>
                 <button type="button" class="btn btn-secondary btn-sm btn-preset-cov" data-meters="100" data-band="ptp" title="PtP Wireless Bridge 100m (Luas: 31.416 m\xB2)" style="grid-column: span 2; font-size: 10px; padding: 4px 6px; justify-content: center;">
-                  \u{1F4E1} PtP Wireless Bridge 100m
+                  PtP Wireless Bridge 100m
                 </button>
               </div>
             </div>
@@ -5729,9 +6079,9 @@ ${device.network.ip}`;
           </div>
         </div>
 
-        <!-- Section: Identitas & Hardware -->
+        <!-- Section: Identitas & Inventaris Sekolah -->
         <div class="panel-section">
-          <span class="section-label">Identitas Perangkat</span>
+          <span class="section-label">Identitas, Spesifikasi &amp; Inventaris</span>
           <div class="info-card" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
             <div style="display: flex; flex-direction: column; gap: 4px;">
               <label style="font-size: 11px; color: var(--text-muted);">Merek / Brand</label>
@@ -5743,17 +6093,35 @@ ${device.network.ip}`;
               <input type="text" id="prop-model" value="${this.escapeHtml(device.model || "")}" placeholder="RB4011, SG300..."
                      style="background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 12px; padding: 5px 8px;">
             </div>
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+              <label style="font-size: 11px; color: var(--text-muted);">Tahun Beli</label>
+              <input type="text" id="prop-purchase-year" value="${this.escapeHtml(inv.purchaseYear || "")}" placeholder="cth: 2020"
+                     style="background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 12px; padding: 5px 8px;">
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+              <label style="font-size: 11px; color: var(--text-muted);">Anggaran (DAK/BOS)</label>
+              <input type="text" id="prop-funding-source" list="prop-funding-datalist" value="${this.escapeHtml(inv.fundingSource || "")}" placeholder="DAK, BOS..."
+                     style="background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 12px; padding: 5px 8px;">
+              <datalist id="prop-funding-datalist">
+                ${FUNDING_SOURCE_PRESETS.map((src) => `<option value="${this.escapeHtml(src)}"></option>`).join("")}
+              </datalist>
+            </div>
             <div style="grid-column: span 2; display: flex; flex-direction: column; gap: 4px;">
               <label style="font-size: 11px; color: var(--text-muted);">Lokasi Fisik / Ruangan</label>
               <input type="text" id="prop-location" value="${this.escapeHtml(device.location || "")}" placeholder="Gedung Utama Lt. 2 Ruang Server..."
                      style="background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 12px; padding: 5px 8px;">
+            </div>
+            <div style="grid-column: span 2; display: flex; flex-direction: column; gap: 4px;">
+              <label style="font-size: 11px; color: var(--text-muted);">Spesifikasi Ringkas</label>
+              <textarea id="prop-spec-summary" rows="2" placeholder="CPU, RAM, jumlah port, daya PoE, atau keterangan tipe unit..."
+                        style="background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 12px; padding: 5px 8px; resize: vertical;">${this.escapeHtml(specs.summary || "")}</textarea>
             </div>
           </div>
         </div>
 
         <!-- Section: Konfigurasi Jaringan -->
         <div class="panel-section">
-          <span class="section-label">Konfigurasi Jaringan</span>
+          <span class="section-label">Konfigurasi Jaringan &amp; Wireless</span>
           <div class="info-card" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
             <div style="grid-column: span 2; display: flex; flex-direction: column; gap: 4px;">
               <label style="font-size: 11px; color: var(--text-muted);">IP Address</label>
@@ -5770,6 +6138,16 @@ ${device.network.ip}`;
               <label style="font-size: 11px; color: var(--text-muted);">VLAN ID</label>
               <input type="number" id="prop-vlan" min="1" max="4094" value="${device.network?.vlan || 1}"
                      style="background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 12px; padding: 5px 8px; font-family: var(--font-mono);">
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+              <label style="font-size: 11px; color: var(--text-muted);">Gateway</label>
+              <input type="text" id="prop-gateway" value="${this.escapeHtml(device.network?.gateway || "")}" placeholder="192.168.1.254"
+                     style="background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 12px; padding: 5px 8px; font-family: var(--font-mono);">
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+              <label style="font-size: 11px; color: var(--text-muted);">SSID Wi-Fi</label>
+              <input type="text" id="prop-ssid" value="${this.escapeHtml(device.network?.ssid || "")}" placeholder="SMK_HOTSPOT"
+                     style="background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 12px; padding: 5px 8px;">
             </div>
             <div style="grid-column: span 2; display: flex; flex-direction: column; gap: 4px;">
               <label style="font-size: 11px; color: var(--text-muted);">MAC Address</label>
@@ -5844,6 +6222,12 @@ ${device.network.ip}`;
       const devId = this.currentDevice.id;
       document.getElementById("btn-prop-jump-layer")?.addEventListener("click", () => {
         eventBus.emit("sidebar-right:switch-tab", { tab: "layers", deviceId: devId });
+      });
+      document.getElementById("btn-open-device-detail")?.addEventListener("click", () => {
+        eventBus.emit("modal:open-device-detail", { deviceId: devId, tab: "overview" });
+      });
+      document.getElementById("btn-open-device-net-config")?.addEventListener("click", () => {
+        eventBus.emit("modal:open-device-detail", { deviceId: devId, tab: "network" });
       });
       document.getElementById("btn-prop-close")?.addEventListener("click", () => {
         this.deviceManager.deselectDevice();
@@ -6150,10 +6534,15 @@ ${device.network.ip}`;
       const brandInput = document.getElementById("prop-brand");
       const modelInput = document.getElementById("prop-model");
       const locInput = document.getElementById("prop-location");
+      const purchaseYearInput = document.getElementById("prop-purchase-year");
+      const fundingSourceInput = document.getElementById("prop-funding-source");
+      const specSummaryInput = document.getElementById("prop-spec-summary");
       const statusSelect = document.getElementById("prop-status");
       const ipInput = document.getElementById("prop-ip");
       const subnetInput = document.getElementById("prop-subnet");
       const vlanInput = document.getElementById("prop-vlan");
+      const gatewayInput = document.getElementById("prop-gateway");
+      const ssidInput = document.getElementById("prop-ssid");
       const macInput = document.getElementById("prop-mac");
       const hostnameInput = document.getElementById("prop-hostname");
       const fwInput = document.getElementById("prop-firmware");
@@ -6191,10 +6580,19 @@ ${device.network.ip}`;
         markerStyle,
         wirelessCoverage: this.currentDevice.wirelessCoverage,
         spatial3d: this.currentDevice.spatial3d,
+        inventory: {
+          purchaseYear: purchaseYearInput?.value.trim() || "",
+          fundingSource: fundingSourceInput?.value.trim() || ""
+        },
+        specs: {
+          summary: specSummaryInput?.value.trim() || ""
+        },
         network: {
           ip,
           subnet: subnetInput?.value.trim() || "255.255.255.0",
           vlan,
+          gateway: gatewayInput?.value.trim() || "",
+          ssid: ssidInput?.value.trim() || "",
           mac,
           hostname: hostnameInput?.value.trim() || ""
         },
@@ -6262,6 +6660,33 @@ ${device.network.ip}`;
             const sldEl = document.getElementById(sldId);
             if (numEl && document.activeElement !== numEl) numEl.value = val;
             if (sldEl && document.activeElement !== sldEl) sldEl.value = val;
+          });
+          const inv = dev.inventory || {};
+          const specs = dev.specs || {};
+          const net = dev.network || {};
+          [
+            ["prop-device-name", dev.name || ""],
+            ["prop-brand", dev.brand || ""],
+            ["prop-model", dev.model || ""],
+            ["prop-purchase-year", inv.purchaseYear || ""],
+            ["prop-funding-source", inv.fundingSource || ""],
+            ["prop-location", dev.location || ""],
+            ["prop-spec-summary", specs.summary || ""],
+            ["prop-ip", net.ip || ""],
+            ["prop-subnet", net.subnet || "255.255.255.0"],
+            ["prop-vlan", net.vlan || 1],
+            ["prop-gateway", net.gateway || ""],
+            ["prop-ssid", net.ssid || ""],
+            ["prop-mac", net.mac || ""],
+            ["prop-hostname", net.hostname || ""],
+            ["prop-firmware", dev.firmware || ""],
+            ["prop-installed", dev.installedAt || ""],
+            ["prop-notes", dev.notes || ""]
+          ].forEach(([fieldId, val]) => {
+            const el = document.getElementById(fieldId);
+            if (el && document.activeElement !== el) {
+              el.value = val;
+            }
           });
         }
       });
@@ -6879,8 +7304,11 @@ ${device.network.ip}`;
           </div>
         </div>
 
-        <!-- Quick Row Actions (Focus & Open Properties) -->
+        <!-- Quick Row Actions (Detail, Focus & Open Properties) -->
         <div class="ps-layer-actions">
+          <button type="button" class="ps-row-action-btn" data-dev-detail="${device.id}" title="Detail, Spesifikasi, Anggaran &amp; SSID">
+            <i data-lucide="file-text" style="width: 12px; height: 12px;"></i>
+          </button>
           <button type="button" class="ps-row-action-btn" data-dev-focus="${device.id}" title="Fokus Kamera ke Perangkat Ini">
             <i data-lucide="crosshair" style="width: 12px; height: 12px;"></i>
           </button>
@@ -6974,6 +7402,15 @@ ${device.network.ip}`;
           this.renderLayerList();
         });
       });
+      treeContainer.querySelectorAll("[data-dev-detail]").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const devId = btn.getAttribute("data-dev-detail");
+          if (!devId) return;
+          this.deviceManager.selectDevice(devId);
+          eventBus.emit("modal:open-device-detail", { deviceId: devId, tab: "overview" });
+        });
+      });
       treeContainer.querySelectorAll("[data-dev-focus]").forEach((btn) => {
         btn.addEventListener("click", (e) => {
           e.stopPropagation();
@@ -7002,6 +7439,15 @@ ${device.network.ip}`;
           });
           if (this.autoFocusOnSelect && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
             this.focusCameraOnDevice(devId);
+          }
+        });
+        row.addEventListener("contextmenu", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const devId = row.getAttribute("data-layer-device-id");
+          const dev = devId ? this.deviceManager.getDeviceById(devId) : null;
+          if (dev) {
+            eventBus.emit("contextmenu:device", { device: dev, screenX: e.clientX, screenY: e.clientY });
           }
         });
         row.addEventListener("dblclick", () => {
@@ -9802,12 +10248,20 @@ ${device.network.ip}`;
     }
     /**
      * Smoothly focus camera on a specific device and trigger selection
+     * Works seamlessly in both 2D and 3D map modes.
      * @param {Object} device 
      * @param {number} [targetScale=1.4] 
      * @param {number} [duration=400] 
      */
-    focusOnDevice(device, targetScale = 1.4, duration = 400) {
+    focusOnDevice(device, targetScale = 1.4, duration = 400, options = {}) {
       if (!device || !device.position) return;
+      if (!options.skip3dEmit && stateManager.getViewMode() === "3d") {
+        eventBus.emit("map3d:focus-device", { deviceId: device.id });
+      }
+      if (!this.stage) {
+        eventBus.emit("device:selected", device);
+        return;
+      }
       const targetX = device.position.x * this.mapDimensions.width;
       const targetY = device.position.y * this.mapDimensions.height;
       const containerWidth = this.stage.width();
@@ -9881,16 +10335,43 @@ ${device.network.ip}`;
       this.cableManager = cableManager;
     }
     /**
-     * Search devices matching the query string
-     * @param {string} query 
-     * @returns {Object[]} Matching devices
+     * Compare two IPv4 strings naturally by octets.
+     * @param {string} ipA
+     * @param {string} ipB
+     * @returns {number}
      */
-    searchDevices(query) {
-      if (!query || query.trim() === "") return [];
-      const tokens = query.trim().toLowerCase().split(/\s+/);
-      const devices = this.deviceManager.getAllDevices();
-      return devices.filter((device) => {
-        const fields = [
+    compareIp(ipA, ipB) {
+      const aParts = String(ipA || "").split(".").map((n) => parseInt(n, 10) || 0);
+      const bParts = String(ipB || "").split(".").map((n) => parseInt(n, 10) || 0);
+      for (let i = 0; i < 4; i++) {
+        const diff = (aParts[i] || 0) - (bParts[i] || 0);
+        if (diff !== 0) return diff;
+      }
+      return String(ipA || "").localeCompare(String(ipB || ""));
+    }
+    /**
+     * Build searchable field values for a device under the given filter mode.
+     * @param {Object} device
+     * @param {'all'|'ip'|'device'|'vlan'} filterMode
+     * @returns {string[]}
+     */
+    getSearchFields(device, filterMode = "all") {
+      const ip = device.network?.ip || device.ip || "";
+      const vlan = device.network?.vlan;
+      const vlanFields = vlan ? [`vlan ${vlan}`, `vlan${vlan}`, String(vlan)] : [];
+      if (filterMode === "ip") {
+        return [
+          ip,
+          device.network?.gateway,
+          device.network?.subnet,
+          device.network?.mac,
+          ...vlanFields,
+          device.name,
+          device.location
+        ].filter(Boolean).map((f) => String(f).toLowerCase());
+      }
+      if (filterMode === "device") {
+        return [
           device.name,
           device.id,
           device.brand,
@@ -9898,17 +10379,136 @@ ${device.network.ip}`;
           device.type,
           device.category,
           device.location,
-          device.status,
-          device.network?.ip,
-          device.network?.mac,
-          device.network?.hostname,
-          device.network?.vlan ? `vlan ${device.network.vlan}` : "",
-          device.network?.vlan ? `vlan${device.network.vlan}` : "",
+          device.inventory?.purchaseYear,
+          device.inventory?.fundingSource,
+          device.inventory?.inventoryCode,
+          device.inventory?.serialNumber,
+          device.specs?.summary,
+          device.specs?.processor,
           device.notes
         ].filter(Boolean).map((f) => String(f).toLowerCase());
+      }
+      if (filterMode === "vlan") {
+        return [
+          ...vlanFields,
+          device.network?.vlanList,
+          device.network?.ssid,
+          device.network?.ssidSecondary,
+          device.network?.wifiBand,
+          ip,
+          device.name
+        ].filter(Boolean).map((f) => String(f).toLowerCase());
+      }
+      return [
+        device.name,
+        device.id,
+        device.brand,
+        device.model,
+        device.type,
+        device.category,
+        device.location,
+        device.status,
+        device.inventory?.purchaseYear,
+        device.inventory?.fundingSource,
+        device.inventory?.inventoryCode,
+        device.inventory?.serialNumber,
+        device.specs?.summary,
+        device.specs?.processor,
+        ip,
+        device.network?.gateway,
+        device.network?.subnet,
+        device.network?.vlanList,
+        device.network?.ssid,
+        device.network?.ssidSecondary,
+        device.network?.wifiBand,
+        device.network?.mac,
+        device.network?.hostname,
+        ...vlanFields,
+        device.notes
+      ].filter(Boolean).map((f) => String(f).toLowerCase());
+    }
+    /**
+     * Compute relevance score for sorting matched devices.
+     * @param {Object} device
+     * @param {string} rawQuery
+     * @param {'all'|'ip'|'device'|'vlan'} filterMode
+     * @returns {number}
+     */
+    scoreDeviceMatch(device, rawQuery, filterMode = "all") {
+      const q = String(rawQuery || "").trim().toLowerCase();
+      const ip = String(device.network?.ip || device.ip || "").trim().toLowerCase();
+      const name = String(device.name || "").trim().toLowerCase();
+      const brandModel = `${device.brand || ""} ${device.model || ""}`.trim().toLowerCase();
+      const ssid = `${device.network?.ssid || ""} ${device.network?.ssidSecondary || ""}`.trim().toLowerCase();
+      const vlanStr = device.network?.vlan ? `vlan ${device.network.vlan}` : "";
+      let score = 0;
+      if (ip && ip === q) score += 1e3;
+      if (name && name === q) score += 1e3;
+      if (ip && ip.startsWith(q)) score += 600;
+      if (name && name.startsWith(q)) score += 500;
+      if (ip && ip.includes(q)) score += 350;
+      if (name && name.includes(q)) score += 300;
+      if (ssid && ssid.includes(q) || brandModel && brandModel.includes(q) || vlanStr && vlanStr.includes(q)) {
+        score += 150;
+      }
+      if (filterMode === "ip" && ip) score += 80;
+      if (filterMode === "vlan" && (device.network?.vlan || ssid)) score += 80;
+      if (ip) score += 20;
+      return score;
+    }
+    /**
+     * Search devices matching the query string and optional filter/browse options
+     * @param {string} query 
+     * @param {Object} [options={}]
+     * @param {'all'|'ip'|'device'|'vlan'} [options.filterMode='all']
+     * @param {boolean} [options.browseWhenEmpty=false]
+     * @param {number} [options.limit=25]
+     * @returns {Object[]} Matching devices
+     */
+    searchDevices(query, options = {}) {
+      const filterMode = options.filterMode || "all";
+      const browseWhenEmpty = Boolean(options.browseWhenEmpty);
+      const limit = Number.isFinite(options.limit) ? options.limit : 25;
+      const devices = this.deviceManager.getAllDevices();
+      if (!query || query.trim() === "") {
+        if (!browseWhenEmpty) return [];
+        const sorted = [...devices].sort((a, b) => {
+          const ipA = a.network?.ip || a.ip || "";
+          const ipB = b.network?.ip || b.ip || "";
+          if (filterMode === "ip") {
+            if (Boolean(ipA) !== Boolean(ipB)) return ipA ? -1 : 1;
+            if (ipA && ipB) return this.compareIp(ipA, ipB);
+          }
+          if (filterMode === "vlan") {
+            const hasVlanA = Boolean(a.network?.vlan || a.network?.ssid);
+            const hasVlanB = Boolean(b.network?.vlan || b.network?.ssid);
+            if (hasVlanA !== hasVlanB) return hasVlanA ? -1 : 1;
+            const vlanDiff = (Number(a.network?.vlan) || 99999) - (Number(b.network?.vlan) || 99999);
+            if (vlanDiff !== 0) return vlanDiff;
+          }
+          return String(a.name || "").localeCompare(String(b.name || ""));
+        });
+        return sorted.slice(0, limit);
+      }
+      const cleanQuery = query.trim().toLowerCase();
+      const tokens = cleanQuery.split(/\s+/);
+      const matched = devices.filter((device) => {
+        const fields = this.getSearchFields(device, filterMode);
         const fullText = fields.join(" ");
         return tokens.every((token) => fullText.includes(token));
       });
+      matched.sort((a, b) => {
+        const scoreDiff = this.scoreDeviceMatch(b, cleanQuery, filterMode) - this.scoreDeviceMatch(a, cleanQuery, filterMode);
+        if (scoreDiff !== 0) return scoreDiff;
+        const ipA = a.network?.ip || a.ip || "";
+        const ipB = b.network?.ip || b.ip || "";
+        if (ipA && ipB) {
+          const ipCmp = this.compareIp(ipA, ipB);
+          if (ipCmp !== 0) return ipCmp;
+        }
+        return String(a.name || "").localeCompare(String(b.name || ""));
+      });
+      return options.limit ? matched.slice(0, limit) : matched;
     }
     /**
      * Filter devices by specific criteria
@@ -9928,68 +10528,99 @@ ${device.network.ip}`;
   };
 
   // js/search/search-ui.js
+  var FILTER_OPTIONS = [
+    { id: "all", label: "Semua" },
+    { id: "ip", label: "IP Address" },
+    { id: "device", label: "Perangkat" },
+    { id: "vlan", label: "VLAN/SSID" }
+  ];
   var SearchUI = class {
     /**
      * @param {Object} options
      * @param {HTMLInputElement} options.inputElement
-     * @param {SearchEngine} options.searchEngine
+     * @param {import('./search-engine.js').SearchEngine} options.searchEngine
      * @param {import('../ui/viewport-navigator.js').ViewportNavigator} options.viewportNavigator
+     * @param {import('../devices/device-manager.js').DeviceManager} [options.deviceManager]
      */
-    constructor({ inputElement, searchEngine, viewportNavigator }) {
+    constructor({ inputElement, searchEngine, viewportNavigator, deviceManager }) {
       this.input = inputElement;
       this.searchEngine = searchEngine;
       this.viewportNavigator = viewportNavigator;
+      this.deviceManager = deviceManager || searchEngine?.deviceManager || null;
+      this.filterMode = "all";
       this.dropdown = null;
+      this.clearBtn = null;
       this.results = [];
       this.selectedIndex = -1;
       this.createDropdown();
       this.bindEvents();
     }
     createDropdown() {
+      const searchBox = this.input.closest?.(".search-box") || this.input.parentElement;
+      if (searchBox && typeof document.createElement === "function") {
+        if (!searchBox.querySelector?.(".search-input-clear-btn")) {
+          this.clearBtn = document.createElement("button");
+          this.clearBtn.type = "button";
+          this.clearBtn.className = "search-input-clear-btn";
+          this.clearBtn.title = "Bersihkan pencarian";
+          this.clearBtn.textContent = "\xD7";
+          searchBox.appendChild(this.clearBtn);
+        } else {
+          this.clearBtn = searchBox.querySelector(".search-input-clear-btn");
+        }
+        if (!searchBox.querySelector?.(".search-shortcut-hint")) {
+          const hint = document.createElement("span");
+          hint.className = "search-shortcut-hint";
+          hint.title = "Tekan Ctrl+K atau / untuk membuka pencarian cepat";
+          hint.textContent = "Ctrl+K";
+          searchBox.appendChild(hint);
+        }
+      }
       this.dropdown = document.createElement("div");
       this.dropdown.id = "search-suggestions-dropdown";
-      this.dropdown.style.cssText = `
-      position: absolute;
-      top: calc(100% + 6px);
-      left: 0;
-      width: 320px;
-      max-height: 380px;
-      overflow-y: auto;
-      background-color: var(--bg-secondary);
-      border: 1px solid var(--border-light);
-      border-radius: var(--radius-lg);
-      box-shadow: var(--shadow-lg);
-      z-index: 100;
-      display: none;
-      flex-direction: column;
-      gap: 2px;
-      padding: 6px;
-    `;
-      const searchBox = this.input.closest(".search-box") || this.input.parentElement;
-      searchBox.style.position = "relative";
-      searchBox.appendChild(this.dropdown);
+      if (searchBox) {
+        searchBox.style.position = "relative";
+        searchBox.appendChild(this.dropdown);
+      }
     }
     bindEvents() {
       this.input.addEventListener("input", () => {
-        const query = this.input.value;
-        if (!query || query.trim().length === 0) {
-          this.hideDropdown();
+        this.selectedIndex = -1;
+        this.refreshResults();
+      });
+      this.input.addEventListener("focus", () => {
+        this.refreshResults();
+      });
+      if (this.clearBtn) {
+        this.clearBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          this.input.value = "";
+          this.selectedIndex = -1;
+          this.input.focus();
+          this.refreshResults();
+        });
+      }
+      this.input.addEventListener("keydown", (e) => {
+        if (this.dropdown.style.display === "none") {
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            this.refreshResults();
+          }
           return;
         }
-        this.results = this.searchEngine.searchDevices(query);
-        this.selectedIndex = -1;
-        this.renderDropdown(this.results);
-      });
-      this.input.addEventListener("keydown", (e) => {
-        if (this.dropdown.style.display === "none") return;
+        const maxVisible = Math.min(this.results.length, 15);
         if (e.key === "ArrowDown") {
           e.preventDefault();
-          this.selectedIndex = Math.min(this.selectedIndex + 1, this.results.length - 1);
-          this.updateActiveItem();
+          if (maxVisible > 0) {
+            this.selectedIndex = Math.min(this.selectedIndex + 1, maxVisible - 1);
+            this.updateActiveItem();
+          }
         } else if (e.key === "ArrowUp") {
           e.preventDefault();
-          this.selectedIndex = Math.max(this.selectedIndex - 1, 0);
-          this.updateActiveItem();
+          if (maxVisible > 0) {
+            this.selectedIndex = Math.max(this.selectedIndex - 1, 0);
+            this.updateActiveItem();
+          }
         } else if (e.key === "Enter") {
           e.preventDefault();
           if (this.selectedIndex >= 0 && this.results[this.selectedIndex]) {
@@ -9999,97 +10630,235 @@ ${device.network.ip}`;
           }
         } else if (e.key === "Escape") {
           this.hideDropdown();
+          this.closeNavbarSearchWrapper();
         }
       });
+      eventBus.on("search:opened", () => {
+        this.refreshResults();
+      });
+      const refreshIfOpen = () => {
+        if (this.dropdown && this.dropdown.style.display === "flex") {
+          this.refreshResults();
+        }
+      };
+      eventBus.on("device:added", refreshIfOpen);
+      eventBus.on("device:updated", refreshIfOpen);
+      eventBus.on("device:deleted", refreshIfOpen);
       document.addEventListener("click", (e) => {
-        if (!this.input.contains(e.target) && !this.dropdown.contains(e.target)) {
+        const target = e.target;
+        const wrapper = this.input.closest?.("#navbar-search-wrapper");
+        if (wrapper && wrapper.contains(target)) return;
+        if (!this.input.contains(target) && !this.dropdown.contains(target)) {
           this.hideDropdown();
         }
       });
     }
-    renderDropdown(results) {
+    refreshResults() {
+      const query = this.input?.value || "";
+      const trimmed = query.trim();
+      if (this.clearBtn?.classList) {
+        this.clearBtn.classList.toggle("visible", trimmed.length > 0);
+      }
+      this.results = this.searchEngine.searchDevices(query, {
+        filterMode: this.filterMode,
+        browseWhenEmpty: true,
+        limit: 25
+      });
+      if (this.selectedIndex >= Math.min(this.results.length, 15)) {
+        this.selectedIndex = -1;
+      }
+      this.renderDropdown(this.results, query);
+    }
+    renderDropdown(results, query = "") {
+      const filterPillsHtml = FILTER_OPTIONS.map((opt) => `
+      <button type="button"
+        class="search-filter-pill ${this.filterMode === opt.id ? "active" : ""}"
+        data-filter-mode="${opt.id}">
+        ${opt.label}
+      </button>
+    `).join("");
+      const trimmed = String(query || "").trim();
+      const countText = trimmed ? `${results.length} cocok` : `${results.length} perangkat${results.length > 15 ? " (tampil 15 teratas)" : ""}`;
+      let bodyHtml = "";
       if (results.length === 0) {
-        this.dropdown.innerHTML = `
-        <div style="padding: 12px; text-align: center; color: var(--text-muted); font-size: 12px;">
-          Tidak ada perangkat yang cocok dengan pencarian
+        bodyHtml = `
+        <div class="search-empty-state">
+          Tidak ada perangkat atau IP yang cocok${trimmed ? ` untuk "<strong>${this.escapeHtml(trimmed)}</strong>"` : ""}.<br>
+          Coba ubah kata kunci atau pilih tab filter <strong>Semua</strong>.
         </div>
       `;
-        this.dropdown.style.display = "flex";
-        return;
-      }
-      let html = "";
-      results.slice(0, 10).forEach((dev, idx) => {
-        const cat = DEVICE_CATEGORIES[dev.category] || DEVICE_CATEGORIES.core;
-        const statusDef = DEVICE_STATUSES[dev.status] || DEVICE_STATUSES.unknown;
-        html += `
-        <div class="search-item" data-index="${idx}" style="padding: 8px 10px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 8px; transition: background 120ms ease;">
-          <div style="display: flex; align-items: center; gap: 8px; min-width: 0;">
-            <span style="font-size: 9px; font-weight: 700; color: ${cat.color}; background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px; font-family: var(--font-mono); text-transform: uppercase;">
-              ${dev.type.substring(0, 3)}
-            </span>
-            <div style="display: flex; flex-direction: column; min-width: 0;">
-              <span style="font-size: 12px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                ${this.escapeHtml(dev.name)}
+      } else {
+        bodyHtml = results.slice(0, 15).map((dev, idx) => {
+          const cat = DEVICE_CATEGORIES[dev.category] || DEVICE_CATEGORIES.core;
+          const statusDef = DEVICE_STATUSES[dev.status] || DEVICE_STATUSES.online;
+          const ip = dev.network?.ip || dev.ip || "";
+          const vlan = dev.network?.vlan;
+          const ssid = dev.network?.ssid || "";
+          const subParts = [
+            dev.brand && dev.model ? `${dev.brand} ${dev.model}` : dev.model || dev.brand || "",
+            dev.location || "",
+            dev.inventory?.purchaseYear ? `Thn ${dev.inventory.purchaseYear}` : "",
+            dev.inventory?.fundingSource || ""
+          ].filter(Boolean);
+          return `
+          <div class="search-item-card ${idx === this.selectedIndex ? "active" : ""}" data-index="${idx}" title="Klik untuk memilih & mengarahkan kamera ke perangkat ini">
+            <div class="search-item-main">
+              <span class="search-cat-tag" style="color: ${cat.color};">
+                ${this.escapeHtml((dev.type || "DEV").substring(0, 4))}
               </span>
-              <span style="font-size: 10px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                ${dev.location || dev.brand || ""}
-              </span>
+              <div class="search-item-info">
+                <div class="search-item-title-row">
+                  <span class="search-item-name">${this.highlightText(dev.name || dev.id, query)}</span>
+                </div>
+                ${subParts.length > 0 ? `<div class="search-item-sub">${this.highlightText(subParts.join(" \u2022 "), query)}</div>` : ""}
+                <div class="search-item-badges">
+                  <span class="search-ip-pill ${ip ? "" : "no-ip"}">
+                    ${ip ? `IP: ${this.highlightText(ip, query)}` : "Tanpa IP"}
+                  </span>
+                  ${vlan ? `<span class="search-vlan-pill">VLAN ${this.escapeHtml(String(vlan))}</span>` : ""}
+                  ${ssid ? `<span class="search-ssid-pill">SSID: ${this.highlightText(ssid, query)}</span>` : ""}
+                  ${dev.layerVisible === false ? `<span class="search-hidden-pill">Tersembunyi</span>` : ""}
+                </div>
+              </div>
+            </div>
+
+            <div class="search-item-side">
+              <span class="search-status-dot" style="color: ${statusDef.color};">\u25CF ${statusDef.name}</span>
+              <div class="search-item-actions">
+                <button type="button" class="search-action-btn" data-detail-index="${idx}" title="Buka Detail & Konfigurasi Perangkat">Detail</button>
+                <button type="button" class="search-action-btn" data-focus-index="${idx}" title="Langsung menuju perangkat ini di peta">Fokus</button>
+              </div>
             </div>
           </div>
-
-          <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0;">
-            <span style="font-size: 11px; font-family: var(--font-mono); color: var(--accent-sky);">
-              ${dev.network?.ip || "No IP"}
-            </span>
-            <span style="font-size: 9px; color: ${statusDef.color}; font-weight: 600; text-transform: uppercase;">
-              \u25CF ${statusDef.name}
-            </span>
-          </div>
+        `;
+        }).join("");
+      }
+      this.dropdown.innerHTML = `
+      <div class="search-filter-bar">
+        <div class="search-filter-pills">${filterPillsHtml}</div>
+        <div class="search-meta-hint">
+          <span>${countText}</span>
+          <span>Klik IP / perangkat \u2192 Fokus Peta 2D/3D</span>
         </div>
-      `;
-      });
-      this.dropdown.innerHTML = html;
+      </div>
+      <div class="search-results-list">
+        ${bodyHtml}
+      </div>
+    `;
       this.dropdown.style.display = "flex";
-      this.dropdown.querySelectorAll(".search-item").forEach((itemEl) => {
-        itemEl.addEventListener("click", () => {
+      this.dropdown.querySelectorAll("[data-filter-mode]").forEach((pill) => {
+        pill.addEventListener("click", (e) => {
+          e.stopPropagation();
+          this.filterMode = pill.getAttribute("data-filter-mode") || "all";
+          this.selectedIndex = -1;
+          this.refreshResults();
+          this.input?.focus();
+        });
+      });
+      this.dropdown.querySelectorAll(".search-item-card").forEach((itemEl) => {
+        itemEl.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (e.target?.closest?.("[data-detail-index]")) return;
           const idx = parseInt(itemEl.getAttribute("data-index"), 10);
           if (results[idx]) {
             this.selectDevice(results[idx]);
           }
         });
-        itemEl.addEventListener("mouseenter", () => {
-          itemEl.style.backgroundColor = "var(--bg-tertiary)";
-        });
-        itemEl.addEventListener("mouseleave", () => {
-          if (parseInt(itemEl.getAttribute("data-index"), 10) !== this.selectedIndex) {
-            itemEl.style.backgroundColor = "transparent";
+      });
+      this.dropdown.querySelectorAll("[data-detail-index]").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const idx = parseInt(btn.getAttribute("data-detail-index"), 10);
+          if (results[idx]) {
+            this.selectDevice(results[idx], { openDetail: true });
           }
         });
       });
     }
     updateActiveItem() {
-      const items = this.dropdown.querySelectorAll(".search-item");
+      const items = this.dropdown.querySelectorAll(".search-item-card");
       items.forEach((item, idx) => {
         if (idx === this.selectedIndex) {
-          item.style.backgroundColor = "var(--bg-tertiary)";
-          item.scrollIntoView({ block: "nearest" });
+          item.classList.add("active");
+          item.scrollIntoView?.({ block: "nearest" });
         } else {
-          item.style.backgroundColor = "transparent";
+          item.classList.remove("active");
         }
       });
     }
-    selectDevice(device) {
+    /**
+     * Reveal (if hidden), select, and navigate camera to the chosen device in 2D and 3D.
+     * @param {Object} device
+     * @param {Object} [options={}]
+     * @param {boolean} [options.openDetail=false]
+     */
+    selectDevice(device, options = {}) {
+      if (!device) return;
       this.hideDropdown();
-      this.input.value = "";
-      this.viewportNavigator.focusOnDevice(device, 1.4);
+      this.closeNavbarSearchWrapper();
+      if (this.input) {
+        this.input.value = "";
+      }
+      if (this.clearBtn?.classList) {
+        this.clearBtn.classList.remove("visible");
+      }
+      if (this.deviceManager) {
+        if (device.layerVisible === false && typeof this.deviceManager.updateDevice === "function") {
+          this.deviceManager.updateDevice(device.id, { layerVisible: true });
+        }
+        if (typeof this.deviceManager.selectDevice === "function") {
+          this.deviceManager.selectDevice(device.id);
+        }
+      }
+      if (this.viewportNavigator && typeof this.viewportNavigator.focusOnDevice === "function") {
+        this.viewportNavigator.focusOnDevice(device, 1.6, 400, { skip3dEmit: true });
+      }
+      if (stateManager.getViewMode() === "3d") {
+        eventBus.emit("map3d:focus-device", { deviceId: device.id });
+      }
+      if (options.openDetail) {
+        eventBus.emit("modal:open-device-detail", { deviceId: device.id });
+      }
+    }
+    closeNavbarSearchWrapper() {
+      const wrapper = this.input?.closest?.("#navbar-search-wrapper") || (typeof document !== "undefined" ? document.getElementById("navbar-search-wrapper") : null);
+      wrapper?.classList?.remove("open");
+      const toggleBtn = typeof document !== "undefined" ? document.getElementById("btn-toggle-search") : null;
+      toggleBtn?.setAttribute?.("aria-expanded", "false");
     }
     hideDropdown() {
-      this.dropdown.style.display = "none";
+      if (this.dropdown) {
+        this.dropdown.style.display = "none";
+      }
       this.selectedIndex = -1;
+    }
+    highlightText(text, query) {
+      const str = String(text ?? "");
+      const tokens = String(query || "").trim().split(/\s+/).filter(Boolean);
+      if (tokens.length === 0 || str === "") {
+        return this.escapeHtml(str);
+      }
+      const escapedTokens = tokens.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+      const regex = new RegExp(`(${escapedTokens.join("|")})`, "gi");
+      let out = "";
+      let lastIdx = 0;
+      let match;
+      while ((match = regex.exec(str)) !== null) {
+        if (match.index > lastIdx) {
+          out += this.escapeHtml(str.slice(lastIdx, match.index));
+        }
+        out += `<mark class="search-highlight">${this.escapeHtml(match[0])}</mark>`;
+        lastIdx = regex.lastIndex;
+        if (match[0].length === 0) break;
+      }
+      if (lastIdx < str.length) {
+        out += this.escapeHtml(str.slice(lastIdx));
+      }
+      return out;
     }
     escapeHtml(str) {
       if (!str) return "";
-      return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
     }
   };
 
@@ -10710,14 +11479,18 @@ ${dev.network?.ip || ""}`,
         const statusDef = DEVICE_STATUSES[dev.status] || DEVICE_STATUSES.unknown;
         html += `
         <tr style="border-bottom: 1px solid var(--border-color); transition: background 120ms ease;">
-          <td style="padding: 10px 12px; font-family: var(--font-mono); color: #38bdf8; font-weight: 600;">
-            ${dev.network.ip}
+          <td style="padding: 10px 12px; font-family: var(--font-mono); font-weight: 600;">
+            <span data-goto-id="${dev.id}" class="ipam-goto-link" title="Klik untuk langsung menuju perangkat ini di peta" style="color: var(--accent-sky, #0284c7); cursor: pointer; text-decoration: underline dotted;">
+              ${this.escapeHtml(dev.network.ip)}
+            </span>
           </td>
           <td style="padding: 10px 12px; font-family: var(--font-mono); color: var(--text-muted);">
-            ${dev.network.subnet || "255.255.255.0"}
+            ${this.escapeHtml(dev.network.subnet || "255.255.255.0")}
           </td>
           <td style="padding: 10px 12px; font-weight: 600; color: var(--text-primary);">
-            ${this.escapeHtml(dev.name)}
+            <span data-goto-id="${dev.id}" class="ipam-goto-link" title="Klik untuk langsung menuju perangkat ini di peta" style="cursor: pointer; text-decoration: underline dotted;">
+              ${this.escapeHtml(dev.name)}
+            </span>
           </td>
           <td style="padding: 10px 12px;">
             <span style="font-size: 10px; font-weight: 700; color: ${cat.color}; background: var(--bg-primary); padding: 2px 6px; border-radius: 4px;">
@@ -10735,7 +11508,10 @@ ${dev.network?.ip || ""}`,
           <td style="padding: 10px 12px; color: var(--text-muted);">
             ${this.escapeHtml(dev.location || "-")}
           </td>
-          <td style="padding: 10px 12px; text-align: right;">
+          <td style="padding: 10px 12px; text-align: right; white-space: nowrap;">
+            <button class="btn btn-secondary btn-sm" data-detail-id="${dev.id}" style="font-size: 11px; margin-right: 4px;">
+              Detail
+            </button>
             <button class="btn btn-secondary btn-sm" data-goto-id="${dev.id}" style="font-size: 11px;">
               Fokus
             </button>
@@ -10745,16 +11521,38 @@ ${dev.network?.ip || ""}`,
       });
       html += `</tbody></table>`;
       container.innerHTML = html;
-      container.querySelectorAll("[data-goto-id]").forEach((btn) => {
+      container.querySelectorAll("[data-detail-id]").forEach((btn) => {
         btn.addEventListener("click", () => {
-          const id = btn.getAttribute("data-goto-id");
-          const dev = this.deviceManager.getDeviceById(id);
-          if (dev) {
+          const id = btn.getAttribute("data-detail-id");
+          if (id) {
             this.hide();
-            this.viewportNavigator.focusOnDevice(dev, 1.4);
+            eventBus.emit("modal:open-device-detail", { deviceId: id, tab: "network" });
           }
         });
       });
+      container.querySelectorAll("[data-goto-id]").forEach((el) => {
+        el.addEventListener("click", () => {
+          const id = el.getAttribute("data-goto-id");
+          const dev = this.deviceManager.getDeviceById(id);
+          this.focusDeviceFromModal(dev);
+        });
+      });
+    }
+    /**
+     * Un-hide, select, and focus camera onto target device in 2D/3D mode
+     * @param {Object|null} dev
+     */
+    focusDeviceFromModal(dev) {
+      if (!dev) return;
+      this.hide();
+      if (dev.layerVisible === false) {
+        this.deviceManager.updateDevice(dev.id, { layerVisible: true });
+      }
+      this.deviceManager.selectDevice(dev.id);
+      this.viewportNavigator?.focusOnDevice(dev, 1.6);
+      if (stateManager.getViewMode() === "3d") {
+        eventBus.emit("map3d:focus-device", { deviceId: dev.id });
+      }
     }
     renderVlanCards(container, devices, filterQuery, countLabel) {
       const vlanMap = /* @__PURE__ */ new Map();
@@ -10821,10 +11619,7 @@ ${dev.network?.ip || ""}`,
         tag.addEventListener("click", () => {
           const id = tag.getAttribute("data-goto-id");
           const dev = this.deviceManager.getDeviceById(id);
-          if (dev) {
-            this.hide();
-            this.viewportNavigator.focusOnDevice(dev, 1.4);
-          }
+          this.focusDeviceFromModal(dev);
         });
       });
     }
@@ -11426,9 +12221,19 @@ ${dev.network?.ip || ""}`,
         "Type": d.type,
         "Brand": d.brand || "",
         "Model": d.model || "",
+        "Purchase Year": d.inventory?.purchaseYear || "",
+        "Funding Source": d.inventory?.fundingSource || "",
+        "Inventory Code": d.inventory?.inventoryCode || "",
+        "Condition": d.inventory?.condition || "",
+        "Serial Number": d.inventory?.serialNumber || "",
+        "Specifications": d.specs?.summary || "",
         "IP Address": d.network?.ip || "",
         "Subnet": d.network?.subnet || "",
+        "Gateway": d.network?.gateway || "",
         "VLAN ID": d.network?.vlan || "",
+        "SSID": d.network?.ssid || "",
+        "Secondary SSID": d.network?.ssidSecondary || "",
+        "Management Access": d.network?.managementAccess || "",
         "MAC Address": d.network?.mac || "",
         "Hostname": d.network?.hostname || "",
         "Status": d.status || "",
@@ -12323,6 +13128,7 @@ ${dev.network?.ip || ""}`,
       this.isOpen = false;
       this.activeTarget = null;
       this._toastTimer = null;
+      this._lastOpenedAt = 0;
       this.createDomElement();
       this.initEventListeners();
     }
@@ -12339,6 +13145,10 @@ ${dev.network?.ip || ""}`,
         menu.setAttribute("aria-hidden", "true");
         document.body.appendChild(menu);
       }
+      menu.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      });
       this.element = menu;
     }
     /**
@@ -12354,6 +13164,18 @@ ${dev.network?.ip || ""}`,
       eventBus.on("contextmenu:canvas", ({ normX, normY, screenX, screenY }) => {
         this.showCanvasMenu({ normX, normY }, screenX, screenY);
       });
+      window.addEventListener("contextmenu", (e) => {
+        const target = e.target;
+        const recentlyOpened = Date.now() - (this._lastOpenedAt || 0) < 400;
+        const inCustomMenu = Boolean(this.element && (this.element === target || this.element.contains?.(target)));
+        const inMapArea = Boolean(
+          target?.closest?.("#map-context-menu, #map-viewport, #map-3d-container, #konva-container, .ps-layer-row")
+        );
+        if (this.isOpen || recentlyOpened || inCustomMenu || inMapArea) {
+          e.preventDefault();
+          if (inCustomMenu) e.stopPropagation();
+        }
+      }, true);
       document.addEventListener("pointerdown", (e) => {
         if (this.isOpen && !this.element.contains(e.target)) {
           this.hide();
@@ -12392,17 +13214,29 @@ ${dev.network?.ip || ""}`,
       this.activeTarget = { type: "device", data: device };
       this.deviceManager.selectDevice(device.id);
       const devDef = getDeviceDefByType(device.type) || { name: "Perangkat Jaringan", category: "core" };
-      const catDef = DEVICE_CATEGORIES[device.category] || DEVICE_CATEGORIES.core;
-      const statusDef = DEVICE_STATUSES[device.status] || DEVICE_STATUSES.online;
+      const statusDef = DEVICE_STATUSES[device.status] || DEVICE_STATUSES.unknown;
+      const statusLabel = statusDef.name || statusDef.label || "Unknown";
       let iconHtml = "";
       if (device.customImage) {
-        iconHtml = `<img src="${device.customImage}" alt="${device.name}" />`;
+        iconHtml = `<img src="${device.customImage}" alt="${escapeHtml2(device.name)}" />`;
       } else {
-        const iconKey = device.icon || getDefaultIconForType(device.type);
+        const iconKey = device.icon || device.customIcon || getDefaultIconForType(device.type);
         iconHtml = getDeviceIconSvg(iconKey, { color: "#2a7c13", size: 20 });
       }
       const ipText = device.network?.ip || device.ip || "Tanpa Alamat IP";
       const statusColor = statusDef.color || "#2a7c13";
+      const actionBarHtml = `
+      <div class="context-menu-action-bar">
+        <button type="button" class="cm-action-btn" data-cm-action="detail" title="Buka Detail Lengkap, Spesifikasi &amp; Anggaran (DAK/BOS)">
+          <i data-lucide="file-text"></i>
+          <span>Detail</span>
+        </button>
+        <button type="button" class="cm-action-btn is-config" data-cm-action="config" title="Buka Konfigurasi Detail IP, VLAN &amp; SSID">
+          <i data-lucide="wifi"></i>
+          <span>Konfigurasi</span>
+        </button>
+      </div>
+    `;
       const items = [
         {
           id: "delete-device",
@@ -12446,7 +13280,7 @@ ${dev.network?.ip || ""}`,
           action: () => {
             this.hide();
             eventBus.emit("map3d:set-navtool", { tool: "move" });
-            this.showToast(`\u2194\uFE0F Mode Move aktif \u2014 Drag "${device.name}" di lantai 3D untuk memindahkan posisi X/Y.`);
+            this.showToast(`Mode Move aktif \u2014 Drag "${device.name}" di lantai 3D untuk memindahkan posisi X/Y.`);
           }
         }] : [],
         {
@@ -12471,7 +13305,7 @@ ${dev.network?.ip || ""}`,
             this.hide();
             const clone2 = this.deviceManager.duplicateDevice(device.id);
             if (clone2) {
-              this.showToast(`\u{1F4CB} Perangkat diduplikat: "${clone2.name}"`);
+              this.showToast(`Perangkat diduplikat: "${clone2.name}"`);
             }
           }
         },
@@ -12490,7 +13324,16 @@ ${dev.network?.ip || ""}`,
       this.renderMenu({
         iconHtml,
         title: device.name,
-        subtitle: `<span class="context-menu-status-dot" style="background-color: ${statusColor};"></span> ${statusDef.label} \u2022 ${ipText} \u2022 ${devDef.name}`,
+        subtitle: `<span class="context-menu-status-dot" style="background-color: ${statusColor};"></span> ${escapeHtml2(statusLabel)} \u2022 ${escapeHtml2(ipText)} \u2022 ${escapeHtml2(devDef.name)}`,
+        actionBarHtml,
+        onDetailClick: () => {
+          this.hide();
+          eventBus.emit("modal:open-device-detail", { deviceId: device.id, tab: "overview" });
+        },
+        onConfigClick: () => {
+          this.hide();
+          eventBus.emit("modal:open-device-detail", { deviceId: device.id, tab: "network" });
+        },
         items
       });
       this.positionAt(screenX, screenY);
@@ -12539,7 +13382,7 @@ ${dev.network?.ip || ""}`,
           action: () => {
             this.hide();
             this.cableManager.updateConnection(cable.id, { route: [] });
-            this.showToast(`\u{1F4CF} Belokan jalur kabel "${cable.name}" direset ke garis lurus`);
+            this.showToast(`Belokan jalur kabel "${cable.name}" direset ke garis lurus`);
           }
         });
       }
@@ -12653,7 +13496,7 @@ ${dev.network?.ip || ""}`,
      * Render HTML content for the context menu
      * @param {Object} options 
      */
-    renderMenu({ iconHtml, title, subtitle, items }) {
+    renderMenu({ iconHtml, title, subtitle, actionBarHtml = "", onDetailClick = null, onConfigClick = null, items }) {
       let html = `
       <div class="context-menu-header">
         <div class="context-menu-header-icon">${iconHtml}</div>
@@ -12662,6 +13505,7 @@ ${dev.network?.ip || ""}`,
           <div class="context-menu-header-sub">${subtitle}</div>
         </div>
       </div>
+      ${actionBarHtml}
       <div class="context-menu-body">
     `;
       items.forEach((item, index) => {
@@ -12681,6 +13525,20 @@ ${dev.network?.ip || ""}`,
       });
       html += `</div>`;
       this.element.innerHTML = html;
+      const detailBtn = this.element.querySelector('[data-cm-action="detail"]');
+      if (detailBtn && typeof onDetailClick === "function") {
+        detailBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          onDetailClick();
+        });
+      }
+      const configBtn = this.element.querySelector('[data-cm-action="config"]');
+      if (configBtn && typeof onConfigClick === "function") {
+        configBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          onConfigClick();
+        });
+      }
       const itemEls = this.element.querySelectorAll(".context-menu-item");
       itemEls.forEach((el) => {
         const idx = parseInt(el.getAttribute("data-index"), 10);
@@ -12711,14 +13569,15 @@ ${dev.network?.ip || ""}`,
      * @param {number} screenY 
      */
     positionAt(screenX, screenY) {
+      this._lastOpenedAt = Date.now();
       this.element.style.display = "block";
       this.element.style.visibility = "hidden";
       this.element.style.top = "0px";
       this.element.style.left = "0px";
       const menuRect = this.element.getBoundingClientRect();
-      const padding = 12;
-      let posX = screenX;
-      let posY = screenY;
+      const padding = 10;
+      let posX = screenX + 2;
+      let posY = screenY + 2;
       if (posX + menuRect.width > window.innerWidth - padding) {
         posX = Math.max(padding, screenX - menuRect.width);
       }
@@ -12763,7 +13622,7 @@ Tip: Tindakan ini dapat dibatalkan sewaktu-waktu dengan menekan Ctrl + Z (Undo).
       if (confirmed) {
         const devName = device.name;
         this.deviceManager.deleteDevice(device.id);
-        this.showToast(`\u{1F5D1}\uFE0F Perangkat "${devName}" berhasil dihapus. Tekan Ctrl+Z untuk membatalkan.`);
+        this.showToast(`Perangkat "${devName}" berhasil dihapus. Tekan Ctrl+Z untuk membatalkan.`);
       }
     }
     /**
@@ -12782,7 +13641,7 @@ Tip: Tindakan ini dapat dibatalkan sewaktu-waktu dengan menekan Ctrl + Z (Undo).
       if (confirmed) {
         const cabName = cable.name;
         this.cableManager.deleteConnection(cable.id);
-        this.showToast(`\u{1F5D1}\uFE0F Jalur kabel "${cabName}" berhasil dihapus. Tekan Ctrl+Z untuk membatalkan.`);
+        this.showToast(`Jalur kabel "${cabName}" berhasil dihapus. Tekan Ctrl+Z untuk membatalkan.`);
       }
     }
     /**
@@ -12795,7 +13654,7 @@ Tip: Tindakan ini dapat dibatalkan sewaktu-waktu dengan menekan Ctrl + Z (Undo).
       stateManager.setMode("draw-cable");
       this.deviceManager.selectDevice(device.id);
       eventBus.emit("map3d:start-cable", { deviceId: device.id });
-      this.showToast(`\u{1F50C} Sumber kabel: "${device.name}". Klik perangkat tujuan untuk menghubungkan.`);
+      this.showToast(`Sumber kabel: "${device.name}". Klik perangkat tujuan untuk menghubungkan.`);
     }
     /**
      * Copy arbitrary text to clipboard with feedback toast
@@ -12816,7 +13675,7 @@ Tip: Tindakan ini dapat dibatalkan sewaktu-waktu dengan menekan Ctrl + Z (Undo).
           document.execCommand("copy");
           document.body.removeChild(textarea);
         }
-        this.showToast(`\u{1F4CB} ${label} disalin ke clipboard: "${text}"`);
+        this.showToast(`${label} disalin ke clipboard: "${text}"`);
       } catch (err) {
         console.warn("[ContextMenu] Clipboard copy failed:", err);
         this.showToast(`Gagal menyalin ${label}`);
@@ -51985,6 +52844,7 @@ void main() {
       this.scene.add(this.cablesGroup);
       const dom = this.renderer.domElement;
       dom.addEventListener("contextmenu", (e) => e.preventDefault());
+      this.container?.addEventListener("contextmenu", (e) => e.preventDefault());
       dom.addEventListener("pointerdown", (e) => {
         if (!this.isActive) return;
         if (stateManager.getMode() !== "draw-cable" && e.button === 0) {
@@ -56073,6 +56933,1161 @@ void main() {
     }
   };
 
+  // js/ui/device-detail-modal.js
+  var SUBNET_PRESETS = [
+    { label: "/24 (255.255.255.0)", mask: "255.255.255.0" },
+    { label: "/25 (255.255.255.128)", mask: "255.255.255.128" },
+    { label: "/23 (255.255.254.0)", mask: "255.255.254.0" },
+    { label: "/16 (255.255.0.0)", mask: "255.255.0.0" }
+  ];
+  var YEAR_PRESETS = ["2019", "2020", "2021", "2022", "2023", "2024", "2025", "2026"];
+  var DeviceDetailModal = class {
+    /**
+     * @param {Object} options
+     * @param {import('../devices/device-manager.js').DeviceManager} options.deviceManager
+     * @param {import('../connections/cable-manager.js').CableManager} [options.cableManager]
+     * @param {import('./viewport-navigator.js').ViewportNavigator} [options.viewportNavigator]
+     */
+    constructor({ deviceManager, cableManager = null, viewportNavigator = null }) {
+      this.deviceManager = deviceManager;
+      this.cableManager = cableManager;
+      this.viewportNavigator = viewportNavigator;
+      this.modalEl = null;
+      this.currentDeviceId = null;
+      this.activeTab = "overview";
+      this.draft = null;
+      this._statusTimer = null;
+      this.createModalDOM();
+      this.bindEvents();
+    }
+    createModalDOM() {
+      this.modalEl = document.createElement("div");
+      this.modalEl.id = "device-detail-modal";
+      this.modalEl.className = "ddm-backdrop";
+      this.modalEl.style.cssText = `
+      position: fixed;
+      inset: 0;
+      z-index: 10050;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background-color: rgba(15, 23, 42, 0.62);
+      backdrop-filter: blur(6px);
+    `;
+      this.modalEl.setAttribute("aria-hidden", "true");
+      this.modalEl.innerHTML = `
+      <div class="ddm-dialog" role="dialog" aria-modal="true" aria-labelledby="ddm-title">
+        <!-- Modal Header -->
+        <div class="ddm-header">
+          <div class="ddm-header-left">
+            <div id="ddm-icon-box" class="ddm-icon-box"></div>
+            <div class="ddm-title-wrap">
+              <div class="ddm-title-row">
+                <h2 id="ddm-title" class="ddm-title">Detail Perangkat</h2>
+                <span id="ddm-status-badge" class="ddm-badge"></span>
+                <span id="ddm-category-badge" class="ddm-badge"></span>
+              </div>
+              <div id="ddm-subtitle" class="ddm-subtitle"></div>
+            </div>
+          </div>
+
+          <div class="ddm-header-actions">
+            <button type="button" id="btn-dd-close" class="btn btn-icon btn-sm" title="Tutup (Esc)">
+              <i data-lucide="x" style="width: 18px; height: 18px;"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Tab Navigation Bar -->
+        <div class="ddm-tabs" role="tablist">
+          <button type="button" class="ddm-tab-btn active" data-dd-tab="overview" role="tab">
+            <i data-lucide="file-text" style="width: 14px; height: 14px;"></i>
+            <span>Ringkasan &amp; Lembar Info</span>
+          </button>
+          <button type="button" class="ddm-tab-btn" data-dd-tab="inventory" role="tab">
+            <i data-lucide="briefcase" style="width: 14px; height: 14px;"></i>
+            <span>Inventaris, Anggaran &amp; Spek</span>
+          </button>
+          <button type="button" class="ddm-tab-btn" data-dd-tab="network" role="tab">
+            <i data-lucide="wifi" style="width: 14px; height: 14px;"></i>
+            <span>Konfigurasi IP, VLAN &amp; SSID</span>
+          </button>
+          <button type="button" class="ddm-tab-btn" data-dd-tab="ports" role="tab">
+            <i data-lucide="network" style="width: 14px; height: 14px;"></i>
+            <span>Port Fisik &amp; Kabel</span>
+          </button>
+        </div>
+
+        <!-- Scrollable Body -->
+        <div id="ddm-body" class="ddm-body"></div>
+
+        <!-- Footer Bar -->
+        <div class="ddm-footer">
+          <div class="ddm-footer-left">
+            <button type="button" id="btn-dd-copy-summary" class="btn btn-secondary btn-sm" title="Salin ringkasan lengkap ke clipboard">
+              <i data-lucide="copy" style="width: 13px; height: 13px;"></i>
+              <span>Salin Ringkasan</span>
+            </button>
+            <button type="button" id="btn-dd-focus" class="btn btn-secondary btn-sm" title="Pusatkan kamera ke perangkat ini">
+              <i data-lucide="crosshair" style="width: 13px; height: 13px;"></i>
+              <span>Fokus di Peta</span>
+            </button>
+            <span id="ddm-feedback-msg" class="ddm-feedback-msg" aria-live="polite"></span>
+          </div>
+          <div class="ddm-footer-right">
+            <button type="button" id="btn-dd-close-footer" class="btn btn-secondary btn-sm">
+              Tutup
+            </button>
+            <button type="button" id="btn-dd-save" class="btn btn-primary btn-sm">
+              <i data-lucide="check" style="width: 14px; height: 14px;"></i>
+              <span>Simpan Perubahan</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+      document.body.appendChild(this.modalEl);
+    }
+    bindEvents() {
+      eventBus.on("modal:open-device-detail", ({ deviceId, device, tab } = {}) => {
+        const targetId = deviceId || device?.id || this.deviceManager?.selectedDeviceId;
+        if (targetId) {
+          this.show(targetId, tab || "overview");
+        }
+      });
+      this.modalEl.querySelector("#btn-dd-close")?.addEventListener("click", () => this.hide());
+      this.modalEl.querySelector("#btn-dd-close-footer")?.addEventListener("click", () => this.hide());
+      this.modalEl.addEventListener("click", (e) => {
+        if (e.target === this.modalEl) {
+          this.hide();
+        }
+      });
+      this.modalEl.querySelectorAll(".ddm-tab-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const nextTab = btn.getAttribute("data-dd-tab");
+          if (!nextTab) return;
+          this.captureCurrentTabInputs();
+          this.switchTab(nextTab);
+        });
+      });
+      this.modalEl.querySelector("#btn-dd-save")?.addEventListener("click", () => {
+        this.saveChanges();
+      });
+      this.modalEl.querySelector("#btn-dd-copy-summary")?.addEventListener("click", () => {
+        this.captureCurrentTabInputs();
+        this.copySummaryToClipboard();
+      });
+      this.modalEl.querySelector("#btn-dd-focus")?.addEventListener("click", () => {
+        const dev = this.deviceManager?.getDeviceById(this.currentDeviceId);
+        if (!dev) return;
+        this.hide();
+        if (stateManager.getViewMode() === "3d") {
+          eventBus.emit("map3d:focus-device", { deviceId: dev.id });
+        } else if (this.viewportNavigator) {
+          this.viewportNavigator.focusOnDevice(dev, 1.4);
+        }
+      });
+      window.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && this.isOpen()) {
+          this.hide();
+        }
+      });
+    }
+    isOpen() {
+      return this.modalEl && this.modalEl.style.display === "flex";
+    }
+    /**
+     * Open modal for a device at the requested tab.
+     * @param {string} deviceId
+     * @param {'overview'|'inventory'|'network'|'ports'} [tab='overview']
+     */
+    show(deviceId, tab = "overview") {
+      const dev = this.deviceManager?.getDeviceById(deviceId);
+      if (!dev) return;
+      if (this.modalEl && typeof document !== "undefined" && document.body && !document.body.contains?.(this.modalEl)) {
+        document.body.appendChild(this.modalEl);
+      }
+      this.currentDeviceId = dev.id;
+      this.draft = this.cloneDeviceDraft(dev);
+      this.modalEl.style.display = "flex";
+      this.modalEl.setAttribute("aria-hidden", "false");
+      this.updateHeader(this.draft);
+      this.switchTab(tab || "overview");
+      const body = this.modalEl.querySelector?.("#ddm-body");
+      if (body) body.scrollTop = 0;
+    }
+    hide() {
+      if (!this.modalEl) return;
+      this.modalEl.style.display = "none";
+      this.modalEl.setAttribute("aria-hidden", "true");
+    }
+    cloneDeviceDraft(dev) {
+      const inv = dev.inventory || {};
+      const sp = dev.specs || {};
+      const net = dev.network || {};
+      return {
+        id: dev.id,
+        name: dev.name || "Perangkat",
+        type: dev.type || "router",
+        category: dev.category || "core",
+        brand: dev.brand || "",
+        model: dev.model || "",
+        status: dev.status || "unknown",
+        location: dev.location || "",
+        firmware: dev.firmware || "",
+        installedAt: dev.installedAt || "",
+        notes: dev.notes || "",
+        customImage: dev.customImage || "",
+        customIcon: dev.customIcon || "",
+        ports: Array.isArray(dev.ports) ? dev.ports.map((p) => ({ ...p })) : [],
+        spatial3d: { ...dev.spatial3d || {} },
+        inventory: {
+          purchaseYear: String(inv.purchaseYear ?? ""),
+          fundingSource: String(inv.fundingSource ?? ""),
+          inventoryCode: String(inv.inventoryCode ?? ""),
+          condition: inv.condition || "baik",
+          serialNumber: String(inv.serialNumber ?? ""),
+          unitPrice: String(inv.unitPrice ?? ""),
+          vendor: String(inv.vendor ?? ""),
+          responsiblePerson: String(inv.responsiblePerson ?? "")
+        },
+        specs: {
+          processor: String(sp.processor ?? ""),
+          ramStorage: String(sp.ramStorage ?? ""),
+          portsSummary: String(sp.portsSummary ?? ""),
+          powerSupply: String(sp.powerSupply ?? ""),
+          throughput: String(sp.throughput ?? ""),
+          dimensions: String(sp.dimensions ?? ""),
+          summary: String(sp.summary ?? "")
+        },
+        network: {
+          ip: net.ip || "",
+          subnet: net.subnet || "255.255.255.0",
+          gateway: net.gateway || "",
+          dns: net.dns || "",
+          connectionMode: net.connectionMode || "static",
+          vlan: net.vlan !== void 0 ? Number(net.vlan) : 1,
+          vlanList: net.vlanList || "",
+          mac: net.mac || "",
+          hostname: net.hostname || "",
+          ssid: net.ssid || "",
+          ssidSecondary: net.ssidSecondary || "",
+          wifiBand: net.wifiBand || "",
+          wifiChannel: net.wifiChannel || "",
+          wifiSecurity: net.wifiSecurity || "",
+          wifiPasswordHint: net.wifiPasswordHint || "",
+          managementAccess: net.managementAccess || "",
+          managementUser: net.managementUser || "",
+          services: net.services || "",
+          configSnippet: net.configSnippet || ""
+        }
+      };
+    }
+    updateHeader(dev) {
+      const iconBox = this.modalEl.querySelector("#ddm-icon-box");
+      const titleEl = this.modalEl.querySelector("#ddm-title");
+      const subEl = this.modalEl.querySelector("#ddm-subtitle");
+      const statusBadge = this.modalEl.querySelector("#ddm-status-badge");
+      const catBadge = this.modalEl.querySelector("#ddm-category-badge");
+      const cat = DEVICE_CATEGORIES[dev.category] || DEVICE_CATEGORIES.core;
+      const statusDef = DEVICE_STATUSES[dev.status] || DEVICE_STATUSES.unknown;
+      const devDef = getDeviceDefByType(dev.type);
+      if (iconBox) {
+        if (dev.customImage) {
+          iconBox.innerHTML = `<img src="${this.escapeAttr(dev.customImage)}" alt="${this.escapeAttr(dev.name)}">`;
+        } else {
+          const iconKey = dev.customIcon || getDefaultIconForType(dev.type);
+          iconBox.innerHTML = getDeviceIconSvg(iconKey, { color: cat.color || "#2a7c13", size: 24 });
+        }
+      }
+      if (titleEl) {
+        titleEl.textContent = dev.name || "Perangkat Jaringan";
+      }
+      if (statusBadge) {
+        statusBadge.textContent = `\u25CF ${statusDef.name || "Unknown"}`;
+        statusBadge.style.color = statusDef.color || "#64748b";
+        statusBadge.style.background = statusDef.bg || "rgba(100,116,139,0.15)";
+        statusBadge.style.borderColor = `${statusDef.color || "#64748b"}44`;
+      }
+      if (catBadge) {
+        catBadge.textContent = cat.name || dev.category;
+        catBadge.style.color = cat.color || "#2a7c13";
+        catBadge.style.background = cat.badgeBg || "rgba(42,124,19,0.12)";
+        catBadge.style.borderColor = `${cat.color || "#2a7c13"}44`;
+      }
+      if (subEl) {
+        const modelLabel = [dev.brand, dev.model].filter(Boolean).join(" ") || devDef?.name || dev.type;
+        const parts = [modelLabel];
+        if (dev.inventory?.purchaseYear) parts.push(`Thn ${dev.inventory.purchaseYear}`);
+        if (dev.inventory?.fundingSource) parts.push(`Anggaran: ${dev.inventory.fundingSource}`);
+        if (dev.network?.ip) parts.push(`IP: ${dev.network.ip}`);
+        if (dev.network?.ssid) parts.push(`SSID: ${dev.network.ssid}`);
+        subEl.textContent = parts.join(" \u2022 ");
+      }
+    }
+    switchTab(tabName) {
+      this.activeTab = tabName;
+      this.modalEl.querySelectorAll(".ddm-tab-btn").forEach((btn) => {
+        const isActive = btn.getAttribute("data-dd-tab") === tabName;
+        btn.classList.toggle("active", isActive);
+        btn.setAttribute("aria-selected", isActive ? "true" : "false");
+      });
+      const body = this.modalEl.querySelector("#ddm-body");
+      if (!body || !this.draft) return;
+      if (tabName === "overview") {
+        body.innerHTML = this.renderOverviewTab(this.draft);
+        this.bindOverviewTabEvents(body);
+      } else if (tabName === "inventory") {
+        body.innerHTML = this.renderInventoryTab(this.draft);
+        this.bindInventoryTabEvents(body);
+      } else if (tabName === "network") {
+        body.innerHTML = this.renderNetworkTab(this.draft);
+        this.bindNetworkTabEvents(body);
+      } else if (tabName === "ports") {
+        body.innerHTML = this.renderPortsTab(this.draft);
+        this.bindPortsTabEvents(body);
+      }
+      if (window.lucide && typeof window.lucide.createIcons === "function") {
+        window.lucide.createIcons({ root: this.modalEl });
+      }
+    }
+    captureCurrentTabInputs() {
+      if (!this.draft) return;
+      const q = (id) => this.modalEl.querySelector(`#${id}`);
+      if (this.activeTab === "inventory") {
+        this.draft.inventory.purchaseYear = q("dd-inv-year")?.value.trim() ?? this.draft.inventory.purchaseYear;
+        this.draft.inventory.fundingSource = q("dd-inv-funding")?.value.trim() ?? this.draft.inventory.fundingSource;
+        this.draft.inventory.inventoryCode = q("dd-inv-code")?.value.trim() ?? this.draft.inventory.inventoryCode;
+        this.draft.inventory.condition = q("dd-inv-condition")?.value ?? this.draft.inventory.condition;
+        this.draft.inventory.serialNumber = q("dd-inv-sn")?.value.trim() ?? this.draft.inventory.serialNumber;
+        this.draft.inventory.unitPrice = q("dd-inv-price")?.value.trim() ?? this.draft.inventory.unitPrice;
+        this.draft.inventory.vendor = q("dd-inv-vendor")?.value.trim() ?? this.draft.inventory.vendor;
+        this.draft.inventory.responsiblePerson = q("dd-inv-pic")?.value.trim() ?? this.draft.inventory.responsiblePerson;
+        this.draft.location = q("dd-location")?.value.trim() ?? this.draft.location;
+        this.draft.installedAt = q("dd-installed")?.value ?? this.draft.installedAt;
+        this.draft.brand = q("dd-brand")?.value.trim() ?? this.draft.brand;
+        this.draft.model = q("dd-model")?.value.trim() ?? this.draft.model;
+        this.draft.firmware = q("dd-firmware")?.value.trim() ?? this.draft.firmware;
+        this.draft.specs.processor = q("dd-spec-cpu")?.value.trim() ?? this.draft.specs.processor;
+        this.draft.specs.ramStorage = q("dd-spec-ram")?.value.trim() ?? this.draft.specs.ramStorage;
+        this.draft.specs.portsSummary = q("dd-spec-ports")?.value.trim() ?? this.draft.specs.portsSummary;
+        this.draft.specs.powerSupply = q("dd-spec-power")?.value.trim() ?? this.draft.specs.powerSupply;
+        this.draft.specs.throughput = q("dd-spec-throughput")?.value.trim() ?? this.draft.specs.throughput;
+        this.draft.specs.dimensions = q("dd-spec-dim")?.value.trim() ?? this.draft.specs.dimensions;
+        this.draft.specs.summary = q("dd-spec-summary")?.value.trim() ?? this.draft.specs.summary;
+      } else if (this.activeTab === "network") {
+        this.draft.network.ip = q("dd-net-ip")?.value.trim() ?? this.draft.network.ip;
+        this.draft.network.subnet = q("dd-net-subnet")?.value.trim() || "255.255.255.0";
+        this.draft.network.gateway = q("dd-net-gateway")?.value.trim() ?? this.draft.network.gateway;
+        this.draft.network.dns = q("dd-net-dns")?.value.trim() ?? this.draft.network.dns;
+        this.draft.network.connectionMode = q("dd-net-mode")?.value ?? this.draft.network.connectionMode;
+        const vlanVal = q("dd-net-vlan")?.value;
+        if (vlanVal !== void 0 && vlanVal !== "") {
+          this.draft.network.vlan = parseInt(vlanVal, 10) || 1;
+        }
+        this.draft.network.vlanList = q("dd-net-vlan-list")?.value.trim() ?? this.draft.network.vlanList;
+        this.draft.network.mac = q("dd-net-mac")?.value.trim() ?? this.draft.network.mac;
+        this.draft.network.hostname = q("dd-net-hostname")?.value.trim() ?? this.draft.network.hostname;
+        this.draft.network.ssid = q("dd-net-ssid")?.value.trim() ?? this.draft.network.ssid;
+        this.draft.network.ssidSecondary = q("dd-net-ssid2")?.value.trim() ?? this.draft.network.ssidSecondary;
+        this.draft.network.wifiBand = q("dd-net-wifi-band")?.value ?? this.draft.network.wifiBand;
+        this.draft.network.wifiChannel = q("dd-net-wifi-channel")?.value.trim() ?? this.draft.network.wifiChannel;
+        this.draft.network.wifiSecurity = q("dd-net-wifi-security")?.value ?? this.draft.network.wifiSecurity;
+        this.draft.network.wifiPasswordHint = q("dd-net-wifi-pass")?.value.trim() ?? this.draft.network.wifiPasswordHint;
+        this.draft.network.managementAccess = q("dd-net-mgmt")?.value.trim() ?? this.draft.network.managementAccess;
+        this.draft.network.managementUser = q("dd-net-mgmt-user")?.value.trim() ?? this.draft.network.managementUser;
+        this.draft.network.services = q("dd-net-services")?.value.trim() ?? this.draft.network.services;
+        this.draft.network.configSnippet = q("dd-net-config-snippet")?.value ?? this.draft.network.configSnippet;
+        this.draft.notes = q("dd-notes")?.value.trim() ?? this.draft.notes;
+      }
+      this.updateHeader(this.draft);
+    }
+    getConnectedCableLinks(deviceId) {
+      const cables = this.cableManager?.getConnectionsByDeviceId?.(deviceId) || [];
+      return cables.map((cab) => {
+        const isSource = cab.source === deviceId;
+        const peerId = isSource ? cab.destination : cab.source;
+        const peerDev = this.deviceManager?.getDeviceById(peerId);
+        const localPort = isSource ? cab.sourcePort : cab.destinationPort;
+        const peerPort = isSource ? cab.destinationPort : cab.sourcePort;
+        const catDef = CABLE_CATEGORIES[cab.category] || CABLE_CATEGORIES.cat6;
+        return {
+          cable: cab,
+          localPort: localPort || "",
+          peerPort: peerPort || "",
+          peerName: peerDev ? peerDev.name : peerId,
+          peerIp: peerDev?.network?.ip || "",
+          cableTypeName: catDef?.name || cab.category || "Kabel",
+          lengthStr: cab.length ? `${cab.length.toFixed(1)} m` : "-"
+        };
+      });
+    }
+    renderKvRow(label, value, { mono = false, badgeColor = null, mutedIfEmpty = true } = {}) {
+      const hasVal = value !== void 0 && value !== null && String(value).trim() !== "";
+      const display = hasVal ? this.escapeHtml(String(value)) : "Belum diisi";
+      let valHtml = "";
+      if (hasVal && badgeColor) {
+        valHtml = `<span class="ddm-kv-pill" style="color: ${badgeColor}; background: ${badgeColor}1a; border-color: ${badgeColor}44;">${display}</span>`;
+      } else {
+        valHtml = `<span class="ddm-kv-val ${mono ? "mono" : ""} ${!hasVal && mutedIfEmpty ? "is-empty" : ""}">${display}</span>`;
+      }
+      return `
+      <div class="ddm-kv-row">
+        <span class="ddm-kv-label">${this.escapeHtml(label)}</span>
+        ${valHtml}
+      </div>
+    `;
+    }
+    renderOverviewTab(dev) {
+      const inv = dev.inventory || {};
+      const sp = dev.specs || {};
+      const net = dev.network || {};
+      const defaultSpecs = getDefaultHardwareSpecs(dev);
+      const condObj = DEVICE_CONDITION_OPTIONS.find((c) => c.id === inv.condition) || DEVICE_CONDITION_OPTIONS[0];
+      const fundingBadgeColor = getFundingBadgeColor(inv.fundingSource);
+      const links = this.getConnectedCableLinks(dev.id);
+      const hasCustomSpecs = Boolean(
+        sp.processor || sp.ramStorage || sp.portsSummary || sp.powerSupply || sp.throughput || sp.dimensions || sp.summary
+      );
+      const specDisplay = {
+        processor: sp.processor || defaultSpecs.processor,
+        ramStorage: sp.ramStorage || defaultSpecs.ramStorage,
+        portsSummary: sp.portsSummary || defaultSpecs.portsSummary,
+        powerSupply: sp.powerSupply || defaultSpecs.powerSupply,
+        throughput: sp.throughput || defaultSpecs.throughput,
+        dimensions: sp.dimensions || defaultSpecs.dimensions,
+        summary: sp.summary || defaultSpecs.summary
+      };
+      const linksHtml = links.length > 0 ? links.map((l) => `
+          <div class="ddm-link-row">
+            <div class="ddm-link-main">
+              <span class="ddm-link-port">${this.escapeHtml(l.localPort || "Auto")}</span>
+              <span style="color: var(--text-muted); font-size: 11px;">\u2192</span>
+              <span class="ddm-link-peer">${this.escapeHtml(l.peerName)}</span>
+              ${l.peerPort ? `<span class="ddm-link-port">${this.escapeHtml(l.peerPort)}</span>` : ""}
+            </div>
+            <div class="ddm-link-meta">
+              ${this.escapeHtml(l.cableTypeName)} \u2022 ${l.lengthStr}${l.peerIp ? ` \u2022 ${this.escapeHtml(l.peerIp)}` : ""}
+            </div>
+          </div>
+        `).join("") : `<div class="ddm-empty-inline">Belum ada jalur kabel terhubung ke perangkat ini.</div>`;
+      return `
+      <div class="ddm-overview-highlights">
+        <div class="ddm-stat-box">
+          <span class="ddm-stat-label">Tahun Pembelian</span>
+          <span class="ddm-stat-value">${inv.purchaseYear ? this.escapeHtml(inv.purchaseYear) : '<em class="muted">-</em>'}</span>
+        </div>
+        <div class="ddm-stat-box">
+          <span class="ddm-stat-label">Sumber Anggaran</span>
+          <span class="ddm-stat-value">
+            ${inv.fundingSource ? `<span class="ddm-kv-pill" style="color: ${fundingBadgeColor}; background: ${fundingBadgeColor}1a; border-color: ${fundingBadgeColor}44;">${this.escapeHtml(inv.fundingSource)}</span>` : '<em class="muted">-</em>'}
+          </span>
+        </div>
+        <div class="ddm-stat-box">
+          <span class="ddm-stat-label">Alamat IP / VLAN</span>
+          <span class="ddm-stat-value mono">${net.ip ? this.escapeHtml(net.ip) : '<em class="muted">Tanpa IP</em>'}${net.vlan ? ` (VLAN ${net.vlan})` : ""}</span>
+        </div>
+        <div class="ddm-stat-box">
+          <span class="ddm-stat-label">SSID / Mode</span>
+          <span class="ddm-stat-value">${net.ssid ? this.escapeHtml(net.ssid) : this.escapeHtml((net.connectionMode || "static").toUpperCase())}</span>
+        </div>
+      </div>
+
+      <div class="ddm-overview-grid">
+        <!-- Card 1: Pengadaan & Inventaris Sekolah -->
+        <div class="ddm-card">
+          <div class="ddm-card-head">
+            <div class="ddm-card-title">
+              <i data-lucide="briefcase" style="width: 15px; height: 15px; color: var(--accent-blue);"></i>
+              <span>Inventaris &amp; Pengadaan Sekolah</span>
+            </div>
+            <button type="button" class="btn btn-secondary btn-sm ddm-jump-btn" data-jump-tab="inventory">
+              Edit Inventaris
+            </button>
+          </div>
+          <div class="ddm-kv-list">
+            ${this.renderKvRow("Tahun Pembelian", inv.purchaseYear)}
+            ${this.renderKvRow("Sumber Anggaran", inv.fundingSource, { badgeColor: inv.fundingSource ? fundingBadgeColor : null })}
+            ${this.renderKvRow("Kode Inventaris / NUP", inv.inventoryCode, { mono: true })}
+            ${this.renderKvRow("Kondisi Fisik", condObj.label, { badgeColor: condObj.color })}
+            ${this.renderKvRow("Nomor Seri (S/N)", inv.serialNumber, { mono: true })}
+            ${this.renderKvRow("Nilai Perolehan", inv.unitPrice)}
+            ${this.renderKvRow("Penyedia / Vendor", inv.vendor)}
+            ${this.renderKvRow("Penanggung Jawab (PIC)", inv.responsiblePerson)}
+            ${this.renderKvRow("Lokasi Ruangan", dev.location)}
+            ${this.renderKvRow("Tgl Pemasangan", dev.installedAt, { mono: true })}
+          </div>
+        </div>
+
+        <!-- Card 2: Spesifikasi Hardware -->
+        <div class="ddm-card">
+          <div class="ddm-card-head">
+            <div class="ddm-card-title">
+              <i data-lucide="cpu" style="width: 15px; height: 15px; color: var(--accent-blue);"></i>
+              <span>Spesifikasi Perangkat Keras</span>
+            </div>
+            <button type="button" class="btn btn-secondary btn-sm ddm-jump-btn" data-jump-tab="inventory">
+              Edit Spek
+            </button>
+          </div>
+          ${!hasCustomSpecs ? `<div class="ddm-hint-banner">Menampilkan rekomendasi spesifikasi standar model (klik <strong>Edit Spek</strong> untuk menyesuaikan atau menyimpan).</div>` : ""}
+          <div class="ddm-kv-list">
+            ${this.renderKvRow("Merek / Model", [dev.brand, dev.model].filter(Boolean).join(" "))}
+            ${this.renderKvRow("Firmware / OS", dev.firmware, { mono: true })}
+            ${this.renderKvRow("Prosesor / Chipset", specDisplay.processor)}
+            ${this.renderKvRow("RAM &amp; Storage", specDisplay.ramStorage)}
+            ${this.renderKvRow("Interface / Port", specDisplay.portsSummary)}
+            ${this.renderKvRow("Catu Daya / PoE", specDisplay.powerSupply)}
+            ${this.renderKvRow("Throughput / Kapasitas", specDisplay.throughput)}
+            ${this.renderKvRow("Dimensi / Chassis", specDisplay.dimensions)}
+          </div>
+          ${specDisplay.summary ? `
+            <div class="ddm-note-box">
+              <div class="ddm-note-title">Ringkasan Spesifikasi</div>
+              <div>${this.escapeHtml(specDisplay.summary)}</div>
+            </div>
+          ` : ""}
+        </div>
+
+        <!-- Card 3: Konfigurasi Jaringan & Wireless (SSID) -->
+        <div class="ddm-card">
+          <div class="ddm-card-head">
+            <div class="ddm-card-title">
+              <i data-lucide="wifi" style="width: 15px; height: 15px; color: var(--accent-blue);"></i>
+              <span>Konfigurasi IP, VLAN &amp; Wireless (SSID)</span>
+            </div>
+            <button type="button" class="btn btn-secondary btn-sm ddm-jump-btn" data-jump-tab="network">
+              Edit Konfigurasi
+            </button>
+          </div>
+          <div class="ddm-kv-list">
+            ${this.renderKvRow("IP Address", net.ip, { mono: true })}
+            ${this.renderKvRow("Subnet Mask", net.subnet, { mono: true })}
+            ${this.renderKvRow("Default Gateway", net.gateway, { mono: true })}
+            ${this.renderKvRow("DNS Server", net.dns, { mono: true })}
+            ${this.renderKvRow("Mode Interface", net.connectionMode)}
+            ${this.renderKvRow("VLAN Utama / Trunk", net.vlanList ? `VLAN ${net.vlan || 1} (${net.vlanList})` : `VLAN ${net.vlan || 1}`, { mono: true })}
+            ${this.renderKvRow("MAC Address", net.mac, { mono: true })}
+            ${this.renderKvRow("Hostname / DNS Lokal", net.hostname, { mono: true })}
+            ${this.renderKvRow("SSID Utama", net.ssid)}
+            ${this.renderKvRow("SSID Kedua / Tamu", net.ssidSecondary)}
+            ${this.renderKvRow("Band &amp; Channel Wi-Fi", [net.wifiBand, net.wifiChannel].filter(Boolean).join(" \u2022 "))}
+            ${this.renderKvRow("Keamanan &amp; Password Hint", [net.wifiSecurity, net.wifiPasswordHint].filter(Boolean).join(" \u2022 "))}
+            ${this.renderKvRow("Akses Manajemen", [net.managementAccess, net.managementUser].filter(Boolean).join(" \u2022 "))}
+            ${this.renderKvRow("Layanan Aktif", net.services)}
+          </div>
+          ${net.configSnippet ? `
+            <div class="ddm-code-wrap">
+              <div class="ddm-note-title">Catatan Konfigurasi / CLI</div>
+              <pre class="ddm-code-block">${this.escapeHtml(net.configSnippet)}</pre>
+            </div>
+          ` : ""}
+        </div>
+
+        <!-- Card 4: Port Fisik & Koneksi Kabel -->
+        <div class="ddm-card">
+          <div class="ddm-card-head">
+            <div class="ddm-card-title">
+              <i data-lucide="network" style="width: 15px; height: 15px; color: var(--accent-blue);"></i>
+              <span>Koneksi Kabel &amp; Port (${links.length} Link \u2022 ${(dev.ports || []).length} Port)</span>
+            </div>
+            <button type="button" class="btn btn-secondary btn-sm ddm-jump-btn" data-jump-tab="ports">
+              Lihat Semua Port
+            </button>
+          </div>
+          <div class="ddm-links-list">
+            ${linksHtml}
+          </div>
+          ${dev.notes ? `
+            <div class="ddm-note-box" style="margin-top: 10px;">
+              <div class="ddm-note-title">Catatan Teknis Umum</div>
+              <div>${this.escapeHtml(dev.notes)}</div>
+            </div>
+          ` : ""}
+        </div>
+      </div>
+    `;
+    }
+    renderInventoryTab(dev) {
+      const inv = dev.inventory || {};
+      const sp = dev.specs || {};
+      return `
+      <div class="ddm-form-sections">
+        <!-- Section 1: Pengadaan & Aset Sekolah -->
+        <div class="ddm-card">
+          <div class="ddm-card-head">
+            <div class="ddm-card-title">
+              <i data-lucide="briefcase" style="width: 15px; height: 15px; color: var(--accent-blue);"></i>
+              <span>Data Pengadaan &amp; Inventaris Sekolah</span>
+            </div>
+          </div>
+
+          <div class="ddm-form-grid">
+            <div class="ddm-field">
+              <label for="dd-inv-year">Tahun Pembelian</label>
+              <input type="text" id="dd-inv-year" placeholder="contoh: 2020" value="${this.escapeAttr(inv.purchaseYear)}">
+              <div class="ddm-chip-row">
+                ${YEAR_PRESETS.map((yr) => `
+                  <button type="button" class="ddm-chip ${inv.purchaseYear === yr ? "active" : ""}" data-fill-input="dd-inv-year" data-fill-val="${yr}">${yr}</button>
+                `).join("")}
+              </div>
+            </div>
+
+            <div class="ddm-field">
+              <label for="dd-inv-funding">Sumber Anggaran (DAK / BOS / dll.)</label>
+              <input type="text" id="dd-inv-funding" placeholder="contoh: DAK 2020 / BOS Reguler" value="${this.escapeAttr(inv.fundingSource)}">
+              <div class="ddm-chip-row">
+                ${FUNDING_SOURCE_PRESETS.map((src) => `
+                  <button type="button" class="ddm-chip ${inv.fundingSource === src ? "active" : ""}" data-fill-input="dd-inv-funding" data-fill-val="${this.escapeAttr(src)}">${this.escapeHtml(src)}</button>
+                `).join("")}
+              </div>
+            </div>
+
+            <div class="ddm-field">
+              <label for="dd-inv-code">Kode Inventaris / KIB / NUP</label>
+              <input type="text" id="dd-inv-code" placeholder="contoh: INV-TIK-2020-001" value="${this.escapeAttr(inv.inventoryCode)}">
+            </div>
+
+            <div class="ddm-field">
+              <label for="dd-inv-condition">Kondisi Perangkat</label>
+              <select id="dd-inv-condition">
+                ${DEVICE_CONDITION_OPTIONS.map((c) => `
+                  <option value="${c.id}" ${inv.condition === c.id ? "selected" : ""}>${this.escapeHtml(c.label)}</option>
+                `).join("")}
+              </select>
+            </div>
+
+            <div class="ddm-field">
+              <label for="dd-inv-sn">Nomor Seri (Serial Number / S/N)</label>
+              <input type="text" id="dd-inv-sn" placeholder="S/N fisik pada stiker unit" value="${this.escapeAttr(inv.serialNumber)}">
+            </div>
+
+            <div class="ddm-field">
+              <label for="dd-inv-price">Nilai / Harga Perolehan</label>
+              <input type="text" id="dd-inv-price" placeholder="contoh: Rp 4.850.000" value="${this.escapeAttr(inv.unitPrice)}">
+            </div>
+
+            <div class="ddm-field">
+              <label for="dd-inv-vendor">Penyedia / Rekanan Pengadaan</label>
+              <input type="text" id="dd-inv-vendor" placeholder="Nama toko / CV / PT" value="${this.escapeAttr(inv.vendor)}">
+            </div>
+
+            <div class="ddm-field">
+              <label for="dd-inv-pic">Penanggung Jawab (PIC / Lab)</label>
+              <input type="text" id="dd-inv-pic" placeholder="Tim IT / Teknisi / Kepala Lab" value="${this.escapeAttr(inv.responsiblePerson)}">
+            </div>
+
+            <div class="ddm-field">
+              <label for="dd-location">Lokasi Ruangan / Titik Pasang</label>
+              <input type="text" id="dd-location" placeholder="Ruang Server / Lab RPL / Koridor Lt. 2" value="${this.escapeAttr(dev.location)}">
+            </div>
+
+            <div class="ddm-field">
+              <label for="dd-installed">Tanggal Pemasangan / Update</label>
+              <input type="date" id="dd-installed" value="${this.escapeAttr(dev.installedAt)}">
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 2: Spesifikasi Hardware -->
+        <div class="ddm-card">
+          <div class="ddm-card-head">
+            <div class="ddm-card-title">
+              <i data-lucide="cpu" style="width: 15px; height: 15px; color: var(--accent-blue);"></i>
+              <span>Spesifikasi Perangkat Keras (Hardware)</span>
+            </div>
+            <button type="button" id="btn-dd-autofill-specs" class="btn btn-secondary btn-sm">
+              <i data-lucide="sparkles" style="width: 13px; height: 13px;"></i>
+              <span>Isi Otomatis Spesifikasi Model Ini</span>
+            </button>
+          </div>
+
+          <div class="ddm-form-grid">
+            <div class="ddm-field">
+              <label for="dd-brand">Merek / Brand</label>
+              <input type="text" id="dd-brand" placeholder="MikroTik, Ruijie, TP-Link..." value="${this.escapeAttr(dev.brand)}">
+            </div>
+            <div class="ddm-field">
+              <label for="dd-model">Seri / Model</label>
+              <input type="text" id="dd-model" placeholder="RB1100AHx4, RG-RAP2260(G)..." value="${this.escapeAttr(dev.model)}">
+            </div>
+            <div class="ddm-field">
+              <label for="dd-firmware">Versi Firmware / OS</label>
+              <input type="text" id="dd-firmware" placeholder="RouterOS v7.14 / ReyeeOS..." value="${this.escapeAttr(dev.firmware)}">
+            </div>
+            <div class="ddm-field">
+              <label for="dd-spec-cpu">Prosesor / Chipset</label>
+              <input type="text" id="dd-spec-cpu" placeholder="Quad-Core 1.4 GHz..." value="${this.escapeAttr(sp.processor)}">
+            </div>
+            <div class="ddm-field">
+              <label for="dd-spec-ram">RAM &amp; Storage</label>
+              <input type="text" id="dd-spec-ram" placeholder="1 GB RAM \u2022 128 MB NAND..." value="${this.escapeAttr(sp.ramStorage)}">
+            </div>
+            <div class="ddm-field">
+              <label for="dd-spec-ports">Ringkasan Interface / Port</label>
+              <input type="text" id="dd-spec-ports" placeholder="13x Gigabit + PoE Out..." value="${this.escapeAttr(sp.portsSummary)}">
+            </div>
+            <div class="ddm-field">
+              <label for="dd-spec-power">Catu Daya / PoE</label>
+              <input type="text" id="dd-spec-power" placeholder="802.3at PoE+ / Dual AC PSU" value="${this.escapeAttr(sp.powerSupply)}">
+            </div>
+            <div class="ddm-field">
+              <label for="dd-spec-throughput">Throughput / Kecepatan Maks</label>
+              <input type="text" id="dd-spec-throughput" placeholder="AX1800 / 7.5 Gbps Routing..." value="${this.escapeAttr(sp.throughput)}">
+            </div>
+            <div class="ddm-field ddm-span-2">
+              <label for="dd-spec-dim">Dimensi / Form Factor</label>
+              <input type="text" id="dd-spec-dim" placeholder="1U Rackmount / Ceiling Dome..." value="${this.escapeAttr(sp.dimensions)}">
+            </div>
+            <div class="ddm-field ddm-span-2">
+              <label for="dd-spec-summary">Catatan Spesifikasi Lengkap</label>
+              <textarea id="dd-spec-summary" rows="3" placeholder="Tuliskan detail spesifikasi tambahan yang dibutuhkan sekolah (kapasitas klien, fitur failover, garansi, dll.)">${this.escapeHtml(sp.summary)}</textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    }
+    renderNetworkTab(dev) {
+      const net = dev.network || {};
+      return `
+      <div class="ddm-form-sections">
+        <!-- Section 1: IP, Gateway, DNS & VLAN -->
+        <div class="ddm-card">
+          <div class="ddm-card-head">
+            <div class="ddm-card-title">
+              <i data-lucide="globe" style="width: 15px; height: 15px; color: var(--accent-blue);"></i>
+              <span>Pengalamatan IP, Gateway, DNS &amp; VLAN</span>
+            </div>
+          </div>
+
+          <div class="ddm-form-grid">
+            <div class="ddm-field">
+              <label for="dd-net-ip">IP Address Manajemen / LAN</label>
+              <input type="text" id="dd-net-ip" class="mono" placeholder="192.168.10.1" value="${this.escapeAttr(net.ip)}">
+              <span id="dd-ip-error" class="ddm-error-text" style="display: none;">Format IPv4 tidak valid</span>
+            </div>
+
+            <div class="ddm-field">
+              <label for="dd-net-subnet">Subnet Mask</label>
+              <input type="text" id="dd-net-subnet" class="mono" placeholder="255.255.255.0" value="${this.escapeAttr(net.subnet || "255.255.255.0")}">
+              <div class="ddm-chip-row">
+                ${SUBNET_PRESETS.map((s) => `
+                  <button type="button" class="ddm-chip ${net.subnet === s.mask ? "active" : ""}" data-fill-input="dd-net-subnet" data-fill-val="${s.mask}">${s.label}</button>
+                `).join("")}
+              </div>
+            </div>
+
+            <div class="ddm-field">
+              <label for="dd-net-gateway">Default Gateway</label>
+              <input type="text" id="dd-net-gateway" class="mono" placeholder="192.168.10.254" value="${this.escapeAttr(net.gateway)}">
+            </div>
+
+            <div class="ddm-field">
+              <label for="dd-net-dns">DNS Server</label>
+              <input type="text" id="dd-net-dns" class="mono" placeholder="1.1.1.1, 8.8.8.8 / DNS Lokal" value="${this.escapeAttr(net.dns)}">
+            </div>
+
+            <div class="ddm-field">
+              <label for="dd-net-mode">Mode Konfigurasi / Port Uplink</label>
+              <select id="dd-net-mode">
+                <option value="static" ${net.connectionMode === "static" ? "selected" : ""}>Static IP</option>
+                <option value="dhcp" ${net.connectionMode === "dhcp" ? "selected" : ""}>DHCP Client</option>
+                <option value="pppoe" ${net.connectionMode === "pppoe" ? "selected" : ""}>PPPoE Client / ISP</option>
+                <option value="bridge" ${net.connectionMode === "bridge" ? "selected" : ""}>Bridge / Transparent</option>
+                <option value="trunk" ${net.connectionMode === "trunk" ? "selected" : ""}>VLAN Trunk / LACP</option>
+              </select>
+            </div>
+
+            <div class="ddm-field">
+              <label for="dd-net-vlan">VLAN ID Utama (Management)</label>
+              <input type="number" id="dd-net-vlan" class="mono" min="1" max="4094" value="${Number(net.vlan || 1)}">
+              <span id="dd-vlan-error" class="ddm-error-text" style="display: none;">VLAN harus angka 1 - 4094</span>
+            </div>
+
+            <div class="ddm-field ddm-span-2">
+              <label for="dd-net-vlan-list">Daftar VLAN / Trunk yang Dilewatkan</label>
+              <input type="text" id="dd-net-vlan-list" placeholder="contoh: VLAN 10 (Guru), VLAN 20 (Siswa/Lab), VLAN 30 (CCTV)" value="${this.escapeAttr(net.vlanList)}">
+            </div>
+
+            <div class="ddm-field">
+              <label for="dd-net-mac">MAC Address</label>
+              <input type="text" id="dd-net-mac" class="mono" placeholder="00:1A:2B:3C:4D:5E" value="${this.escapeAttr(net.mac)}">
+              <span id="dd-mac-error" class="ddm-error-text" style="display: none;">Format MAC tidak valid (cth: AA:BB:CC:DD:EE:FF)</span>
+            </div>
+
+            <div class="ddm-field">
+              <label for="dd-net-hostname">Hostname / System Identity</label>
+              <input type="text" id="dd-net-hostname" class="mono" placeholder="ap-lab-rpl.smk.sch.id" value="${this.escapeAttr(net.hostname)}">
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 2: Wireless / SSID -->
+        <div class="ddm-card">
+          <div class="ddm-card-head">
+            <div class="ddm-card-title">
+              <i data-lucide="wifi" style="width: 15px; height: 15px; color: var(--accent-blue);"></i>
+              <span>Konfigurasi Wireless &amp; SSID</span>
+            </div>
+          </div>
+
+          <div class="ddm-form-grid">
+            <div class="ddm-field">
+              <label for="dd-net-ssid">Nama SSID Utama</label>
+              <input type="text" id="dd-net-ssid" placeholder="contoh: SMKN1_HOTSPOT / GURU_STAFF" value="${this.escapeAttr(net.ssid)}">
+            </div>
+
+            <div class="ddm-field">
+              <label for="dd-net-ssid2">SSID Tambahan / Guest / Lab</label>
+              <input type="text" id="dd-net-ssid2" placeholder="contoh: SISWA_CBT / TAMU_SEKOLAH" value="${this.escapeAttr(net.ssidSecondary)}">
+            </div>
+
+            <div class="ddm-field">
+              <label for="dd-net-wifi-band">Frekuensi / Band Wi-Fi</label>
+              <select id="dd-net-wifi-band">
+                <option value="" ${!net.wifiBand ? "selected" : ""}>- Tidak / Kabel Saja -</option>
+                <option value="Dual-Band (2.4 & 5 GHz)" ${net.wifiBand === "Dual-Band (2.4 & 5 GHz)" ? "selected" : ""}>Dual-Band (2.4 &amp; 5 GHz)</option>
+                <option value="5 GHz Only" ${net.wifiBand === "5 GHz Only" ? "selected" : ""}>5 GHz Only (High Density)</option>
+                <option value="2.4 GHz Only" ${net.wifiBand === "2.4 GHz Only" ? "selected" : ""}>2.4 GHz Only (Jangkauan Luas)</option>
+                <option value="PtP Bridge 5 GHz" ${net.wifiBand === "PtP Bridge 5 GHz" ? "selected" : ""}>PtP Wireless Bridge 5 GHz</option>
+              </select>
+            </div>
+
+            <div class="ddm-field">
+              <label for="dd-net-wifi-channel">Channel / Lebar Pita</label>
+              <input type="text" id="dd-net-wifi-channel" placeholder="Auto / Ch 1, 6, 11 / 36 (80MHz)" value="${this.escapeAttr(net.wifiChannel)}">
+            </div>
+
+            <div class="ddm-field">
+              <label for="dd-net-wifi-security">Keamanan Wireless</label>
+              <select id="dd-net-wifi-security">
+                <option value="" ${!net.wifiSecurity ? "selected" : ""}>- Pilih Keamanan -</option>
+                <option value="WPA2-PSK (AES)" ${net.wifiSecurity === "WPA2-PSK (AES)" ? "selected" : ""}>WPA2-PSK (AES)</option>
+                <option value="WPA2/WPA3-PSK" ${net.wifiSecurity === "WPA2/WPA3-PSK" ? "selected" : ""}>WPA2 / WPA3-PSK</option>
+                <option value="Hotspot Captive Portal" ${net.wifiSecurity === "Hotspot Captive Portal" ? "selected" : ""}>Hotspot Captive Portal / Voucher</option>
+                <option value="Open / Portal RADIUS" ${net.wifiSecurity === "Open / Portal RADIUS" ? "selected" : ""}>Open / Portal RADIUS</option>
+                <option value="WPA2-Enterprise (802.1X)" ${net.wifiSecurity === "WPA2-Enterprise (802.1X)" ? "selected" : ""}>WPA2-Enterprise (802.1X)</option>
+              </select>
+            </div>
+
+            <div class="ddm-field">
+              <label for="dd-net-wifi-pass">Petunjuk Sandi / Kebijakan Akses Wi-Fi</label>
+              <input type="text" id="dd-net-wifi-pass" placeholder="Gunakan petunjuk aman (hindari sandi polos bila sensitif)" value="${this.escapeAttr(net.wifiPasswordHint)}">
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 3: Manajemen, Layanan & CLI -->
+        <div class="ddm-card">
+          <div class="ddm-card-head">
+            <div class="ddm-card-title">
+              <i data-lucide="terminal" style="width: 15px; height: 15px; color: var(--accent-blue);"></i>
+              <span>Akses Manajemen, Layanan &amp; Catatan CLI</span>
+            </div>
+          </div>
+
+          <div class="ddm-form-grid">
+            <div class="ddm-field">
+              <label for="dd-net-mgmt">Protokol / URL Manajemen</label>
+              <input type="text" id="dd-net-mgmt" class="mono" placeholder="Winbox 8291, Web https://..., Ruijie Cloud, SSH" value="${this.escapeAttr(net.managementAccess)}">
+            </div>
+
+            <div class="ddm-field">
+              <label for="dd-net-mgmt-user">Akun Admin / Catatan Login</label>
+              <input type="text" id="dd-net-mgmt-user" placeholder="contoh: admin-it (lihat arsip brankas)" value="${this.escapeAttr(net.managementUser)}">
+            </div>
+
+            <div class="ddm-field ddm-span-2">
+              <label for="dd-net-services">Layanan / Fitur Aktif</label>
+              <input type="text" id="dd-net-services" placeholder="contoh: DHCP Server, Hotspot, Queue Simple, NTP, SNMP, PoE Watchdog" value="${this.escapeAttr(net.services)}">
+            </div>
+
+            <div class="ddm-field ddm-span-2">
+              <label for="dd-net-config-snippet">Cuplikan Konfigurasi / Aturan Routing / CLI</label>
+              <textarea id="dd-net-config-snippet" class="mono" rows="4" placeholder="/ip address add address=192.168.10.1/24 interface=bridge-lan&#10;/ip dhcp-server ...">${this.escapeHtml(net.configSnippet)}</textarea>
+            </div>
+
+            <div class="ddm-field ddm-span-2">
+              <label for="dd-notes">Catatan Pemeliharaan / Histori Konfigurasi</label>
+              <textarea id="dd-notes" rows="2" placeholder="Riwayat perbaikan, jadwal maintenance, atau catatan khusus admin sekolah...">${this.escapeHtml(dev.notes)}</textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    }
+    renderPortsTab(dev) {
+      const ports = Array.isArray(dev.ports) ? dev.ports : [];
+      const links = this.getConnectedCableLinks(dev.id);
+      const linkByPort = /* @__PURE__ */ new Map();
+      links.forEach((l) => {
+        if (l.localPort) {
+          linkByPort.set(l.localPort.toLowerCase(), l);
+        }
+      });
+      const rowsHtml = ports.length > 0 ? ports.map((p, idx) => {
+        const matched = linkByPort.get(String(p.name || "").toLowerCase());
+        return `
+            <tr>
+              <td class="mono">${idx + 1}</td>
+              <td class="mono" style="font-weight: 600;">${this.escapeHtml(p.name)}</td>
+              <td><span class="ddm-chip-static">${this.escapeHtml(String(p.type || "rj45").toUpperCase())}</span></td>
+              <td class="mono">${this.escapeHtml(p.speed || "1G")}</td>
+              <td>
+                ${matched ? `<span class="ddm-port-used">Terhubung ke <strong>${this.escapeHtml(matched.peerName)}</strong>${matched.peerPort ? ` (${this.escapeHtml(matched.peerPort)})` : ""} \u2022 ${this.escapeHtml(matched.cableTypeName)}</span>` : `<span class="ddm-port-free">Tersedia / Kosong</span>`}
+              </td>
+            </tr>
+          `;
+      }).join("") : `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 16px;">Belum ada port fisik terdefinisi pada perangkat ini.</td></tr>`;
+      return `
+      <div class="ddm-form-sections">
+        <div class="ddm-card">
+          <div class="ddm-card-head">
+            <div class="ddm-card-title">
+              <i data-lucide="network" style="width: 15px; height: 15px; color: var(--accent-blue);"></i>
+              <span>Daftar Port Fisik &amp; Status Koneksi (${ports.length} Port)</span>
+            </div>
+            <div style="display: flex; gap: 6px;">
+              <button type="button" id="btn-dd-draw-cable" class="btn btn-secondary btn-sm">
+                <i data-lucide="git-commit" style="width: 13px; height: 13px;"></i>
+                <span>Tarik Kabel Baru</span>
+              </button>
+              <button type="button" id="btn-dd-open-3d" class="btn btn-secondary btn-sm">
+                <i data-lucide="cpu" style="width: 13px; height: 13px;"></i>
+                <span>Atur Model 3D &amp; Port (.GLB)</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="ddm-table-wrap">
+            <table class="ddm-ports-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Nama Port</th>
+                  <th>Tipe</th>
+                  <th>Kecepatan</th>
+                  <th>Status / Perangkat Tujuan</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rowsHtml}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    `;
+    }
+    bindOverviewTabEvents(body) {
+      body.querySelectorAll("[data-jump-tab]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const target = btn.getAttribute("data-jump-tab");
+          if (target) this.switchTab(target);
+        });
+      });
+    }
+    bindInventoryTabEvents(body) {
+      body.querySelectorAll("input, select, textarea").forEach((el) => {
+        el.addEventListener("input", () => this.captureCurrentTabInputs());
+        el.addEventListener("change", () => this.captureCurrentTabInputs());
+      });
+      body.querySelectorAll("[data-fill-input]").forEach((chip) => {
+        chip.addEventListener("click", () => {
+          const inputId = chip.getAttribute("data-fill-input");
+          const val = chip.getAttribute("data-fill-val") ?? "";
+          const input = body.querySelector(`#${inputId}`);
+          if (input) {
+            input.value = val;
+            this.captureCurrentTabInputs();
+            chip.parentElement?.querySelectorAll(".ddm-chip").forEach((c) => c.classList.remove("active"));
+            chip.classList.add("active");
+          }
+        });
+      });
+      body.querySelector("#btn-dd-autofill-specs")?.addEventListener("click", () => {
+        this.captureCurrentTabInputs();
+        const rec = getDefaultHardwareSpecs(this.draft);
+        const map = {
+          "dd-spec-cpu": rec.processor,
+          "dd-spec-ram": rec.ramStorage,
+          "dd-spec-ports": rec.portsSummary,
+          "dd-spec-power": rec.powerSupply,
+          "dd-spec-throughput": rec.throughput,
+          "dd-spec-dim": rec.dimensions,
+          "dd-spec-summary": rec.summary
+        };
+        Object.entries(map).forEach(([id, val]) => {
+          const el = body.querySelector(`#${id}`);
+          if (el) el.value = val || "";
+        });
+        this.captureCurrentTabInputs();
+        this.showFeedback("Spesifikasi default model diisi \u2014 klik Simpan Perubahan untuk menyimpan.");
+      });
+    }
+    bindNetworkTabEvents(body) {
+      body.querySelectorAll("input, select, textarea").forEach((el) => {
+        el.addEventListener("input", () => this.captureCurrentTabInputs());
+        el.addEventListener("change", () => this.captureCurrentTabInputs());
+      });
+      body.querySelectorAll("[data-fill-input]").forEach((chip) => {
+        chip.addEventListener("click", () => {
+          const inputId = chip.getAttribute("data-fill-input");
+          const val = chip.getAttribute("data-fill-val") ?? "";
+          const input = body.querySelector(`#${inputId}`);
+          if (input) {
+            input.value = val;
+            this.captureCurrentTabInputs();
+            chip.parentElement?.querySelectorAll(".ddm-chip").forEach((c) => c.classList.remove("active"));
+            chip.classList.add("active");
+          }
+        });
+      });
+    }
+    bindPortsTabEvents(body) {
+      body.querySelector("#btn-dd-draw-cable")?.addEventListener("click", () => {
+        const devId = this.currentDeviceId;
+        this.hide();
+        if (!devId) return;
+        stateManager.setMode("draw-cable");
+        this.deviceManager.selectDevice(devId);
+        eventBus.emit("map3d:start-cable", { deviceId: devId });
+      });
+      body.querySelector("#btn-dd-open-3d")?.addEventListener("click", () => {
+        const devId = this.currentDeviceId;
+        this.hide();
+        if (devId) {
+          eventBus.emit("modal:open-device-3d", { deviceId: devId });
+        }
+      });
+    }
+    saveChanges() {
+      if (!this.currentDeviceId || !this.draft) return;
+      this.captureCurrentTabInputs();
+      const ip = this.draft.network.ip || "";
+      const mac = this.draft.network.mac || "";
+      const vlan = this.draft.network.vlan;
+      if (!validateIp(ip)) {
+        this.switchTab("network");
+        const err = this.modalEl.querySelector("#dd-ip-error");
+        if (err) err.style.display = "block";
+        this.showFeedback("Format IPv4 tidak valid!", true);
+        return;
+      }
+      if (!validateVlan(vlan)) {
+        this.switchTab("network");
+        const err = this.modalEl.querySelector("#dd-vlan-error");
+        if (err) err.style.display = "block";
+        this.showFeedback("VLAN harus antara 1 - 4094!", true);
+        return;
+      }
+      if (!validateMac(mac)) {
+        this.switchTab("network");
+        const err = this.modalEl.querySelector("#dd-mac-error");
+        if (err) err.style.display = "block";
+        this.showFeedback("Format MAC Address tidak valid!", true);
+        return;
+      }
+      const updated = this.deviceManager.updateDevice(this.currentDeviceId, {
+        brand: this.draft.brand,
+        model: this.draft.model,
+        location: this.draft.location,
+        firmware: this.draft.firmware,
+        installedAt: this.draft.installedAt,
+        notes: this.draft.notes,
+        inventory: { ...this.draft.inventory },
+        specs: { ...this.draft.specs },
+        network: { ...this.draft.network }
+      });
+      if (updated) {
+        this.draft = this.cloneDeviceDraft(updated);
+        this.updateHeader(this.draft);
+        if (this.activeTab === "overview") {
+          this.switchTab("overview");
+        }
+        this.showFeedback("Detail perangkat & konfigurasi berhasil disimpan!");
+      }
+    }
+    showFeedback(msg, isError = false) {
+      const el = this.modalEl.querySelector("#ddm-feedback-msg");
+      if (!el) return;
+      el.textContent = msg;
+      el.classList.toggle("is-error", Boolean(isError));
+      el.classList.add("visible");
+      clearTimeout(this._statusTimer);
+      this._statusTimer = setTimeout(() => {
+        el.classList.remove("visible");
+      }, 3200);
+    }
+    async copySummaryToClipboard() {
+      if (!this.draft) return;
+      const d = this.draft;
+      const inv = d.inventory || {};
+      const sp = d.specs || {};
+      const net = d.network || {};
+      const defaultSpecs = getDefaultHardwareSpecs(d);
+      const lines = [
+        `=== DETAIL PERANGKAT: ${d.name} ===`,
+        `Brand / Model    : ${[d.brand, d.model].filter(Boolean).join(" ") || "-"}`,
+        `Lokasi           : ${d.location || "-"}`,
+        `Firmware         : ${d.firmware || "-"}`,
+        `--- INVENTARIS SEKOLAH ---`,
+        `Tahun Pembelian  : ${inv.purchaseYear || "-"}`,
+        `Sumber Anggaran  : ${inv.fundingSource || "-"}`,
+        `Kode Inventaris  : ${inv.inventoryCode || "-"}`,
+        `Kondisi          : ${inv.condition || "baik"}`,
+        `Nomor Seri (S/N) : ${inv.serialNumber || "-"}`,
+        `Penyedia / PIC   : ${[inv.vendor, inv.responsiblePerson].filter(Boolean).join(" / ") || "-"}`,
+        `--- SPESIFIKASI ---`,
+        `Ringkasan        : ${sp.summary || defaultSpecs.summary || "-"}`,
+        `CPU / RAM        : ${[sp.processor || defaultSpecs.processor, sp.ramStorage || defaultSpecs.ramStorage].filter(Boolean).join(" | ") || "-"}`,
+        `Port & Daya      : ${[sp.portsSummary || defaultSpecs.portsSummary, sp.powerSupply || defaultSpecs.powerSupply].filter(Boolean).join(" | ") || "-"}`,
+        `--- KONFIGURASI JARINGAN & WIRELESS ---`,
+        `IP / Subnet      : ${net.ip || "-"} / ${net.subnet || "255.255.255.0"}`,
+        `Gateway / DNS    : ${net.gateway || "-"} / ${net.dns || "-"}`,
+        `VLAN / Mode      : VLAN ${net.vlan || 1}${net.vlanList ? ` (${net.vlanList})` : ""} | ${net.connectionMode || "static"}`,
+        `MAC / Hostname   : ${net.mac || "-"} | ${net.hostname || "-"}`,
+        `SSID Wi-Fi       : ${[net.ssid, net.ssidSecondary].filter(Boolean).join(", ") || "-"}`,
+        `Akses Manajemen  : ${[net.managementAccess, net.managementUser].filter(Boolean).join(" | ") || "-"}`
+      ];
+      const text = lines.join("\n");
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(text);
+        } else {
+          const ta = document.createElement("textarea");
+          ta.value = text;
+          ta.style.position = "fixed";
+          ta.style.opacity = "0";
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand("copy");
+          document.body.removeChild(ta);
+        }
+        this.showFeedback("Ringkasan perangkat disalin ke clipboard!");
+      } catch (err) {
+        this.showFeedback("Gagal menyalin ke clipboard.", true);
+      }
+    }
+    escapeHtml(str) {
+      if (str === void 0 || str === null) return "";
+      return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+    escapeAttr(str) {
+      return this.escapeHtml(str);
+    }
+  };
+  function getFundingBadgeColor(source) {
+    const s = String(source || "").toLowerCase();
+    if (s.includes("dak")) return "#2563eb";
+    if (s.includes("bos")) return "#059669";
+    if (s.includes("apbd") || s.includes("apbn")) return "#7c3aed";
+    if (s.includes("komite") || s.includes("hibah")) return "#d97706";
+    return "#2a7c13";
+  }
+
   // js/app.js
   var NetMapApp = class {
     constructor() {
@@ -56099,6 +58114,7 @@ void main() {
       this.room3DModal = null;
       this.object3DModal = null;
       this.device3DModelModal = null;
+      this.deviceDetailModal = null;
       this.projectStorage = null;
       this.exportModal = null;
       this.projectModal = null;
@@ -56169,7 +58185,8 @@ void main() {
         this.searchUI = new SearchUI({
           inputElement: searchInput,
           searchEngine: this.searchEngine,
-          viewportNavigator: this.viewportNavigator
+          viewportNavigator: this.viewportNavigator,
+          deviceManager: this.deviceManager
         });
       }
       this.topologyModal = new TopologyModal({
@@ -56247,6 +58264,11 @@ void main() {
       this.portPickerModal = new PortPickerModal({
         deviceManager: this.deviceManager,
         cableManager: this.cableManager
+      });
+      this.deviceDetailModal = new DeviceDetailModal({
+        deviceManager: this.deviceManager,
+        cableManager: this.cableManager,
+        viewportNavigator: this.viewportNavigator
       });
       this.setup3DControls();
       window.__netmapApp = this;
@@ -56547,6 +58569,9 @@ void main() {
             return;
           }
         }
+        if (this.deviceDetailModal?.isOpen()) {
+          return;
+        }
         if (stateManager.getViewMode() === "3d") {
           const lower = e.key.toLowerCase();
           if (lower === "o") {
@@ -56607,6 +58632,11 @@ void main() {
           if (e.key === "0") {
             e.preventDefault();
             this.map3DEngine?.zoomExtents();
+            return;
+          }
+          if (lower === "d" && e.shiftKey && this.deviceManager?.selectedDeviceId) {
+            e.preventDefault();
+            this.deviceDetailModal?.show(this.deviceManager.selectedDeviceId, "overview");
             return;
           }
           if (["w", "a", "s", "d", "q", "e", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(lower)) {
@@ -56681,6 +58711,13 @@ void main() {
           case "K":
             e.preventDefault();
             this.mapScaleModal.show();
+            break;
+          case "d":
+          case "D":
+            if (!e.ctrlKey && !e.metaKey && this.deviceManager?.selectedDeviceId) {
+              e.preventDefault();
+              this.deviceDetailModal?.show(this.deviceManager.selectedDeviceId, "overview");
+            }
             break;
           case "Delete":
           case "Backspace": {

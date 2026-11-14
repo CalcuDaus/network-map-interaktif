@@ -400,7 +400,8 @@ body.workspace-fullscreen .hud-3d-exit-fs-btn {
 .navbar-search-panel {
   left: auto;
   right: 0;
-  min-width: 280px;
+  min-width: 360px;
+  max-width: calc(100vw - 24px);
   padding: 8px;
 }
 

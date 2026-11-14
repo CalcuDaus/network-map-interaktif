@@ -4,6 +4,7 @@
  */
 
 import { eventBus } from '../core/event-bus.js';
+import { stateManager } from '../core/state-manager.js';
 import { clamp } from '../utils/helpers.js';
 
 export class ViewportNavigator {
@@ -18,12 +19,22 @@ export class ViewportNavigator {
 
   /**
    * Smoothly focus camera on a specific device and trigger selection
+   * Works seamlessly in both 2D and 3D map modes.
    * @param {Object} device 
    * @param {number} [targetScale=1.4] 
    * @param {number} [duration=400] 
    */
-  focusOnDevice(device, targetScale = 1.4, duration = 400) {
+  focusOnDevice(device, targetScale = 1.4, duration = 400, options = {}) {
     if (!device || !device.position) return;
+
+    if (!options.skip3dEmit && stateManager.getViewMode() === '3d') {
+      eventBus.emit('map3d:focus-device', { deviceId: device.id });
+    }
+
+    if (!this.stage) {
+      eventBus.emit('device:selected', device);
+      return;
+    }
 
     const targetX = device.position.x * this.mapDimensions.width;
     const targetY = device.position.y * this.mapDimensions.height;

@@ -30,6 +30,7 @@ export class ContextMenu {
     this.isOpen = false;
     this.activeTarget = null; // { type: 'device'|'cable'|'canvas', data: any }
     this._toastTimer = null;
+    this._lastOpenedAt = 0;
 
     this.createDomElement();
     this.initEventListeners();
@@ -48,6 +49,10 @@ export class ContextMenu {
       menu.setAttribute('aria-hidden', 'true');
       document.body.appendChild(menu);
     }
+    menu.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    });
     this.element = menu;
   }
 
@@ -67,6 +72,21 @@ export class ContextMenu {
     eventBus.on('contextmenu:canvas', ({ normX, normY, screenX, screenY }) => {
       this.showCanvasMenu({ normX, normY }, screenX, screenY);
     });
+
+    // 1b. Prevent browser native context menu whenever custom menu just opened
+    // (fixes 3D pointerup repositioning the menu under cursor before `contextmenu` fires)
+    window.addEventListener('contextmenu', (e) => {
+      const target = e.target;
+      const recentlyOpened = Date.now() - (this._lastOpenedAt || 0) < 400;
+      const inCustomMenu = Boolean(this.element && (this.element === target || this.element.contains?.(target)));
+      const inMapArea = Boolean(
+        target?.closest?.('#map-context-menu, #map-viewport, #map-3d-container, #konva-container, .ps-layer-row')
+      );
+      if (this.isOpen || recentlyOpened || inCustomMenu || inMapArea) {
+        e.preventDefault();
+        if (inCustomMenu) e.stopPropagation();
+      }
+    }, true);
 
     // 2. Auto-dismiss on click outside or pointerdown
     document.addEventListener('pointerdown', (e) => {
@@ -120,20 +140,33 @@ export class ContextMenu {
     this.deviceManager.selectDevice(device.id);
 
     const devDef = getDeviceDefByType(device.type) || { name: 'Perangkat Jaringan', category: 'core' };
-    const catDef = DEVICE_CATEGORIES[device.category] || DEVICE_CATEGORIES.core;
-    const statusDef = DEVICE_STATUSES[device.status] || DEVICE_STATUSES.online;
+    const statusDef = DEVICE_STATUSES[device.status] || DEVICE_STATUSES.unknown;
+    const statusLabel = statusDef.name || statusDef.label || 'Unknown';
 
     // Header thumbnail: custom image or vector SVG
     let iconHtml = '';
     if (device.customImage) {
-      iconHtml = `<img src="${device.customImage}" alt="${device.name}" />`;
+      iconHtml = `<img src="${device.customImage}" alt="${escapeHtml(device.name)}" />`;
     } else {
-      const iconKey = device.icon || getDefaultIconForType(device.type);
+      const iconKey = device.icon || device.customIcon || getDefaultIconForType(device.type);
       iconHtml = getDeviceIconSvg(iconKey, { color: '#2a7c13', size: 20 });
     }
 
     const ipText = device.network?.ip || device.ip || 'Tanpa Alamat IP';
     const statusColor = statusDef.color || '#2a7c13';
+
+    const actionBarHtml = `
+      <div class="context-menu-action-bar">
+        <button type="button" class="cm-action-btn" data-cm-action="detail" title="Buka Detail Lengkap, Spesifikasi &amp; Anggaran (DAK/BOS)">
+          <i data-lucide="file-text"></i>
+          <span>Detail</span>
+        </button>
+        <button type="button" class="cm-action-btn is-config" data-cm-action="config" title="Buka Konfigurasi Detail IP, VLAN &amp; SSID">
+          <i data-lucide="wifi"></i>
+          <span>Konfigurasi</span>
+        </button>
+      </div>
+    `;
 
     // Build items
     const items = [
@@ -179,7 +212,7 @@ export class ContextMenu {
         action: () => {
           this.hide();
           eventBus.emit('map3d:set-navtool', { tool: 'move' });
-          this.showToast(`↔️ Mode Move aktif — Drag "${device.name}" di lantai 3D untuk memindahkan posisi X/Y.`);
+          this.showToast(`Mode Move aktif — Drag "${device.name}" di lantai 3D untuk memindahkan posisi X/Y.`);
         }
       }] : []),
       {
@@ -204,7 +237,7 @@ export class ContextMenu {
           this.hide();
           const clone = this.deviceManager.duplicateDevice(device.id);
           if (clone) {
-            this.showToast(`📋 Perangkat diduplikat: "${clone.name}"`);
+            this.showToast(`Perangkat diduplikat: "${clone.name}"`);
           }
         }
       },
@@ -224,7 +257,16 @@ export class ContextMenu {
     this.renderMenu({
       iconHtml,
       title: device.name,
-      subtitle: `<span class="context-menu-status-dot" style="background-color: ${statusColor};"></span> ${statusDef.label} • ${ipText} • ${devDef.name}`,
+      subtitle: `<span class="context-menu-status-dot" style="background-color: ${statusColor};"></span> ${escapeHtml(statusLabel)} • ${escapeHtml(ipText)} • ${escapeHtml(devDef.name)}`,
+      actionBarHtml,
+      onDetailClick: () => {
+        this.hide();
+        eventBus.emit('modal:open-device-detail', { deviceId: device.id, tab: 'overview' });
+      },
+      onConfigClick: () => {
+        this.hide();
+        eventBus.emit('modal:open-device-detail', { deviceId: device.id, tab: 'network' });
+      },
       items
     });
 
@@ -283,7 +325,7 @@ export class ContextMenu {
         action: () => {
           this.hide();
           this.cableManager.updateConnection(cable.id, { route: [] });
-          this.showToast(`📏 Belokan jalur kabel "${cable.name}" direset ke garis lurus`);
+          this.showToast(`Belokan jalur kabel "${cable.name}" direset ke garis lurus`);
         }
       });
     }
@@ -408,7 +450,7 @@ export class ContextMenu {
    * Render HTML content for the context menu
    * @param {Object} options 
    */
-  renderMenu({ iconHtml, title, subtitle, items }) {
+  renderMenu({ iconHtml, title, subtitle, actionBarHtml = '', onDetailClick = null, onConfigClick = null, items }) {
     let html = `
       <div class="context-menu-header">
         <div class="context-menu-header-icon">${iconHtml}</div>
@@ -417,6 +459,7 @@ export class ContextMenu {
           <div class="context-menu-header-sub">${subtitle}</div>
         </div>
       </div>
+      ${actionBarHtml}
       <div class="context-menu-body">
     `;
 
@@ -440,6 +483,22 @@ export class ContextMenu {
 
     html += `</div>`;
     this.element.innerHTML = html;
+
+    const detailBtn = this.element.querySelector('[data-cm-action="detail"]');
+    if (detailBtn && typeof onDetailClick === 'function') {
+      detailBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        onDetailClick();
+      });
+    }
+
+    const configBtn = this.element.querySelector('[data-cm-action="config"]');
+    if (configBtn && typeof onConfigClick === 'function') {
+      configBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        onConfigClick();
+      });
+    }
 
     // Attach click handlers to items
     const itemEls = this.element.querySelectorAll('.context-menu-item');
@@ -475,16 +534,17 @@ export class ContextMenu {
    * @param {number} screenY 
    */
   positionAt(screenX, screenY) {
+    this._lastOpenedAt = Date.now();
     this.element.style.display = 'block';
     this.element.style.visibility = 'hidden';
     this.element.style.top = '0px';
     this.element.style.left = '0px';
 
     const menuRect = this.element.getBoundingClientRect();
-    const padding = 12;
+    const padding = 10;
 
-    let posX = screenX;
-    let posY = screenY;
+    let posX = screenX + 2;
+    let posY = screenY + 2;
 
     // Clamp horizontally
     if (posX + menuRect.width > window.innerWidth - padding) {
@@ -539,7 +599,7 @@ export class ContextMenu {
     if (confirmed) {
       const devName = device.name;
       this.deviceManager.deleteDevice(device.id);
-      this.showToast(`🗑️ Perangkat "${devName}" berhasil dihapus. Tekan Ctrl+Z untuk membatalkan.`);
+      this.showToast(`Perangkat "${devName}" berhasil dihapus. Tekan Ctrl+Z untuk membatalkan.`);
     }
   }
 
@@ -562,7 +622,7 @@ export class ContextMenu {
     if (confirmed) {
       const cabName = cable.name;
       this.cableManager.deleteConnection(cable.id);
-      this.showToast(`🗑️ Jalur kabel "${cabName}" berhasil dihapus. Tekan Ctrl+Z untuk membatalkan.`);
+      this.showToast(`Jalur kabel "${cabName}" berhasil dihapus. Tekan Ctrl+Z untuk membatalkan.`);
     }
   }
 
@@ -578,7 +638,7 @@ export class ContextMenu {
     // Selecting device after switching mode engages CableDrawingTool (2D) & Map3DEngine (3D)
     this.deviceManager.selectDevice(device.id);
     eventBus.emit('map3d:start-cable', { deviceId: device.id });
-    this.showToast(`🔌 Sumber kabel: "${device.name}". Klik perangkat tujuan untuk menghubungkan.`);
+    this.showToast(`Sumber kabel: "${device.name}". Klik perangkat tujuan untuk menghubungkan.`);
   }
 
   /**
@@ -600,7 +660,7 @@ export class ContextMenu {
         document.execCommand('copy');
         document.body.removeChild(textarea);
       }
-      this.showToast(`📋 ${label} disalin ke clipboard: "${text}"`);
+      this.showToast(`${label} disalin ke clipboard: "${text}"`);
     } catch (err) {
       console.warn('[ContextMenu] Clipboard copy failed:', err);
       this.showToast(`Gagal menyalin ${label}`);

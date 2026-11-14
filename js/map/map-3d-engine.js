@@ -159,6 +159,7 @@ export class Map3DEngine {
     // Pointer interaction: Look-Around drag, Box/Marquee select, SketchUp Gizmo/Draw3D, click raycast
     const dom = this.renderer.domElement;
     dom.addEventListener('contextmenu', (e) => e.preventDefault());
+    this.container?.addEventListener('contextmenu', (e) => e.preventDefault());
 
     // Capture-phase guard so Box Select, Draw 3D, or Push/Pull Gizmos intercept before OrbitControls starts orbiting/panning
     dom.addEventListener('pointerdown', (e) => {

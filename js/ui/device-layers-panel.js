@@ -2,7 +2,7 @@
  * NetMap — Photoshop-Style Device Layers Panel (Right Sidebar Tab Component)
  * Displays all devices placed on the map organized by Device Library groups/models,
  * with Photoshop-style Eye (visibility), Lock (position lock), Folder collapse,
- * sub-model chips, camera focus, and instant selection.
+ * sub-model chips, camera focus, detail shortcut, and instant selection.
  */
 
 import {
@@ -590,10 +590,10 @@ export class DeviceLayersPanel {
         activeSubType === 'all'
           ? group.devices
           : group.devices.filter((d) => {
-              const def = getDeviceDefByType(d.type);
-              const typeKey = d.model || def?.name || d.type || 'Custom';
-              return typeKey === activeSubType;
-            });
+            const def = getDeviceDefByType(d.type);
+            const typeKey = d.model || def?.name || d.type || 'Custom';
+            return typeKey === activeSubType;
+          });
 
       html += `
         <div class="ps-layer-group ${hasSelectedInGroup ? 'has-selected' : ''}" data-ps-group-id="${group.id}">
@@ -617,28 +617,27 @@ export class DeviceLayersPanel {
             </button>
           </div>
 
-          ${
-            !isCollapsed && subTypesMap.size > 1
-              ? `
+          ${!isCollapsed && subTypesMap.size > 1
+          ? `
             <div class="ps-group-subtype-bar">
               <button type="button" class="ps-subtype-chip ${activeSubType === 'all' ? 'active' : ''}"
                       data-subtype-group="${group.id}" data-subtype-val="all">
                 Semua (${group.devices.length})
               </button>
               ${Array.from(subTypesMap.entries())
-                .map(
-                  ([sKey, sCount]) => `
+            .map(
+              ([sKey, sCount]) => `
                 <button type="button" class="ps-subtype-chip ${activeSubType === sKey ? 'active' : ''}"
                         data-subtype-group="${group.id}" data-subtype-val="${this.escapeHtml(sKey)}">
                   ${this.escapeHtml(sKey)} (${sCount})
                 </button>
               `
-                )
-                .join('')}
+            )
+            .join('')}
             </div>
           `
-              : ''
-          }
+          : ''
+        }
 
           <!-- Group Child Device Layers -->
           <div class="ps-layer-group-children" style="display: ${isCollapsed ? 'none' : 'flex'};">
@@ -714,8 +713,11 @@ export class DeviceLayersPanel {
           </div>
         </div>
 
-        <!-- Quick Row Actions (Focus & Open Properties) -->
+        <!-- Quick Row Actions (Detail, Focus & Open Properties) -->
         <div class="ps-layer-actions">
+          <button type="button" class="ps-row-action-btn" data-dev-detail="${device.id}" title="Detail, Spesifikasi, Anggaran &amp; SSID">
+            <i data-lucide="file-text" style="width: 12px; height: 12px;"></i>
+          </button>
           <button type="button" class="ps-row-action-btn" data-dev-focus="${device.id}" title="Fokus Kamera ke Perangkat Ini">
             <i data-lucide="crosshair" style="width: 12px; height: 12px;"></i>
           </button>
@@ -822,7 +824,18 @@ export class DeviceLayersPanel {
       });
     });
 
-    // 7. Quick Focus Button on Row
+    // 7. Quick Detail Modal Button on Row
+    treeContainer.querySelectorAll('[data-dev-detail]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const devId = btn.getAttribute('data-dev-detail');
+        if (!devId) return;
+        this.deviceManager.selectDevice(devId);
+        eventBus.emit('modal:open-device-detail', { deviceId: devId, tab: 'overview' });
+      });
+    });
+
+    // 7b. Quick Focus Button on Row
     treeContainer.querySelectorAll('[data-dev-focus]').forEach((btn) => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -844,7 +857,7 @@ export class DeviceLayersPanel {
       });
     });
 
-    // 9. Click & Double-Click on Layer Row (Ctrl/Shift multi-select supported)
+    // 9. Click, Right-Click & Double-Click on Layer Row (Ctrl/Shift multi-select supported)
     treeContainer.querySelectorAll('[data-layer-device-id]').forEach((row) => {
       row.addEventListener('click', (e) => {
         const devId = row.getAttribute('data-layer-device-id');
@@ -855,6 +868,16 @@ export class DeviceLayersPanel {
         });
         if (this.autoFocusOnSelect && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
           this.focusCameraOnDevice(devId);
+        }
+      });
+
+      row.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const devId = row.getAttribute('data-layer-device-id');
+        const dev = devId ? this.deviceManager.getDeviceById(devId) : null;
+        if (dev) {
+          eventBus.emit('contextmenu:device', { device: dev, screenX: e.clientX, screenY: e.clientY });
         }
       });
 

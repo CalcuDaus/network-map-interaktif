@@ -152,10 +152,8 @@ export class Toolbar {
       e.stopPropagation();
       const willOpen = !this.navbarSearchWrapper?.classList.contains('open');
       this.closeNavbarDropdowns();
-      if (willOpen && this.navbarSearchWrapper) {
-        this.navbarSearchWrapper.classList.add('open');
-        this.btnToggleSearch?.setAttribute('aria-expanded', 'true');
-        setTimeout(() => this.globalSearchInput?.focus(), 20);
+      if (willOpen) {
+        this.openSearchDropdown();
       }
     });
 
@@ -169,6 +167,29 @@ export class Toolbar {
         this.closeNavbarDropdowns();
       }
     });
+
+    // Global Search Shortcut: Ctrl+K or '/' (outside form inputs)
+    window.addEventListener('keydown', (e) => {
+      const isCtrlK = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k';
+      const inInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName) || document.activeElement?.isContentEditable;
+      const isSlash = !inInput && !e.ctrlKey && !e.metaKey && !e.altKey && e.key === '/';
+
+      if (isCtrlK || isSlash) {
+        e.preventDefault();
+        this.closeNavbarDropdowns();
+        this.openSearchDropdown();
+      }
+    });
+  }
+
+  openSearchDropdown() {
+    if (!this.navbarSearchWrapper) return;
+    this.navbarSearchWrapper.classList.add('open');
+    this.btnToggleSearch?.setAttribute('aria-expanded', 'true');
+    setTimeout(() => {
+      this.globalSearchInput?.focus();
+      eventBus.emit('search:opened');
+    }, 20);
   }
 
   closeNavbarDropdowns() {

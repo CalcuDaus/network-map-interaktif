@@ -35,6 +35,7 @@ import { Room3DModal } from './ui/room-3d-modal.js';
 import { Object3DModal } from './ui/object-3d-modal.js';
 import { Device3DModelModal } from './ui/device-3d-modal.js';
 import { PortPickerModal } from './ui/port-picker-modal.js';
+import { DeviceDetailModal } from './ui/device-detail-modal.js';
 
 class NetMapApp {
   constructor() {
@@ -61,6 +62,7 @@ class NetMapApp {
     this.room3DModal = null;
     this.object3DModal = null;
     this.device3DModelModal = null;
+    this.deviceDetailModal = null;
     this.projectStorage = null;
     this.exportModal = null;
     this.projectModal = null;
@@ -156,7 +158,8 @@ class NetMapApp {
       this.searchUI = new SearchUI({
         inputElement: searchInput,
         searchEngine: this.searchEngine,
-        viewportNavigator: this.viewportNavigator
+        viewportNavigator: this.viewportNavigator,
+        deviceManager: this.deviceManager
       });
     }
 
@@ -255,6 +258,11 @@ class NetMapApp {
     this.portPickerModal = new PortPickerModal({
       deviceManager: this.deviceManager,
       cableManager: this.cableManager
+    });
+    this.deviceDetailModal = new DeviceDetailModal({
+      deviceManager: this.deviceManager,
+      cableManager: this.cableManager,
+      viewportNavigator: this.viewportNavigator
     });
     this.setup3DControls();
 
@@ -636,6 +644,11 @@ class NetMapApp {
         }
       }
 
+      // Don't trigger map shortcuts while DeviceDetailModal is open
+      if (this.deviceDetailModal?.isOpen()) {
+        return;
+      }
+
       // SketchUp-style 3D Navigation Shortcuts when 3D Map is active
       if (stateManager.getViewMode() === '3d') {
         const lower = e.key.toLowerCase();
@@ -697,6 +710,11 @@ class NetMapApp {
         if (e.key === '0') {
           e.preventDefault();
           this.map3DEngine?.zoomExtents();
+          return;
+        }
+        if (lower === 'd' && e.shiftKey && this.deviceManager?.selectedDeviceId) {
+          e.preventDefault();
+          this.deviceDetailModal?.show(this.deviceManager.selectedDeviceId, 'overview');
           return;
         }
         if (['w', 'a', 's', 'd', 'q', 'e', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(lower)) {
@@ -773,6 +791,13 @@ class NetMapApp {
         case 'K':
           e.preventDefault();
           this.mapScaleModal.show();
+          break;
+        case 'd':
+        case 'D':
+          if (!e.ctrlKey && !e.metaKey && this.deviceManager?.selectedDeviceId) {
+            e.preventDefault();
+            this.deviceDetailModal?.show(this.deviceManager.selectedDeviceId, 'overview');
+          }
           break;
         case 'Delete':
         case 'Backspace': {

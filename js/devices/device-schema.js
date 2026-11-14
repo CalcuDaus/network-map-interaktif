@@ -455,6 +455,297 @@ export function getDefaultDevicePorts(type = 'router', preset = '', customModelU
   ], 0.1, 0.28, 0.3);
 }
 
+export const FUNDING_SOURCE_PRESETS = [
+  'DAK',
+  'BOS Reguler',
+  'BOS Kinerja',
+  'APBD',
+  'APBN',
+  'Komite / Yayasan',
+  'Hibah',
+  'Mandiri'
+];
+
+export const DEVICE_CONDITION_OPTIONS = [
+  { id: 'baik', label: 'Baik / Layak Pakai', color: '#22c55e' },
+  { id: 'cukup', label: 'Cukup (Perlu Perhatian)', color: '#f59e0b' },
+  { id: 'rusak-ringan', label: 'Rusak Ringan', color: '#f97316' },
+  { id: 'rusak-berat', label: 'Rusak Berat / Non-Aktif', color: '#ef4444' }
+];
+
+const MODEL_HARDWARE_SPEC_PRESETS = [
+  {
+    keywords: ['rb1100ahx4', 'rb1100'],
+    specs: {
+      processor: 'Annapurna Alpine AL21400 Quad-Core 1.4 GHz (ARM 32-bit)',
+      ramStorage: '1 GB RAM • 128 MB NAND + SATA/M.2 Slot',
+      portsSummary: '13x Gigabit Ethernet (Port 13 PoE-Out Pasif), RS232, Dual PSU Redundan',
+      powerSupply: 'Dual AC 100-240V / DC 12-57V + PoE-In',
+      throughput: 'Up to 7.5 Gbps Routing / 1.8 Gbps IPsec',
+      dimensions: '443 x 148 x 44 mm (1U Rackmount)',
+      summary: 'Router Core Sekolah 13x Gigabit LAN, Quad-Core 1.4GHz, 1GB RAM, Dual PSU 1U Rackmount.'
+    }
+  },
+  {
+    keywords: ['rb750gr3', 'hex'],
+    specs: {
+      processor: 'MT7621A Dual-Core 880 MHz (4 Thread)',
+      ramStorage: '256 MB RAM • 16 MB Flash + microSD',
+      portsSummary: '5x Gigabit Ethernet, 1x USB 2.0 Type-A',
+      powerSupply: 'DC Jack 8-30V / Passive PoE-In Ether1',
+      throughput: 'Up to 1.9 Gbps',
+      dimensions: '113 x 89 x 28 mm (Desktop)',
+      summary: 'Router MikroTik hEX 5x Gigabit Port, Dual-Core 880MHz, 256MB RAM.'
+    }
+  },
+  {
+    keywords: ['ccr2116'],
+    specs: {
+      processor: 'AL73400 16-Core 2.0 GHz (ARM 64-bit)',
+      ramStorage: '16 GB DDR4 RAM • 128 MB NAND',
+      portsSummary: '13x Gigabit Ethernet, 4x 10G SFP+, 2x M.2 PCIe',
+      powerSupply: 'Dual Hot-Swap AC Power Supply',
+      throughput: 'Up to 45 Gbps+',
+      dimensions: '443 x 224 x 44 mm (1U Rackmount)',
+      summary: 'Cloud Core Router 16-Core 2GHz, 16GB RAM, 4x SFP+ 10G + 13x Gigabit.'
+    }
+  },
+  {
+    keywords: ['ccr2004'],
+    specs: {
+      processor: 'AL32400 Quad-Core 1.7 GHz (ARM 64-bit)',
+      ramStorage: '4 GB DDR4 RAM • 128 MB NAND',
+      portsSummary: '16x Gigabit Ethernet, 2x 10G SFP+ Cage',
+      powerSupply: 'Dual AC PSU',
+      throughput: 'Up to 18 Gbps',
+      dimensions: '443 x 210 x 44 mm (1U Rackmount)',
+      summary: 'MikroTik CCR2004 Quad-Core 1.7GHz, 4GB RAM, 16x Gigabit + 2x SFP+ 10G.'
+    }
+  },
+  {
+    keywords: ['rb5009'],
+    specs: {
+      processor: 'Marvell Armada 88F7040 Quad-Core 1.4 GHz',
+      ramStorage: '1 GB DDR4 RAM • 1 GB NAND',
+      portsSummary: '7x Gigabit Ethernet, 1x 2.5G Ethernet (PoE-In), 1x 10G SFP+, 1x USB 3.0',
+      powerSupply: 'DC 24-57V / 802.3af/at PoE-In',
+      throughput: 'Up to 9.4 Gbps',
+      dimensions: '220 x 125 x 22 mm',
+      summary: 'Router RB5009UPr 7x 1G + 1x 2.5G + 1x 10G SFP+, Quad-Core 1.4GHz, 1GB RAM.'
+    }
+  },
+  {
+    keywords: ['rb4011'],
+    specs: {
+      processor: 'AL21400 Quad-Core 1.4 GHz',
+      ramStorage: '1 GB RAM • 512 MB NAND',
+      portsSummary: '10x Gigabit Ethernet (Ether10 PoE-Out), 1x 10G SFP+',
+      powerSupply: 'DC 12-57V / PoE-In',
+      throughput: 'Up to 9.7 Gbps',
+      dimensions: '228 x 120 x 30 mm (Metal Enclosure)',
+      summary: 'MikroTik RB4011 10x Gigabit Port + 1x SFP+ 10G, Quad-Core 1.4GHz.'
+    }
+  },
+  {
+    keywords: ['crs326'],
+    specs: {
+      processor: '98DX3236 800 MHz (Switch Chip Marvell)',
+      ramStorage: '512 MB RAM • 16 MB Flash',
+      portsSummary: '24x Gigabit Ethernet, 2x 10G SFP+ Cage',
+      powerSupply: 'DC Jack 10-30V / Passive PoE-In',
+      throughput: 'Non-Blocking L2/L3 Hardware Switching 88 Gbps',
+      dimensions: '443 x 144 x 44 mm (1U Rackmount)',
+      summary: 'Cloud Router Switch 24x Gigabit LAN + 2x 10G SFP+, Dual Boot SwOS/RouterOS.'
+    }
+  },
+  {
+    keywords: ['crs328'],
+    specs: {
+      processor: '98DX3236 800 MHz',
+      ramStorage: '512 MB RAM • 16 MB Flash',
+      portsSummary: '24x Gigabit Ethernet (802.3af/at PoE-Out 450W), 4x 10G SFP+',
+      powerSupply: 'Internal AC PSU 500W',
+      throughput: 'Switching Capacity 128 Gbps',
+      dimensions: '443 x 305 x 44 mm (1U Rackmount)',
+      summary: 'Switch PoE+ 24x Gigabit (450W Total) + 4x 10G SFP+ Uplink.'
+    }
+  },
+  {
+    keywords: ['rap2260'],
+    specs: {
+      processor: 'Quad-Core Wireless SoC Wi-Fi 6',
+      ramStorage: '512 MB RAM • 128 MB Flash',
+      portsSummary: '1x 2.5G Multi-Gigabit PoE-In + 1x 1G LAN',
+      powerSupply: 'IEEE 802.3at PoE+ / DC 12V 2A (Max 18W)',
+      throughput: 'AX1800 Dual-Band (574 Mbps @2.4G + 1201 Mbps @5G)',
+      dimensions: '194 x 194 x 41.5 mm (Ceiling Mount)',
+      summary: 'Ruijie Reyee Wi-Fi 6 AX1800 Ceiling AP, 2.5G PoE-In, MU-MIMO & Mesh Cloud.'
+    }
+  },
+  {
+    keywords: ['ew1200g'],
+    specs: {
+      processor: 'Dual-Core 880 MHz SoC',
+      ramStorage: '128 MB DDR3 RAM • 16 MB Flash',
+      portsSummary: '1x Gigabit WAN + 3x Gigabit LAN, 6x Antena 6dBi',
+      powerSupply: 'DC 12V 1.5A',
+      throughput: 'AC1300 Dual-Band (400 Mbps @2.4G + 867 Mbps @5G)',
+      dimensions: '220 x 140 x 36 mm (Desktop / Wall)',
+      summary: 'Ruijie Reyee RG-EW1200G PRO AC1300 Dual-Band Full Gigabit Wireless Router.'
+    }
+  },
+  {
+    keywords: ['es216gc', 'es218gc'],
+    specs: {
+      processor: 'Realtek Managed Switch ASIC',
+      ramStorage: 'Packet Buffer 4.1 Mbit',
+      portsSummary: '16x Gigabit RJ45 Smart Cloud Managed',
+      powerSupply: 'Internal AC 100-240V (Max 12W)',
+      throughput: 'Switching Capacity 32 Gbps (Non-Blocking)',
+      dimensions: '440 x 165 x 44 mm (1U Rackmount / Desktop)',
+      summary: 'Ruijie Reyee Smart Managed Switch 16-Port Gigabit, VLAN 802.1Q, Loop Prevention.'
+    }
+  },
+  {
+    keywords: ['sg1024d'],
+    specs: {
+      processor: 'Unmanaged Gigabit Switch Controller',
+      ramStorage: 'Packet Buffer 4 Mbit',
+      portsSummary: '24x 10/100/1000 Mbps Auto-Negotiation RJ45',
+      powerSupply: 'Internal AC 100-240V (Green Ethernet)',
+      throughput: 'Switching Capacity 48 Gbps',
+      dimensions: '294 x 180 x 44 mm (1U Rackmount / Desktop)',
+      summary: 'TP-Link TL-SG1024D 24-Port Gigabit Unmanaged Switch, Plug & Play.'
+    }
+  },
+  {
+    keywords: ['sg108'],
+    specs: {
+      processor: 'Realtek 8-Port Gigabit Switch',
+      ramStorage: 'Packet Buffer 1.5 Mbit',
+      portsSummary: '8x 10/100/1000 Mbps RJ45 Steel Casing',
+      powerSupply: 'DC 9V 0.6A',
+      throughput: 'Switching Capacity 16 Gbps',
+      dimensions: '158 x 101 x 25 mm (Desktop / Wall)',
+      summary: 'TP-Link TL-SG108 8-Port Gigabit Metal Switch, IGMP Snooping & QoS.'
+    }
+  },
+  {
+    keywords: ['poe160s'],
+    specs: {
+      processor: 'IEEE 802.3at/af PoE+ Controller',
+      ramStorage: 'Passive Hardware Injector',
+      portsSummary: '1x Gigabit Data-In + 1x Gigabit PoE-Out',
+      powerSupply: 'AC 100-240V (Output PoE+ Max 30W)',
+      throughput: '1 Gbps Full-Duplex Pass-Through',
+      dimensions: '125 x 59 x 36 mm',
+      summary: 'TP-Link TL-PoE160S Gigabit PoE+ Injector hingga 30W untuk AP/CCTV jarak jauh.'
+    }
+  },
+  {
+    keywords: ['dl380p'],
+    specs: {
+      processor: 'Dual Intel Xeon E5-2600 v2 Series (Up to 24 Core)',
+      ramStorage: 'ECC DDR3 Registered RAM (Up to 768 GB) • SAS/SATA RAID',
+      portsSummary: '4x Gigabit FlexibleLOM + 4x Additional NIC + 1x iLO 4 Mgmt',
+      powerSupply: 'Dual Hot-Plug Redundant PSU 460W / 750W',
+      throughput: 'PCIe 3.0 High-I/O Enterprise Server',
+      dimensions: '2U Rackmount Server Chassis',
+      summary: 'HPE ProLiant DL380p Gen8 Server Aplikasi Sekolah (E-Rapor, CBT, Dapodik, LMS).'
+    }
+  },
+  {
+    keywords: ['dahua_nvr', 'nvr'],
+    specs: {
+      processor: 'Quad-Core Embedded NVR Processor',
+      ramStorage: 'Dual/Single SATA HDD Bay (Up to 10TB)',
+      portsSummary: '1x Gigabit LAN, HDMI + VGA Simultaneous, 2x USB',
+      powerSupply: 'DC 12V 2A',
+      throughput: '80 Mbps Incoming Bandwidth (Up to 8CH IP Cam 8MP)',
+      dimensions: '260 x 225 x 48 mm (Compact 1U)',
+      summary: 'Dahua NVR Network Video Recorder 8-Channel H.265+, Pemantauan CCTV Sekolah.'
+    }
+  },
+  {
+    keywords: ['dahua_ip_cam', 'cctv', 'ipc'],
+    specs: {
+      processor: 'CMOS Image Sensor Full HD / 4MP IR Night Vision',
+      ramStorage: 'MicroSD Slot (Up to 256 GB)',
+      portsSummary: '1x RJ45 100Mbps PoE (802.3af)',
+      powerSupply: 'PoE 802.3af / DC 12V (< 5.5W)',
+      throughput: 'H.265 / H.264 Dual-Stream RTSP/ONVIF',
+      dimensions: 'Dome / Bullet IP67 Weatherproof',
+      summary: 'Kamera CCTV IP PoE Resolusi Tinggi dengan Infrared Night Vision & ONVIF.'
+    }
+  }
+];
+
+/**
+ * Resolve recommended default hardware specifications based on model/type/ports.
+ * @param {Object} [device]
+ * @returns {{processor: string, ramStorage: string, portsSummary: string, powerSupply: string, throughput: string, dimensions: string, summary: string}}
+ */
+export function getDefaultHardwareSpecs(device = {}) {
+  const haystack = [
+    device.model,
+    device.name,
+    device.brand,
+    device.type,
+    device.spatial3d?.customModelUrl
+  ].filter(Boolean).join(' ').toLowerCase();
+
+  for (const entry of MODEL_HARDWARE_SPEC_PRESETS) {
+    if (entry.keywords.some((kw) => haystack.includes(kw))) {
+      return { ...entry.specs };
+    }
+  }
+
+  const portCount = Array.isArray(device.ports) ? device.ports.length : 0;
+  const type = device.type || 'custom';
+  if (type.includes('switch') || type.includes('crs') || type.includes('sg') || type.includes('es2')) {
+    return {
+      processor: 'Embedded L2/L3 Switch ASIC',
+      ramStorage: 'Buffer & Flash Standar',
+      portsSummary: `${portCount || 8}x Port RJ45 / SFP+`,
+      powerSupply: 'AC 100-240V / DC Adapter',
+      throughput: 'Wire-Speed Non-Blocking Switching',
+      dimensions: 'Rackmount / Desktop Enclosure',
+      summary: `${device.brand || ''} ${device.model || 'Network Switch'} (${portCount || 8} Port) untuk distribusi jaringan sekolah.`.trim()
+    };
+  }
+  if (type.includes('ap') || type.includes('access-point') || type.includes('wireless')) {
+    return {
+      processor: 'Dual-Core / Quad-Core Wireless SoC',
+      ramStorage: '128-512 MB RAM',
+      portsSummary: `${portCount || 2}x LAN/PoE + Antena Dual-Band Wi-Fi`,
+      powerSupply: 'PoE 802.3af/at / DC 12V',
+      throughput: 'Dual-Band 2.4 GHz & 5 GHz',
+      dimensions: 'Ceiling / Wall Mount Enclosure',
+      summary: `${device.brand || ''} ${device.model || 'Access Point'} Wireless hotspot ruang kelas/area sekolah.`.trim()
+    };
+  }
+  if (['server', 'nvr', 'storage', 'database'].includes(type)) {
+    return {
+      processor: 'Multi-Core Server / Storage CPU',
+      ramStorage: 'Server RAM & Storage Array',
+      portsSummary: `${portCount || 2}x Gigabit/10G NIC`,
+      powerSupply: 'Redundant / AC Power Supply',
+      throughput: 'High-Availability LAN/Service',
+      dimensions: 'Rackmount / Tower Chassis',
+      summary: `${device.brand || ''} ${device.model || 'Server'} layanan sistem & database sekolah.`.trim()
+    };
+  }
+  return {
+    processor: 'Embedded Network Processor',
+    ramStorage: 'Standar Pabrikan',
+    portsSummary: portCount > 0 ? `${portCount}x Port Jaringan` : 'Standar RJ45 / Wireless',
+    powerSupply: 'AC / DC / PoE',
+    throughput: 'Gigabit / Fast Ethernet',
+    dimensions: 'Standar Perangkat Jaringan',
+    summary: `${device.brand || ''} ${device.model || device.name || 'Perangkat Jaringan'} infrastruktur jaringan sekolah.`.trim()
+  };
+}
+
 export const DeviceSchema = {
   /**
    * Factory function to create a validated device object with default values
@@ -497,7 +788,9 @@ export const DeviceSchema = {
         rackUnit: rawSpatial.rackUnit !== undefined ? rawSpatial.rackUnit : defaultSpatial.rackUnit,
         customModelUrl: resolvedModelUrl,
         modelScale: typeof rawSpatial.modelScale === 'number' ? rawSpatial.modelScale : 1,
-        rotationY: typeof rawSpatial.rotationY === 'number' ? rawSpatial.rotationY : 0
+        rotationX: typeof rawSpatial.rotationX === 'number' ? rawSpatial.rotationX : (defaultSpatial.rotationX || 0),
+        rotationY: typeof rawSpatial.rotationY === 'number' ? rawSpatial.rotationY : (defaultSpatial.rotationY || 0),
+        rotationZ: typeof rawSpatial.rotationZ === 'number' ? rawSpatial.rotationZ : (defaultSpatial.rotationZ || 0)
       },
       wirelessCoverage: params.wirelessCoverage ? {
         enabled: Boolean(params.wirelessCoverage.enabled),
@@ -522,12 +815,45 @@ export const DeviceSchema = {
         x: typeof params.position?.x === 'number' ? params.position.x : 0.5,
         y: typeof params.position?.y === 'number' ? params.position.y : 0.5
       },
+      inventory: {
+        purchaseYear: String(params.inventory?.purchaseYear ?? params.purchaseYear ?? ''),
+        fundingSource: String(params.inventory?.fundingSource ?? params.fundingSource ?? ''),
+        inventoryCode: String(params.inventory?.inventoryCode ?? params.inventoryCode ?? ''),
+        condition: params.inventory?.condition || params.condition || 'baik',
+        serialNumber: String(params.inventory?.serialNumber ?? params.serialNumber ?? ''),
+        unitPrice: String(params.inventory?.unitPrice ?? params.unitPrice ?? ''),
+        vendor: String(params.inventory?.vendor ?? params.vendor ?? ''),
+        responsiblePerson: String(params.inventory?.responsiblePerson ?? params.responsiblePerson ?? '')
+      },
+      specs: {
+        processor: String(params.specs?.processor ?? ''),
+        ramStorage: String(params.specs?.ramStorage ?? ''),
+        portsSummary: String(params.specs?.portsSummary ?? ''),
+        powerSupply: String(params.specs?.powerSupply ?? ''),
+        throughput: String(params.specs?.throughput ?? ''),
+        dimensions: String(params.specs?.dimensions ?? ''),
+        summary: String(params.specs?.summary ?? params.specifications ?? '')
+      },
       network: {
         ip: params.network?.ip || params.ip || '',
         mac: params.network?.mac || params.mac || '',
         subnet: params.network?.subnet || params.subnet || '255.255.255.0',
+        gateway: params.network?.gateway || params.gateway || '',
+        dns: params.network?.dns || params.dns || '',
+        connectionMode: params.network?.connectionMode || 'static',
         vlan: params.network?.vlan !== undefined ? Number(params.network.vlan) : (params.vlan !== undefined ? Number(params.vlan) : 1),
-        hostname: params.network?.hostname || params.hostname || ''
+        vlanList: params.network?.vlanList || '',
+        hostname: params.network?.hostname || params.hostname || '',
+        ssid: params.network?.ssid || params.ssid || '',
+        ssidSecondary: params.network?.ssidSecondary || '',
+        wifiBand: params.network?.wifiBand || '',
+        wifiChannel: params.network?.wifiChannel || '',
+        wifiSecurity: params.network?.wifiSecurity || '',
+        wifiPasswordHint: params.network?.wifiPasswordHint || '',
+        managementAccess: params.network?.managementAccess || '',
+        managementUser: params.network?.managementUser || '',
+        services: params.network?.services || '',
+        configSnippet: params.network?.configSnippet || ''
       },
       status: params.status || 'unknown',      // online, offline, warning, unknown
       layerVisible: params.layerVisible !== undefined ? Boolean(params.layerVisible) : true,

@@ -3,6 +3,8 @@
  * Structured tables and segmentation explorer
  */
 
+import { eventBus } from '../core/event-bus.js';
+import { stateManager } from '../core/state-manager.js';
 import { DEVICE_CATEGORIES, DEVICE_STATUSES } from '../devices/device-library.js';
 
 export class IpVlanModal {
@@ -195,14 +197,18 @@ export class IpVlanModal {
 
       html += `
         <tr style="border-bottom: 1px solid var(--border-color); transition: background 120ms ease;">
-          <td style="padding: 10px 12px; font-family: var(--font-mono); color: #38bdf8; font-weight: 600;">
-            ${dev.network.ip}
+          <td style="padding: 10px 12px; font-family: var(--font-mono); font-weight: 600;">
+            <span data-goto-id="${dev.id}" class="ipam-goto-link" title="Klik untuk langsung menuju perangkat ini di peta" style="color: var(--accent-sky, #0284c7); cursor: pointer; text-decoration: underline dotted;">
+              ${this.escapeHtml(dev.network.ip)}
+            </span>
           </td>
           <td style="padding: 10px 12px; font-family: var(--font-mono); color: var(--text-muted);">
-            ${dev.network.subnet || '255.255.255.0'}
+            ${this.escapeHtml(dev.network.subnet || '255.255.255.0')}
           </td>
           <td style="padding: 10px 12px; font-weight: 600; color: var(--text-primary);">
-            ${this.escapeHtml(dev.name)}
+            <span data-goto-id="${dev.id}" class="ipam-goto-link" title="Klik untuk langsung menuju perangkat ini di peta" style="cursor: pointer; text-decoration: underline dotted;">
+              ${this.escapeHtml(dev.name)}
+            </span>
           </td>
           <td style="padding: 10px 12px;">
             <span style="font-size: 10px; font-weight: 700; color: ${cat.color}; background: var(--bg-primary); padding: 2px 6px; border-radius: 4px;">
@@ -220,7 +226,10 @@ export class IpVlanModal {
           <td style="padding: 10px 12px; color: var(--text-muted);">
             ${this.escapeHtml(dev.location || '-')}
           </td>
-          <td style="padding: 10px 12px; text-align: right;">
+          <td style="padding: 10px 12px; text-align: right; white-space: nowrap;">
+            <button class="btn btn-secondary btn-sm" data-detail-id="${dev.id}" style="font-size: 11px; margin-right: 4px;">
+              Detail
+            </button>
             <button class="btn btn-secondary btn-sm" data-goto-id="${dev.id}" style="font-size: 11px;">
               Fokus
             </button>
@@ -232,17 +241,42 @@ export class IpVlanModal {
     html += `</tbody></table>`;
     container.innerHTML = html;
 
-    // Attach goto click
-    container.querySelectorAll('[data-goto-id]').forEach((btn) => {
+    // Attach detail click
+    container.querySelectorAll('[data-detail-id]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        const id = btn.getAttribute('data-goto-id');
-        const dev = this.deviceManager.getDeviceById(id);
-        if (dev) {
+        const id = btn.getAttribute('data-detail-id');
+        if (id) {
           this.hide();
-          this.viewportNavigator.focusOnDevice(dev, 1.4);
+          eventBus.emit('modal:open-device-detail', { deviceId: id, tab: 'network' });
         }
       });
     });
+
+    // Attach goto click (IP cell, device name cell, and Fokus button)
+    container.querySelectorAll('[data-goto-id]').forEach((el) => {
+      el.addEventListener('click', () => {
+        const id = el.getAttribute('data-goto-id');
+        const dev = this.deviceManager.getDeviceById(id);
+        this.focusDeviceFromModal(dev);
+      });
+    });
+  }
+
+  /**
+   * Un-hide, select, and focus camera onto target device in 2D/3D mode
+   * @param {Object|null} dev
+   */
+  focusDeviceFromModal(dev) {
+    if (!dev) return;
+    this.hide();
+    if (dev.layerVisible === false) {
+      this.deviceManager.updateDevice(dev.id, { layerVisible: true });
+    }
+    this.deviceManager.selectDevice(dev.id);
+    this.viewportNavigator?.focusOnDevice(dev, 1.6);
+    if (stateManager.getViewMode() === '3d') {
+      eventBus.emit('map3d:focus-device', { deviceId: dev.id });
+    }
   }
 
   renderVlanCards(container, devices, filterQuery, countLabel) {
@@ -321,10 +355,7 @@ export class IpVlanModal {
       tag.addEventListener('click', () => {
         const id = tag.getAttribute('data-goto-id');
         const dev = this.deviceManager.getDeviceById(id);
-        if (dev) {
-          this.hide();
-          this.viewportNavigator.focusOnDevice(dev, 1.4);
-        }
+        this.focusDeviceFromModal(dev);
       });
     });
   }
