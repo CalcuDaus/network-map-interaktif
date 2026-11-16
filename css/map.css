@@ -229,18 +229,92 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  padding: 6px 12px;
+  padding: 6px 10px 6px 12px;
   background-color: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
   font-size: 11px;
   color: var(--text-secondary);
-  pointer-events: none;
+  pointer-events: auto;
+  max-width: calc(100% - 32px);
 }
 
 .hud-3d-hints strong {
   color: var(--text-primary);
+}
+
+.hud-3d-hint-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 6px;
+  margin-left: 2px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.hud-3d-hint-toggle-btn:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--accent-blue);
+}
+
+.hud-3d-hint-toggle-label {
+  display: none;
+}
+
+.hud-3d-hints.is-minimized {
+  padding: 4px 8px;
+  gap: 0;
+}
+
+.hud-3d-hints.is-minimized > span {
+  display: none;
+}
+
+.hud-3d-hints.is-minimized .hud-3d-hint-toggle-btn {
+  margin-left: 0;
+  border-color: transparent;
+  background-color: transparent;
+  padding: 0 4px;
+}
+
+.hud-3d-hints.is-minimized .hud-3d-hint-toggle-label {
+  display: inline;
+}
+
+.hud-3d-hints.is-minimized .hud-3d-hint-toggle-btn svg {
+  transform: rotate(180deg);
+}
+
+/* Minimized state for top #hud-3d-controls bar */
+.hud-3d-toggle-btn .hud-3d-toggle-label {
+  display: none;
+}
+
+#hud-3d-controls.is-minimized {
+  padding: 5px 8px;
+  gap: 6px;
+}
+
+#hud-3d-controls.is-minimized > :not(#btn-3d-toggle-controls):not(#btn-3d-exit-fullscreen) {
+  display: none !important;
+}
+
+#hud-3d-controls.is-minimized #btn-3d-toggle-controls .hud-3d-toggle-label {
+  display: inline;
+}
+
+#hud-3d-controls.is-minimized #btn-3d-toggle-controls svg {
+  transform: rotate(180deg);
 }
 
 #map-3d-container canvas {

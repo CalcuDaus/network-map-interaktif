@@ -214,6 +214,22 @@ export const BUILTIN_GLB_MODELS = [
     ]
   },
   {
+    id: 'es208gc-v2',
+    label: 'Ruijie RG-ES208GC-V2 (8-Port Gigabit Smart Switch)',
+    url: 'assets/models/ruijie_rg_es208gc_v2.glb',
+    keywords: ['es208gc', 'ruijie_rg_es208gc_v2', 'rg-es208gc'],
+    ports: [
+      { name: 'Gi0/1', type: 'rj45', speed: '1G', local3d: { x: -0.3006, y: 0.1198, z: 0.4599 } },
+      { name: 'Gi0/2', type: 'rj45', speed: '1G', local3d: { x: -0.1869, y: 0.1198, z: 0.4599 } },
+      { name: 'Gi0/3', type: 'rj45', speed: '1G', local3d: { x: -0.0731, y: 0.1198, z: 0.4599 } },
+      { name: 'Gi0/4', type: 'rj45', speed: '1G', local3d: { x: 0.0406, y: 0.1198, z: 0.4599 } },
+      { name: 'Gi0/5', type: 'rj45', speed: '1G', local3d: { x: 0.1544, y: 0.1198, z: 0.4599 } },
+      { name: 'Gi0/6', type: 'rj45', speed: '1G', local3d: { x: 0.2681, y: 0.1198, z: 0.4599 } },
+      { name: 'Gi0/7', type: 'rj45', speed: '1G', local3d: { x: 0.3819, y: 0.1198, z: 0.4599 } },
+      { name: 'Gi0/8', type: 'rj45', speed: '1G', local3d: { x: 0.4956, y: 0.1198, z: 0.4599 } }
+    ]
+  },
+  {
     id: 'rb750gr3',
     label: 'MikroTik hEX RB750Gr3 (5-Port Gigabit Router)',
     name: 'MikroTik hEX RB750Gr3',
@@ -287,7 +303,8 @@ const BUILTIN_META_BY_ID = {
   'tl-sg108': { name: 'TP-Link TL-SG108', brand: 'TP-Link', model: 'TL-SG108', deviceType: 'unmanaged-switch', category: 'distribution', customIcon: 'switch' },
   'tl-sg1024d': { name: 'TP-Link TL-SG1024D', brand: 'TP-Link', model: 'TL-SG1024D', deviceType: 'tplink-sg1024d', category: 'distribution', customIcon: 'switch' },
   'dl380p-gen8': { name: 'HPE ProLiant DL380p Gen8', brand: 'HPE', model: 'DL380p Gen8', deviceType: 'server', category: 'core', customIcon: 'server' },
-  'es216gc-v2': { name: 'Ruijie RG-ES216GC-V2', brand: 'Ruijie', model: 'RG-ES216GC-V2', deviceType: 'managed-switch', category: 'distribution', customIcon: 'switch' }
+  'es216gc-v2': { name: 'Ruijie RG-ES216GC-V2', brand: 'Ruijie', model: 'RG-ES216GC-V2', deviceType: 'managed-switch', category: 'distribution', customIcon: 'switch' },
+  'es208gc-v2': { name: 'Ruijie RG-ES208GC-V2', brand: 'Ruijie', model: 'RG-ES208GC-V2', deviceType: 'managed-switch', category: 'distribution', customIcon: 'switch' }
 };
 
 export function getBuiltinGlbCustomTemplates() {
@@ -604,6 +621,18 @@ const MODEL_HARDWARE_SPEC_PRESETS = [
       throughput: 'Switching Capacity 32 Gbps (Non-Blocking)',
       dimensions: '440 x 165 x 44 mm (1U Rackmount / Desktop)',
       summary: 'Ruijie Reyee Smart Managed Switch 16-Port Gigabit, VLAN 802.1Q, Loop Prevention.'
+    }
+  },
+  {
+    keywords: ['es208gc'],
+    specs: {
+      processor: 'Realtek Managed Switch ASIC',
+      ramStorage: 'Packet Buffer 1.5 Mbit',
+      portsSummary: '8x Gigabit RJ45 Smart Cloud Managed',
+      powerSupply: 'DC 5V 1A / 9V 0.6A (Max 4.5W)',
+      throughput: 'Switching Capacity 16 Gbps (Non-Blocking)',
+      dimensions: '160 x 108 x 28 mm (Desktop / Wall-Mount)',
+      summary: 'Ruijie Reyee Smart Managed Switch 8-Port Gigabit, VLAN 802.1Q, Loop Prevention.'
     }
   },
   {

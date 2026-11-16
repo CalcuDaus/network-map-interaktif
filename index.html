@@ -18,7 +18,7 @@
   <link rel="stylesheet" href="css/main.css?v=20261113-3d-sketchup">
   <link rel="stylesheet" href="css/layout.css?v=20261115-search">
   <link rel="stylesheet" href="css/components.css?v=20261115-simplecm">
-  <link rel="stylesheet" href="css/map.css?v=20261113-3d-sketchup">
+  <link rel="stylesheet" href="css/map.css?v=20261116-hudmin">
 
   <!-- Vendor Libraries (Offline-First with CDN fallback) -->
   <script src="assets/vendor/konva.min.js"></script>
@@ -156,6 +156,19 @@
               title="Kelola / Buka Proyek Jaringan">
               <i data-lucide="folder" style="width: 14px; height: 14px; color: var(--status-warning);"></i>
               <span>Proyek</span>
+            </button>
+            <div style="height: 1px; background: var(--border-color); margin: 3px 4px;"></div>
+            <button id="btn-menu-toggle-3d-nav" class="navbar-dropdown-item" role="menuitem"
+              title="Tampilkan / Minimize Bar Navigasi 3D (Orbit, Pan, dll)">
+              <i data-lucide="sliders-horizontal" style="width: 14px; height: 14px; color: var(--accent-green);"></i>
+              <span style="flex: 1;">Navigasi 3D</span>
+              <span id="badge-menu-3d-nav" style="font-size: 10px; opacity: 0.75;">Tampil</span>
+            </button>
+            <button id="btn-menu-toggle-3d-hints" class="navbar-dropdown-item" role="menuitem"
+              title="Tampilkan / Minimize Panduan Kontrol 3D di Bawah">
+              <i data-lucide="help-circle" style="width: 14px; height: 14px; color: var(--accent-green);"></i>
+              <span style="flex: 1;">Panduan 3D</span>
+              <span id="badge-menu-3d-hints" style="font-size: 10px; opacity: 0.75;">Tampil</span>
             </button>
           </div>
         </div>
@@ -339,6 +352,11 @@
 
         <!-- Floating 3D Controls HUD (SketchUp-Style Navigation Bar) -->
         <div id="hud-3d-controls" class="hud-3d-controls hidden" style="display: none;">
+          <button id="btn-3d-toggle-controls" class="hud-3d-btn hud-3d-toggle-btn" type="button"
+            title="Minimize Bar Navigasi 3D" aria-expanded="true">
+            <i data-lucide="chevron-up" style="width: 13px; height: 13px;"></i>
+            <span class="hud-3d-toggle-label">Navigasi 3D</span>
+          </button>
           <!-- SketchUp Camera Tool Selector -->
           <div class="hud-3d-group" title="Alat Navigasi ala SketchUp">
             <button id="btn-3d-tool-orbit" class="hud-3d-btn active" data-tool3d="orbit"
@@ -473,6 +491,11 @@
           <span><strong>Multi-Pilih:</strong> Ctrl+Klik / Ctrl+Drag Box</span>
           <span>•</span>
           <span><strong>WASD / QE:</strong> Jalan</span>
+          <button id="btn-3d-toggle-hints" class="hud-3d-hint-toggle-btn" type="button"
+            title="Minimize Panduan Kontrol 3D" aria-expanded="true">
+            <i data-lucide="chevron-down" style="width: 13px; height: 13px;"></i>
+            <span class="hud-3d-hint-toggle-label">Panduan 3D</span>
+          </button>
         </div>
 
         <!-- Compass / North Indicator (Top Right) -->
@@ -595,7 +618,7 @@
   </div>
 
   <!-- Application Bootstrap (Bundled for file:// and http:// compatibility) -->
-  <script src="js/bundle.js?v=20261115-simplecm"></script>
+  <script src="js/bundle.js?v=20261116-hudmin"></script>
 </body>
 
 </html>

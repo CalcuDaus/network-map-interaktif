@@ -1,7 +1,7 @@
 
 
 # Project Memory — network-map-interaktif
-> 46 notes | Score threshold: >40
+> 47 notes | Score threshold: >40
 
 ## Safety — Never Run Destructive Commands
 
@@ -23,19 +23,17 @@
 - **🟢 Edited docker-compose.yml (73 changes, 8min) — confirmed 3x**
 - **🟢 Edited index.html (5 changes, 15min) — confirmed 3x**
 - **convention in .gitignore**
-- **convention in .gitignore**
 - **🟢 Edited docker-compose.yml (72 changes, 57min)**
+- **🟢 Edited docker-compose.yml (150 changes, 28min)**
 
 ## Project Standards
 
 - 🟢 Edited docker-compose.yml (73 changes, 8min) — confirmed 3x
 - 🟢 Edited index.html (5 changes, 15min) — confirmed 3x
 - convention in .gitignore
+- Fixed null crash in Quick — prevents XSS injection attacks — confirmed 4x
 - convention in .gitignore
 - convention in .gitignore
-- Version your API from day 1 (/api/v1/)
-- Use consistent response format across all endpoints
-- Implement soft delete for important data — don't hard delete without confirmation
 
 ## Learned Patterns
 

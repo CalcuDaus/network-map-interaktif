@@ -573,6 +573,65 @@ class NetMapApp {
       this.map3DEngine?.setShowLabels(showLabels);
     });
 
+    // Minimize / Expand toggles for #hud-3d-controls and #hud-3d-hints (persisted in localStorage)
+    const CONTROLS_MIN_KEY = 'netmap_hud3d_controls_min';
+    const HINTS_MIN_KEY = 'netmap_hud3d_hints_min';
+    const btnToggleControls = document.getElementById('btn-3d-toggle-controls');
+    const btnToggleHints = document.getElementById('btn-3d-toggle-hints');
+    const btnMenuToggle3dNav = document.getElementById('btn-menu-toggle-3d-nav');
+    const btnMenuToggle3dHints = document.getElementById('btn-menu-toggle-3d-hints');
+    const badgeMenu3dNav = document.getElementById('badge-menu-3d-nav');
+    const badgeMenu3dHints = document.getElementById('badge-menu-3d-hints');
+
+    let isControlsMinimized = false;
+    let isHintsMinimized = false;
+    try {
+      isControlsMinimized = localStorage.getItem(CONTROLS_MIN_KEY) === '1';
+      isHintsMinimized = localStorage.getItem(HINTS_MIN_KEY) === '1';
+    } catch { /* ignore storage errors */ }
+
+    const applyHudMinimizeState = () => {
+      hud3d?.classList.toggle('is-minimized', isControlsMinimized);
+      if (btnToggleControls) {
+        btnToggleControls.setAttribute('aria-expanded', String(!isControlsMinimized));
+        btnToggleControls.title = isControlsMinimized
+          ? 'Tampilkan Bar Navigasi 3D'
+          : 'Minimize Bar Navigasi 3D';
+      }
+      if (badgeMenu3dNav) {
+        badgeMenu3dNav.textContent = isControlsMinimized ? 'Minimal' : 'Tampil';
+      }
+
+      hud3dHints?.classList.toggle('is-minimized', isHintsMinimized);
+      if (btnToggleHints) {
+        btnToggleHints.setAttribute('aria-expanded', String(!isHintsMinimized));
+        btnToggleHints.title = isHintsMinimized
+          ? 'Tampilkan Panduan Kontrol 3D'
+          : 'Minimize Panduan Kontrol 3D';
+      }
+      if (badgeMenu3dHints) {
+        badgeMenu3dHints.textContent = isHintsMinimized ? 'Minimal' : 'Tampil';
+      }
+    };
+
+    const toggleControlsMin = () => {
+      isControlsMinimized = !isControlsMinimized;
+      try { localStorage.setItem(CONTROLS_MIN_KEY, isControlsMinimized ? '1' : '0'); } catch { /* ignore */ }
+      applyHudMinimizeState();
+    };
+
+    const toggleHintsMin = () => {
+      isHintsMinimized = !isHintsMinimized;
+      try { localStorage.setItem(HINTS_MIN_KEY, isHintsMinimized ? '1' : '0'); } catch { /* ignore */ }
+      applyHudMinimizeState();
+    };
+
+    applyHudMinimizeState();
+    btnToggleControls?.addEventListener('click', toggleControlsMin);
+    btnToggleHints?.addEventListener('click', toggleHintsMin);
+    btnMenuToggle3dNav?.addEventListener('click', toggleControlsMin);
+    btnMenuToggle3dHints?.addEventListener('click', toggleHintsMin);
+
     // Rooms, 3D Object Studio & Device 3D Model Modals
     document.getElementById('btn-3d-rooms')?.addEventListener('click', () => {
       this.room3DModal?.show();
