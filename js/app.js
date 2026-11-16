@@ -471,6 +471,16 @@ class NetMapApp {
       if (hud3d) hud3d.style.display = is3d ? 'flex' : 'none';
       hud3dHints?.classList.toggle('hidden', !is3d);
       if (hud3dHints) hud3dHints.style.display = is3d ? 'flex' : 'none';
+      const hud3dSimInspector = document.getElementById('hud-3d-sim-inspector');
+      if (!is3d && hud3dSimInspector) {
+        hud3dSimInspector.classList.add('hidden');
+        hud3dSimInspector.style.display = 'none';
+      }
+      const hud3dAvatarBar = document.getElementById('hud-3d-avatar-bar');
+      if (!is3d && hud3dAvatarBar) {
+        hud3dAvatarBar.classList.add('hidden');
+        hud3dAvatarBar.style.display = 'none';
+      }
 
       if (is3d) {
         this.map3DEngine?.activate();
@@ -543,6 +553,16 @@ class NetMapApp {
       });
     });
 
+    // Simulator Auto-Focus on Device Click toggle
+    const btnAutoFocus = document.getElementById('btn-3d-autofocus');
+    if (btnAutoFocus && this.map3DEngine) {
+      btnAutoFocus.classList.toggle('active', Boolean(this.map3DEngine.autoFocusOnClick));
+      btnAutoFocus.addEventListener('click', () => {
+        const nextState = this.map3DEngine.toggleAutoFocusOnClick();
+        btnAutoFocus.classList.toggle('active', nextState);
+      });
+    }
+
     // Object scale multiplier
     document.getElementById('select-3d-scale')?.addEventListener('change', (e) => {
       const val = Number(e.target.value) || 1;
@@ -571,6 +591,13 @@ class NetMapApp {
       showLabels = !showLabels;
       btnLabels.classList.toggle('active', showLabels);
       this.map3DEngine?.setShowLabels(showLabels);
+    });
+
+    // Mode Teknisi (Roblox-like 3D character walker) toggle
+    const btnAvatar = document.getElementById('btn-3d-avatar');
+    btnAvatar?.addEventListener('click', () => {
+      const nextState = this.map3DEngine?.toggleAvatarMode();
+      btnAvatar.classList.toggle('active', Boolean(nextState));
     });
 
     // Minimize / Expand toggles for #hud-3d-controls and #hud-3d-hints (persisted in localStorage)
@@ -766,6 +793,16 @@ class NetMapApp {
           this.object3DModal?.show();
           return;
         }
+        if (lower === 'g' && !e.ctrlKey && !e.metaKey) {
+          e.preventDefault();
+          this.map3DEngine?.toggleAvatarMode();
+          return;
+        }
+        if (lower === 'f' && this.map3DEngine?.avatarMode && !e.ctrlKey && !e.metaKey) {
+          e.preventDefault();
+          this.map3DEngine.inspectNearestDeviceFromAvatar();
+          return;
+        }
         if (e.key === '0') {
           e.preventDefault();
           this.map3DEngine?.zoomExtents();
@@ -780,6 +817,16 @@ class NetMapApp {
           return; // Handled smoothly by Map3DEngine walk loop
         }
         if (e.key === 'Escape') {
+          if (this.map3DEngine?.simulatorFocusedDeviceId || this.map3DEngine?.pendingCableSourceId) {
+            if (this.map3DEngine.pendingCableSourceId && !this.map3DEngine.simulatorFocusedDeviceId) {
+              this.map3DEngine.pendingCableSourceId = null;
+              this.map3DEngine.pendingCableSourcePort = '';
+              this.map3DEngine.syncDevices();
+              this.map3DEngine.syncCables();
+            } else {
+              this.map3DEngine.exitSimulatorFocus({ restoreCamera: true });
+            }
+          }
           this.deviceManager.deselectDevice();
           this.cableManager.deselectConnection();
           stateManager.deselectObject3d?.();

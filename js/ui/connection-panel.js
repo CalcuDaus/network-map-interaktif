@@ -1094,7 +1094,15 @@ export class ConnectionPanel {
 
     eventBus.on('connection:updated', (cable) => {
       if (!cable || this.currentCable?.id !== cable.id) return;
+      const prevRouteLen = Array.isArray(this.currentCable.route) ? this.currentCable.route.length : 0;
+      const nextRouteLen = Array.isArray(cable.route) ? cable.route.length : 0;
+      const prevStyle = this.currentCable.details?.pathStyle;
+      const nextStyle = cable.details?.pathStyle;
       this.currentCable = cable;
+      if (prevRouteLen !== nextRouteLen || prevStyle !== nextStyle) {
+        this.renderCableForm(cable);
+        return;
+      }
       const d = cable.details || {};
       const syncPair = (numId, sldId, rawVal, sliderFallback) => {
         const numEl = document.getElementById(numId);

@@ -265,7 +265,18 @@ export function create3DPortsSubGroup(ports = [], portStatusMap = new Map(), isC
     const linkState = portStatusMap.get(p.name);
     const isConnected = Boolean(linkState);
     if (isCustomGlb && !isConnected) {
-      // Leave the .GLB model's own sculpted RJ45/SFP port cavity completely clean when unplugged
+      // Keep sculpted .GLB port cavity visually clean while exposing an accurate raycast socket hitbox
+      const hitGeo = new THREE.BoxGeometry(0.028, 0.026, 0.036);
+      const hitMat = new THREE.MeshBasicMaterial({
+        transparent: true,
+        opacity: 0,
+        depthWrite: false
+      });
+      const hitSocket = new THREE.Mesh(hitGeo, hitMat);
+      hitSocket.position.set(lx, ly, lz + 0.008 * zSign);
+      hitSocket.userData.portName = p.name;
+      hitSocket.userData.isPortSocket = true;
+      group.add(hitSocket);
       return;
     }
 
@@ -282,6 +293,7 @@ export function create3DPortsSubGroup(ports = [], portStatusMap = new Map(), isC
     const socketMesh = new THREE.Mesh(socketGeo, socketMat);
     socketMesh.position.set(lx, ly, lz);
     socketMesh.userData.portName = p.name;
+    socketMesh.userData.isPortSocket = true;
     group.add(socketMesh);
 
     let ledColor = 0x475569; // unplugged
@@ -302,6 +314,7 @@ export function create3DPortsSubGroup(ports = [], portStatusMap = new Map(), isC
       ledMesh.position.set(lx, ly + 0.028, lz + zSign * 0.012);
     }
     ledMesh.userData.portName = p.name;
+    ledMesh.userData.isPortSocket = true;
     group.add(ledMesh);
   });
 
@@ -1080,6 +1093,214 @@ export function createCustomObject3DGroup(obj, normToWorldFn, isSelected = false
   }
 
   return group;
+}
+
+/**
+ * Create a Roblox-style R6 blocky Network Engineer 3D character rig.
+ * Origin sits on the floor at (0, 0, 0) and faces +Z.
+ * All child meshes disable raycasting so the avatar never blocks clicking devices or ports.
+ * @param {string} [label='Teknisi Jaringan']
+ * @returns {THREE.Group}
+ */
+export function createRobloxAvatar3DGroup(label = 'Teknisi Jaringan') {
+  const root = new THREE.Group();
+  root.name = 'RobloxNetworkEngineer';
+
+  const rigRoot = new THREE.Group();
+  rigRoot.name = 'RobloxAvatarRig';
+  root.add(rigRoot);
+
+  // Classic Roblox R6 colors + SmartSchool Network Engineer high-vis vest
+  const skinMat = makeMat(0xfacc15, { roughness: 0.42, metalness: 0.05 });
+  const torsoNavyMat = makeMat(0x1e293b, { roughness: 0.55, metalness: 0.1 });
+  const vestGreenMat = makeMat(0x2a7c13, { roughness: 0.4, metalness: 0.12 });
+  const stripeMat = makeMat(0xd9f99d, { emissive: 0x76c457, emissiveIntensity: 0.35, roughness: 0.25 });
+  const pantsMat = makeMat(0x334155, { roughness: 0.65, metalness: 0.05 });
+  const bootMat = makeMat(0x0f172a, { roughness: 0.7, metalness: 0.1 });
+  const helmetMat = makeMat(0x76c457, { roughness: 0.32, metalness: 0.18 });
+  const tabletBodyMat = makeMat(0x0f172a, { roughness: 0.35, metalness: 0.4 });
+  const tabletScreenMat = makeMat(0x38bdf8, { emissive: 0x0284c7, emissiveIntensity: 0.75, roughness: 0.2 });
+  const faceDarkMat = makeMat(0x111827, { roughness: 0.3 });
+
+  // Ground indicator ring under feet
+  const ringMat = new THREE.MeshBasicMaterial({
+    color: 0x76c457,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0.65
+  });
+  const groundRing = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.52, 24), ringMat);
+  groundRing.rotation.x = -Math.PI / 2;
+  groundRing.position.y = 0.025;
+  root.add(groundRing);
+
+  // Small forward pointer arrow on ground ring (+Z)
+  const dirArrow = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.2, 6), ringMat);
+  dirArrow.rotation.x = Math.PI / 2;
+  dirArrow.position.set(0, 0.03, 0.58);
+  root.add(dirArrow);
+
+  // Legs (hip pivots at y = 0.70)
+  const makeLeg = (xPos, name) => {
+    const pivot = new THREE.Group();
+    pivot.name = name;
+    pivot.position.set(xPos, 0.70, 0);
+    addBox(pivot, 0.24, 0.60, 0.24, 0, -0.30, 0, pantsMat);
+    addBox(pivot, 0.26, 0.12, 0.28, 0, -0.64, 0.02, bootMat);
+    rigRoot.add(pivot);
+    return pivot;
+  };
+  const leftLegPivot = makeLeg(-0.14, 'LeftLegPivot');
+  const rightLegPivot = makeLeg(0.14, 'RightLegPivot');
+
+  // Torso (center y = 1.06)
+  const torsoGroup = new THREE.Group();
+  torsoGroup.name = 'TorsoGroup';
+  torsoGroup.position.set(0, 1.06, 0);
+  addBox(torsoGroup, 0.54, 0.72, 0.28, 0, 0, 0, torsoNavyMat);
+  addBox(torsoGroup, 0.57, 0.60, 0.30, 0, -0.02, 0, vestGreenMat);
+  // Reflective safety stripes front & back + ID card badge
+  addBox(torsoGroup, 0.585, 0.07, 0.31, 0, -0.14, 0, stripeMat);
+  addBox(torsoGroup, 0.12, 0.14, 0.03, -0.15, 0.14, 0.16, tabletScreenMat);
+  rigRoot.add(torsoGroup);
+
+  // Arms (shoulder pivots at y = 1.38)
+  const makeArm = (xPos, name, withTester = false) => {
+    const pivot = new THREE.Group();
+    pivot.name = name;
+    pivot.position.set(xPos, 1.38, 0);
+    addBox(pivot, 0.22, 0.42, 0.22, 0, -0.21, 0, torsoNavyMat);
+    addBox(pivot, 0.20, 0.28, 0.20, 0, -0.54, 0, skinMat);
+    if (withTester) {
+      // Handheld Network Cable Tester / Mini Field Laptop
+      addBox(pivot, 0.18, 0.04, 0.24, 0, -0.66, 0.12, tabletBodyMat);
+      addBox(pivot, 0.14, 0.02, 0.16, 0, -0.635, 0.12, tabletScreenMat);
+    }
+    rigRoot.add(pivot);
+    return pivot;
+  };
+  const leftArmPivot = makeArm(-0.40, 'LeftArmPivot', false);
+  const rightArmPivot = makeArm(0.40, 'RightArmPivot', true);
+
+  // Head + Safety Hard-Hat (neck pivot at y = 1.44)
+  const headPivot = new THREE.Group();
+  headPivot.name = 'HeadPivot';
+  headPivot.position.set(0, 1.44, 0);
+  addBox(headPivot, 0.40, 0.40, 0.40, 0, 0.22, 0, skinMat);
+  // Blocky eyes & smile facing +Z
+  addBox(headPivot, 0.055, 0.075, 0.02, -0.085, 0.25, 0.20, faceDarkMat);
+  addBox(headPivot, 0.055, 0.075, 0.02, 0.085, 0.25, 0.20, faceDarkMat);
+  addBox(headPivot, 0.14, 0.03, 0.02, 0, 0.12, 0.20, faceDarkMat);
+  // Engineer Safety Hard-Hat
+  addBox(headPivot, 0.45, 0.14, 0.46, 0, 0.41, 0, helmetMat);
+  addBox(headPivot, 0.28, 0.07, 0.48, 0, 0.48, 0, helmetMat);
+  addBox(headPivot, 0.42, 0.04, 0.18, 0, 0.36, 0.24, helmetMat);
+  rigRoot.add(headPivot);
+
+  // Overhead floating role label when canvas is available
+  if (typeof document !== 'undefined' && label) {
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = 320;
+      canvas.height = 76;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = 'rgba(22, 40, 18, 0.90)';
+        roundRect(ctx, 8, 8, 304, 60, 14);
+        ctx.fill();
+        ctx.strokeStyle = '#76c457';
+        ctx.lineWidth = 3;
+        roundRect(ctx, 8, 8, 304, 60, 14);
+        ctx.stroke();
+        ctx.fillStyle = '#fff8cf';
+        ctx.font = 'bold 26px Poppins, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(truncateText(ctx, label, 280), 160, 38);
+
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.needsUpdate = true;
+        const spriteMat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+        const sprite = new THREE.Sprite(spriteMat);
+        sprite.position.set(0, 2.28, 0);
+        sprite.scale.set(2.1, 0.5, 1);
+        sprite.renderOrder = 25;
+        rigRoot.add(sprite);
+      }
+    } catch { /* ignore headless canvas errors */ }
+  }
+
+  // Ensure avatar meshes never block picking devices, ports, or cables underneath
+  root.traverse((child) => {
+    child.userData.isAvatarMesh = true;
+    child.raycast = () => {};
+  });
+
+  root.userData.rigs = {
+    rigRoot,
+    headPivot,
+    leftArmPivot,
+    rightArmPivot,
+    leftLegPivot,
+    rightLegPivot
+  };
+
+  return root;
+}
+
+/**
+ * Animate the Roblox R6 Network Engineer limbs cleanly based on walk/sprint/jump state.
+ * @param {THREE.Group} avatarGroup
+ * @param {Object} animState
+ * @param {number} [dt=0.016]
+ */
+export function animateRobloxAvatarRig(avatarGroup, animState = {}, dt = 0.016) {
+  const rigs = avatarGroup?.userData?.rigs;
+  if (!rigs) return;
+
+  const { rigRoot, headPivot, leftArmPivot, rightArmPivot, leftLegPivot, rightLegPivot } = rigs;
+  const isGrounded = animState.isGrounded !== false;
+  const isMoving = Boolean(animState.isMoving);
+  const isRunning = Boolean(animState.isRunning);
+  const phase = Number(animState.walkPhase) || 0;
+
+  if (!isGrounded) {
+    // Crisp jump pose
+    leftLegPivot.rotation.x = 0.38;
+    rightLegPivot.rotation.x = -0.32;
+    leftArmPivot.rotation.x = -0.75;
+    rightArmPivot.rotation.x = -0.65;
+    leftArmPivot.rotation.z = 0.24;
+    rightArmPivot.rotation.z = -0.24;
+    rigRoot.position.y = 0;
+    headPivot.rotation.y = 0;
+    return;
+  }
+
+  if (isMoving) {
+    const amp = isRunning ? 0.85 : 0.58;
+    const swing = Math.sin(phase) * amp;
+    leftLegPivot.rotation.x = swing;
+    rightLegPivot.rotation.x = -swing;
+    leftArmPivot.rotation.x = -swing * 0.85;
+    rightArmPivot.rotation.x = swing * 0.6 - 0.16;
+    leftArmPivot.rotation.z = 0.06;
+    rightArmPivot.rotation.z = -0.06;
+    rigRoot.position.y = Math.abs(Math.cos(phase)) * (isRunning ? 0.085 : 0.045);
+    headPivot.rotation.y = Math.sin(phase * 0.5) * 0.05;
+    return;
+  }
+
+  // Smooth damp back to idle pose
+  const damp = Math.min(1, Math.max(0.05, dt * 12));
+  leftLegPivot.rotation.x += (0 - leftLegPivot.rotation.x) * damp;
+  rightLegPivot.rotation.x += (0 - rightLegPivot.rotation.x) * damp;
+  leftArmPivot.rotation.x += (0 - leftArmPivot.rotation.x) * damp;
+  rightArmPivot.rotation.x += (-0.15 - rightArmPivot.rotation.x) * damp;
+  leftArmPivot.rotation.z += (0.04 - leftArmPivot.rotation.z) * damp;
+  rightArmPivot.rotation.z += (-0.04 - rightArmPivot.rotation.z) * damp;
+  rigRoot.position.y += (0 - rigRoot.position.y) * damp;
+  headPivot.rotation.y += (0 - headPivot.rotation.y) * damp;
 }
 
 function roundRect(ctx, x, y, w, h, r) {

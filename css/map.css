@@ -431,3 +431,381 @@
 #map-3d-container.tool-box canvas {
   cursor: crosshair !important;
 }
+
+/* Simulator Device & Port Inspector Dock (Bottom Center in 3D Mode) */
+.hud-3d-sim-inspector {
+  position: absolute;
+  left: 50%;
+  bottom: 58px;
+  transform: translateX(-50%);
+  width: min(880px, calc(100% - 32px));
+  z-index: 38;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  color: var(--text-primary);
+  pointer-events: auto;
+  backdrop-filter: blur(8px);
+}
+
+.hud-3d-sim-inspector.hidden {
+  display: none !important;
+}
+
+.sim-inspector-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sim-inspector-title-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sim-inspector-device-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 240px;
+}
+
+.sim-inspector-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+}
+
+.sim-inspector-badge.is-ip {
+  color: var(--accent-blue);
+  border-color: var(--accent-blue);
+}
+
+.sim-inspector-controls-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.sim-angle-pill,
+.sim-action-btn,
+.sim-stack-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 25px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.sim-angle-pill:hover,
+.sim-action-btn:hover,
+.sim-stack-pill:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--accent-blue);
+}
+
+.sim-angle-pill.active,
+.sim-stack-pill.active {
+  background-color: var(--accent-blue);
+  color: var(--text-inverse);
+  border-color: var(--accent-blue);
+}
+
+.sim-action-btn.is-primary {
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+}
+
+.sim-action-btn.is-primary:hover {
+  background-color: var(--accent-blue);
+  color: var(--text-inverse);
+}
+
+.sim-action-btn.is-exit {
+  border-color: var(--status-warning);
+  color: var(--status-warning);
+}
+
+.sim-action-btn.is-exit:hover {
+  background-color: var(--status-warning);
+  color: #ffffff;
+}
+
+.sim-inspector-stack-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-light);
+}
+
+.sim-stack-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-right: 2px;
+}
+
+.sim-port-pending-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--status-warning);
+  background-color: rgba(217, 119, 6, 0.14);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+[data-theme="dark"] .sim-port-pending-banner {
+  background-color: rgba(251, 191, 36, 0.15);
+}
+
+.sim-port-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+  gap: 5px;
+  max-height: 122px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.sim-port-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 3px;
+  padding: 5px 7px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast);
+}
+
+.sim-port-card:hover {
+  background-color: var(--bg-hover);
+  border-color: var(--accent-blue);
+  transform: translateY(-1px);
+}
+
+.sim-port-card.is-connected {
+  border-color: rgba(42, 124, 19, 0.45);
+}
+
+[data-theme="dark"] .sim-port-card.is-connected {
+  border-color: rgba(118, 196, 87, 0.45);
+}
+
+.sim-port-card.is-cable-selected {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 1px var(--accent-blue) inset;
+  background-color: rgba(42, 124, 19, 0.12);
+}
+
+.sim-port-card.is-pending-source {
+  border-color: var(--status-warning);
+  box-shadow: 0 0 0 1px var(--status-warning) inset;
+  background-color: rgba(217, 119, 6, 0.14);
+}
+
+.sim-port-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px;
+  width: 100%;
+}
+
+.sim-port-name-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.sim-port-led {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background-color: var(--status-unknown);
+}
+
+.sim-port-led.is-online {
+  background-color: var(--status-online);
+  box-shadow: 0 0 5px var(--status-online);
+}
+
+.sim-port-led.is-warning {
+  background-color: var(--status-warning);
+  box-shadow: 0 0 5px var(--status-warning);
+}
+
+.sim-port-led.is-offline {
+  background-color: var(--status-offline);
+}
+
+.sim-port-name {
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sim-port-speed {
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.sim-port-peer {
+  font-size: 10px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+
+.sim-port-card:not(.is-connected) .sim-port-peer {
+  color: var(--text-muted);
+}
+
+/* Mode Teknisi 3D Avatar Bottom Bar */
+.hud-3d-avatar-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 58px;
+  transform: translateX(-50%);
+  width: min(860px, calc(100% - 32px));
+  z-index: 36;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--accent-blue);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  color: var(--text-primary);
+  pointer-events: auto;
+  backdrop-filter: blur(8px);
+}
+
+.hud-3d-avatar-bar.hidden {
+  display: none !important;
+}
+
+.avatar-bar-status {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.avatar-bar-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.avatar-bar-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--status-online);
+  box-shadow: 0 0 6px var(--status-online);
+}
+
+.avatar-bar-controls-hint {
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
+.avatar-bar-nearest {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-primary);
+  font-size: 11px;
+}
+
+.avatar-bar-nearest-name {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.avatar-bar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.avatar-teleport-select {
+  height: 26px;
+  max-width: 190px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+}

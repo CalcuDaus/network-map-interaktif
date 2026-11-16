@@ -18,7 +18,7 @@
   <link rel="stylesheet" href="css/main.css?v=20261113-3d-sketchup">
   <link rel="stylesheet" href="css/layout.css?v=20261115-search">
   <link rel="stylesheet" href="css/components.css?v=20261115-simplecm">
-  <link rel="stylesheet" href="css/map.css?v=20261116-hudmin">
+  <link rel="stylesheet" href="css/map.css?v=20261116-roblox-sim">
 
   <!-- Vendor Libraries (Offline-First with CDN fallback) -->
   <script src="assets/vendor/konva.min.js"></script>
@@ -415,6 +415,10 @@
             <button id="btn-3d-front" class="hud-3d-btn" title="Tampak Depan">Depan</button>
             <button id="btn-3d-side" class="hud-3d-btn" title="Tampak Samping (Lihat Tumpukan)">Samping</button>
             <button id="btn-3d-focus" class="hud-3d-btn" title="Fokus ke Perangkat Terpilih">Fokus</button>
+            <button id="btn-3d-autofocus" class="hud-3d-btn active" title="Auto-Fokus Simulator saat Perangkat Diklik">
+              <i data-lucide="crosshair" style="width: 12px; height: 12px;"></i>
+              <span>Auto-Fokus</span>
+            </button>
           </div>
 
           <div class="hud-3d-divider"></div>
@@ -451,6 +455,11 @@
             <span>Label</span>
           </button>
 
+          <button id="btn-3d-avatar" class="hud-3d-btn" title="Mode Teknisi 3D ala Simulator (G) — Jalan-jalan dengan karakter di denah (WASD + Spasi Lompat)">
+            <i data-lucide="user" style="width: 13px; height: 13px;"></i>
+            <span>Mode Teknisi</span>
+          </button>
+
           <div class="hud-3d-divider"></div>
 
           <button id="btn-3d-rooms" class="hud-3d-btn hud-3d-btn-accent"
@@ -475,6 +484,12 @@
             <span>Keluar Fullscreen</span>
           </button>
         </div>
+
+        <!-- Mode Teknisi Roblox Avatar Radar & Control Bar (Bottom Center in 3D Mode) -->
+        <div id="hud-3d-avatar-bar" class="hud-3d-avatar-bar hidden" style="display: none;"></div>
+
+        <!-- Simulator Device & Port Inspector Dock (Bottom Center in 3D Mode) -->
+        <div id="hud-3d-sim-inspector" class="hud-3d-sim-inspector hidden" style="display: none;"></div>
 
         <!-- SketchUp Shortcut Hint Pill (Bottom Right in 3D Mode) -->
         <div id="hud-3d-hints" class="hud-3d-hints hidden" style="display: none;">
@@ -618,7 +633,7 @@
   </div>
 
   <!-- Application Bootstrap (Bundled for file:// and http:// compatibility) -->
-  <script src="js/bundle.js?v=20261116-cablefix2"></script>
+  <script src="js/bundle.js?v=20261116-roblox-sim"></script>
 </body>
 
 </html>

@@ -52,8 +52,8 @@ export class CableManager {
       naturalWidth: this.naturalWidth,
       naturalHeight: this.naturalHeight,
       onSelect: (id) => this.selectConnection(id),
-      onContextMenu: (cable, clientX, clientY) => {
-        eventBus.emit('contextmenu:cable', { cable, screenX: clientX, screenY: clientY });
+      onContextMenu: (cable, clientX, clientY, hitCoord = null, waypointIdx = null) => {
+        eventBus.emit('contextmenu:cable', { cable, screenX: clientX, screenY: clientY, hitCoord, waypointIdx });
       },
       onWaypointMoved: (id, idx, norm) => this.updateWaypoint(id, idx, norm),
       onWaypointDeleted: (id, idx) => this.deleteWaypoint(id, idx),
@@ -168,13 +168,20 @@ export class CableManager {
    * Update an intermediate waypoint position
    * @param {string} cableId 
    * @param {number} waypointIndex 
-   * @param {{x: number, y: number}} newNormalized 
+   * @param {{x: number, y: number, z?: number}} newNormalized 
    */
   updateWaypoint(cableId, waypointIndex, newNormalized) {
     const cable = this.connections.get(cableId);
     if (!cable || !Array.isArray(cable.route) || !cable.route[waypointIndex]) return;
 
-    cable.route[waypointIndex] = newNormalized;
+    cable.route[waypointIndex] = {
+      ...cable.route[waypointIndex],
+      x: Math.max(0.01, Math.min(0.99, Number(newNormalized.x))),
+      y: Math.max(0.01, Math.min(0.99, Number(newNormalized.y))),
+      ...(typeof newNormalized.z === 'number' && !isNaN(newNormalized.z)
+        ? { z: Number(Math.max(0.02, newNormalized.z).toFixed(2)) }
+        : {})
+    };
     cable.updatedAt = new Date().toISOString();
 
     const sourceDev = this.deviceManager.getDeviceById(cable.source);
@@ -194,7 +201,7 @@ export class CableManager {
    * Insert a new intermediate anchor/waypoint at a specific segment index (Pen Tool add-anchor)
    * @param {string} cableId
    * @param {number} insertIndex
-   * @param {{x: number, y: number}} newNormalized
+   * @param {{x: number, y: number, z?: number}} newNormalized
    */
   insertWaypoint(cableId, insertIndex, newNormalized) {
     const cable = this.connections.get(cableId);
@@ -202,7 +209,14 @@ export class CableManager {
     if (!Array.isArray(cable.route)) cable.route = [];
 
     const clampedIdx = Math.max(0, Math.min(cable.route.length, insertIndex));
-    cable.route.splice(clampedIdx, 0, { x: newNormalized.x, y: newNormalized.y });
+    const pt = {
+      x: Math.max(0.01, Math.min(0.99, Number(newNormalized.x))),
+      y: Math.max(0.01, Math.min(0.99, Number(newNormalized.y)))
+    };
+    if (typeof newNormalized.z === 'number' && !isNaN(newNormalized.z)) {
+      pt.z = Number(Math.max(0.02, newNormalized.z).toFixed(2));
+    }
+    cable.route.splice(clampedIdx, 0, pt);
     cable.updatedAt = new Date().toISOString();
 
     const sourceDev = this.deviceManager.getDeviceById(cable.source);
@@ -216,6 +230,89 @@ export class CableManager {
     this.connectionLayer.batchDraw();
 
     eventBus.emit('connection:updated', cable);
+  }
+
+  /**
+   * Smartly insert a draggable Pen-Tool waypoint at the nearest segment to hitCoord (or midpoint of longest segment)
+   * @param {string} cableId
+   * @param {{x: number, y: number, z?: number}|null} [hitCoord]
+   * @returns {{x: number, y: number, z?: number}|null}
+   */
+  addSmartWaypoint(cableId, hitCoord = null) {
+    const cable = this.connections.get(cableId);
+    if (!cable) return null;
+    const sourceDev = this.deviceManager.getDeviceById(cable.source);
+    const destDev = this.deviceManager.getDeviceById(cable.destination);
+    if (!sourceDev || !destDev) return null;
+
+    const existingRoute = Array.isArray(cable.route) ? cable.route : [];
+    const chain = [sourceDev.position, ...existingRoute, destDev.position];
+    const hasHit = hitCoord && typeof hitCoord.x === 'number' && !isNaN(hitCoord.x)
+      && typeof hitCoord.y === 'number' && !isNaN(hitCoord.y);
+
+    if (hasHit) {
+      const px = Math.max(0.01, Math.min(0.99, Number(hitCoord.x)));
+      const py = Math.max(0.01, Math.min(0.99, Number(hitCoord.y)));
+      let bestSegIdx = 0;
+      let bestDist = Infinity;
+
+      for (let i = 0; i < chain.length - 1; i++) {
+        const a = chain[i];
+        const b = chain[i + 1];
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const lenSq = dx * dx + dy * dy;
+        let t = lenSq > 1e-9 ? ((px - a.x) * dx + (py - a.y) * dy) / lenSq : 0;
+        t = Math.max(0, Math.min(1, t));
+        const projX = a.x + t * dx;
+        const projY = a.y + t * dy;
+        const d = Math.hypot(px - projX, py - projY);
+        if (d < bestDist) {
+          bestDist = d;
+          bestSegIdx = i;
+        }
+      }
+
+      const zVal = (typeof hitCoord.z === 'number' && !isNaN(hitCoord.z))
+        ? Number(Math.max(0.02, hitCoord.z).toFixed(2))
+        : (typeof cable.details?.elevationZ === 'number' ? cable.details.elevationZ : 1.2);
+
+      if (existingRoute.length === 0 && typeof hitCoord.z === 'number' && !isNaN(hitCoord.z)) {
+        cable.details = {
+          ...(cable.details || {}),
+          pathStyle: 'curve',
+          bowOut: 0,
+          sideOffset: 0,
+          sagDrop: 0
+        };
+      }
+
+      const inserted = { x: Number(px.toFixed(4)), y: Number(py.toFixed(4)), z: zVal };
+      this.insertWaypoint(cableId, bestSegIdx, inserted);
+      return inserted;
+    }
+
+    // Fallback when no hitCoord provided: bisect longest segment
+    let longestIdx = 0;
+    let longestLenSq = -1;
+    for (let i = 0; i < chain.length - 1; i++) {
+      const lenSq = Math.pow(chain[i + 1].x - chain[i].x, 2) + Math.pow(chain[i + 1].y - chain[i].y, 2);
+      if (lenSq > longestLenSq) {
+        longestLenSq = lenSq;
+        longestIdx = i;
+      }
+    }
+    const segA = chain[longestIdx];
+    const segB = chain[longestIdx + 1];
+    const midX = Number(Math.max(0.01, Math.min(0.99, (segA.x + segB.x) * 0.5)).toFixed(4));
+    const midY = Number(Math.max(0.01, Math.min(0.99, (segA.y + segB.y) * 0.5)).toFixed(4));
+    const zVal = (typeof segA.z === 'number' && typeof segB.z === 'number')
+      ? Number(Math.max(0.02, (segA.z + segB.z) * 0.5).toFixed(2))
+      : (typeof cable.details?.elevationZ === 'number' ? cable.details.elevationZ : 1.2);
+
+    const inserted = { x: midX, y: midY, z: zVal };
+    this.insertWaypoint(cableId, longestIdx, inserted);
+    return inserted;
   }
 
   /**

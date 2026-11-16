@@ -65,8 +65,8 @@ export class ContextMenu {
       this.showDeviceMenu(device, screenX, screenY);
     });
 
-    eventBus.on('contextmenu:cable', ({ cable, screenX, screenY }) => {
-      this.showCableMenu(cable, screenX, screenY);
+    eventBus.on('contextmenu:cable', ({ cable, screenX, screenY, hitCoord = null, waypointIdx = null }) => {
+      this.showCableMenu(cable, screenX, screenY, { hitCoord, waypointIdx });
     });
 
     eventBus.on('contextmenu:canvas', ({ normX, normY, screenX, screenY }) => {
@@ -278,23 +278,111 @@ export class ContextMenu {
    * @param {Object} cable 
    * @param {number} screenX 
    * @param {number} screenY 
+   * @param {{hitCoord?: {x: number, y: number, z?: number}|null, waypointIdx?: number|null}} [extra]
    */
-  showCableMenu(cable, screenX, screenY) {
+  showCableMenu(cable, screenX, screenY, extra = {}) {
     if (!cable) return;
+    const { hitCoord = null, waypointIdx = null } = extra || {};
     this.activeTarget = { type: 'cable', data: cable };
 
     // Select cable so that connection panel & waypoint handles activate
     this.cableManager.selectConnection(cable.id);
 
-    const catDef = CABLE_CATEGORIES[cable.category] || CABLE_CATEGORIES.cat6;
+    const catDef = CABLE_CATEGORIES[cable.cableCategory || cable.category] || CABLE_CATEGORIES.cat6;
     const cableColor = cable.customColor || catDef.color;
     const lengthStr = cable.length ? `${cable.length.toFixed(1)} meter` : '0 m';
     const waypointsCount = Array.isArray(cable.route) ? cable.route.length : 0;
+    const pathStyle = cable.details?.pathStyle || 'curve';
 
     // Header thumbnail: color circle
     const iconHtml = `<span style="width: 14px; height: 14px; border-radius: 50%; background: ${cableColor}; border: 2px solid #fff; box-shadow: 0 0 0 1px ${cableColor}; display: inline-block;"></span>`;
 
+    const actionBarHtml = `
+      <div class="context-menu-action-bar">
+        <button type="button" class="cm-action-btn" data-cm-action="detail" title="Tambah Titik Geser (Pen Tool) di titik klik">
+          <i data-lucide="plus-circle"></i>
+          <span>+ Titik Geser</span>
+        </button>
+        <button type="button" class="cm-action-btn is-config" data-cm-action="config" title="Buka Properti &amp; Detail Lengkungan Kabel">
+          <i data-lucide="sliders"></i>
+          <span>Properti</span>
+        </button>
+      </div>
+    `;
+
     const items = [
+      {
+        id: 'add-cable-waypoint',
+        icon: 'plus-circle',
+        label: 'Tambah Titik Geser Disini (Pen Tool)',
+        shortcut: '2x Klik',
+        action: () => {
+          this.hide();
+          const pt = this.cableManager.addSmartWaypoint?.(cable.id, hitCoord);
+          if (pt) {
+            this.showToast('Titik geser ditambahkan — seret titik kuning di peta 2D/3D (Shift+Drag = naik/turun Z).');
+          }
+        }
+      },
+      {
+        id: 'bake-cable-pen-points',
+        icon: 'git-commit',
+        label: 'Buat 3 Titik Lengkung Dinamis (Pen Tool)',
+        action: () => {
+          this.hide();
+          eventBus.emit('map3d:bake-cable-pen-points', { cableId: cable.id, count: 3 });
+          this.showToast('3 titik lengkung Pen Tool dibuat sepanjang jalur kabel.');
+        }
+      },
+      ...(typeof waypointIdx === 'number' && waypointIdx >= 0 ? [{
+        id: 'delete-cable-waypoint',
+        icon: 'minus-circle',
+        label: `Hapus Titik Geser #${waypointIdx + 1}`,
+        danger: true,
+        action: () => {
+          this.hide();
+          this.cableManager.deleteWaypoint?.(cable.id, waypointIdx);
+          this.showToast(`Titik geser #${waypointIdx + 1} dihapus.`);
+        }
+      }] : []),
+      { isDivider: true },
+      {
+        id: 'toggle-cable-pathstyle',
+        icon: 'activity',
+        label: pathStyle === 'orthogonal' ? 'Gaya Jalur: Ubah ke Kurva Bezier' : 'Gaya Jalur: Ubah ke Sudut Tray 90°',
+        action: () => {
+          this.hide();
+          const nextStyle = pathStyle === 'orthogonal' ? 'curve' : 'orthogonal';
+          this.cableManager.updateConnection(cable.id, {
+            details: { ...(cable.details || {}), pathStyle: nextStyle }
+          });
+          this.showToast(`Gaya jalur diubah ke ${nextStyle === 'curve' ? 'Kurva Bezier' : 'Orthogonal 90°'}.`);
+        }
+      },
+      ...((waypointsCount > 0 || cable.details?.bowOut || cable.details?.sideOffset || cable.details?.sagDrop) ? [{
+        id: 'straighten-cable',
+        icon: 'minimize-2',
+        label: `Reset / Luruskan Jalur${waypointsCount > 0 ? ` (${waypointsCount} titik)` : ''}`,
+        action: () => {
+          this.hide();
+          this.cableManager.updateConnection(cable.id, {
+            route: [],
+            details: { ...(cable.details || {}), bowOut: null, sideOffset: 0, sagDrop: null }
+          });
+          this.showToast(`Jalur kabel "${cable.name}" direset.`);
+        }
+      }] : []),
+      { isDivider: true },
+      {
+        id: 'copy-cable-info',
+        icon: 'clipboard-copy',
+        label: 'Salin Info Kabel',
+        action: () => {
+          this.hide();
+          const copyVal = `${cable.name} (${catDef.name}, ${lengthStr})`;
+          this.copyToClipboard(copyVal, 'Spesifikasi Kabel');
+        }
+      },
       {
         id: 'delete-cable',
         icon: 'trash-2',
@@ -302,49 +390,25 @@ export class ContextMenu {
         shortcut: 'Del',
         danger: true,
         action: () => this.confirmAndDeleteCable(cable)
-      },
-      { isDivider: true },
-      {
-        id: 'inspect-cable',
-        icon: 'sliders',
-        label: 'Properti & Detail Kabel',
-        shortcut: 'Enter',
-        action: () => {
-          this.cableManager.selectConnection(cable.id);
-          this.hide();
-        }
       }
     ];
-
-    // If cable has waypoints, offer to straighten it
-    if (waypointsCount > 0) {
-      items.push({
-        id: 'straighten-cable',
-        icon: 'minimize-2',
-        label: `Luruskan Jalur (${waypointsCount} belokan)`,
-        action: () => {
-          this.hide();
-          this.cableManager.updateConnection(cable.id, { route: [] });
-          this.showToast(`Belokan jalur kabel "${cable.name}" direset ke garis lurus`);
-        }
-      });
-    }
-
-    items.push({
-      id: 'copy-cable-info',
-      icon: 'clipboard-copy',
-      label: 'Salin Info Kabel',
-      action: () => {
-        this.hide();
-        const copyVal = `${cable.name} (${catDef.name}, ${lengthStr})`;
-        this.copyToClipboard(copyVal, 'Spesifikasi Kabel');
-      }
-    });
 
     this.renderMenu({
       iconHtml,
       title: cable.name,
       subtitle: `${catDef.name} • ${lengthStr}`,
+      actionBarHtml,
+      onDetailClick: () => {
+        this.hide();
+        const pt = this.cableManager.addSmartWaypoint?.(cable.id, hitCoord);
+        if (pt) {
+          this.showToast('Titik geser ditambahkan — seret titik kuning di peta 2D/3D (Shift+Drag = naik/turun Z).');
+        }
+      },
+      onConfigClick: () => {
+        this.cableManager.selectConnection(cable.id);
+        this.hide();
+      },
       items
     });
 

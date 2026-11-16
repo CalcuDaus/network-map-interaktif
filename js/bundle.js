@@ -8027,8 +8027,13 @@ ${device.network.ip}`;
           e.evt.preventDefault();
           e.cancelBubble = true;
           const cur = line.getAttr("cableData") || cable;
+          const pos = this.connectionLayer.getRelativePointerPosition?.();
+          const hitCoord = pos ? {
+            x: clamp2(pos.x / this.naturalWidth, 0.01, 0.99),
+            y: clamp2(pos.y / this.naturalHeight, 0.01, 0.99)
+          } : null;
           if (this.onContextMenu) {
-            this.onContextMenu(cur, e.evt.clientX, e.evt.clientY);
+            this.onContextMenu(cur, e.evt.clientX, e.evt.clientY, hitCoord, null);
           }
         });
         line.on("mouseenter", () => {
@@ -8393,8 +8398,8 @@ ${device.network.ip}`;
         naturalWidth: this.naturalWidth,
         naturalHeight: this.naturalHeight,
         onSelect: (id) => this.selectConnection(id),
-        onContextMenu: (cable, clientX, clientY) => {
-          eventBus.emit("contextmenu:cable", { cable, screenX: clientX, screenY: clientY });
+        onContextMenu: (cable, clientX, clientY, hitCoord = null, waypointIdx = null) => {
+          eventBus.emit("contextmenu:cable", { cable, screenX: clientX, screenY: clientY, hitCoord, waypointIdx });
         },
         onWaypointMoved: (id, idx, norm) => this.updateWaypoint(id, idx, norm),
         onWaypointDeleted: (id, idx) => this.deleteWaypoint(id, idx),
@@ -8483,12 +8488,17 @@ ${device.network.ip}`;
      * Update an intermediate waypoint position
      * @param {string} cableId 
      * @param {number} waypointIndex 
-     * @param {{x: number, y: number}} newNormalized 
+     * @param {{x: number, y: number, z?: number}} newNormalized 
      */
     updateWaypoint(cableId, waypointIndex, newNormalized) {
       const cable = this.connections.get(cableId);
       if (!cable || !Array.isArray(cable.route) || !cable.route[waypointIndex]) return;
-      cable.route[waypointIndex] = newNormalized;
+      cable.route[waypointIndex] = {
+        ...cable.route[waypointIndex],
+        x: Math.max(0.01, Math.min(0.99, Number(newNormalized.x))),
+        y: Math.max(0.01, Math.min(0.99, Number(newNormalized.y))),
+        ...typeof newNormalized.z === "number" && !isNaN(newNormalized.z) ? { z: Number(Math.max(0.02, newNormalized.z).toFixed(2)) } : {}
+      };
       cable.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
       const sourceDev = this.deviceManager.getDeviceById(cable.source);
       const destDev = this.deviceManager.getDeviceById(cable.destination);
@@ -8503,14 +8513,21 @@ ${device.network.ip}`;
      * Insert a new intermediate anchor/waypoint at a specific segment index (Pen Tool add-anchor)
      * @param {string} cableId
      * @param {number} insertIndex
-     * @param {{x: number, y: number}} newNormalized
+     * @param {{x: number, y: number, z?: number}} newNormalized
      */
     insertWaypoint(cableId, insertIndex, newNormalized) {
       const cable = this.connections.get(cableId);
       if (!cable) return;
       if (!Array.isArray(cable.route)) cable.route = [];
       const clampedIdx = Math.max(0, Math.min(cable.route.length, insertIndex));
-      cable.route.splice(clampedIdx, 0, { x: newNormalized.x, y: newNormalized.y });
+      const pt = {
+        x: Math.max(0.01, Math.min(0.99, Number(newNormalized.x))),
+        y: Math.max(0.01, Math.min(0.99, Number(newNormalized.y)))
+      };
+      if (typeof newNormalized.z === "number" && !isNaN(newNormalized.z)) {
+        pt.z = Number(Math.max(0.02, newNormalized.z).toFixed(2));
+      }
+      cable.route.splice(clampedIdx, 0, pt);
       cable.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
       const sourceDev = this.deviceManager.getDeviceById(cable.source);
       const destDev = this.deviceManager.getDeviceById(cable.destination);
@@ -8520,6 +8537,74 @@ ${device.network.ip}`;
       this.renderer.renderCable(cable, sourceDev, destDev);
       this.connectionLayer.batchDraw();
       eventBus.emit("connection:updated", cable);
+    }
+    /**
+     * Smartly insert a draggable Pen-Tool waypoint at the nearest segment to hitCoord (or midpoint of longest segment)
+     * @param {string} cableId
+     * @param {{x: number, y: number, z?: number}|null} [hitCoord]
+     * @returns {{x: number, y: number, z?: number}|null}
+     */
+    addSmartWaypoint(cableId, hitCoord = null) {
+      const cable = this.connections.get(cableId);
+      if (!cable) return null;
+      const sourceDev = this.deviceManager.getDeviceById(cable.source);
+      const destDev = this.deviceManager.getDeviceById(cable.destination);
+      if (!sourceDev || !destDev) return null;
+      const existingRoute = Array.isArray(cable.route) ? cable.route : [];
+      const chain = [sourceDev.position, ...existingRoute, destDev.position];
+      const hasHit = hitCoord && typeof hitCoord.x === "number" && !isNaN(hitCoord.x) && typeof hitCoord.y === "number" && !isNaN(hitCoord.y);
+      if (hasHit) {
+        const px2 = Math.max(0.01, Math.min(0.99, Number(hitCoord.x)));
+        const py2 = Math.max(0.01, Math.min(0.99, Number(hitCoord.y)));
+        let bestSegIdx = 0;
+        let bestDist = Infinity;
+        for (let i = 0; i < chain.length - 1; i++) {
+          const a = chain[i];
+          const b = chain[i + 1];
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const lenSq = dx * dx + dy * dy;
+          let t = lenSq > 1e-9 ? ((px2 - a.x) * dx + (py2 - a.y) * dy) / lenSq : 0;
+          t = Math.max(0, Math.min(1, t));
+          const projX = a.x + t * dx;
+          const projY = a.y + t * dy;
+          const d = Math.hypot(px2 - projX, py2 - projY);
+          if (d < bestDist) {
+            bestDist = d;
+            bestSegIdx = i;
+          }
+        }
+        const zVal2 = typeof hitCoord.z === "number" && !isNaN(hitCoord.z) ? Number(Math.max(0.02, hitCoord.z).toFixed(2)) : typeof cable.details?.elevationZ === "number" ? cable.details.elevationZ : 1.2;
+        if (existingRoute.length === 0 && typeof hitCoord.z === "number" && !isNaN(hitCoord.z)) {
+          cable.details = {
+            ...cable.details || {},
+            pathStyle: "curve",
+            bowOut: 0,
+            sideOffset: 0,
+            sagDrop: 0
+          };
+        }
+        const inserted2 = { x: Number(px2.toFixed(4)), y: Number(py2.toFixed(4)), z: zVal2 };
+        this.insertWaypoint(cableId, bestSegIdx, inserted2);
+        return inserted2;
+      }
+      let longestIdx = 0;
+      let longestLenSq = -1;
+      for (let i = 0; i < chain.length - 1; i++) {
+        const lenSq = Math.pow(chain[i + 1].x - chain[i].x, 2) + Math.pow(chain[i + 1].y - chain[i].y, 2);
+        if (lenSq > longestLenSq) {
+          longestLenSq = lenSq;
+          longestIdx = i;
+        }
+      }
+      const segA = chain[longestIdx];
+      const segB = chain[longestIdx + 1];
+      const midX = Number(Math.max(0.01, Math.min(0.99, (segA.x + segB.x) * 0.5)).toFixed(4));
+      const midY = Number(Math.max(0.01, Math.min(0.99, (segA.y + segB.y) * 0.5)).toFixed(4));
+      const zVal = typeof segA.z === "number" && typeof segB.z === "number" ? Number(Math.max(0.02, (segA.z + segB.z) * 0.5).toFixed(2)) : typeof cable.details?.elevationZ === "number" ? cable.details.elevationZ : 1.2;
+      const inserted = { x: midX, y: midY, z: zVal };
+      this.insertWaypoint(cableId, longestIdx, inserted);
+      return inserted;
     }
     /**
      * Delete an intermediate waypoint
@@ -10029,7 +10114,15 @@ ${device.network.ip}`;
       });
       eventBus.on("connection:updated", (cable) => {
         if (!cable || this.currentCable?.id !== cable.id) return;
+        const prevRouteLen = Array.isArray(this.currentCable.route) ? this.currentCable.route.length : 0;
+        const nextRouteLen = Array.isArray(cable.route) ? cable.route.length : 0;
+        const prevStyle = this.currentCable.details?.pathStyle;
+        const nextStyle = cable.details?.pathStyle;
         this.currentCable = cable;
+        if (prevRouteLen !== nextRouteLen || prevStyle !== nextStyle) {
+          this.renderCableForm(cable);
+          return;
+        }
         const d = cable.details || {};
         const syncPair = (numId, sldId, rawVal, sliderFallback) => {
           const numEl = document.getElementById(numId);
@@ -13411,8 +13504,8 @@ ${dev.network?.ip || ""}`,
       eventBus.on("contextmenu:device", ({ device, screenX, screenY }) => {
         this.showDeviceMenu(device, screenX, screenY);
       });
-      eventBus.on("contextmenu:cable", ({ cable, screenX, screenY }) => {
-        this.showCableMenu(cable, screenX, screenY);
+      eventBus.on("contextmenu:cable", ({ cable, screenX, screenY, hitCoord = null, waypointIdx = null }) => {
+        this.showCableMenu(cable, screenX, screenY, { hitCoord, waypointIdx });
       });
       eventBus.on("contextmenu:canvas", ({ normX, normY, screenX, screenY }) => {
         this.showCanvasMenu({ normX, normY }, screenX, screenY);
@@ -13596,17 +13689,104 @@ ${dev.network?.ip || ""}`,
      * @param {Object} cable 
      * @param {number} screenX 
      * @param {number} screenY 
+     * @param {{hitCoord?: {x: number, y: number, z?: number}|null, waypointIdx?: number|null}} [extra]
      */
-    showCableMenu(cable, screenX, screenY) {
+    showCableMenu(cable, screenX, screenY, extra = {}) {
       if (!cable) return;
+      const { hitCoord = null, waypointIdx = null } = extra || {};
       this.activeTarget = { type: "cable", data: cable };
       this.cableManager.selectConnection(cable.id);
-      const catDef = CABLE_CATEGORIES[cable.category] || CABLE_CATEGORIES.cat6;
+      const catDef = CABLE_CATEGORIES[cable.cableCategory || cable.category] || CABLE_CATEGORIES.cat6;
       const cableColor = cable.customColor || catDef.color;
       const lengthStr = cable.length ? `${cable.length.toFixed(1)} meter` : "0 m";
       const waypointsCount = Array.isArray(cable.route) ? cable.route.length : 0;
+      const pathStyle = cable.details?.pathStyle || "curve";
       const iconHtml = `<span style="width: 14px; height: 14px; border-radius: 50%; background: ${cableColor}; border: 2px solid #fff; box-shadow: 0 0 0 1px ${cableColor}; display: inline-block;"></span>`;
+      const actionBarHtml = `
+      <div class="context-menu-action-bar">
+        <button type="button" class="cm-action-btn" data-cm-action="detail" title="Tambah Titik Geser (Pen Tool) di titik klik">
+          <i data-lucide="plus-circle"></i>
+          <span>+ Titik Geser</span>
+        </button>
+        <button type="button" class="cm-action-btn is-config" data-cm-action="config" title="Buka Properti &amp; Detail Lengkungan Kabel">
+          <i data-lucide="sliders"></i>
+          <span>Properti</span>
+        </button>
+      </div>
+    `;
       const items = [
+        {
+          id: "add-cable-waypoint",
+          icon: "plus-circle",
+          label: "Tambah Titik Geser Disini (Pen Tool)",
+          shortcut: "2x Klik",
+          action: () => {
+            this.hide();
+            const pt = this.cableManager.addSmartWaypoint?.(cable.id, hitCoord);
+            if (pt) {
+              this.showToast("Titik geser ditambahkan \u2014 seret titik kuning di peta 2D/3D (Shift+Drag = naik/turun Z).");
+            }
+          }
+        },
+        {
+          id: "bake-cable-pen-points",
+          icon: "git-commit",
+          label: "Buat 3 Titik Lengkung Dinamis (Pen Tool)",
+          action: () => {
+            this.hide();
+            eventBus.emit("map3d:bake-cable-pen-points", { cableId: cable.id, count: 3 });
+            this.showToast("3 titik lengkung Pen Tool dibuat sepanjang jalur kabel.");
+          }
+        },
+        ...typeof waypointIdx === "number" && waypointIdx >= 0 ? [{
+          id: "delete-cable-waypoint",
+          icon: "minus-circle",
+          label: `Hapus Titik Geser #${waypointIdx + 1}`,
+          danger: true,
+          action: () => {
+            this.hide();
+            this.cableManager.deleteWaypoint?.(cable.id, waypointIdx);
+            this.showToast(`Titik geser #${waypointIdx + 1} dihapus.`);
+          }
+        }] : [],
+        { isDivider: true },
+        {
+          id: "toggle-cable-pathstyle",
+          icon: "activity",
+          label: pathStyle === "orthogonal" ? "Gaya Jalur: Ubah ke Kurva Bezier" : "Gaya Jalur: Ubah ke Sudut Tray 90\xB0",
+          action: () => {
+            this.hide();
+            const nextStyle = pathStyle === "orthogonal" ? "curve" : "orthogonal";
+            this.cableManager.updateConnection(cable.id, {
+              details: { ...cable.details || {}, pathStyle: nextStyle }
+            });
+            this.showToast(`Gaya jalur diubah ke ${nextStyle === "curve" ? "Kurva Bezier" : "Orthogonal 90\xB0"}.`);
+          }
+        },
+        ...waypointsCount > 0 || cable.details?.bowOut || cable.details?.sideOffset || cable.details?.sagDrop ? [{
+          id: "straighten-cable",
+          icon: "minimize-2",
+          label: `Reset / Luruskan Jalur${waypointsCount > 0 ? ` (${waypointsCount} titik)` : ""}`,
+          action: () => {
+            this.hide();
+            this.cableManager.updateConnection(cable.id, {
+              route: [],
+              details: { ...cable.details || {}, bowOut: null, sideOffset: 0, sagDrop: null }
+            });
+            this.showToast(`Jalur kabel "${cable.name}" direset.`);
+          }
+        }] : [],
+        { isDivider: true },
+        {
+          id: "copy-cable-info",
+          icon: "clipboard-copy",
+          label: "Salin Info Kabel",
+          action: () => {
+            this.hide();
+            const copyVal = `${cable.name} (${catDef.name}, ${lengthStr})`;
+            this.copyToClipboard(copyVal, "Spesifikasi Kabel");
+          }
+        },
         {
           id: "delete-cable",
           icon: "trash-2",
@@ -13614,45 +13794,24 @@ ${dev.network?.ip || ""}`,
           shortcut: "Del",
           danger: true,
           action: () => this.confirmAndDeleteCable(cable)
-        },
-        { isDivider: true },
-        {
-          id: "inspect-cable",
-          icon: "sliders",
-          label: "Properti & Detail Kabel",
-          shortcut: "Enter",
-          action: () => {
-            this.cableManager.selectConnection(cable.id);
-            this.hide();
-          }
         }
       ];
-      if (waypointsCount > 0) {
-        items.push({
-          id: "straighten-cable",
-          icon: "minimize-2",
-          label: `Luruskan Jalur (${waypointsCount} belokan)`,
-          action: () => {
-            this.hide();
-            this.cableManager.updateConnection(cable.id, { route: [] });
-            this.showToast(`Belokan jalur kabel "${cable.name}" direset ke garis lurus`);
-          }
-        });
-      }
-      items.push({
-        id: "copy-cable-info",
-        icon: "clipboard-copy",
-        label: "Salin Info Kabel",
-        action: () => {
-          this.hide();
-          const copyVal = `${cable.name} (${catDef.name}, ${lengthStr})`;
-          this.copyToClipboard(copyVal, "Spesifikasi Kabel");
-        }
-      });
       this.renderMenu({
         iconHtml,
         title: cable.name,
         subtitle: `${catDef.name} \u2022 ${lengthStr}`,
+        actionBarHtml,
+        onDetailClick: () => {
+          this.hide();
+          const pt = this.cableManager.addSmartWaypoint?.(cable.id, hitCoord);
+          if (pt) {
+            this.showToast("Titik geser ditambahkan \u2014 seret titik kuning di peta 2D/3D (Shift+Drag = naik/turun Z).");
+          }
+        },
+        onConfigClick: () => {
+          this.cableManager.selectConnection(cable.id);
+          this.hide();
+        },
         items
       });
       this.positionAt(screenX, screenY);
@@ -49752,6 +49911,17 @@ void main() {
       const linkState = portStatusMap.get(p.name);
       const isConnected = Boolean(linkState);
       if (isCustomGlb && !isConnected) {
+        const hitGeo = new BoxGeometry(0.028, 0.026, 0.036);
+        const hitMat = new MeshBasicMaterial({
+          transparent: true,
+          opacity: 0,
+          depthWrite: false
+        });
+        const hitSocket = new Mesh(hitGeo, hitMat);
+        hitSocket.position.set(lx, ly, lz + 8e-3 * zSign);
+        hitSocket.userData.portName = p.name;
+        hitSocket.userData.isPortSocket = true;
+        group.add(hitSocket);
         return;
       }
       const isSfpOrFiber = p.type === "sfp+" || p.type === "sfp" || p.type === "fiber";
@@ -49764,6 +49934,7 @@ void main() {
       const socketMesh = new Mesh(socketGeo, socketMat);
       socketMesh.position.set(lx, ly, lz);
       socketMesh.userData.portName = p.name;
+      socketMesh.userData.isPortSocket = true;
       group.add(socketMesh);
       let ledColor = 4674921;
       if (isConnected) {
@@ -49783,6 +49954,7 @@ void main() {
         ledMesh.position.set(lx, ly + 0.028, lz + zSign * 0.012);
       }
       ledMesh.userData.portName = p.name;
+      ledMesh.userData.isPortSocket = true;
       group.add(ledMesh);
     });
     return group;
@@ -50469,6 +50641,169 @@ void main() {
       group.add(labelSprite);
     }
     return group;
+  }
+  function createRobloxAvatar3DGroup(label = "Teknisi Jaringan") {
+    const root = new Group();
+    root.name = "RobloxNetworkEngineer";
+    const rigRoot = new Group();
+    rigRoot.name = "RobloxAvatarRig";
+    root.add(rigRoot);
+    const skinMat = makeMat(16436245, { roughness: 0.42, metalness: 0.05 });
+    const torsoNavyMat = makeMat(1976635, { roughness: 0.55, metalness: 0.1 });
+    const vestGreenMat = makeMat(2784275, { roughness: 0.4, metalness: 0.12 });
+    const stripeMat = makeMat(14285213, { emissive: 7783511, emissiveIntensity: 0.35, roughness: 0.25 });
+    const pantsMat = makeMat(3359061, { roughness: 0.65, metalness: 0.05 });
+    const bootMat = makeMat(988970, { roughness: 0.7, metalness: 0.1 });
+    const helmetMat = makeMat(7783511, { roughness: 0.32, metalness: 0.18 });
+    const tabletBodyMat = makeMat(988970, { roughness: 0.35, metalness: 0.4 });
+    const tabletScreenMat = makeMat(3718648, { emissive: 165063, emissiveIntensity: 0.75, roughness: 0.2 });
+    const faceDarkMat = makeMat(1120295, { roughness: 0.3 });
+    const ringMat = new MeshBasicMaterial({
+      color: 7783511,
+      side: DoubleSide,
+      transparent: true,
+      opacity: 0.65
+    });
+    const groundRing = new Mesh(new RingGeometry(0.42, 0.52, 24), ringMat);
+    groundRing.rotation.x = -Math.PI / 2;
+    groundRing.position.y = 0.025;
+    root.add(groundRing);
+    const dirArrow = new Mesh(new ConeGeometry(0.11, 0.2, 6), ringMat);
+    dirArrow.rotation.x = Math.PI / 2;
+    dirArrow.position.set(0, 0.03, 0.58);
+    root.add(dirArrow);
+    const makeLeg = (xPos, name) => {
+      const pivot = new Group();
+      pivot.name = name;
+      pivot.position.set(xPos, 0.7, 0);
+      addBox(pivot, 0.24, 0.6, 0.24, 0, -0.3, 0, pantsMat);
+      addBox(pivot, 0.26, 0.12, 0.28, 0, -0.64, 0.02, bootMat);
+      rigRoot.add(pivot);
+      return pivot;
+    };
+    const leftLegPivot = makeLeg(-0.14, "LeftLegPivot");
+    const rightLegPivot = makeLeg(0.14, "RightLegPivot");
+    const torsoGroup = new Group();
+    torsoGroup.name = "TorsoGroup";
+    torsoGroup.position.set(0, 1.06, 0);
+    addBox(torsoGroup, 0.54, 0.72, 0.28, 0, 0, 0, torsoNavyMat);
+    addBox(torsoGroup, 0.57, 0.6, 0.3, 0, -0.02, 0, vestGreenMat);
+    addBox(torsoGroup, 0.585, 0.07, 0.31, 0, -0.14, 0, stripeMat);
+    addBox(torsoGroup, 0.12, 0.14, 0.03, -0.15, 0.14, 0.16, tabletScreenMat);
+    rigRoot.add(torsoGroup);
+    const makeArm = (xPos, name, withTester = false) => {
+      const pivot = new Group();
+      pivot.name = name;
+      pivot.position.set(xPos, 1.38, 0);
+      addBox(pivot, 0.22, 0.42, 0.22, 0, -0.21, 0, torsoNavyMat);
+      addBox(pivot, 0.2, 0.28, 0.2, 0, -0.54, 0, skinMat);
+      if (withTester) {
+        addBox(pivot, 0.18, 0.04, 0.24, 0, -0.66, 0.12, tabletBodyMat);
+        addBox(pivot, 0.14, 0.02, 0.16, 0, -0.635, 0.12, tabletScreenMat);
+      }
+      rigRoot.add(pivot);
+      return pivot;
+    };
+    const leftArmPivot = makeArm(-0.4, "LeftArmPivot", false);
+    const rightArmPivot = makeArm(0.4, "RightArmPivot", true);
+    const headPivot = new Group();
+    headPivot.name = "HeadPivot";
+    headPivot.position.set(0, 1.44, 0);
+    addBox(headPivot, 0.4, 0.4, 0.4, 0, 0.22, 0, skinMat);
+    addBox(headPivot, 0.055, 0.075, 0.02, -0.085, 0.25, 0.2, faceDarkMat);
+    addBox(headPivot, 0.055, 0.075, 0.02, 0.085, 0.25, 0.2, faceDarkMat);
+    addBox(headPivot, 0.14, 0.03, 0.02, 0, 0.12, 0.2, faceDarkMat);
+    addBox(headPivot, 0.45, 0.14, 0.46, 0, 0.41, 0, helmetMat);
+    addBox(headPivot, 0.28, 0.07, 0.48, 0, 0.48, 0, helmetMat);
+    addBox(headPivot, 0.42, 0.04, 0.18, 0, 0.36, 0.24, helmetMat);
+    rigRoot.add(headPivot);
+    if (typeof document !== "undefined" && label) {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = 320;
+        canvas.height = 76;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.fillStyle = "rgba(22, 40, 18, 0.90)";
+          roundRect(ctx, 8, 8, 304, 60, 14);
+          ctx.fill();
+          ctx.strokeStyle = "#76c457";
+          ctx.lineWidth = 3;
+          roundRect(ctx, 8, 8, 304, 60, 14);
+          ctx.stroke();
+          ctx.fillStyle = "#fff8cf";
+          ctx.font = "bold 26px Poppins, sans-serif";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(truncateText(ctx, label, 280), 160, 38);
+          const tex = new CanvasTexture(canvas);
+          tex.needsUpdate = true;
+          const spriteMat = new SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+          const sprite = new Sprite(spriteMat);
+          sprite.position.set(0, 2.28, 0);
+          sprite.scale.set(2.1, 0.5, 1);
+          sprite.renderOrder = 25;
+          rigRoot.add(sprite);
+        }
+      } catch {
+      }
+    }
+    root.traverse((child) => {
+      child.userData.isAvatarMesh = true;
+      child.raycast = () => {
+      };
+    });
+    root.userData.rigs = {
+      rigRoot,
+      headPivot,
+      leftArmPivot,
+      rightArmPivot,
+      leftLegPivot,
+      rightLegPivot
+    };
+    return root;
+  }
+  function animateRobloxAvatarRig(avatarGroup, animState = {}, dt = 0.016) {
+    const rigs = avatarGroup?.userData?.rigs;
+    if (!rigs) return;
+    const { rigRoot, headPivot, leftArmPivot, rightArmPivot, leftLegPivot, rightLegPivot } = rigs;
+    const isGrounded = animState.isGrounded !== false;
+    const isMoving = Boolean(animState.isMoving);
+    const isRunning = Boolean(animState.isRunning);
+    const phase = Number(animState.walkPhase) || 0;
+    if (!isGrounded) {
+      leftLegPivot.rotation.x = 0.38;
+      rightLegPivot.rotation.x = -0.32;
+      leftArmPivot.rotation.x = -0.75;
+      rightArmPivot.rotation.x = -0.65;
+      leftArmPivot.rotation.z = 0.24;
+      rightArmPivot.rotation.z = -0.24;
+      rigRoot.position.y = 0;
+      headPivot.rotation.y = 0;
+      return;
+    }
+    if (isMoving) {
+      const amp = isRunning ? 0.85 : 0.58;
+      const swing = Math.sin(phase) * amp;
+      leftLegPivot.rotation.x = swing;
+      rightLegPivot.rotation.x = -swing;
+      leftArmPivot.rotation.x = -swing * 0.85;
+      rightArmPivot.rotation.x = swing * 0.6 - 0.16;
+      leftArmPivot.rotation.z = 0.06;
+      rightArmPivot.rotation.z = -0.06;
+      rigRoot.position.y = Math.abs(Math.cos(phase)) * (isRunning ? 0.085 : 0.045);
+      headPivot.rotation.y = Math.sin(phase * 0.5) * 0.05;
+      return;
+    }
+    const damp2 = Math.min(1, Math.max(0.05, dt * 12));
+    leftLegPivot.rotation.x += (0 - leftLegPivot.rotation.x) * damp2;
+    rightLegPivot.rotation.x += (0 - rightLegPivot.rotation.x) * damp2;
+    leftArmPivot.rotation.x += (0 - leftArmPivot.rotation.x) * damp2;
+    rightArmPivot.rotation.x += (-0.15 - rightArmPivot.rotation.x) * damp2;
+    leftArmPivot.rotation.z += (0.04 - leftArmPivot.rotation.z) * damp2;
+    rightArmPivot.rotation.z += (-0.04 - rightArmPivot.rotation.z) * damp2;
+    rigRoot.position.y += (0 - rigRoot.position.y) * damp2;
+    headPivot.rotation.y += (0 - headPivot.rotation.y) * damp2;
   }
   function roundRect(ctx, x, y, w, h, r) {
     ctx.beginPath();
@@ -53039,6 +53374,7 @@ void main() {
       this.lookYaw = 0;
       this.lookPitch = 0;
       this.pendingCableSourceId = null;
+      this.pendingCableSourcePort = "";
       this.pending3dWaypoints = [];
       this.pen3dPathStyle = "curve";
       this.pen3dCategory = "cat6";
@@ -53051,6 +53387,34 @@ void main() {
       this._marqueeEl = null;
       this._temporarilyDisabledControlsForBox = false;
       this._pendingSyncRaf = null;
+      let autoFocusPref = true;
+      try {
+        if (typeof localStorage !== "undefined") {
+          autoFocusPref = localStorage.getItem("netmap_sim_autofocus_3d") !== "0";
+        }
+      } catch {
+      }
+      this.autoFocusOnClick = autoFocusPref;
+      this.simulatorViewAngle = "front";
+      this.simulatorFocusedDeviceId = null;
+      this.savedPreFocusCamera = null;
+      this.avatarMode = false;
+      this.avatarGroup = null;
+      this.avatarState = {
+        x: 0,
+        y: 0,
+        z: 0,
+        yaw: 0,
+        vy: 0,
+        isGrounded: true,
+        walkPhase: 0,
+        isMoving: false,
+        isRunning: false,
+        nearestDeviceId: null,
+        nearestDist: Infinity
+      };
+      this._lastAvatarHudNearestId = null;
+      this._lastAvatarHudDistKey = "";
       this.bindGlobalListeners();
     }
     init() {
@@ -53263,6 +53627,28 @@ void main() {
       this.keysPressed.clear();
       this.cameraAnim = null;
       this.isLookDragging = false;
+      this.simulatorFocusedDeviceId = null;
+      this.savedPreFocusCamera = null;
+      this.pendingCableSourceId = null;
+      this.pendingCableSourcePort = "";
+      this.pending3dWaypoints = [];
+      this.avatarMode = false;
+      if (this.avatarGroup) this.avatarGroup.visible = false;
+      if (typeof document !== "undefined") {
+        document.getElementById("btn-3d-avatar")?.classList.remove("active");
+        const avatarHudEl = document.getElementById("hud-3d-avatar-bar");
+        if (avatarHudEl) {
+          avatarHudEl.innerHTML = "";
+          avatarHudEl.classList.add("hidden");
+          avatarHudEl.style.display = "none";
+        }
+        const hudEl = document.getElementById("hud-3d-sim-inspector");
+        if (hudEl) {
+          hudEl.innerHTML = "";
+          hudEl.classList.add("hidden");
+          hudEl.style.display = "none";
+        }
+      }
       this.container.style.display = "none";
       if (this.animFrameId) {
         cancelAnimationFrame(this.animFrameId);
@@ -53277,7 +53663,11 @@ void main() {
         const dt = Math.min(0.05, Math.max(1e-3, (now - (this.lastFrameTime || now)) / 1e3));
         this.lastFrameTime = now;
         this.updateCameraAnimation(now);
-        this.updateWalkMovement(dt);
+        if (this.avatarMode) {
+          this.updateAvatarController(dt);
+        } else {
+          this.updateWalkMovement(dt);
+        }
         this.controls?.update();
         this.renderer?.render(this.scene, this.camera);
       };
@@ -53525,6 +53915,13 @@ void main() {
             modelContainer.add(create3DPortsSubGroup(devPorts, updatedStatusMap, true));
             this.tagDescendantDeviceId(modelContainer, dev.id);
             this.syncCables();
+            if (this.simulatorFocusedDeviceId === dev.id) {
+              this.focusOnDevice(dev.id, {
+                viewAngle: this.simulatorViewAngle || "front",
+                saveReturnCamera: false,
+                duration: 220
+              });
+            }
           }).catch((err) => {
             console.warn(`[Map3DEngine] Custom 3D model load failed for ${dev.name}:`, err);
             modelContainer.add(create3DPortsSubGroup(devPorts, portStatusMap, false));
@@ -53561,13 +53958,15 @@ void main() {
         selRing.raycast = () => {
         };
         holder.add(selRing);
-        if (stateManager.getMode() === "draw-cable" && this.pendingCableSourceId === dev.id) {
+        if ((stateManager.getMode() === "draw-cable" || this.pendingCableSourcePort) && this.pendingCableSourceId === dev.id) {
           const srcRing = new Mesh(
             new RingGeometry(1.25 * userModelScale, 1.52 * userModelScale, 32),
             new MeshBasicMaterial({ color: 959977, side: DoubleSide })
           );
           srcRing.rotation.x = -Math.PI / 2;
           srcRing.position.y = 0.06;
+          srcRing.raycast = () => {
+          };
           holder.add(srcRing);
         }
         if (this.showLabels) {
@@ -53801,11 +54200,13 @@ void main() {
         const sideDist = sideUnits * avgPortScale;
         const bootLenSrc = 0.028 * srcScale;
         const bootLenDst = 0.028 * dstScale;
+        const srcBootTipWorld = hasSrcPort ? srcPos.clone().addScaledVector(srcDir, bootLenSrc) : srcPos.clone();
+        const dstBootTipWorld = hasDstPort ? dstPos.clone().addScaledVector(dstDir, bootLenDst) : dstPos.clone();
         const pts = [];
         if (hasSrcPort && !isWireless) {
           pts.push(srcPos.clone().addScaledVector(srcDir, -8e-3 * srcScale));
           pts.push(srcPos.clone());
-          pts.push(srcPos.clone().addScaledVector(srcDir, bootLenSrc));
+          pts.push(srcBootTipWorld.clone());
         } else {
           pts.push(srcPos.clone());
         }
@@ -53813,6 +54214,12 @@ void main() {
         const hasCustomElev = typeof cable.details?.elevationZ === "number" && !isNaN(cable.details.elevationZ);
         const trayY = hasCustomElev ? Math.max(0.02, cable.details.elevationZ) : Math.max(0.06, Math.min(srcPos.y, dstPos.y));
         let waypointMarkers = [];
+        const wpBowOffset = new Vector3();
+        if (pathStyle === "curve" && (hasCustomBow || hasCustomSide || hasCustomSag)) {
+          if (hasCustomBow) wpBowOffset.addScaledVector(outDir, bowUnits * avgPortScale);
+          if (hasCustomSide) wpBowOffset.addScaledVector(sideDir, sideDist);
+          if (hasCustomSag) wpBowOffset.y -= sagDist * 0.5;
+        }
         if (Array.isArray(cable.route) && cable.route.length > 0) {
           const rawWps = cable.route.map((wp) => {
             const wpWorld = this.normToWorld(wp.x, wp.y);
@@ -53841,12 +54248,8 @@ void main() {
             }
           } else {
             const shapedWps = rawWps.map((wpVec) => {
-              const v = wpVec.clone();
-              if (pathStyle === "curve" && (hasCustomBow || hasCustomSide || hasCustomSag)) {
-                if (hasCustomBow) v.addScaledVector(outDir, bowUnits * avgPortScale);
-                if (hasCustomSide) v.addScaledVector(sideDir, sideDist);
-                if (hasCustomSag) v.y = Math.max(0.02, v.y - sagDist * 0.5);
-              }
+              const v = wpVec.clone().add(wpBowOffset);
+              v.y = Math.max(0.02, v.y);
               return v;
             });
             waypointMarkers = shapedWps;
@@ -53971,6 +54374,7 @@ void main() {
         mesh.userData = {
           cableId: cable.id,
           cableTubeSelected: isSelected,
+          curve,
           linearMid: srcPos.clone().add(dstPos).multiplyScalar(0.5),
           outDir: outDir.clone(),
           sideDir: sideDir.clone(),
@@ -54035,7 +54439,9 @@ void main() {
               qDot.userData = {
                 cableId: cable.id,
                 cableHandleType: "add-waypoint",
-                tVal
+                insertIdx: 0,
+                tVal,
+                bowOffset: wpBowOffset.clone()
               };
               this.cablesGroup.add(qDot);
             });
@@ -54051,7 +54457,8 @@ void main() {
             wpDot.userData = {
               cableId: cable.id,
               cableHandleType: "waypoint",
-              waypointIdx: idx
+              waypointIdx: idx,
+              bowOffset: wpBowOffset.clone()
             };
             this.cablesGroup.add(wpDot);
             const stemGeo = new BufferGeometry().setFromPoints([
@@ -54060,6 +54467,29 @@ void main() {
             ]);
             this.cablesGroup.add(new Line(stemGeo, stemMat));
           });
+          if (!isWireless) {
+            const ctrlPts = [srcBootTipWorld.clone(), ...waypointMarkers, dstBootTipWorld.clone()];
+            const ctrlGeo = new BufferGeometry().setFromPoints(ctrlPts);
+            const ctrlMat = new LineBasicMaterial({ color: 3718648, transparent: true, opacity: 0.55 });
+            this.cablesGroup.add(new Line(ctrlGeo, ctrlMat));
+            const midGeo = new SphereGeometry(Math.max(0.065, radius * 1.9, 0.028 * avgPortScale), 10, 10);
+            const midMat = new MeshBasicMaterial({ color: 3718648, transparent: true, opacity: 0.9 });
+            const segCount = waypointMarkers.length + 1;
+            for (let segIdx = 0; segIdx < segCount; segIdx++) {
+              const tVal = (segIdx + 0.5) / segCount;
+              const mPt = curve.getPoint(tVal);
+              const mDot = new Mesh(midGeo, midMat);
+              mDot.position.copy(mPt);
+              mDot.userData = {
+                cableId: cable.id,
+                cableHandleType: "add-waypoint",
+                insertIdx: segIdx,
+                tVal,
+                bowOffset: wpBowOffset.clone()
+              };
+              this.cablesGroup.add(mDot);
+            }
+          }
         }
       });
       if (stateManager.getMode() === "draw-cable" && this.pendingCableSourceId && this.pending3dWaypoints.length > 0) {
@@ -54098,6 +54528,14 @@ void main() {
       }
       return null;
     }
+    findPortNameFromObject(obj) {
+      let cur = obj;
+      while (cur && cur !== this.devicesGroup) {
+        if (cur.userData?.portName) return cur.userData.portName;
+        cur = cur.parent;
+      }
+      return "";
+    }
     handleCanvasClick(e) {
       const rect = this.renderer.domElement.getBoundingClientRect();
       this.pointer.x = (e.clientX - rect.left) / rect.width * 2 - 1;
@@ -54115,25 +54553,31 @@ void main() {
       }
       if (devHits.length > 0) {
         const devId = this.findDeviceIdFromObject(devHits[0].object);
+        const hitPortName = this.findPortNameFromObject(devHits[0].object);
         if (devId) {
           if (stateManager.getMode() === "draw-cable") {
             if (!this.pendingCableSourceId) {
               this.pendingCableSourceId = devId;
+              this.pendingCableSourcePort = hitPortName || "";
               this.pending3dWaypoints = [];
               this.deviceManager.selectDevice(devId);
               this.syncDevices();
               const srcDev2 = this.deviceManager.getDeviceById(devId);
-              this.showStatusHint(`\u2712\uFE0F Pen Tool 3D: Sumber "${srcDev2?.name || devId}". Klik lantai untuk titik belok (Shift=45\xB0/90\xB0), atau klik perangkat tujuan.`);
+              const portHint = hitPortName ? ` [${hitPortName}]` : "";
+              this.showStatusHint(`Pen Tool 3D: Sumber "${srcDev2?.name || devId}"${portHint}. Klik lantai untuk titik belok (Shift=45\xB0/90\xB0), atau klik perangkat/port tujuan.`);
+              if (this.simulatorFocusedDeviceId) {
+                this.renderSimulatorInspectorHud(devId);
+              }
               return;
             }
             if (this.pendingCableSourceId === devId) {
-              this.showStatusHint("\u26A0\uFE0F Perangkat tujuan tidak boleh sama dengan perangkat sumber.");
+              this.showStatusHint("Perangkat tujuan tidak boleh sama dengan perangkat sumber.");
               return;
             }
             const srcDev = this.deviceManager.getDeviceById(this.pendingCableSourceId);
             const dstDev = this.deviceManager.getDeviceById(devId);
             const newCab = this.cableManager.addConnection({
-              name: `Link ${srcDev?.name || "Source"} \u2794 ${dstDev?.name || "Dest"}`,
+              name: `Link ${srcDev?.name || "Source"} -> ${dstDev?.name || "Dest"}`,
               source: this.pendingCableSourceId,
               destination: devId,
               cableCategory: this.pen3dCategory || "cat6",
@@ -54141,19 +54585,32 @@ void main() {
               status: "active",
               details: {
                 pathStyle: this.pen3dPathStyle || "curve",
-                curveTension: 0.38
+                curveTension: 0.38,
+                ...this.pendingCableSourcePort ? { portSource: this.pendingCableSourcePort } : {},
+                ...hitPortName ? { portDestination: hitPortName } : {}
               }
             });
             this.pendingCableSourceId = null;
+            this.pendingCableSourcePort = "";
             this.pending3dWaypoints = [];
             stateManager.setMode("select");
             this.syncDevices();
             if (newCab) {
               this.cableManager.selectConnection(newCab.id);
               this.syncCables();
-              this.showStatusHint(`\u2705 Kabel terhubung: "${newCab.name}" \u2014 Pilih port interface.`);
-              eventBus.emit("cable:prompt-port-picker", { cableId: newCab.id });
+              this.showStatusHint(`Kabel terhubung: "${newCab.name}" \u2014 Pilih port interface.`);
+              if (!hitPortName) {
+                eventBus.emit("cable:prompt-port-picker", { cableId: newCab.id });
+              }
             }
+            return;
+          }
+          if (this.pendingCableSourceId && this.pendingCableSourcePort && hitPortName && this.pendingCableSourceId !== devId) {
+            this.handleSimulatorPortClick(devId, hitPortName);
+            return;
+          }
+          if (hitPortName && this.simulatorFocusedDeviceId === devId && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+            this.handleSimulatorPortClick(devId, hitPortName);
             return;
           }
           stateManager.deselectObject3d?.();
@@ -54161,6 +54618,11 @@ void main() {
             toggle: Boolean(e.ctrlKey || e.metaKey),
             additive: Boolean(e.shiftKey)
           });
+          if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
+            if (this.autoFocusOnClick || this.simulatorFocusedDeviceId) {
+              this.focusOnDevice(devId, { viewAngle: this.simulatorViewAngle || "front" });
+            }
+          }
           return;
         }
       }
@@ -54219,11 +54681,21 @@ void main() {
       }
       const hadPending = Boolean(this.pendingCableSourceId);
       this.pendingCableSourceId = null;
-      if (hadPending) this.syncDevices();
+      this.pendingCableSourcePort = "";
+      if (hadPending) {
+        this.syncDevices();
+        if (this.simulatorFocusedDeviceId) {
+          this.renderSimulatorInspectorHud(this.simulatorFocusedDeviceId);
+          return;
+        }
+      }
       if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
         this.deviceManager.deselectDevice();
         this.cableManager.deselectConnection();
         stateManager.deselectObject3d?.();
+        if (this.simulatorFocusedDeviceId) {
+          this.exitSimulatorFocus({ restoreCamera: false });
+        }
       }
     }
     handleCanvasRightClick(e) {
@@ -54232,25 +54704,35 @@ void main() {
       this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
       this.raycaster.setFromCamera(this.pointer, this.camera);
       const devHits = this.raycaster.intersectObjects(this.devicesGroup.children, true);
+      const cableHits = this.raycaster.intersectObjects(this.cablesGroup.children, true);
+      if (cableHits.length > 0 && (devHits.length === 0 || cableHits[0].distance <= devHits[0].distance + 0.25 || Boolean(cableHits[0].object?.userData?.cableHandleType))) {
+        const cabId = cableHits[0].object.userData?.cableId;
+        const cable = cabId ? this.cableManager.getConnectionById(cabId) : null;
+        if (cable) {
+          const hitPt = cableHits[0].point.clone();
+          const rawNorm = this.worldToNorm(hitPt.x, hitPt.z);
+          const hitCoord = {
+            x: Math.max(0.01, Math.min(0.99, Number(rawNorm.normX.toFixed(4)))),
+            y: Math.max(0.01, Math.min(0.99, Number(rawNorm.normY.toFixed(4)))),
+            z: Number(Math.max(0.02, hitPt.y).toFixed(2))
+          };
+          const waypointIdx = cableHits[0].object?.userData?.cableHandleType === "waypoint" ? cableHits[0].object.userData.waypointIdx : null;
+          eventBus.emit("contextmenu:cable", {
+            cable,
+            screenX: e.clientX,
+            screenY: e.clientY,
+            hitCoord,
+            waypointIdx
+          });
+          return;
+        }
+      }
       if (devHits.length > 0) {
         const devId = this.findDeviceIdFromObject(devHits[0].object);
         const device = devId ? this.deviceManager.getDeviceById(devId) : null;
         if (device) {
           eventBus.emit("contextmenu:device", {
             device,
-            screenX: e.clientX,
-            screenY: e.clientY
-          });
-          return;
-        }
-      }
-      const cableHits = this.raycaster.intersectObjects(this.cablesGroup.children, true);
-      if (cableHits.length > 0) {
-        const cabId = cableHits[0].object.userData?.cableId;
-        const cable = cabId ? this.cableManager.getConnectionById(cabId) : null;
-        if (cable) {
-          eventBus.emit("contextmenu:cable", {
-            cable,
             screenX: e.clientX,
             screenY: e.clientY
           });
@@ -54283,6 +54765,26 @@ void main() {
       this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
       this.raycaster.setFromCamera(this.pointer, this.camera);
       const devHits = this.raycaster.intersectObjects(this.devicesGroup.children, true);
+      const cableHits = this.raycaster.intersectObjects(this.cablesGroup.children, true);
+      if (cableHits.length > 0 && (devHits.length === 0 || cableHits[0].distance <= devHits[0].distance + 0.25 || Boolean(cableHits[0].object?.userData?.cableHandleType))) {
+        const cabId = cableHits[0].object?.userData?.cableId;
+        if (cabId) {
+          if (cableHits[0].object?.userData?.cableHandleType === "waypoint") {
+            this.cableManager.deleteWaypoint(cabId, cableHits[0].object.userData.waypointIdx);
+            return;
+          }
+          const hitPt = cableHits[0].point.clone();
+          const rawNorm = this.worldToNorm(hitPt.x, hitPt.z);
+          const hitCoord = {
+            x: Math.max(0.01, Math.min(0.99, Number(rawNorm.normX.toFixed(4)))),
+            y: Math.max(0.01, Math.min(0.99, Number(rawNorm.normY.toFixed(4)))),
+            z: Number(Math.max(0.02, hitPt.y).toFixed(2))
+          };
+          this.cableManager.selectConnection(cabId);
+          this.cableManager.addSmartWaypoint(cabId, hitCoord);
+          return;
+        }
+      }
       if (devHits.length > 0) {
         const devId = this.findDeviceIdFromObject(devHits[0].object);
         if (devId) {
@@ -54906,7 +55408,10 @@ void main() {
         cableId: cable.id,
         handleType: handleHit.cableHandleType,
         waypointIdx: typeof handleHit.waypointIdx === "number" ? handleHit.waypointIdx : -1,
+        insertIdx: typeof handleHit.insertIdx === "number" ? handleHit.insertIdx : -1,
         tVal: typeof handleHit.tVal === "number" ? handleHit.tVal : 0.5,
+        bowOffset: handleHit.bowOffset?.clone() || new Vector3(),
+        startWorldPt: initPos.clone(),
         linearMid: handleHit.linearMid?.clone() || initPos.clone(),
         outDir: handleHit.outDir?.clone() || new Vector3(0, 0, 1),
         sideDir: handleHit.sideDir?.clone() || new Vector3(1, 0, 0),
@@ -54939,14 +55444,30 @@ void main() {
         this.syncCables();
         return;
       }
-      const rawNorm = this.worldToNorm(hitPt.x, hitPt.z);
+      if (!Array.isArray(cable.route)) cable.route = [];
+      if (state.handleType === "add-waypoint" && cable.route.length === 0) {
+        cable.details = {
+          ...cable.details || {},
+          pathStyle: "curve",
+          bowOut: 0,
+          sideOffset: 0,
+          sagDrop: 0
+        };
+        state.bowOffset.set(0, 0, 0);
+      }
+      const rawHit = hitPt.clone().sub(state.bowOffset);
+      if (e.shiftKey) {
+        const lockedXZ = state.startWorldPt.clone().sub(state.bowOffset);
+        rawHit.x = lockedXZ.x;
+        rawHit.z = lockedXZ.z;
+      }
+      const rawNorm = this.worldToNorm(rawHit.x, rawHit.z);
       const normX = Math.max(0.01, Math.min(0.99, rawNorm.normX));
       const normY = Math.max(0.01, Math.min(0.99, rawNorm.normY));
-      const wpZ = Math.max(0.02, Number(hitPt.y.toFixed(2)));
+      const wpZ = Math.max(0.02, Number(rawHit.y.toFixed(2)));
       const wp = { x: normX, y: normY, z: wpZ };
-      if (!Array.isArray(cable.route)) cable.route = [];
       if (state.handleType === "add-waypoint") {
-        const insertIdx = state.tVal < 0.5 ? 0 : cable.route.length;
+        const insertIdx = state.insertIdx >= 0 ? Math.max(0, Math.min(cable.route.length, state.insertIdx)) : state.tVal < 0.5 ? 0 : cable.route.length;
         cable.route.splice(insertIdx, 0, wp);
         state.handleType = "waypoint";
         state.waypointIdx = insertIdx;
@@ -55362,6 +55883,316 @@ void main() {
       this.camera.position.add(moveVec);
       this.controls.target.add(moveVec);
     }
+    getAvatarFollowCameraPose(followDist = 6.2, heightOffset = 2.75) {
+      const yaw = Number(this.avatarState.yaw) || 0;
+      const target = new Vector3(
+        this.avatarState.x,
+        this.avatarState.y + 1.35,
+        this.avatarState.z
+      );
+      const endPos = new Vector3(
+        this.avatarState.x - Math.sin(yaw) * followDist,
+        Math.max(0.6, this.avatarState.y + heightOffset),
+        this.avatarState.z - Math.cos(yaw) * followDist
+      );
+      return { endPos, target };
+    }
+    setAvatarMode(enabled) {
+      const next = Boolean(enabled);
+      this.avatarMode = next;
+      if (typeof document !== "undefined") {
+        document.getElementById("btn-3d-avatar")?.classList.toggle("active", next);
+      }
+      if (!next) {
+        if (this.avatarGroup) {
+          this.avatarGroup.visible = false;
+        }
+        if (typeof document !== "undefined") {
+          const hudEl = document.getElementById("hud-3d-avatar-bar");
+          if (hudEl) {
+            hudEl.innerHTML = "";
+            hudEl.classList.add("hidden");
+            hudEl.style.display = "none";
+          }
+        }
+        this.showStatusHint("Mode Teknisi dimatikan \u2014 kembali ke navigasi kamera bebas.");
+        return false;
+      }
+      if (!this.avatarGroup) {
+        this.avatarGroup = createRobloxAvatar3DGroup("Teknisi Jaringan");
+      }
+      if (this.scene && !this.scene.children.includes(this.avatarGroup)) {
+        this.scene.add(this.avatarGroup);
+      }
+      this.avatarGroup.visible = true;
+      if (this.simulatorFocusedDeviceId) {
+        this.exitSimulatorFocus({ restoreCamera: false });
+      }
+      if (this.isActive && this.effectivePosMap.size === 0 && (this.deviceManager?.getAllDevices?.() || []).length > 0) {
+        this.syncDevices();
+      }
+      const selectedId = this.deviceManager?.selectedDeviceId;
+      const fallbackId = selectedId && this.effectivePosMap.has(selectedId) ? selectedId : this.effectivePosMap.keys().next().value || null;
+      if (selectedId && this.effectivePosMap.has(selectedId)) {
+        this.teleportAvatarToDevice(selectedId, { duration: 380 });
+      } else {
+        let spawnX = 0;
+        let spawnZ = 0;
+        let spawnYaw = 0;
+        const { worldW, worldD } = this.getWorldDimensions();
+        const target = this.controls?.target;
+        if (target && Math.abs(target.x) <= worldW * 0.55 && Math.abs(target.z) <= worldD * 0.55) {
+          spawnX = target.x;
+          spawnZ = target.z;
+        } else if (fallbackId && this.effectivePosMap.has(fallbackId)) {
+          const fp = this.effectivePosMap.get(fallbackId);
+          spawnX = fp.x;
+          spawnZ = fp.z + 2.8;
+          spawnYaw = Math.PI;
+        }
+        this.avatarState.x = spawnX;
+        this.avatarState.y = 0;
+        this.avatarState.z = spawnZ;
+        this.avatarState.yaw = spawnYaw;
+        this.avatarState.vy = 0;
+        this.avatarState.isGrounded = true;
+        this.avatarGroup.position.set(spawnX, 0, spawnZ);
+        this.avatarGroup.rotation.y = spawnYaw;
+        animateRobloxAvatarRig(this.avatarGroup, this.avatarState, 0.016);
+        const camPose = this.getAvatarFollowCameraPose();
+        this.animateCameraTo(camPose.endPos, camPose.target, 380);
+      }
+      this.findNearestDeviceToAvatar();
+      this.renderAvatarHudBar();
+      this.showStatusHint("Mode Teknisi aktif: WASD/Panah untuk berjalan, Shift lari, Spasi lompat, F inspeksi perangkat terdekat.");
+      return true;
+    }
+    toggleAvatarMode() {
+      return this.setAvatarMode(!this.avatarMode);
+    }
+    teleportAvatarToDevice(deviceId, { duration = 360 } = {}) {
+      if (!deviceId || !this.effectivePosMap.has(deviceId)) return false;
+      const { panelCenter, panelNormal } = this.getDevicePortPanelPose(deviceId);
+      const { worldW, worldD } = this.getWorldDimensions();
+      const distInFront = Math.max(2.2, Math.min(3.5, this.deviceScaleMultiplier * 0.95));
+      const rawX = panelCenter.x + panelNormal.x * distInFront;
+      const rawZ = panelCenter.z + panelNormal.z * distInFront;
+      const tx = Math.max(-worldW * 0.55, Math.min(worldW * 0.55, rawX));
+      const tz = Math.max(-worldD * 0.55, Math.min(worldD * 0.55, rawZ));
+      const yaw = Math.atan2(panelCenter.x - tx, panelCenter.z - tz);
+      this.avatarState.x = tx;
+      this.avatarState.y = 0;
+      this.avatarState.z = tz;
+      this.avatarState.yaw = yaw;
+      this.avatarState.vy = 0;
+      this.avatarState.isGrounded = true;
+      this.avatarState.isMoving = false;
+      if (this.avatarGroup) {
+        this.avatarGroup.position.set(tx, 0, tz);
+        this.avatarGroup.rotation.y = yaw;
+        animateRobloxAvatarRig(this.avatarGroup, this.avatarState, 0.016);
+      }
+      const camPose = this.getAvatarFollowCameraPose();
+      this.animateCameraTo(camPose.endPos, camPose.target, duration);
+      this.findNearestDeviceToAvatar();
+      this.updateAvatarProximityHud();
+      return true;
+    }
+    findNearestDeviceToAvatar() {
+      let bestId = null;
+      let bestDist = Infinity;
+      for (const [devId, pos] of this.effectivePosMap.entries()) {
+        const dev = this.deviceManager?.getDeviceById?.(devId);
+        if (dev && dev.layerVisible === false) continue;
+        const d = Math.hypot((pos?.x ?? 0) - this.avatarState.x, (pos?.z ?? 0) - this.avatarState.z);
+        if (d < bestDist) {
+          bestDist = d;
+          bestId = devId;
+        }
+      }
+      this.avatarState.nearestDeviceId = bestId;
+      this.avatarState.nearestDist = bestDist;
+      return { deviceId: bestId, distance: bestDist };
+    }
+    inspectNearestDeviceFromAvatar() {
+      const { deviceId } = this.findNearestDeviceToAvatar();
+      const targetId = deviceId || this.deviceManager?.selectedDeviceId || null;
+      if (!targetId) {
+        this.showStatusHint("Tidak ada perangkat di area denah untuk diinspeksi.");
+        return false;
+      }
+      stateManager.deselectObject3d?.();
+      this.deviceManager?.selectDevice?.(targetId);
+      this.focusOnDevice(targetId, { viewAngle: this.simulatorViewAngle || "front", saveReturnCamera: true });
+      return true;
+    }
+    updateAvatarController(dt = 0.016) {
+      if (!this.avatarMode) return;
+      let forward = 0;
+      let right = 0;
+      if (this.keysPressed.has("w") || this.keysPressed.has("arrowup")) forward += 1;
+      if (this.keysPressed.has("s") || this.keysPressed.has("arrowdown")) forward -= 1;
+      if (this.keysPressed.has("d") || this.keysPressed.has("arrowright")) right += 1;
+      if (this.keysPressed.has("a") || this.keysPressed.has("arrowleft")) right -= 1;
+      const jumpPressed = this.keysPressed.has("space");
+      const hasMoveInput = forward !== 0 || right !== 0;
+      const isRunning = this.keysPressed.has("shift");
+      if ((hasMoveInput || jumpPressed) && this.simulatorFocusedDeviceId) {
+        this.exitSimulatorFocus({ restoreCamera: false });
+        const pose = this.getAvatarFollowCameraPose();
+        if (this.camera && this.controls) {
+          this.camera.position.copy(pose.endPos);
+          this.controls.target.copy(pose.target);
+        }
+      }
+      if (this.simulatorFocusedDeviceId) {
+        animateRobloxAvatarRig(this.avatarGroup, { ...this.avatarState, isMoving: false }, dt);
+        return;
+      }
+      const prevX = this.avatarState.x;
+      const prevY = this.avatarState.y;
+      const prevZ = this.avatarState.z;
+      if (jumpPressed && this.avatarState.isGrounded) {
+        this.avatarState.vy = 7.6;
+        this.avatarState.isGrounded = false;
+      }
+      if (!this.avatarState.isGrounded || this.avatarState.y > 0) {
+        this.avatarState.vy -= 21 * dt;
+        this.avatarState.y += this.avatarState.vy * dt;
+        if (this.avatarState.y <= 0) {
+          this.avatarState.y = 0;
+          this.avatarState.vy = 0;
+          this.avatarState.isGrounded = true;
+        }
+      }
+      if (hasMoveInput) {
+        this.cameraAnim = null;
+        const viewDir = new Vector3(0, 0, -1);
+        if (this.camera && this.controls) {
+          viewDir.copy(this.controls.target).sub(this.camera.position);
+          viewDir.y = 0;
+        }
+        if (viewDir.lengthSq() < 1e-4) {
+          viewDir.set(-Math.sin(this.avatarState.yaw), 0, -Math.cos(this.avatarState.yaw));
+        } else {
+          viewDir.normalize();
+        }
+        const rightDir = new Vector3().crossVectors(viewDir, new Vector3(0, 1, 0)).normalize();
+        const moveDir = new Vector3().addScaledVector(viewDir, forward).addScaledVector(rightDir, right);
+        if (moveDir.lengthSq() > 1e-4) {
+          moveDir.normalize();
+          const speed = isRunning ? 11.5 : 6.2;
+          const { worldW, worldD } = this.getWorldDimensions();
+          const maxX = worldW * 0.55;
+          const maxZ = worldD * 0.55;
+          this.avatarState.x = Math.max(-maxX, Math.min(maxX, this.avatarState.x + moveDir.x * speed * dt));
+          this.avatarState.z = Math.max(-maxZ, Math.min(maxZ, this.avatarState.z + moveDir.z * speed * dt));
+          const targetYaw = Math.atan2(moveDir.x, moveDir.z);
+          const angleDiff = Math.atan2(Math.sin(targetYaw - this.avatarState.yaw), Math.cos(targetYaw - this.avatarState.yaw));
+          this.avatarState.yaw += angleDiff * Math.min(1, dt * 14);
+          this.avatarState.walkPhase += dt * (isRunning ? 14.5 : 9.5);
+        }
+        this.avatarState.isMoving = true;
+        this.avatarState.isRunning = isRunning;
+      } else {
+        this.avatarState.isMoving = false;
+        this.avatarState.isRunning = false;
+      }
+      const dx = this.avatarState.x - prevX;
+      const dy = this.avatarState.y - prevY;
+      const dz = this.avatarState.z - prevZ;
+      if (this.avatarGroup) {
+        this.avatarGroup.position.set(this.avatarState.x, this.avatarState.y, this.avatarState.z);
+        this.avatarGroup.rotation.y = this.avatarState.yaw;
+        animateRobloxAvatarRig(this.avatarGroup, this.avatarState, dt);
+      }
+      if (this.camera && this.controls && !this.cameraAnim && (dx !== 0 || dy !== 0 || dz !== 0)) {
+        this.camera.position.x += dx;
+        this.camera.position.y = Math.max(0.35, this.camera.position.y + dy * 0.65);
+        this.camera.position.z += dz;
+        this.controls.target.x += dx;
+        this.controls.target.y += dy * 0.65;
+        this.controls.target.z += dz;
+      }
+      this.findNearestDeviceToAvatar();
+      this.updateAvatarProximityHud();
+    }
+    renderAvatarHudBar() {
+      if (typeof document === "undefined") return;
+      const hudEl = document.getElementById("hud-3d-avatar-bar");
+      if (!hudEl) return;
+      if (!this.isActive || !this.avatarMode || this.simulatorFocusedDeviceId) {
+        hudEl.classList.add("hidden");
+        hudEl.style.display = "none";
+        return;
+      }
+      const allDevs = (this.deviceManager?.getAllDevices?.() || []).filter((d) => d.layerVisible !== false);
+      const optionsHtml = allDevs.map((d) => `<option value="${this.escapeHudHtml(d.id)}">${this.escapeHudHtml(d.name)}${d.network?.ip ? ` (${this.escapeHudHtml(d.network.ip)})` : ""}</option>`).join("");
+      hudEl.innerHTML = `
+      <div class="avatar-bar-status">
+        <span class="avatar-bar-title">
+          <span class="avatar-bar-dot"></span>
+          <span>Mode Teknisi 3D</span>
+        </span>
+        <span class="avatar-bar-controls-hint"><strong>WASD / Panah</strong> Jalan \u2022 <strong>Shift</strong> Lari \u2022 <strong>Spasi</strong> Lompat \u2022 <strong>Orbit</strong> Putar Kamera</span>
+      </div>
+      <div class="avatar-bar-nearest" id="avatar-nearest-slot">
+        <span>Terdekat: --</span>
+      </div>
+      <div class="avatar-bar-actions">
+        <select id="select-avatar-teleport" class="avatar-teleport-select" title="Teleport karakter ke depan perangkat">
+          <option value="">Teleport ke Perangkat...</option>
+          ${optionsHtml}
+        </select>
+        <button type="button" id="btn-avatar-inspect-nearest" class="sim-action-btn is-primary" title="Fokus & Inspeksi Port perangkat terdekat (F)">Inspeksi Port (F)</button>
+        <button type="button" id="btn-avatar-exit" class="sim-action-btn is-exit" title="Keluar dari Mode Teknisi (G)">Keluar</button>
+      </div>
+    `;
+      hudEl.classList.remove("hidden");
+      hudEl.style.display = "flex";
+      this._lastAvatarHudNearestId = null;
+      this._lastAvatarHudDistKey = "";
+      hudEl.onpointerdown = (ev) => ev.stopPropagation();
+      const teleportSel = hudEl.querySelector("#select-avatar-teleport");
+      if (teleportSel) {
+        teleportSel.onchange = (ev) => {
+          const devId = ev.target.value;
+          if (devId) {
+            this.teleportAvatarToDevice(devId);
+            ev.target.value = "";
+          }
+        };
+      }
+      hudEl.querySelector("#btn-avatar-inspect-nearest")?.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        this.inspectNearestDeviceFromAvatar();
+      });
+      hudEl.querySelector("#btn-avatar-exit")?.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        this.setAvatarMode(false);
+      });
+      this.updateAvatarProximityHud();
+    }
+    updateAvatarProximityHud() {
+      if (typeof document === "undefined" || !this.avatarMode || this.simulatorFocusedDeviceId) return;
+      const slot = document.getElementById("avatar-nearest-slot");
+      if (!slot) return;
+      const nearestId = this.avatarState.nearestDeviceId;
+      const dist = this.avatarState.nearestDist;
+      const distText = Number.isFinite(dist) ? `${dist.toFixed(1)}m` : "--";
+      if (this._lastAvatarHudNearestId === nearestId && this._lastAvatarHudDistKey === distText) {
+        return;
+      }
+      this._lastAvatarHudNearestId = nearestId;
+      this._lastAvatarHudDistKey = distText;
+      const dev = nearestId ? this.deviceManager?.getDeviceById?.(nearestId) : null;
+      if (!dev) {
+        slot.innerHTML = "<span>Terdekat: Tidak ada perangkat</span>";
+      } else {
+        const ipBadge = dev.network?.ip ? ` <span class="sim-inspector-badge is-ip">${this.escapeHudHtml(dev.network.ip)}</span>` : "";
+        slot.innerHTML = `<span>Terdekat:</span> <span class="avatar-bar-nearest-name">${this.escapeHudHtml(dev.name)}</span>${ipBadge} <span class="sim-inspector-badge">${distText}</span>`;
+      }
+    }
     zoomExtents() {
       if (!this.camera || !this.controls) return;
       const box = new Box3();
@@ -55425,12 +56256,402 @@ void main() {
       }
       this.animateCameraTo(pos, target, 400);
     }
-    focusOnDevice(deviceId) {
+    escapeHudHtml(str) {
+      return String(str ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+    }
+    setAutoFocusOnClick(enabled) {
+      this.autoFocusOnClick = Boolean(enabled);
+      try {
+        if (typeof localStorage !== "undefined") {
+          localStorage.setItem("netmap_sim_autofocus_3d", this.autoFocusOnClick ? "1" : "0");
+        }
+      } catch {
+      }
+      if (typeof document !== "undefined") {
+        document.getElementById("btn-3d-autofocus")?.classList.toggle("active", this.autoFocusOnClick);
+      }
+      this.showStatusHint(
+        this.autoFocusOnClick ? "Auto-Fokus Simulator aktif: klik perangkat untuk zoom ke panel port & kelola kabel." : "Auto-Fokus Simulator dimatikan: gunakan tombol Fokus / Double-Klik untuk zoom perangkat."
+      );
+      return this.autoFocusOnClick;
+    }
+    toggleAutoFocusOnClick() {
+      return this.setAutoFocusOnClick(!this.autoFocusOnClick);
+    }
+    getDeviceStackPeers(deviceId) {
+      const dev = this.deviceManager?.getDeviceById?.(deviceId);
+      if (!dev || !dev.position) return dev ? [dev] : [];
+      const allDevs = this.deviceManager?.getAllDevices?.() || [];
+      const peers = allDevs.filter((d) => d && d.position && Math.hypot((d.position.x ?? 0) - (dev.position.x ?? 0), (d.position.y ?? 0) - (dev.position.y ?? 0)) < 0.025);
+      peers.sort((a, b) => {
+        const ezB = b.spatial3d?.elevationMeters ?? getDefaultSpatial3d(b.type).elevationMeters;
+        const ezA = a.spatial3d?.elevationMeters ?? getDefaultSpatial3d(a.type).elevationMeters;
+        if (Math.abs(ezB - ezA) > 1e-3) return ezB - ezA;
+        return String(a.name || "").localeCompare(String(b.name || ""));
+      });
+      return peers.length > 0 ? peers : [dev];
+    }
+    getDevicePortPanelPose(deviceId) {
+      const dev = this.deviceManager?.getDeviceById?.(deviceId);
+      const basePos = this.effectivePosMap.get(deviceId) || new Vector3();
+      const userScale = (dev?.spatial3d?.modelScale > 0 ? Number(dev.spatial3d.modelScale) : 1) * this.deviceScaleMultiplier;
+      const prefix = `${deviceId}::`;
+      const posSum = new Vector3();
+      const dirSum = new Vector3();
+      let posCount = 0;
+      let dirCount = 0;
+      for (const [key, pt] of this.portWorldPosMap.entries()) {
+        if (key.startsWith(prefix) && pt) {
+          posSum.add(pt);
+          posCount += 1;
+        }
+      }
+      for (const [key, dir] of this.portWorldDirMap.entries()) {
+        if (key.startsWith(prefix) && dir) {
+          dirSum.add(dir);
+          dirCount += 1;
+        }
+      }
+      const panelCenter = posCount > 0 ? posSum.multiplyScalar(1 / posCount) : basePos.clone().add(new Vector3(0, 0.14 * this.deviceScaleMultiplier, 0));
+      let panelNormal = dirCount > 0 ? dirSum.multiplyScalar(1 / dirCount) : new Vector3(0, 0, 1).applyEuler(this.getDeviceEuler(dev));
+      panelNormal.y = 0;
+      if (panelNormal.lengthSq() < 1e-3) {
+        panelNormal = new Vector3(0, 0, 1).applyEuler(this.getDeviceEuler(dev));
+        panelNormal.y = 0;
+      }
+      if (panelNormal.lengthSq() < 1e-3) {
+        panelNormal.set(0, 0, 1);
+      } else {
+        panelNormal.normalize();
+      }
+      const rightVec = new Vector3().crossVectors(new Vector3(0, 1, 0), panelNormal);
+      if (rightVec.lengthSq() < 1e-3) rightVec.set(1, 0, 0);
+      else rightVec.normalize();
+      return { panelCenter, panelNormal, rightVec, userScale, dev, basePos };
+    }
+    computeSimulatorCameraPose(deviceId, viewAngle = "front") {
+      const validAngles = ["front", "stack", "iso", "side", "back"];
+      const angle = validAngles.includes(viewAngle) ? viewAngle : "front";
+      const { panelCenter, panelNormal, rightVec, userScale, basePos } = this.getDevicePortPanelPose(deviceId);
+      const stackPeers = this.getDeviceStackPeers(deviceId);
+      let target;
+      let endPos;
+      if (angle === "stack" && stackPeers.length > 0) {
+        let minY = Infinity;
+        let maxY = -Infinity;
+        const centerAccum = new Vector3();
+        let cnt = 0;
+        stackPeers.forEach((peer) => {
+          const peerPose = this.getDevicePortPanelPose(peer.id);
+          const py2 = peerPose.panelCenter.y;
+          minY = Math.min(minY, py2);
+          maxY = Math.max(maxY, py2);
+          centerAccum.add(peerPose.panelCenter);
+          cnt += 1;
+        });
+        const stackCenter = cnt > 0 ? centerAccum.multiplyScalar(1 / cnt) : panelCenter.clone();
+        stackCenter.y = (minY + maxY) * 0.5;
+        const stackSpan = Math.max(0.9, maxY - minY + userScale * 0.65);
+        const dist = Math.max(2.1, stackSpan * 1.35, userScale * 1.55);
+        target = stackCenter;
+        endPos = stackCenter.clone().addScaledVector(panelNormal, dist).add(new Vector3(0, stackSpan * 0.04, 0));
+      } else if (angle === "iso") {
+        const dist = Math.max(1.8, userScale * 1.6);
+        target = panelCenter.clone();
+        endPos = panelCenter.clone().addScaledVector(panelNormal, dist * 0.85).addScaledVector(rightVec, dist * 0.52).add(new Vector3(0, userScale * 0.34, 0));
+      } else if (angle === "side") {
+        const dist = Math.max(1.75, userScale * 1.55);
+        target = panelCenter.clone().addScaledVector(panelNormal, userScale * 0.16);
+        endPos = target.clone().addScaledVector(rightVec, dist).add(new Vector3(0, userScale * 0.1, 0));
+      } else if (angle === "back") {
+        const dist = Math.max(1.65, userScale * 1.5);
+        target = basePos.clone();
+        endPos = target.clone().addScaledVector(panelNormal, -dist).add(new Vector3(0, userScale * 0.14, 0));
+      } else {
+        const dist = Math.max(1.55, userScale * 1.45);
+        target = panelCenter.clone();
+        endPos = panelCenter.clone().addScaledVector(panelNormal, dist).add(new Vector3(0, userScale * 0.05, 0));
+      }
+      endPos.y = Math.max(0.25, endPos.y);
+      return { target, endPos, viewAngle: angle, stackPeers };
+    }
+    focusOnDevice(deviceId, { viewAngle = this.simulatorViewAngle || "front", saveReturnCamera = true, duration = 400 } = {}) {
       if (!this.isActive || !this.effectivePosMap.has(deviceId)) return;
-      const p = this.effectivePosMap.get(deviceId);
-      const offsetDist = Math.max(4.5, Math.min(14, this.deviceScaleMultiplier * 3.5));
-      const endPos = new Vector3(p.x + offsetDist, p.y + offsetDist * 0.72, p.z + offsetDist);
-      this.animateCameraTo(endPos, p, 360);
+      if (saveReturnCamera && !this.simulatorFocusedDeviceId && this.camera && this.controls) {
+        this.savedPreFocusCamera = {
+          pos: this.camera.position.clone(),
+          target: this.controls.target.clone()
+        };
+      }
+      const pose = this.computeSimulatorCameraPose(deviceId, viewAngle);
+      this.simulatorFocusedDeviceId = deviceId;
+      this.simulatorViewAngle = pose.viewAngle;
+      this.animateCameraTo(pose.endPos, pose.target, duration);
+      if (typeof document !== "undefined") {
+        const avatarHud = document.getElementById("hud-3d-avatar-bar");
+        if (avatarHud) {
+          avatarHud.classList.add("hidden");
+          avatarHud.style.display = "none";
+        }
+      }
+      this.renderSimulatorInspectorHud(deviceId);
+    }
+    exitSimulatorFocus({ restoreCamera = true } = {}) {
+      if (restoreCamera && this.savedPreFocusCamera && this.camera && this.controls) {
+        this.animateCameraTo(this.savedPreFocusCamera.pos, this.savedPreFocusCamera.target, 380);
+      }
+      this.savedPreFocusCamera = null;
+      this.simulatorFocusedDeviceId = null;
+      if (typeof document !== "undefined") {
+        const hudEl = document.getElementById("hud-3d-sim-inspector");
+        if (hudEl) {
+          hudEl.innerHTML = "";
+          hudEl.classList.add("hidden");
+          hudEl.style.display = "none";
+        }
+      }
+      if (this.avatarMode && this.isActive) {
+        this.renderAvatarHudBar();
+      }
+    }
+    startCableFromDevicePort(deviceId, portName = "") {
+      if (!deviceId) return;
+      this.pendingCableSourceId = deviceId;
+      this.pendingCableSourcePort = portName || "";
+      this.pending3dWaypoints = [];
+      this.simulatorFocusedDeviceId = deviceId;
+      const srcDev = this.deviceManager?.getDeviceById?.(deviceId);
+      const portSuffix = portName ? ` [${portName}]` : "";
+      this.showStatusHint(`Menarik kabel dari ${srcDev?.name || deviceId}${portSuffix} \u2014 klik perangkat & port tujuan.`);
+      if (this.isActive) {
+        this.syncDevices();
+        this.syncCables();
+        this.renderSimulatorInspectorHud(deviceId);
+      }
+    }
+    handleSimulatorPortClick(deviceId, portName) {
+      if (!deviceId || !portName) return null;
+      const allCables = this.cableManager?.getAllConnections?.() || [];
+      const existingConn = allCables.find((cab) => cab.source === deviceId && cab.details?.portSource === portName || cab.destination === deviceId && cab.details?.portDestination === portName);
+      if (existingConn) {
+        if (this.pendingCableSourceId) {
+          this.showStatusHint(`Port ${portName} sudah terhubung. Pilih port yang masih kosong.`);
+          return null;
+        }
+        stateManager.deselectObject3d?.();
+        this.cableManager?.selectConnection?.(existingConn.id);
+        this.simulatorFocusedDeviceId = deviceId;
+        this.renderSimulatorInspectorHud(deviceId);
+        return existingConn;
+      }
+      if (this.pendingCableSourceId && this.pendingCableSourceId !== deviceId) {
+        const srcId = this.pendingCableSourceId;
+        const srcPort = this.pendingCableSourcePort || "";
+        const srcDev = this.deviceManager?.getDeviceById?.(srcId);
+        const dstDev = this.deviceManager?.getDeviceById?.(deviceId);
+        const newCab = this.cableManager?.addConnection?.({
+          name: `${srcDev?.name || "Source"}${srcPort ? ` [${srcPort}]` : ""} -> ${dstDev?.name || "Dest"} [${portName}]`,
+          source: srcId,
+          destination: deviceId,
+          cableCategory: this.pen3dCategory || "cat6",
+          route: [...this.pending3dWaypoints],
+          status: "active",
+          details: {
+            pathStyle: "curve",
+            curveTension: 0.38,
+            ...srcPort ? { portSource: srcPort } : {},
+            portDestination: portName
+          }
+        });
+        this.pendingCableSourceId = null;
+        this.pendingCableSourcePort = "";
+        this.pending3dWaypoints = [];
+        this.simulatorFocusedDeviceId = deviceId;
+        if (this.isActive) {
+          this.syncDevices();
+          this.syncCables();
+        }
+        if (newCab) {
+          this.cableManager?.selectConnection?.(newCab.id);
+          this.showStatusHint(`Kabel terpasang: ${srcDev?.name || srcId} [${srcPort || "auto"}] -> ${dstDev?.name || deviceId} [${portName}]`);
+        }
+        this.renderSimulatorInspectorHud(deviceId);
+        return newCab || null;
+      }
+      if (this.pendingCableSourceId === deviceId && this.pendingCableSourcePort === portName) {
+        this.pendingCableSourceId = null;
+        this.pendingCableSourcePort = "";
+        this.pending3dWaypoints = [];
+        if (this.isActive) {
+          this.syncDevices();
+          this.syncCables();
+        }
+        this.renderSimulatorInspectorHud(deviceId);
+        return null;
+      }
+      this.startCableFromDevicePort(deviceId, portName);
+      return null;
+    }
+    renderSimulatorInspectorHud(deviceId) {
+      if (typeof document === "undefined") return;
+      const hudEl = document.getElementById("hud-3d-sim-inspector");
+      if (!hudEl) return;
+      if (!this.isActive || !deviceId) {
+        hudEl.innerHTML = "";
+        hudEl.classList.add("hidden");
+        hudEl.style.display = "none";
+        return;
+      }
+      const dev = this.deviceManager?.getDeviceById?.(deviceId);
+      if (!dev) {
+        hudEl.innerHTML = "";
+        hudEl.classList.add("hidden");
+        hudEl.style.display = "none";
+        return;
+      }
+      const holder = this.deviceMeshMap.get(deviceId);
+      const devPorts = Array.isArray(holder?.userData?.devPorts) && holder.userData.devPorts.length > 0 ? holder.userData.devPorts : Array.isArray(dev.ports) && dev.ports.length > 0 ? dev.ports : getDefaultDevicePorts(dev.type, dev.model, dev.spatial3d?.customModelUrl);
+      const allCables = this.cableManager?.getAllConnections?.() || [];
+      const portConnMap = /* @__PURE__ */ new Map();
+      allCables.forEach((cab) => {
+        if (cab.source === deviceId && cab.details?.portSource) {
+          const peer = this.deviceManager?.getDeviceById?.(cab.destination);
+          portConnMap.set(cab.details.portSource, {
+            cable: cab,
+            peerName: peer?.name || cab.destination,
+            peerPort: cab.details?.portDestination || ""
+          });
+        }
+        if (cab.destination === deviceId && cab.details?.portDestination) {
+          const peer = this.deviceManager?.getDeviceById?.(cab.source);
+          portConnMap.set(cab.details.portDestination, {
+            cable: cab,
+            peerName: peer?.name || cab.source,
+            peerPort: cab.details?.portSource || ""
+          });
+        }
+      });
+      const stackPeers = this.getDeviceStackPeers(deviceId);
+      const selectedCableId = this.cableManager?.selectedCableId || null;
+      const ipText = dev.network?.ip ? dev.network.ip : "Tanpa IP";
+      const modelText = [dev.brand, dev.model].filter(Boolean).join(" ") || (dev.type || "Device");
+      const angles = [
+        { key: "front", label: "Depan Port" },
+        { key: "stack", label: "Satu Rak" },
+        { key: "iso", label: "Diagonal" },
+        { key: "side", label: "Samping" },
+        { key: "back", label: "Belakang" }
+      ];
+      const pendingSrcDev = this.pendingCableSourceId ? this.deviceManager?.getDeviceById?.(this.pendingCableSourceId) : null;
+      const stackBarHtml = stackPeers.length > 1 ? `<div class="sim-inspector-stack-bar">
+           <span class="sim-stack-label">Tumpukan (${stackPeers.length}):</span>
+           ${stackPeers.map((peer) => {
+        const elev = peer.spatial3d?.elevationMeters ?? getDefaultSpatial3d(peer.type).elevationMeters;
+        const isCur = peer.id === deviceId;
+        return `<button type="button" class="sim-stack-pill ${isCur ? "active" : ""}" data-sim-stack-id="${this.escapeHudHtml(peer.id)}" title="Fokus ke ${this.escapeHudHtml(peer.name)} (${elev}m)">${this.escapeHudHtml(peer.name)} (${elev}m)</button>`;
+      }).join("")}
+         </div>` : "";
+      const pendingBannerHtml = pendingSrcDev ? `<div class="sim-port-pending-banner">
+           <span>Menarik kabel dari <strong>${this.escapeHudHtml(pendingSrcDev.name)}</strong>${this.pendingCableSourcePort ? ` [<strong>${this.escapeHudHtml(this.pendingCableSourcePort)}</strong>]` : ""} \u2014 pilih port tujuan pada perangkat lain${stackPeers.length > 1 ? " atau klik perangkat di Tumpukan" : ""}.</span>
+           <button type="button" class="sim-action-btn" data-sim-cancel-cable="1">Batal Kabel</button>
+         </div>` : "";
+      const portsHtml = devPorts.map((p) => {
+        const link = portConnMap.get(p.name);
+        const isConnected = Boolean(link);
+        const isCableSel = isConnected && link.cable.id === selectedCableId;
+        const isPendingSrc = this.pendingCableSourceId === deviceId && this.pendingCableSourcePort === p.name;
+        let ledClass = "";
+        if (isPendingSrc) {
+          ledClass = "is-warning";
+        } else if (isConnected) {
+          const st = link.cable.status || "active";
+          ledClass = st === "damaged" || st === "inactive" ? "is-offline" : st === "maintenance" ? "is-warning" : "is-online";
+        }
+        const peerLabel = isConnected ? `${link.peerName}${link.peerPort ? ` [${link.peerPort}]` : ""}` : isPendingSrc ? "Sumber Kabel Aktif" : pendingSrcDev && pendingSrcDev.id !== deviceId ? "Pasang ke Sini" : "+ Kabel";
+        return `<button type="button" class="sim-port-card ${isConnected ? "is-connected" : ""} ${isCableSel ? "is-cable-selected" : ""} ${isPendingSrc ? "is-pending-source" : ""}" data-sim-port="${this.escapeHudHtml(p.name)}" title="${isConnected ? `Pilih kabel ke ${this.escapeHudHtml(peerLabel)}` : pendingSrcDev && pendingSrcDev.id !== deviceId ? `Sambungkan kabel dari ${this.escapeHudHtml(pendingSrcDev.name)} ke port ${this.escapeHudHtml(p.name)}` : `Tarik kabel dari port ${this.escapeHudHtml(p.name)}`}">
+        <div class="sim-port-top-row">
+          <span class="sim-port-name-wrap">
+            <span class="sim-port-led ${ledClass}"></span>
+            <span class="sim-port-name">${this.escapeHudHtml(p.name)}</span>
+          </span>
+          <span class="sim-port-speed">${this.escapeHudHtml(p.speed || p.type || "")}</span>
+        </div>
+        <span class="sim-port-peer">${this.escapeHudHtml(peerLabel)}</span>
+      </button>`;
+      }).join("");
+      hudEl.innerHTML = `
+      <div class="sim-inspector-header">
+        <div class="sim-inspector-title-group">
+          <span class="sim-inspector-device-name">${this.escapeHudHtml(dev.name)}</span>
+          <span class="sim-inspector-badge">${this.escapeHudHtml(modelText)}</span>
+          <span class="sim-inspector-badge is-ip">${this.escapeHudHtml(ipText)}</span>
+        </div>
+        <div class="sim-inspector-controls-group">
+          ${angles.map((a) => `<button type="button" class="sim-angle-pill ${this.simulatorViewAngle === a.key ? "active" : ""}" data-sim-angle="${a.key}">${a.label}</button>`).join("")}
+          <button type="button" class="sim-action-btn is-primary" data-sim-action="detail" title="Detail Lengkap, Spesifikasi & Anggaran (DAK/BOS)">Detail</button>
+          <button type="button" class="sim-action-btn" data-sim-action="config" title="Konfigurasi Detail IP, VLAN & SSID">Konfigurasi</button>
+          <button type="button" class="sim-action-btn is-exit" data-sim-action="exit" title="Keluar Mode Fokus Simulator (Esc)">Keluar Fokus</button>
+        </div>
+      </div>
+      ${stackBarHtml}
+      ${pendingBannerHtml}
+      <div class="sim-port-grid">${portsHtml}</div>
+    `;
+      hudEl.classList.remove("hidden");
+      hudEl.style.display = "flex";
+      hudEl.onpointerdown = (ev) => ev.stopPropagation();
+      hudEl.onclick = (evt) => {
+        evt.stopPropagation();
+        const angleBtn = evt.target.closest("[data-sim-angle]");
+        if (angleBtn) {
+          const angle = angleBtn.getAttribute("data-sim-angle");
+          this.focusOnDevice(deviceId, { viewAngle: angle, saveReturnCamera: false, duration: 360 });
+          return;
+        }
+        const stackBtn = evt.target.closest("[data-sim-stack-id]");
+        if (stackBtn) {
+          const targetId = stackBtn.getAttribute("data-sim-stack-id");
+          if (targetId) {
+            stateManager.deselectObject3d?.();
+            this.deviceManager.selectDevice(targetId);
+            this.focusOnDevice(targetId, {
+              viewAngle: this.simulatorViewAngle || "front",
+              saveReturnCamera: false,
+              duration: 340
+            });
+          }
+          return;
+        }
+        const cancelBtn = evt.target.closest("[data-sim-cancel-cable]");
+        if (cancelBtn) {
+          this.pendingCableSourceId = null;
+          this.pendingCableSourcePort = "";
+          this.pending3dWaypoints = [];
+          this.syncDevices();
+          this.syncCables();
+          this.renderSimulatorInspectorHud(deviceId);
+          return;
+        }
+        const actionBtn = evt.target.closest("[data-sim-action]");
+        if (actionBtn) {
+          const action = actionBtn.getAttribute("data-sim-action");
+          if (action === "detail") {
+            eventBus.emit("modal:open-device-detail", { deviceId, tab: "overview" });
+          } else if (action === "config") {
+            eventBus.emit("modal:open-device-detail", { deviceId, tab: "network" });
+          } else if (action === "exit") {
+            this.exitSimulatorFocus({ restoreCamera: true });
+          }
+          return;
+        }
+        const portBtn = evt.target.closest("[data-sim-port]");
+        if (portBtn) {
+          const portName = portBtn.getAttribute("data-sim-port");
+          if (portName) {
+            this.handleSimulatorPortClick(deviceId, portName);
+          }
+        }
+      };
     }
     setDeviceScaleMultiplier(scaleVal) {
       this.deviceScaleMultiplier = Number(scaleVal) || 3;
@@ -55500,11 +56721,28 @@ void main() {
           if (!this.isActive || this.dragMoveState || this.dragRotateState) return;
           this.syncDevices();
           this.syncCables();
+          if (this.simulatorFocusedDeviceId) {
+            if (this.deviceManager?.getDeviceById?.(this.simulatorFocusedDeviceId)) {
+              this.renderSimulatorInspectorHud(this.simulatorFocusedDeviceId);
+            } else {
+              this.exitSimulatorFocus({ restoreCamera: false });
+            }
+          } else if (this.avatarMode) {
+            this.findNearestDeviceToAvatar();
+            this.renderAvatarHudBar();
+          }
         });
       };
       const handleSelectionVisuals = () => {
         if (!this.isActive) return;
         this.syncSelectionRings();
+        if (this.simulatorFocusedDeviceId) {
+          if (this.deviceManager?.getDeviceById?.(this.simulatorFocusedDeviceId)) {
+            this.renderSimulatorInspectorHud(this.simulatorFocusedDeviceId);
+          } else {
+            this.exitSimulatorFocus({ restoreCamera: false });
+          }
+        }
       };
       eventBus.on("device:added", scheduleSyncDevAndCables);
       eventBus.on("device:updated", scheduleSyncDevAndCables);
@@ -55516,6 +56754,9 @@ void main() {
       const syncCablesOnly = () => {
         if (!this.isActive) return;
         this.syncCables();
+        if (this.simulatorFocusedDeviceId) {
+          this.renderSimulatorInspectorHud(this.simulatorFocusedDeviceId);
+        }
       };
       eventBus.on("connection:added", syncCablesOnly);
       eventBus.on("connection:updated", syncCablesOnly);
@@ -55555,10 +56796,14 @@ void main() {
         }
         if (mode !== "draw-cable") {
           this.pendingCableSourceId = null;
+          this.pendingCableSourcePort = "";
           this.pending3dWaypoints = [];
           if (this.isActive) {
             this.syncDevices();
             this.syncCables();
+            if (this.simulatorFocusedDeviceId) {
+              this.renderSimulatorInspectorHud(this.simulatorFocusedDeviceId);
+            }
           }
         }
       });
@@ -55573,12 +56818,16 @@ void main() {
           if (this.isActive) this.syncCables();
         }
       });
-      eventBus.on("map3d:start-cable", ({ deviceId }) => {
+      eventBus.on("map3d:start-cable", ({ deviceId, portName = "" }) => {
         this.pendingCableSourceId = deviceId || null;
+        this.pendingCableSourcePort = portName || "";
         this.pending3dWaypoints = [];
         if (this.isActive) {
           this.syncDevices();
           this.syncCables();
+          if (this.simulatorFocusedDeviceId) {
+            this.renderSimulatorInspectorHud(this.simulatorFocusedDeviceId);
+          }
         }
       });
       eventBus.on("map3d:zoom-extents", () => {
@@ -55587,13 +56836,68 @@ void main() {
       eventBus.on("map3d:set-navtool", ({ tool }) => {
         if (tool) this.setNavTool(tool);
       });
+      eventBus.on("map3d:bake-cable-pen-points", ({ cableId, count = 3 }) => {
+        const cable = this.cableManager?.getConnectionById(cableId);
+        if (!cable) return;
+        const numPts = Math.max(1, Math.min(8, Number(count) || 3));
+        const mesh = this.cableMeshMap.get(cableId);
+        const curve = mesh?.userData?.curve || null;
+        const srcDev = this.deviceManager?.getDeviceById(cable.source);
+        const dstDev = this.deviceManager?.getDeviceById(cable.destination);
+        const sampledRoute = [];
+        if (curve && typeof curve.getPoint === "function") {
+          for (let i = 1; i <= numPts; i++) {
+            const t = i / (numPts + 1);
+            const pt = curve.getPoint(t);
+            const { normX, normY } = this.worldToNorm(pt.x, pt.z);
+            sampledRoute.push({
+              x: Number(Math.max(0.01, Math.min(0.99, normX)).toFixed(4)),
+              y: Number(Math.max(0.01, Math.min(0.99, normY)).toFixed(4)),
+              z: Number(Math.max(0.02, pt.y).toFixed(2))
+            });
+          }
+        } else if (srcDev && dstDev) {
+          const srcElev = srcDev.spatial3d?.elevationMeters ?? 1.2;
+          const dstElev = dstDev.spatial3d?.elevationMeters ?? 1.2;
+          for (let i = 1; i <= numPts; i++) {
+            const t = i / (numPts + 1);
+            sampledRoute.push({
+              x: Number(Math.max(0.01, Math.min(0.99, srcDev.position.x + (dstDev.position.x - srcDev.position.x) * t)).toFixed(4)),
+              y: Number(Math.max(0.01, Math.min(0.99, srcDev.position.y + (dstDev.position.y - srcDev.position.y) * t)).toFixed(4)),
+              z: Number(Math.max(0.02, srcElev + (dstElev - srcElev) * t).toFixed(2))
+            });
+          }
+        }
+        if (sampledRoute.length > 0) {
+          this.cableManager.updateConnection(cableId, {
+            route: sampledRoute,
+            details: {
+              ...cable.details || {},
+              pathStyle: "curve",
+              bowOut: 0,
+              sideOffset: 0,
+              sagDrop: 0
+            }
+          });
+        }
+      });
       window.addEventListener("keydown", (e) => {
         if (!this.isActive) return;
         if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) return;
+        if (e.code === "Space" || e.key === " ") {
+          if (this.avatarMode) {
+            e.preventDefault();
+            this.keysPressed.add("space");
+          }
+          return;
+        }
         this.keysPressed.add(e.key.toLowerCase());
         if (e.shiftKey) this.keysPressed.add("shift");
       });
       window.addEventListener("keyup", (e) => {
+        if (e.code === "Space" || e.key === " ") {
+          this.keysPressed.delete("space");
+        }
         this.keysPressed.delete(e.key.toLowerCase());
         if (!e.shiftKey) this.keysPressed.delete("shift");
       });
@@ -58971,6 +60275,16 @@ void main() {
         if (hud3d) hud3d.style.display = is3d ? "flex" : "none";
         hud3dHints?.classList.toggle("hidden", !is3d);
         if (hud3dHints) hud3dHints.style.display = is3d ? "flex" : "none";
+        const hud3dSimInspector = document.getElementById("hud-3d-sim-inspector");
+        if (!is3d && hud3dSimInspector) {
+          hud3dSimInspector.classList.add("hidden");
+          hud3dSimInspector.style.display = "none";
+        }
+        const hud3dAvatarBar = document.getElementById("hud-3d-avatar-bar");
+        if (!is3d && hud3dAvatarBar) {
+          hud3dAvatarBar.classList.add("hidden");
+          hud3dAvatarBar.style.display = "none";
+        }
         if (is3d) {
           this.map3DEngine?.activate();
           const coverageToggle = document.getElementById("filter-toggle-coverage");
@@ -59030,6 +60344,14 @@ void main() {
           this.map3DEngine?.setCameraPreset(preset);
         });
       });
+      const btnAutoFocus = document.getElementById("btn-3d-autofocus");
+      if (btnAutoFocus && this.map3DEngine) {
+        btnAutoFocus.classList.toggle("active", Boolean(this.map3DEngine.autoFocusOnClick));
+        btnAutoFocus.addEventListener("click", () => {
+          const nextState = this.map3DEngine.toggleAutoFocusOnClick();
+          btnAutoFocus.classList.toggle("active", nextState);
+        });
+      }
       document.getElementById("select-3d-scale")?.addEventListener("change", (e) => {
         const val = Number(e.target.value) || 1;
         this.map3DEngine?.setDeviceScaleMultiplier(val);
@@ -59051,6 +60373,11 @@ void main() {
         showLabels = !showLabels;
         btnLabels.classList.toggle("active", showLabels);
         this.map3DEngine?.setShowLabels(showLabels);
+      });
+      const btnAvatar = document.getElementById("btn-3d-avatar");
+      btnAvatar?.addEventListener("click", () => {
+        const nextState = this.map3DEngine?.toggleAvatarMode();
+        btnAvatar.classList.toggle("active", Boolean(nextState));
       });
       const CONTROLS_MIN_KEY = "netmap_hud3d_controls_min";
       const HINTS_MIN_KEY = "netmap_hud3d_hints_min";
@@ -59225,6 +60552,16 @@ void main() {
             this.object3DModal?.show();
             return;
           }
+          if (lower === "g" && !e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            this.map3DEngine?.toggleAvatarMode();
+            return;
+          }
+          if (lower === "f" && this.map3DEngine?.avatarMode && !e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            this.map3DEngine.inspectNearestDeviceFromAvatar();
+            return;
+          }
           if (e.key === "0") {
             e.preventDefault();
             this.map3DEngine?.zoomExtents();
@@ -59239,6 +60576,16 @@ void main() {
             return;
           }
           if (e.key === "Escape") {
+            if (this.map3DEngine?.simulatorFocusedDeviceId || this.map3DEngine?.pendingCableSourceId) {
+              if (this.map3DEngine.pendingCableSourceId && !this.map3DEngine.simulatorFocusedDeviceId) {
+                this.map3DEngine.pendingCableSourceId = null;
+                this.map3DEngine.pendingCableSourcePort = "";
+                this.map3DEngine.syncDevices();
+                this.map3DEngine.syncCables();
+              } else {
+                this.map3DEngine.exitSimulatorFocus({ restoreCamera: true });
+              }
+            }
             this.deviceManager.deselectDevice();
             this.cableManager.deselectConnection();
             stateManager.deselectObject3d?.();

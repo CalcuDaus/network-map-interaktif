@@ -175,8 +175,13 @@ export class CableRenderer {
         e.evt.preventDefault();
         e.cancelBubble = true;
         const cur = line.getAttr('cableData') || cable;
+        const pos = this.connectionLayer.getRelativePointerPosition?.();
+        const hitCoord = pos ? {
+          x: clamp(pos.x / this.naturalWidth, 0.01, 0.99),
+          y: clamp(pos.y / this.naturalHeight, 0.01, 0.99)
+        } : null;
         if (this.onContextMenu) {
-          this.onContextMenu(cur, e.evt.clientX, e.evt.clientY);
+          this.onContextMenu(cur, e.evt.clientX, e.evt.clientY, hitCoord, null);
         }
       });
 
