@@ -13,8 +13,23 @@ import { eventBus } from '../core/event-bus.js';
 const LOCAL_DB_STORAGE_KEY = 'netmap_multi_db_v1';
 const LOCAL_TOKEN_STORAGE_KEY = 'netmap_auth_token_v1';
 const LOCAL_WS_MODE_STORAGE_KEY = 'netmap_workspace_mode_v1';
+const LOCAL_PRESENCE_STORAGE_KEY = 'netmap_presence_peers_v1';
 const DEFAULT_SEED_SALT = 'netmap_salt_2026';
 const DEFAULT_MAIN_SERVER_PASSWORD = 'server123';
+const PRESENCE_TTL_MS = 15000;
+const PEER_COLOR_PALETTE = [
+  '#2563eb', '#dc2626', '#d97706', '#7c3aed',
+  '#0891b2', '#db2777', '#ea580c', '#4f46e5'
+];
+
+export function getPeerColorHex(seed = '') {
+  const str = String(seed || 'peer');
+  let h = 0;
+  for (let i = 0; i < str.length; i++) {
+    h = ((h << 5) - h + str.charCodeAt(i)) | 0;
+  }
+  return PEER_COLOR_PALETTE[Math.abs(h) % PEER_COLOR_PALETTE.length];
+}
 
 // Standard FIPS 180-4 SHA-256 so offline file:// hashing matches MySQL SHA2() & Node crypto identically
 const SHA256_K = new Uint32Array([
@@ -135,6 +150,30 @@ export class AuthManager {
     this._pollTimer = null;
     this._memoryStore = null;
 
+    // Multi-technician real-time avatar & cursor presence
+    this.clientId = `peer-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    this.remotePeers = new Map();
+    this._presenceTimer = null;
+    this._presenceInFlight = false;
+    this._lastPresencePushAt = 0;
+    this._presenceDirty = false;
+    this.localPresenceState = {
+      viewMode: '2d',
+      avatarMode: false,
+      perspective: 'tpp',
+      x: 0,
+      y: 0,
+      z: 0,
+      normX: 0.5,
+      normY: 0.5,
+      yaw: 0,
+      isMoving: false,
+      isRunning: false,
+      isGrounded: true,
+      walkPhase: 0,
+      nearestDeviceId: null
+    };
+
     this.restoreLocalMeta();
     this.initSyncChannel();
   }
@@ -160,7 +199,22 @@ export class AuthManager {
         }
         this._channel.onmessage = (evt) => {
           const msg = evt?.data;
-          if (!msg || !this.isAuthenticated()) return;
+          if (!msg) return;
+          if (msg.type === 'presence-heartbeat' && msg.peer && msg.peer.clientId !== this.clientId) {
+            const targetWs = this.isAuthenticated() ? this.getActiveWorkspaceKey() : (this.isPublicPreviewActive() ? 'main' : null);
+            if (targetWs && msg.peer.workspaceKey === targetWs) {
+              this.remotePeers.set(msg.peer.clientId, { ...msg.peer, updatedAt: Date.now() });
+              this._pruneAndEmitPresence();
+            }
+            return;
+          }
+          if (msg.type === 'presence-leave' && msg.clientId) {
+            if (this.remotePeers.delete(msg.clientId)) {
+              this._pruneAndEmitPresence();
+            }
+            return;
+          }
+          if (!this.isAuthenticated()) return;
           if (msg.type === 'workspace-updated' && msg.workspaceKey === this.getActiveWorkspaceKey()) {
             if (msg.updatedAt && msg.updatedAt !== this.lastSyncedAt) {
               this.lastUpdatedBy = msg.updatedBy || this.lastUpdatedBy;
@@ -173,6 +227,17 @@ export class AuthManager {
           }
         };
       } catch { /* ignore BroadcastChannel failure */ }
+    }
+
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener('storage', (evt) => {
+        if (evt.key === LOCAL_PRESENCE_STORAGE_KEY) {
+          this._syncPresenceFromLocalStorage();
+        }
+      });
+      window.addEventListener('beforeunload', () => {
+        this.leavePresence();
+      });
     }
   }
 
@@ -268,12 +333,20 @@ export class AuthManager {
 
   setWorkspaceMode(mode) {
     const next = mode === 'personal' ? 'personal' : 'main';
+    const prev = this.workspaceMode;
     this.workspaceMode = next;
     try {
       if (typeof localStorage !== 'undefined') {
         localStorage.setItem(LOCAL_WS_MODE_STORAGE_KEY, next);
       }
     } catch { /* ignore */ }
+    if (prev !== next) {
+      this.remotePeers.clear();
+      eventBus.emit('presence:updated', { peers: [] });
+      if (this.isAuthenticated()) {
+        this.pushPresenceNow({ force: true }).catch(() => {});
+      }
+    }
     eventBus.emit('auth:workspace-mode-changed', {
       workspaceMode: next,
       workspaceKey: this.getActiveWorkspaceKey()
@@ -341,7 +414,10 @@ export class AuthManager {
             }
           }
           eventBus.emit('auth:changed', this.getAuthStateSnapshot());
-          if (this.isAuthenticated()) this.startRemoteSyncPolling();
+          if (this.isAuthenticated()) {
+            this.startRemoteSyncPolling();
+            this.startPresenceSync();
+          }
           return this.getAuthStateSnapshot();
         }
       } catch {
@@ -376,6 +452,9 @@ export class AuthManager {
       this.mainWorkspaceUnlocked = false;
     }
     eventBus.emit('auth:changed', this.getAuthStateSnapshot());
+    if (this.isAuthenticated()) {
+      this.startPresenceSync();
+    }
     return this.getAuthStateSnapshot();
   }
 
@@ -424,6 +503,7 @@ export class AuthManager {
       this.publicPreviewMode = false;
       this.storageBackend = res.storageBackend || this.storageBackend;
       this.startRemoteSyncPolling();
+      this.startPresenceSync();
       eventBus.emit('auth:changed', this.getAuthStateSnapshot());
       return res.user;
     }
@@ -464,6 +544,7 @@ export class AuthManager {
     this.mainWorkspaceUnlocked = mainUnlocked;
     this.mainOwnerUsername = db.mainSecurity?.ownerUsername || 'admin';
     this.publicPreviewMode = false;
+    this.startPresenceSync();
     eventBus.emit('auth:changed', this.getAuthStateSnapshot());
     return this.currentUser;
   }
@@ -500,6 +581,7 @@ export class AuthManager {
       this.publicPreviewMode = false;
       this.storageBackend = res.storageBackend || this.storageBackend;
       this.startRemoteSyncPolling();
+      this.startPresenceSync();
       eventBus.emit('auth:changed', this.getAuthStateSnapshot());
       return res.user;
     }
@@ -555,14 +637,20 @@ export class AuthManager {
     this.mainWorkspaceUnlocked = mainUnlocked;
     this.mainOwnerUsername = db.mainSecurity?.ownerUsername || 'admin';
     this.publicPreviewMode = false;
+    this.startPresenceSync();
     eventBus.emit('auth:changed', this.getAuthStateSnapshot());
     return this.currentUser;
   }
 
   async logout() {
+    this.leavePresence();
+    this.stopPresenceSync();
     if (this.apiAvailable && this.authToken) {
       try {
-        await this.apiFetch('/api/auth/logout', { method: 'POST' });
+        await this.apiFetch('/api/auth/logout', {
+          method: 'POST',
+          body: JSON.stringify({ clientId: this.clientId })
+        });
       } catch { /* ignore network errors during logout */ }
     } else if (this.authToken) {
       const db = this.readLocalDb();
@@ -576,8 +664,10 @@ export class AuthManager {
     this.publicPreviewMode = false;
     this.lastUpdatedBy = null;
     this.lastSyncedAt = null;
+    this.remotePeers.clear();
     this.stopRemoteSyncPolling();
     this.persistToken('');
+    eventBus.emit('presence:updated', { peers: [] });
     eventBus.emit('auth:changed', this.getAuthStateSnapshot());
   }
 
@@ -704,6 +794,7 @@ export class AuthManager {
       }
       if (!this.isAuthenticated()) {
         this.publicPreviewMode = true;
+        this.startPresenceSync();
         eventBus.emit('auth:changed', this.getAuthStateSnapshot());
       }
       return res;
@@ -716,6 +807,7 @@ export class AuthManager {
     this.mainOwnerUsername = db.mainSecurity?.ownerUsername || 'admin';
     if (!this.isAuthenticated()) {
       this.publicPreviewMode = true;
+      this.startPresenceSync();
       eventBus.emit('auth:changed', this.getAuthStateSnapshot());
     }
     return ws
@@ -754,6 +846,233 @@ export class AuthManager {
     if (this._pollTimer) {
       clearInterval(this._pollTimer);
       this._pollTimer = null;
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // Real-Time Multi-Technician Character & Cursor Presence Sync
+  // --------------------------------------------------------------------------
+  getRemotePeers() {
+    const now = Date.now();
+    const targetWs = this.isAuthenticated()
+      ? this.getActiveWorkspaceKey()
+      : (this.isPublicPreviewActive() ? 'main' : null);
+    if (!targetWs) return [];
+    const list = [];
+    for (const [cid, peer] of this.remotePeers.entries()) {
+      if (!peer || cid === this.clientId) continue;
+      if ((now - (peer.updatedAt || 0)) > PRESENCE_TTL_MS) {
+        this.remotePeers.delete(cid);
+        continue;
+      }
+      if (peer.workspaceKey === targetWs) {
+        list.push(peer);
+      }
+    }
+    return list;
+  }
+
+  _pruneAndEmitPresence() {
+    const peers = this.getRemotePeers();
+    eventBus.emit('presence:updated', { peers });
+    return peers;
+  }
+
+  _buildLocalPresencePayload() {
+    if (!this.isAuthenticated()) return null;
+    const wsKey = this.getActiveWorkspaceKey() || 'main';
+    return {
+      clientId: this.clientId,
+      username: this.currentUser.username,
+      displayName: this.currentUser.displayName || this.currentUser.username,
+      role: this.currentUser.role || 'teknisi',
+      workspaceKey: wsKey,
+      colorHex: getPeerColorHex(this.currentUser.username || this.clientId),
+      ...this.localPresenceState,
+      updatedAt: Date.now()
+    };
+  }
+
+  _syncPresenceFromLocalStorage(ownPayload = null) {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      const now = Date.now();
+      const raw = localStorage.getItem(LOCAL_PRESENCE_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : {};
+      const store = (parsed && typeof parsed === 'object') ? parsed : {};
+      let dirtyStorage = false;
+
+      Object.keys(store).forEach((cid) => {
+        const entry = store[cid];
+        if (!entry || (now - (entry.updatedAt || 0)) > PRESENCE_TTL_MS) {
+          delete store[cid];
+          dirtyStorage = true;
+        }
+      });
+
+      if (ownPayload) {
+        store[ownPayload.clientId] = ownPayload;
+        dirtyStorage = true;
+      }
+
+      if (dirtyStorage) {
+        localStorage.setItem(LOCAL_PRESENCE_STORAGE_KEY, JSON.stringify(store));
+      }
+
+      const targetWs = this.isAuthenticated()
+        ? this.getActiveWorkspaceKey()
+        : (this.isPublicPreviewActive() ? 'main' : null);
+      if (!targetWs) return;
+
+      for (const [cid, peer] of Object.entries(store)) {
+        if (cid !== this.clientId && peer?.workspaceKey === targetWs) {
+          this.remotePeers.set(cid, peer);
+        }
+      }
+      this._pruneAndEmitPresence();
+    } catch { /* ignore storage errors */ }
+  }
+
+  updateLocalPresence(partialState = {}) {
+    if (!partialState || typeof partialState !== 'object') return;
+    Object.assign(this.localPresenceState, partialState);
+    this._presenceDirty = true;
+
+    if (!this.isAuthenticated()) return;
+    const payload = this._buildLocalPresencePayload();
+    if (!payload) return;
+
+    const now = Date.now();
+    if (now - this._lastBroadcastAt >= 60 || !this._lastBroadcastAt) {
+      this._lastBroadcastAt = now;
+      this._channel?.postMessage({ type: 'presence-heartbeat', peer: payload });
+      this._syncPresenceFromLocalStorage(payload);
+    }
+
+    if (this.apiAvailable && (now - this._lastPresencePushAt >= 200)) {
+      this.pushPresenceNow().catch(() => {});
+    }
+  }
+
+  async pushPresenceNow({ force = false } = {}) {
+    if (this._presenceInFlight) return this.getRemotePeers();
+
+    const isAuth = this.isAuthenticated();
+    const isPublic = !isAuth && this.isPublicPreviewActive();
+    if (!isAuth && !isPublic) return [];
+
+    const wsKey = isAuth ? (this.getActiveWorkspaceKey() || 'main') : 'main';
+    const ownPayload = isAuth ? this._buildLocalPresencePayload() : null;
+
+    if (ownPayload) {
+      this._channel?.postMessage({ type: 'presence-heartbeat', peer: ownPayload });
+      this._syncPresenceFromLocalStorage(ownPayload);
+    } else if (isPublic) {
+      this._syncPresenceFromLocalStorage(null);
+    }
+
+    if (!this.apiAvailable) {
+      return this.getRemotePeers();
+    }
+
+    const now = Date.now();
+    if (!force && !this._presenceDirty && (now - this._lastPresencePushAt < 1100)) {
+      return this.getRemotePeers();
+    }
+
+    this._presenceInFlight = true;
+    this._lastPresencePushAt = now;
+    this._presenceDirty = false;
+    try {
+      const res = isAuth
+        ? await this.apiFetch('/api/presence', {
+            method: 'POST',
+            body: JSON.stringify(ownPayload)
+          })
+        : await this.apiFetch(`/api/presence?workspace=${encodeURIComponent(wsKey)}`);
+
+      const peers = Array.isArray(res?.peers) ? res.peers : [];
+      this.applyRemotePeerList(peers);
+      return this.getRemotePeers();
+    } catch {
+      return this.getRemotePeers();
+    } finally {
+      this._presenceInFlight = false;
+    }
+  }
+
+  applyRemotePeerList(peers = []) {
+    const incomingIds = new Set();
+    const now = Date.now();
+    for (const peer of peers) {
+      if (!peer || !peer.clientId || peer.clientId === this.clientId) continue;
+      incomingIds.add(peer.clientId);
+      this.remotePeers.set(peer.clientId, { ...peer, updatedAt: peer.updatedAt || now });
+    }
+    for (const [cid, existing] of Array.from(this.remotePeers.entries())) {
+      if (!incomingIds.has(cid) && (!existing || (now - (existing.updatedAt || 0)) > 2000)) {
+        this.remotePeers.delete(cid);
+      }
+    }
+    return this._pruneAndEmitPresence();
+  }
+
+  leavePresence() {
+    this._channel?.postMessage({ type: 'presence-leave', clientId: this.clientId });
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const raw = localStorage.getItem(LOCAL_PRESENCE_STORAGE_KEY);
+        if (raw) {
+          const store = JSON.parse(raw);
+          if (store && store[this.clientId]) {
+            delete store[this.clientId];
+            localStorage.setItem(LOCAL_PRESENCE_STORAGE_KEY, JSON.stringify(store));
+          }
+        }
+      }
+    } catch { /* ignore */ }
+
+    if (this.apiAvailable && this.authToken && typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+      try {
+        const blob = new Blob([JSON.stringify({ clientId: this.clientId, token: this.authToken })], { type: 'application/json' });
+        navigator.sendBeacon('/api/presence/leave', blob);
+      } catch { /* ignore */ }
+    }
+  }
+
+  startPresenceSync() {
+    this.stopPresenceSync();
+    const isBrowserRuntime = typeof window !== 'undefined' && typeof window.location === 'object' && typeof setTimeout !== 'undefined';
+    if (!isBrowserRuntime) return;
+    if (!this.isAuthenticated() && !this.isPublicPreviewActive()) return;
+
+    this.pushPresenceNow({ force: true }).catch(() => {});
+
+    const tick = () => {
+      if (!this.isAuthenticated() && !this.isPublicPreviewActive()) {
+        this.stopPresenceSync();
+        return;
+      }
+      const isHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
+      const fastMode = !isHidden && (this.localPresenceState.avatarMode || this.localPresenceState.isMoving);
+      const delayMs = isHidden ? 4000 : (fastMode ? 240 : 1200);
+      this._presenceTimer = setTimeout(async () => {
+        await this.pushPresenceNow({ force: true }).catch(() => {});
+        if (this._presenceTimer !== null) {
+          tick();
+        }
+      }, delayMs);
+      if (typeof this._presenceTimer?.unref === 'function') {
+        this._presenceTimer.unref();
+      }
+    };
+    tick();
+  }
+
+  stopPresenceSync() {
+    if (this._presenceTimer !== null && this._presenceTimer !== undefined) {
+      clearTimeout(this._presenceTimer);
+      this._presenceTimer = null;
     }
   }
 

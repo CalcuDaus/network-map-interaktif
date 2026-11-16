@@ -60,6 +60,13 @@ export class MapLayers {
       id: 'interaction-layer'
     });
 
+    // 8. Multiplayer Presence Layer (Remote technician badges & live cursors in 2D)
+    this.presenceLayer = new Konva.Layer({
+      id: 'presence-layer',
+      listening: false,
+      hitGraphEnabled: false
+    });
+
     // Add all layers to stage in strict order (bottom to top)
     this.stage.add(this.bgLayer);
     this.stage.add(this.buildingLayer);
@@ -68,6 +75,7 @@ export class MapLayers {
     this.stage.add(this.deviceLayer);
     this.stage.add(this.annotationLayer);
     this.stage.add(this.interactionLayer);
+    this.stage.add(this.presenceLayer);
 
     // Map dictionary for easy reference
     this.layers = {
@@ -77,7 +85,8 @@ export class MapLayers {
       connections: this.connectionLayer,
       devices: this.deviceLayer,
       annotations: this.annotationLayer,
-      interaction: this.interactionLayer
+      interaction: this.interactionLayer,
+      presence: this.presenceLayer
     };
 
     // Listen to layer visibility toggle events

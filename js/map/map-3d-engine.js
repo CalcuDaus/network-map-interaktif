@@ -20,11 +20,13 @@ import {
   loadCustomGlbModel,
   create3DPortsSubGroup,
   createRobloxAvatar3DGroup,
+  updateRobloxAvatarLabel,
   animateRobloxAvatarRig,
   createFppHandsViewmodelGroup
 } from './map-3d-models.js';
 import { clamp, generateId } from '../utils/helpers.js';
 import { CAMPUS_MAP_DATA_URL } from './campus-map-data.js';
+import { authManager, getPeerColorHex } from '../storage/auth-manager.js';
 
 export class Map3DEngine {
   /**
@@ -115,11 +117,16 @@ export class Map3DEngine {
     this.simulatorFocusedDeviceId = null;
     this.savedPreFocusCamera = null;
 
-    // Mode Teknisi (Roblox-style engineer character + TPP/FPP perspective) state
+    // Mode Teknisi (Roblox-style engineer character + TPP/FPP perspective + Remote Multiplayer Peers) state
     this.avatarMode = false;
     this.avatarPerspective = 'tpp'; // 'tpp' | 'fpp'
     this.avatarGroup = null;
     this.fppViewmodelGroup = null;
+    this.remoteAvatarsGroup = new THREE.Group();
+    this.remoteAvatarsGroup.name = 'RemoteTechniciansGroup';
+    this.remoteAvatarMap = new Map();
+    this._lastPresenceEmitAt = 0;
+    this._lastPresenceSnapshotKey = '';
     this.avatarState = {
       x: 0,
       y: 0,
@@ -197,6 +204,7 @@ export class Map3DEngine {
     this.scene.add(this.coverageGroup);
     this.scene.add(this.devicesGroup);
     this.scene.add(this.cablesGroup);
+    this.scene.add(this.remoteAvatarsGroup);
 
     // Pointer interaction: Look-Around drag, Box/Marquee select, SketchUp Gizmo/Draw3D, click raycast
     const dom = this.renderer.domElement;
@@ -432,6 +440,8 @@ export class Map3DEngine {
     if (!this.groundTexture) {
       this.rebuildGround();
     }
+    this.syncRemoteAvatars(authManager.getRemotePeers());
+    this.publishLocalPresence(true);
     this.lastFrameTime = performance.now();
     this.startLoop();
   }
@@ -450,6 +460,7 @@ export class Map3DEngine {
     this.avatarState._lastMouseClient = null;
     if (this.avatarGroup) this.avatarGroup.visible = false;
     if (this.fppViewmodelGroup) this.fppViewmodelGroup.visible = false;
+    authManager.updateLocalPresence({ viewMode: '2d', avatarMode: false, isMoving: false, isRunning: false });
     this.releaseAvatarPointerLock();
     this.syncAvatarCrosshair();
     this.syncAvatarControlsUI();
@@ -489,7 +500,9 @@ export class Map3DEngine {
         this.updateAvatarController(dt);
       } else {
         this.updateWalkMovement(dt);
+        this.publishLocalPresence(false);
       }
+      this.updateRemoteAvatars(dt);
       this.controls?.update();
       this.syncFppViewmodelTransform();
       this.renderer?.render(this.scene, this.camera);
@@ -3263,11 +3276,16 @@ export class Map3DEngine {
         }
       }
       this.showStatusHint('Mode Teknisi dimatikan — kembali ke navigasi kamera bebas.');
+      this.publishLocalPresence?.(true);
       return false;
     }
 
+    const activeUser = authManager.getCurrentUser?.();
+    const localAvatarLabel = activeUser ? `@${activeUser.username}` : 'Teknisi Jaringan';
     if (!this.avatarGroup) {
-      this.avatarGroup = createRobloxAvatar3DGroup('Teknisi Jaringan');
+      this.avatarGroup = createRobloxAvatar3DGroup(localAvatarLabel);
+    } else {
+      updateRobloxAvatarLabel(this.avatarGroup, localAvatarLabel, '#76c457');
     }
     if (this.scene && !this.scene.children.includes(this.avatarGroup)) {
       this.scene.add(this.avatarGroup);
@@ -3306,6 +3324,17 @@ export class Map3DEngine {
         spawnZ = fp.z + 2.8;
         spawnYaw = Math.PI;
       }
+
+      // Apply slight deterministic offset if other online teammates are already near spawn point
+      if (this.remoteAvatarMap?.size > 0) {
+        const cid = String(authManager.clientId || 'local');
+        let h = 0;
+        for (let i = 0; i < cid.length; i++) h = ((h << 5) - h + cid.charCodeAt(i)) | 0;
+        const ang = (Math.abs(h) % 360) * (Math.PI / 180);
+        spawnX = Math.max(-worldW * 0.55, Math.min(worldW * 0.55, spawnX + Math.cos(ang) * 1.6));
+        spawnZ = Math.max(-worldD * 0.55, Math.min(worldD * 0.55, spawnZ + Math.sin(ang) * 1.6));
+      }
+
       this.avatarState.x = spawnX;
       this.avatarState.y = 0;
       this.avatarState.z = spawnZ;
@@ -3329,6 +3358,7 @@ export class Map3DEngine {
     this.findNearestDeviceToAvatar();
     this.renderAvatarHudBar();
     this.tryLockAvatarPointer();
+    this.publishLocalPresence?.(true);
     this.showStatusHint(
       this.avatarPerspective === 'fpp'
         ? 'Mode FPP aktif: Gerakkan mouse lihat dari mata teknisi, WASD jalan, Spasi lompat, V ke TPP, F inspeksi.'
@@ -3374,6 +3404,7 @@ export class Map3DEngine {
     this.animateCameraTo(camPose.endPos, camPose.target, duration);
     this.findNearestDeviceToAvatar();
     this.updateAvatarProximityHud();
+    this.publishLocalPresence?.(true);
     return true;
   }
 
@@ -3511,6 +3542,219 @@ export class Map3DEngine {
 
     this.findNearestDeviceToAvatar();
     this.updateAvatarProximityHud();
+    this.publishLocalPresence?.(false);
+  }
+
+  publishLocalPresence(force = false) {
+    if (!authManager?.isAuthenticated?.()) return;
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const minIntervalMs = this.avatarMode ? 90 : 450;
+    if (!force && (now - this._lastPresenceEmitAt < minIntervalMs)) return;
+
+    let wx = 0;
+    let wy = 0;
+    let wz = 0;
+    let yaw = 0;
+    let moving = false;
+    let running = false;
+    let grounded = true;
+    let walkPhase = 0;
+
+    if (this.avatarMode) {
+      wx = Number(this.avatarState.x) || 0;
+      wy = Number(this.avatarState.y) || 0;
+      wz = Number(this.avatarState.z) || 0;
+      yaw = Number(this.avatarState.yaw) || 0;
+      moving = Boolean(this.avatarState.isMoving);
+      running = Boolean(this.avatarState.isRunning);
+      grounded = this.avatarState.isGrounded !== false;
+      walkPhase = Number(this.avatarState.walkPhase) || 0;
+    } else if (this.controls?.target) {
+      const { worldW, worldD } = this.getWorldDimensions();
+      wx = Math.max(-worldW * 0.55, Math.min(worldW * 0.55, Number(this.controls.target.x) || 0));
+      wz = Math.max(-worldD * 0.55, Math.min(worldD * 0.55, Number(this.controls.target.z) || 0));
+      wy = 0;
+      if (this.camera) {
+        yaw = Math.atan2(wx - this.camera.position.x, wz - this.camera.position.z);
+      }
+    }
+
+    const snapKey = `${this.avatarMode ? 1 : 0}:${this.avatarPerspective}:${wx.toFixed(2)}:${wy.toFixed(2)}:${wz.toFixed(2)}:${yaw.toFixed(2)}:${moving ? 1 : 0}:${grounded ? 1 : 0}`;
+    if (!force && snapKey === this._lastPresenceSnapshotKey) return;
+
+    this._lastPresenceEmitAt = now;
+    this._lastPresenceSnapshotKey = snapKey;
+    const { normX, normY } = this.worldToNorm(wx, wz);
+    authManager.updateLocalPresence({
+      viewMode: '3d',
+      avatarMode: Boolean(this.avatarMode),
+      perspective: this.avatarPerspective,
+      x: Number(wx.toFixed(3)),
+      y: Number(wy.toFixed(3)),
+      z: Number(wz.toFixed(3)),
+      normX: Number(normX.toFixed(4)),
+      normY: Number(normY.toFixed(4)),
+      yaw: Number(yaw.toFixed(3)),
+      isMoving: moving,
+      isRunning: running,
+      isGrounded: grounded,
+      walkPhase: Number(walkPhase.toFixed(3)),
+      nearestDeviceId: this.avatarState.nearestDeviceId || null
+    });
+  }
+
+  _disposeAvatarMeshGroup(group) {
+    if (!group) return;
+    group.traverse((obj) => {
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material) {
+        if (Array.isArray(obj.material)) {
+          obj.material.forEach((m) => {
+            if (m.map) m.map.dispose();
+            m.dispose();
+          });
+        } else {
+          if (obj.material.map) obj.material.map.dispose();
+          obj.material.dispose();
+        }
+      }
+    });
+  }
+
+  syncRemoteAvatars(peers = []) {
+    const activeIds = new Set();
+    const list = Array.isArray(peers) ? peers : [];
+
+    for (const peer of list) {
+      if (!peer || !peer.clientId) continue;
+      if (authManager?.clientId && peer.clientId === authManager.clientId) continue;
+      activeIds.add(peer.clientId);
+
+      let tx = Number(peer.x);
+      let ty = Number(peer.y) || 0;
+      let tz = Number(peer.z);
+      if (peer.viewMode === '2d' || !Number.isFinite(tx) || !Number.isFinite(tz)) {
+        const wpos = this.normToWorld(
+          Number.isFinite(Number(peer.normX)) ? Number(peer.normX) : 0.5,
+          Number.isFinite(Number(peer.normY)) ? Number(peer.normY) : 0.5
+        );
+        tx = wpos.x;
+        tz = wpos.z;
+        ty = 0;
+      }
+
+      const tyaw = Number.isFinite(Number(peer.yaw)) ? Number(peer.yaw) : 0;
+      const colorHex = peer.colorHex || getPeerColorHex(peer.username || peer.clientId);
+      const labelText = peer.viewMode === '2d'
+        ? `@${peer.username} (2D)`
+        : `@${peer.username}`;
+
+      let entry = this.remoteAvatarMap.get(peer.clientId);
+      if (!entry) {
+        const group = createRobloxAvatar3DGroup(labelText, {
+          isRemote: true,
+          vestColor: colorHex,
+          helmetColor: colorHex,
+          ringColor: colorHex,
+          accentHex: colorHex
+        });
+        group.visible = true;
+        group.position.set(tx, ty, tz);
+        group.rotation.y = tyaw;
+        this.remoteAvatarsGroup.add(group);
+        entry = {
+          clientId: peer.clientId,
+          group,
+          currentX: tx,
+          currentY: ty,
+          currentZ: tz,
+          currentYaw: tyaw,
+          targetX: tx,
+          targetY: ty,
+          targetZ: tz,
+          targetYaw: tyaw,
+          state: {
+            isMoving: Boolean(peer.isMoving),
+            isRunning: Boolean(peer.isRunning),
+            isGrounded: peer.isGrounded !== false,
+            walkPhase: Number(peer.walkPhase) || 0
+          },
+          peer
+        };
+        animateRobloxAvatarRig(group, entry.state, 0.016);
+        this.remoteAvatarMap.set(peer.clientId, entry);
+      } else {
+        updateRobloxAvatarLabel(entry.group, labelText, colorHex);
+        entry.targetX = tx;
+        entry.targetY = ty;
+        entry.targetZ = tz;
+        entry.targetYaw = tyaw;
+        entry.state.isMoving = Boolean(peer.isMoving);
+        entry.state.isRunning = Boolean(peer.isRunning);
+        entry.state.isGrounded = peer.isGrounded !== false;
+        if (Number.isFinite(Number(peer.walkPhase))) {
+          entry.state.walkPhase = Number(peer.walkPhase);
+        }
+        entry.peer = peer;
+      }
+    }
+
+    for (const [cid, entry] of Array.from(this.remoteAvatarMap.entries())) {
+      if (!activeIds.has(cid)) {
+        this.remoteAvatarsGroup.remove(entry.group);
+        this._disposeAvatarMeshGroup(entry.group);
+        this.remoteAvatarMap.delete(cid);
+      }
+    }
+
+    this.updateRemotePeersHud(list);
+  }
+
+  updateRemoteAvatars(dt = 0.016) {
+    if (this.remoteAvatarMap.size === 0) return;
+    const alpha = Math.min(1, Math.max(0.05, dt * 12));
+    for (const entry of this.remoteAvatarMap.values()) {
+      const dist = Math.hypot(entry.targetX - entry.currentX, entry.targetZ - entry.currentZ);
+      if (dist > 25) {
+        entry.currentX = entry.targetX;
+        entry.currentY = entry.targetY;
+        entry.currentZ = entry.targetZ;
+        entry.currentYaw = entry.targetYaw;
+      } else {
+        entry.currentX += (entry.targetX - entry.currentX) * alpha;
+        entry.currentY += (entry.targetY - entry.currentY) * alpha;
+        entry.currentZ += (entry.targetZ - entry.currentZ) * alpha;
+        const yawDiff = Math.atan2(
+          Math.sin(entry.targetYaw - entry.currentYaw),
+          Math.cos(entry.targetYaw - entry.currentYaw)
+        );
+        entry.currentYaw += yawDiff * alpha;
+      }
+
+      if (entry.state.isMoving || dist > 0.04) {
+        entry.state.walkPhase += dt * (entry.state.isRunning ? 14.5 : 9.5);
+      }
+
+      entry.group.position.set(entry.currentX, entry.currentY, entry.currentZ);
+      entry.group.rotation.y = entry.currentYaw;
+      animateRobloxAvatarRig(entry.group, {
+        ...entry.state,
+        isMoving: entry.state.isMoving || dist > 0.05
+      }, dt);
+    }
+  }
+
+  updateRemotePeersHud(peers = authManager?.getRemotePeers?.() || []) {
+    if (typeof document === 'undefined') return;
+    const badge = document.getElementById('avatar-online-peers-slot');
+    if (!badge) return;
+    const count = Array.isArray(peers) ? peers.length : 0;
+    if (count === 0) {
+      badge.textContent = 'Rekan: 0 online';
+    } else {
+      const names = peers.slice(0, 3).map((p) => `@${p.username}`).join(', ');
+      badge.textContent = `Rekan (${count}): ${names}${count > 3 ? '…' : ''}`;
+    }
   }
 
   renderAvatarHudBar() {
@@ -3533,6 +3777,7 @@ export class Map3DEngine {
         <span class="avatar-bar-title">
           <span class="avatar-bar-dot"></span>
           <span>${isFpp ? 'Mode Teknisi (FPP)' : 'Mode Teknisi (TPP)'}</span>
+          <span id="avatar-online-peers-slot" class="sim-inspector-badge">Rekan: 0 online</span>
         </span>
         <span class="avatar-bar-controls-hint"><strong>Mouse</strong> Lihat • <strong>Scroll</strong> Zoom/FPP • <strong>WASD</strong> Jalan • <strong>Spasi</strong> Lompat • <strong>V</strong> Ganti View</span>
       </div>
@@ -3590,6 +3835,7 @@ export class Map3DEngine {
     });
 
     this.updateAvatarProximityHud();
+    this.updateRemotePeersHud?.(authManager.getRemotePeers());
   }
 
   updateAvatarProximityHud() {
@@ -4338,6 +4584,18 @@ export class Map3DEngine {
 
     eventBus.on('theme:changed', () => {
       this.applyThemeColors();
+    });
+
+    eventBus.on('presence:updated', ({ peers } = {}) => {
+      this.syncRemoteAvatars(peers || authManager.getRemotePeers());
+    });
+
+    eventBus.on('auth:changed', () => {
+      const u = authManager.getCurrentUser?.();
+      if (this.avatarGroup) {
+        updateRobloxAvatarLabel(this.avatarGroup, u ? `@${u.username}` : 'Teknisi Jaringan', '#76c457');
+      }
+      this.syncRemoteAvatars(authManager.getRemotePeers());
     });
 
     eventBus.on('mode:changed', ({ mode }) => {

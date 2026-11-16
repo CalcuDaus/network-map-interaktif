@@ -1095,36 +1095,86 @@ export function createCustomObject3DGroup(obj, normToWorldFn, isSelected = false
   return group;
 }
 
+function drawAvatarLabelCanvas(canvas, label, accentHex = '#76c457') {
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = 'rgba(18, 28, 16, 0.92)';
+  roundRect(ctx, 8, 8, 304, 60, 14);
+  ctx.fill();
+  ctx.strokeStyle = accentHex || '#76c457';
+  ctx.lineWidth = 3;
+  roundRect(ctx, 8, 8, 304, 60, 14);
+  ctx.stroke();
+  ctx.fillStyle = '#fff8cf';
+  ctx.font = 'bold 24px Poppins, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(truncateText(ctx, label || 'Teknisi', 278), 160, 38);
+}
+
+/**
+ * Dynamically update the floating nameplate above a Roblox technician avatar.
+ * @param {THREE.Group} avatarGroup
+ * @param {string} newLabel
+ * @param {string} [accentHex='#76c457']
+ */
+export function updateRobloxAvatarLabel(avatarGroup, newLabel, accentHex = '#76c457') {
+  if (!avatarGroup?.userData) return;
+  const safeLabel = String(newLabel || 'Teknisi');
+  const safeAccent = accentHex || avatarGroup.userData.accentHex || '#76c457';
+  if (avatarGroup.userData.currentLabel === safeLabel && avatarGroup.userData.accentHex === safeAccent) {
+    return;
+  }
+  const canvas = avatarGroup.userData.labelCanvas;
+  const tex = avatarGroup.userData.labelTexture;
+  if (canvas && tex) {
+    drawAvatarLabelCanvas(canvas, safeLabel, safeAccent);
+    tex.needsUpdate = true;
+  }
+  avatarGroup.userData.currentLabel = safeLabel;
+  avatarGroup.userData.accentHex = safeAccent;
+}
+
 /**
  * Create a Roblox-style R6 blocky Network Engineer 3D character rig.
  * Origin sits on the floor at (0, 0, 0) and faces +Z.
  * All child meshes disable raycasting so the avatar never blocks clicking devices or ports.
  * @param {string} [label='Teknisi Jaringan']
+ * @param {Object} [options]
  * @returns {THREE.Group}
  */
-export function createRobloxAvatar3DGroup(label = 'Teknisi Jaringan') {
+export function createRobloxAvatar3DGroup(label = 'Teknisi Jaringan', options = {}) {
   const root = new THREE.Group();
-  root.name = 'RobloxNetworkEngineer';
+  root.name = options.isRemote ? 'RemoteRobloxNetworkEngineer' : 'RobloxNetworkEngineer';
 
   const rigRoot = new THREE.Group();
   rigRoot.name = 'RobloxAvatarRig';
   root.add(rigRoot);
 
+  const vestHex = options.vestColor !== undefined ? new THREE.Color(options.vestColor).getHex() : 0x2a7c13;
+  const helmetHex = options.helmetColor !== undefined
+    ? new THREE.Color(options.helmetColor).getHex()
+    : (options.isRemote ? vestHex : 0x76c457);
+  const ringHex = options.ringColor !== undefined ? new THREE.Color(options.ringColor).getHex() : helmetHex;
+  const accentCss = options.accentHex || `#${helmetHex.toString(16).padStart(6, '0')}`;
+
   // Classic Roblox R6 colors + SmartSchool Network Engineer high-vis vest
   const skinMat = makeMat(0xfacc15, { roughness: 0.42, metalness: 0.05 });
   const torsoNavyMat = makeMat(0x1e293b, { roughness: 0.55, metalness: 0.1 });
-  const vestGreenMat = makeMat(0x2a7c13, { roughness: 0.4, metalness: 0.12 });
-  const stripeMat = makeMat(0xd9f99d, { emissive: 0x76c457, emissiveIntensity: 0.35, roughness: 0.25 });
+  const vestGreenMat = makeMat(vestHex, { roughness: 0.4, metalness: 0.12 });
+  const stripeMat = makeMat(0xd9f99d, { emissive: vestHex, emissiveIntensity: 0.35, roughness: 0.25 });
   const pantsMat = makeMat(0x334155, { roughness: 0.65, metalness: 0.05 });
   const bootMat = makeMat(0x0f172a, { roughness: 0.7, metalness: 0.1 });
-  const helmetMat = makeMat(0x76c457, { roughness: 0.32, metalness: 0.18 });
+  const helmetMat = makeMat(helmetHex, { roughness: 0.32, metalness: 0.18 });
   const tabletBodyMat = makeMat(0x0f172a, { roughness: 0.35, metalness: 0.4 });
   const tabletScreenMat = makeMat(0x38bdf8, { emissive: 0x0284c7, emissiveIntensity: 0.75, roughness: 0.2 });
   const faceDarkMat = makeMat(0x111827, { roughness: 0.3 });
 
   // Ground indicator ring under feet
   const ringMat = new THREE.MeshBasicMaterial({
-    color: 0x76c457,
+    color: ringHex,
     side: THREE.DoubleSide,
     transparent: true,
     opacity: 0.65
@@ -1198,35 +1248,24 @@ export function createRobloxAvatar3DGroup(label = 'Teknisi Jaringan') {
   rigRoot.add(headPivot);
 
   // Overhead floating role label when canvas is available
+  root.userData.currentLabel = label || '';
+  root.userData.accentHex = accentCss;
   if (typeof document !== 'undefined' && label) {
     try {
       const canvas = document.createElement('canvas');
       canvas.width = 320;
       canvas.height = 76;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.fillStyle = 'rgba(22, 40, 18, 0.90)';
-        roundRect(ctx, 8, 8, 304, 60, 14);
-        ctx.fill();
-        ctx.strokeStyle = '#76c457';
-        ctx.lineWidth = 3;
-        roundRect(ctx, 8, 8, 304, 60, 14);
-        ctx.stroke();
-        ctx.fillStyle = '#fff8cf';
-        ctx.font = 'bold 26px Poppins, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(truncateText(ctx, label, 280), 160, 38);
-
-        const tex = new THREE.CanvasTexture(canvas);
-        tex.needsUpdate = true;
-        const spriteMat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
-        const sprite = new THREE.Sprite(spriteMat);
-        sprite.position.set(0, 2.28, 0);
-        sprite.scale.set(2.1, 0.5, 1);
-        sprite.renderOrder = 25;
-        rigRoot.add(sprite);
-      }
+      drawAvatarLabelCanvas(canvas, label, accentCss);
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.needsUpdate = true;
+      const spriteMat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+      const sprite = new THREE.Sprite(spriteMat);
+      sprite.position.set(0, 2.28, 0);
+      sprite.scale.set(2.1, 0.5, 1);
+      sprite.renderOrder = 25;
+      rigRoot.add(sprite);
+      root.userData.labelCanvas = canvas;
+      root.userData.labelTexture = tex;
     } catch { /* ignore headless canvas errors */ }
   }
 

@@ -460,6 +460,11 @@
       this.interactionLayer = new Konva.Layer({
         id: "interaction-layer"
       });
+      this.presenceLayer = new Konva.Layer({
+        id: "presence-layer",
+        listening: false,
+        hitGraphEnabled: false
+      });
       this.stage.add(this.bgLayer);
       this.stage.add(this.buildingLayer);
       this.stage.add(this.infrastructureLayer);
@@ -467,6 +472,7 @@
       this.stage.add(this.deviceLayer);
       this.stage.add(this.annotationLayer);
       this.stage.add(this.interactionLayer);
+      this.stage.add(this.presenceLayer);
       this.layers = {
         background: this.bgLayer,
         buildings: this.buildingLayer,
@@ -474,7 +480,8 @@
         connections: this.connectionLayer,
         devices: this.deviceLayer,
         annotations: this.annotationLayer,
-        interaction: this.interactionLayer
+        interaction: this.interactionLayer,
+        presence: this.presenceLayer
       };
       eventBus.on("layer:visibility-changed", ({ layer, visible }) => {
         this.setLayerVisibility(layer, visible);
@@ -1107,6 +1114,1229 @@
     }
   };
 
+  // js/storage/auth-manager.js
+  var LOCAL_DB_STORAGE_KEY = "netmap_multi_db_v1";
+  var LOCAL_TOKEN_STORAGE_KEY = "netmap_auth_token_v1";
+  var LOCAL_WS_MODE_STORAGE_KEY = "netmap_workspace_mode_v1";
+  var LOCAL_PRESENCE_STORAGE_KEY = "netmap_presence_peers_v1";
+  var DEFAULT_SEED_SALT = "netmap_salt_2026";
+  var DEFAULT_MAIN_SERVER_PASSWORD = "server123";
+  var PRESENCE_TTL_MS = 15e3;
+  var PEER_COLOR_PALETTE = [
+    "#2563eb",
+    "#dc2626",
+    "#d97706",
+    "#7c3aed",
+    "#0891b2",
+    "#db2777",
+    "#ea580c",
+    "#4f46e5"
+  ];
+  function getPeerColorHex(seed = "") {
+    const str = String(seed || "peer");
+    let h = 0;
+    for (let i = 0; i < str.length; i++) {
+      h = (h << 5) - h + str.charCodeAt(i) | 0;
+    }
+    return PEER_COLOR_PALETTE[Math.abs(h) % PEER_COLOR_PALETTE.length];
+  }
+  var SHA256_K = new Uint32Array([
+    1116352408,
+    1899447441,
+    3049323471,
+    3921009573,
+    961987163,
+    1508970993,
+    2453635748,
+    2870763221,
+    3624381080,
+    310598401,
+    607225278,
+    1426881987,
+    1925078388,
+    2162078206,
+    2614888103,
+    3248222580,
+    3835390401,
+    4022224774,
+    264347078,
+    604807628,
+    770255983,
+    1249150122,
+    1555081692,
+    1996064986,
+    2554220882,
+    2821834349,
+    2952996808,
+    3210313671,
+    3336571891,
+    3584528711,
+    113926993,
+    338241895,
+    666307205,
+    773529912,
+    1294757372,
+    1396182291,
+    1695183700,
+    1986661051,
+    2177026350,
+    2456956037,
+    2730485921,
+    2820302411,
+    3259730800,
+    3345764771,
+    3516065817,
+    3600352804,
+    4094571909,
+    275423344,
+    430227734,
+    506948616,
+    659060556,
+    883997877,
+    958139571,
+    1322822218,
+    1537002063,
+    1747873779,
+    1955562222,
+    2024104815,
+    2227730452,
+    2361852424,
+    2428436474,
+    2756734187,
+    3204031479,
+    3329325298
+  ]);
+  function sha256Hex(message) {
+    const bytes = new TextEncoder().encode(String(message));
+    const bitLen = bytes.length * 8;
+    const paddedLen = Math.ceil((bytes.length + 9) / 64) * 64;
+    const buf = new Uint8Array(paddedLen);
+    buf.set(bytes);
+    buf[bytes.length] = 128;
+    const view = new DataView(buf.buffer);
+    view.setUint32(paddedLen - 8, Math.floor(bitLen / 4294967296), false);
+    view.setUint32(paddedLen - 4, bitLen >>> 0, false);
+    const H = new Uint32Array([
+      1779033703,
+      3144134277,
+      1013904242,
+      2773480762,
+      1359893119,
+      2600822924,
+      528734635,
+      1541459225
+    ]);
+    const W = new Uint32Array(64);
+    const rotr = (n, x) => x >>> n | x << 32 - n;
+    for (let offset = 0; offset < paddedLen; offset += 64) {
+      for (let i = 0; i < 16; i++) W[i] = view.getUint32(offset + i * 4, false);
+      for (let i = 16; i < 64; i++) {
+        const s0 = rotr(7, W[i - 15]) ^ rotr(18, W[i - 15]) ^ W[i - 15] >>> 3;
+        const s1 = rotr(17, W[i - 2]) ^ rotr(19, W[i - 2]) ^ W[i - 2] >>> 10;
+        W[i] = W[i - 16] + s0 + W[i - 7] + s1 >>> 0;
+      }
+      let [a, b, c, d, e, f, g, h] = H;
+      for (let i = 0; i < 64; i++) {
+        const S1 = rotr(6, e) ^ rotr(11, e) ^ rotr(25, e);
+        const ch = e & f ^ ~e & g;
+        const temp1 = h + S1 + ch + SHA256_K[i] + W[i] >>> 0;
+        const S0 = rotr(2, a) ^ rotr(13, a) ^ rotr(22, a);
+        const maj = a & b ^ a & c ^ b & c;
+        const temp2 = S0 + maj >>> 0;
+        h = g;
+        g = f;
+        f = e;
+        e = d + temp1 >>> 0;
+        d = c;
+        c = b;
+        b = a;
+        a = temp1 + temp2 >>> 0;
+      }
+      H[0] = H[0] + a >>> 0;
+      H[1] = H[1] + b >>> 0;
+      H[2] = H[2] + c >>> 0;
+      H[3] = H[3] + d >>> 0;
+      H[4] = H[4] + e >>> 0;
+      H[5] = H[5] + f >>> 0;
+      H[6] = H[6] + g >>> 0;
+      H[7] = H[7] + h >>> 0;
+    }
+    return Array.from(H).map((v) => v.toString(16).padStart(8, "0")).join("");
+  }
+  function defaultOfflineSeedState() {
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    return {
+      nextUserId: 4,
+      users: [
+        {
+          id: 1,
+          username: "admin",
+          displayName: "Admin Utama Jaringan",
+          role: "admin",
+          passwordSalt: DEFAULT_SEED_SALT,
+          passwordHash: sha256Hex(`${DEFAULT_SEED_SALT}:admin123`),
+          createdAt: now,
+          lastLoginAt: null
+        },
+        {
+          id: 2,
+          username: "teknisi1",
+          displayName: "Teknisi Lapangan 1",
+          role: "teknisi",
+          passwordSalt: DEFAULT_SEED_SALT,
+          passwordHash: sha256Hex(`${DEFAULT_SEED_SALT}:teknisi123`),
+          createdAt: now,
+          lastLoginAt: null
+        },
+        {
+          id: 3,
+          username: "teknisi2",
+          displayName: "Teknisi Lapangan 2",
+          role: "teknisi",
+          passwordSalt: DEFAULT_SEED_SALT,
+          passwordHash: sha256Hex(`${DEFAULT_SEED_SALT}:teknisi123`),
+          createdAt: now,
+          lastLoginAt: null
+        }
+      ],
+      sessions: {},
+      workspaces: {},
+      mainSecurity: {
+        ownerUsername: "admin",
+        passwordSalt: DEFAULT_SEED_SALT,
+        passwordHash: sha256Hex(`${DEFAULT_SEED_SALT}:${DEFAULT_MAIN_SERVER_PASSWORD}`),
+        isPublicViewable: true,
+        updatedAt: now,
+        updatedBy: "admin"
+      }
+    };
+  }
+  var AuthManager = class {
+    constructor() {
+      this.currentUser = null;
+      this.authToken = "";
+      this.workspaceMode = "main";
+      this.mainWorkspaceUnlocked = false;
+      this.mainOwnerUsername = "admin";
+      this.publicPreviewMode = false;
+      this.apiAvailable = false;
+      this.storageBackend = "local";
+      this.lastUpdatedBy = null;
+      this.lastSyncedAt = null;
+      this._channel = null;
+      this._pollTimer = null;
+      this._memoryStore = null;
+      this.clientId = `peer-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+      this.remotePeers = /* @__PURE__ */ new Map();
+      this._presenceTimer = null;
+      this._presenceInFlight = false;
+      this._lastPresencePushAt = 0;
+      this._presenceDirty = false;
+      this.localPresenceState = {
+        viewMode: "2d",
+        avatarMode: false,
+        perspective: "tpp",
+        x: 0,
+        y: 0,
+        z: 0,
+        normX: 0.5,
+        normY: 0.5,
+        yaw: 0,
+        isMoving: false,
+        isRunning: false,
+        isGrounded: true,
+        walkPhase: 0,
+        nearestDeviceId: null
+      };
+      this.restoreLocalMeta();
+      this.initSyncChannel();
+    }
+    restoreLocalMeta() {
+      try {
+        if (typeof localStorage !== "undefined") {
+          this.authToken = localStorage.getItem(LOCAL_TOKEN_STORAGE_KEY) || "";
+          const savedMode = localStorage.getItem(LOCAL_WS_MODE_STORAGE_KEY);
+          if (savedMode === "personal" || savedMode === "main") {
+            this.workspaceMode = savedMode;
+          }
+        }
+      } catch {
+      }
+    }
+    initSyncChannel() {
+      if (typeof BroadcastChannel !== "undefined") {
+        try {
+          this._channel = new BroadcastChannel("netmap_multiplayer_sync");
+          if (typeof this._channel.unref === "function") {
+            this._channel.unref();
+          }
+          this._channel.onmessage = (evt) => {
+            const msg = evt?.data;
+            if (!msg) return;
+            if (msg.type === "presence-heartbeat" && msg.peer && msg.peer.clientId !== this.clientId) {
+              const targetWs = this.isAuthenticated() ? this.getActiveWorkspaceKey() : this.isPublicPreviewActive() ? "main" : null;
+              if (targetWs && msg.peer.workspaceKey === targetWs) {
+                this.remotePeers.set(msg.peer.clientId, { ...msg.peer, updatedAt: Date.now() });
+                this._pruneAndEmitPresence();
+              }
+              return;
+            }
+            if (msg.type === "presence-leave" && msg.clientId) {
+              if (this.remotePeers.delete(msg.clientId)) {
+                this._pruneAndEmitPresence();
+              }
+              return;
+            }
+            if (!this.isAuthenticated()) return;
+            if (msg.type === "workspace-updated" && msg.workspaceKey === this.getActiveWorkspaceKey()) {
+              if (msg.updatedAt && msg.updatedAt !== this.lastSyncedAt) {
+                this.lastUpdatedBy = msg.updatedBy || this.lastUpdatedBy;
+                eventBus.emit("workspace:remote-updated", {
+                  workspaceKey: msg.workspaceKey,
+                  updatedBy: msg.updatedBy,
+                  updatedAt: msg.updatedAt
+                });
+              }
+            }
+          };
+        } catch {
+        }
+      }
+      if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+        window.addEventListener("storage", (evt) => {
+          if (evt.key === LOCAL_PRESENCE_STORAGE_KEY) {
+            this._syncPresenceFromLocalStorage();
+          }
+        });
+        window.addEventListener("beforeunload", () => {
+          this.leavePresence();
+        });
+      }
+    }
+    readLocalDb() {
+      const ensureDefaults = (db) => {
+        if (!db.mainSecurity || !db.mainSecurity.passwordHash) {
+          db.mainSecurity = defaultOfflineSeedState().mainSecurity;
+        }
+        if (!db.sessions || typeof db.sessions !== "object") db.sessions = {};
+        if (!db.workspaces || typeof db.workspaces !== "object") db.workspaces = {};
+        return db;
+      };
+      try {
+        if (typeof localStorage !== "undefined") {
+          const raw = localStorage.getItem(LOCAL_DB_STORAGE_KEY);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && Array.isArray(parsed.users)) {
+              return ensureDefaults(parsed);
+            }
+          }
+          const seeded = defaultOfflineSeedState();
+          localStorage.setItem(LOCAL_DB_STORAGE_KEY, JSON.stringify(seeded));
+          return seeded;
+        }
+      } catch {
+      }
+      if (!this._memoryStore) {
+        this._memoryStore = defaultOfflineSeedState();
+      }
+      return ensureDefaults(this._memoryStore);
+    }
+    writeLocalDb(dbState) {
+      this._memoryStore = dbState;
+      try {
+        if (typeof localStorage !== "undefined") {
+          localStorage.setItem(LOCAL_DB_STORAGE_KEY, JSON.stringify(dbState));
+        }
+      } catch {
+      }
+    }
+    persistToken(token) {
+      this.authToken = token || "";
+      try {
+        if (typeof localStorage !== "undefined") {
+          if (this.authToken) {
+            localStorage.setItem(LOCAL_TOKEN_STORAGE_KEY, this.authToken);
+          } else {
+            localStorage.removeItem(LOCAL_TOKEN_STORAGE_KEY);
+          }
+        }
+      } catch {
+      }
+    }
+    isAuthenticated() {
+      return Boolean(this.currentUser && this.currentUser.username);
+    }
+    getCurrentUser() {
+      return this.currentUser;
+    }
+    isMainWorkspaceUnlocked() {
+      return Boolean(this.isAuthenticated() && this.mainWorkspaceUnlocked);
+    }
+    isMainServerAdmin() {
+      if (!this.isAuthenticated()) return false;
+      const uname = String(this.currentUser?.username || "").toLowerCase();
+      const owner = String(this.mainOwnerUsername || "admin").toLowerCase();
+      return uname === "admin" || this.currentUser?.role === "admin" || uname === owner;
+    }
+    isPublicPreviewActive() {
+      return Boolean(!this.isAuthenticated() && this.publicPreviewMode);
+    }
+    setPublicPreviewMode(active) {
+      this.publicPreviewMode = Boolean(active) && !this.isAuthenticated();
+      eventBus.emit("auth:changed", this.getAuthStateSnapshot());
+      return this.publicPreviewMode;
+    }
+    canWriteActiveWorkspace() {
+      if (!this.isAuthenticated()) return false;
+      if (this.getWorkspaceMode() === "personal") return true;
+      return this.mainWorkspaceUnlocked === true;
+    }
+    getWorkspaceMode() {
+      return this.workspaceMode === "personal" ? "personal" : "main";
+    }
+    setWorkspaceMode(mode) {
+      const next = mode === "personal" ? "personal" : "main";
+      const prev = this.workspaceMode;
+      this.workspaceMode = next;
+      try {
+        if (typeof localStorage !== "undefined") {
+          localStorage.setItem(LOCAL_WS_MODE_STORAGE_KEY, next);
+        }
+      } catch {
+      }
+      if (prev !== next) {
+        this.remotePeers.clear();
+        eventBus.emit("presence:updated", { peers: [] });
+        if (this.isAuthenticated()) {
+          this.pushPresenceNow({ force: true }).catch(() => {
+          });
+        }
+      }
+      eventBus.emit("auth:workspace-mode-changed", {
+        workspaceMode: next,
+        workspaceKey: this.getActiveWorkspaceKey()
+      });
+      return next;
+    }
+    getActiveWorkspaceKey() {
+      if (!this.isAuthenticated()) return null;
+      if (this.workspaceMode === "personal") {
+        return `user_${this.currentUser.username}`;
+      }
+      return "main";
+    }
+    _verifyLocalMainPassword(db, rawPassword) {
+      const sec = db?.mainSecurity;
+      if (!sec || !sec.passwordHash) return true;
+      return sha256Hex(`${sec.passwordSalt || DEFAULT_SEED_SALT}:${String(rawPassword || "")}`) === sec.passwordHash;
+    }
+    async apiFetch(apiPath, options = {}) {
+      const headers = {
+        "Content-Type": "application/json",
+        ...options.headers || {}
+      };
+      if (this.authToken) {
+        headers.Authorization = `Bearer ${this.authToken}`;
+      }
+      const resp = await fetch(apiPath, {
+        ...options,
+        headers
+      });
+      const payload = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        const err = new Error(payload.error || `HTTP ${resp.status}`);
+        err.status = resp.status;
+        throw err;
+      }
+      return payload;
+    }
+    async initSession() {
+      const isHttpOrigin = typeof window !== "undefined" && (window.location?.protocol === "http:" || window.location?.protocol === "https:") && typeof fetch === "function";
+      if (isHttpOrigin) {
+        try {
+          const health = await this.apiFetch("/api/health");
+          if (health && health.ok) {
+            this.apiAvailable = true;
+            this.storageBackend = health.storageBackend || "file";
+            if (this.authToken) {
+              const sess = await this.apiFetch("/api/auth/session");
+              if (sess.authenticated && sess.user) {
+                this.currentUser = sess.user;
+                this.mainWorkspaceUnlocked = Boolean(sess.mainUnlocked);
+                this.mainOwnerUsername = sess.mainOwnerUsername || "admin";
+                this.publicPreviewMode = false;
+              } else {
+                this.currentUser = null;
+                this.mainWorkspaceUnlocked = false;
+                this.persistToken("");
+              }
+            }
+            eventBus.emit("auth:changed", this.getAuthStateSnapshot());
+            if (this.isAuthenticated()) {
+              this.startRemoteSyncPolling();
+              this.startPresenceSync();
+            }
+            return this.getAuthStateSnapshot();
+          }
+        } catch {
+          this.apiAvailable = false;
+        }
+      }
+      this.apiAvailable = false;
+      this.storageBackend = "local";
+      const db = this.readLocalDb();
+      this.mainOwnerUsername = db.mainSecurity?.ownerUsername || "admin";
+      if (this.authToken) {
+        const sess = db.sessions?.[this.authToken];
+        const user = sess ? db.users.find((u) => u.username.toLowerCase() === String(sess.username).toLowerCase()) : null;
+        if (user) {
+          this.currentUser = {
+            id: user.id,
+            username: user.username,
+            displayName: user.displayName,
+            role: user.role,
+            lastLoginAt: user.lastLoginAt
+          };
+          this.mainWorkspaceUnlocked = Boolean(sess?.mainUnlocked);
+          this.publicPreviewMode = false;
+        } else {
+          this.currentUser = null;
+          this.mainWorkspaceUnlocked = false;
+          this.persistToken("");
+        }
+      } else {
+        this.mainWorkspaceUnlocked = false;
+      }
+      eventBus.emit("auth:changed", this.getAuthStateSnapshot());
+      if (this.isAuthenticated()) {
+        this.startPresenceSync();
+      }
+      return this.getAuthStateSnapshot();
+    }
+    getAuthStateSnapshot() {
+      return {
+        authenticated: this.isAuthenticated(),
+        user: this.currentUser,
+        workspaceMode: this.getWorkspaceMode(),
+        workspaceKey: this.getActiveWorkspaceKey(),
+        mainUnlocked: this.isMainWorkspaceUnlocked(),
+        mainOwnerUsername: this.mainOwnerUsername,
+        canManageServerPassword: this.isMainServerAdmin(),
+        canWriteActive: this.canWriteActiveWorkspace(),
+        publicPreviewMode: this.isPublicPreviewActive(),
+        storageBackend: this.storageBackend,
+        apiAvailable: this.apiAvailable,
+        lastUpdatedBy: this.lastUpdatedBy,
+        lastSyncedAt: this.lastSyncedAt
+      };
+    }
+    async login(username, password, options = {}) {
+      const cleanUser = String(username || "").trim();
+      const rawPass = String(password || "");
+      const workspacePassword = typeof options.workspacePassword === "string" ? options.workspacePassword : "";
+      const requireMainUnlock = Boolean(options.requireMainUnlock);
+      if (!cleanUser || !rawPass) {
+        throw new Error("Username dan password wajib diisi.");
+      }
+      if (this.apiAvailable) {
+        const res = await this.apiFetch("/api/auth/login", {
+          method: "POST",
+          body: JSON.stringify({
+            username: cleanUser,
+            password: rawPass,
+            workspacePassword,
+            requireMainUnlock
+          })
+        });
+        this.persistToken(res.token);
+        this.currentUser = res.user;
+        this.mainWorkspaceUnlocked = Boolean(res.mainUnlocked);
+        this.mainOwnerUsername = res.mainOwnerUsername || "admin";
+        this.publicPreviewMode = false;
+        this.storageBackend = res.storageBackend || this.storageBackend;
+        this.startRemoteSyncPolling();
+        this.startPresenceSync();
+        eventBus.emit("auth:changed", this.getAuthStateSnapshot());
+        return res.user;
+      }
+      const db = this.readLocalDb();
+      const userRow = db.users.find((u) => u.username.toLowerCase() === cleanUser.toLowerCase());
+      if (!userRow || sha256Hex(`${userRow.passwordSalt}:${rawPass}`) !== userRow.passwordHash) {
+        throw new Error("Username atau password salah.");
+      }
+      let mainUnlocked = false;
+      if (workspacePassword) {
+        if (!this._verifyLocalMainPassword(db, workspacePassword)) {
+          throw new Error("Password akses Server Utama salah.");
+        }
+        mainUnlocked = true;
+      } else if (requireMainUnlock) {
+        throw new Error("Masukkan password akses Server Utama untuk menggunakan workspace Server Utama.");
+      }
+      userRow.lastLoginAt = (/* @__PURE__ */ new Date()).toISOString();
+      const token = `local-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+      db.sessions[token] = {
+        username: userRow.username,
+        mainUnlocked,
+        createdAt: userRow.lastLoginAt
+      };
+      this.writeLocalDb(db);
+      this.persistToken(token);
+      this.currentUser = {
+        id: userRow.id,
+        username: userRow.username,
+        displayName: userRow.displayName,
+        role: userRow.role,
+        lastLoginAt: userRow.lastLoginAt
+      };
+      this.mainWorkspaceUnlocked = mainUnlocked;
+      this.mainOwnerUsername = db.mainSecurity?.ownerUsername || "admin";
+      this.publicPreviewMode = false;
+      this.startPresenceSync();
+      eventBus.emit("auth:changed", this.getAuthStateSnapshot());
+      return this.currentUser;
+    }
+    async register({ username, displayName, password, role = "teknisi", workspacePassword = "", requireMainUnlock = false }) {
+      const cleanUser = String(username || "").trim();
+      const cleanName = String(displayName || cleanUser).trim() || cleanUser;
+      const rawPass = String(password || "");
+      const serverPass = typeof workspacePassword === "string" ? workspacePassword : "";
+      if (!/^[a-zA-Z0-9._-]{3,32}$/.test(cleanUser)) {
+        throw new Error("Username harus 3-32 karakter (huruf, angka, titik, _ atau -).");
+      }
+      if (rawPass.length < 4) {
+        throw new Error("Password minimal 4 karakter.");
+      }
+      if (this.apiAvailable) {
+        const res = await this.apiFetch("/api/auth/register", {
+          method: "POST",
+          body: JSON.stringify({
+            username: cleanUser,
+            displayName: cleanName,
+            password: rawPass,
+            role,
+            workspacePassword: serverPass,
+            requireMainUnlock: Boolean(requireMainUnlock)
+          })
+        });
+        this.persistToken(res.token);
+        this.currentUser = res.user;
+        this.mainWorkspaceUnlocked = Boolean(res.mainUnlocked);
+        this.mainOwnerUsername = res.mainOwnerUsername || "admin";
+        this.publicPreviewMode = false;
+        this.storageBackend = res.storageBackend || this.storageBackend;
+        this.startRemoteSyncPolling();
+        this.startPresenceSync();
+        eventBus.emit("auth:changed", this.getAuthStateSnapshot());
+        return res.user;
+      }
+      const db = this.readLocalDb();
+      if (db.users.some((u) => u.username.toLowerCase() === cleanUser.toLowerCase())) {
+        throw new Error(`Username "${cleanUser}" sudah terdaftar.`);
+      }
+      if (role === "admin") {
+        if (!serverPass || !this._verifyLocalMainPassword(db, serverPass)) {
+          throw new Error("Password Server Utama diperlukan untuk mendaftar sebagai Admin Utama.");
+        }
+      }
+      let mainUnlocked = false;
+      if (serverPass) {
+        if (!this._verifyLocalMainPassword(db, serverPass)) {
+          throw new Error("Password akses Server Utama salah.");
+        }
+        mainUnlocked = true;
+      } else if (requireMainUnlock) {
+        throw new Error("Masukkan password akses Server Utama untuk menggunakan workspace Server Utama.");
+      }
+      const salt = `${DEFAULT_SEED_SALT}_${Date.now().toString(36)}`;
+      const now = (/* @__PURE__ */ new Date()).toISOString();
+      const newUser = {
+        id: db.nextUserId++,
+        username: cleanUser,
+        displayName: cleanName,
+        role: role === "admin" ? "admin" : "teknisi",
+        passwordSalt: salt,
+        passwordHash: sha256Hex(`${salt}:${rawPass}`),
+        createdAt: now,
+        lastLoginAt: now
+      };
+      db.users.push(newUser);
+      const token = `local-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+      db.sessions[token] = {
+        username: newUser.username,
+        mainUnlocked,
+        createdAt: now
+      };
+      this.writeLocalDb(db);
+      this.persistToken(token);
+      this.currentUser = {
+        id: newUser.id,
+        username: newUser.username,
+        displayName: newUser.displayName,
+        role: newUser.role,
+        lastLoginAt: now
+      };
+      this.mainWorkspaceUnlocked = mainUnlocked;
+      this.mainOwnerUsername = db.mainSecurity?.ownerUsername || "admin";
+      this.publicPreviewMode = false;
+      this.startPresenceSync();
+      eventBus.emit("auth:changed", this.getAuthStateSnapshot());
+      return this.currentUser;
+    }
+    async logout() {
+      this.leavePresence();
+      this.stopPresenceSync();
+      if (this.apiAvailable && this.authToken) {
+        try {
+          await this.apiFetch("/api/auth/logout", {
+            method: "POST",
+            body: JSON.stringify({ clientId: this.clientId })
+          });
+        } catch {
+        }
+      } else if (this.authToken) {
+        const db = this.readLocalDb();
+        if (db.sessions?.[this.authToken]) {
+          delete db.sessions[this.authToken];
+          this.writeLocalDb(db);
+        }
+      }
+      this.currentUser = null;
+      this.mainWorkspaceUnlocked = false;
+      this.publicPreviewMode = false;
+      this.lastUpdatedBy = null;
+      this.lastSyncedAt = null;
+      this.remotePeers.clear();
+      this.stopRemoteSyncPolling();
+      this.persistToken("");
+      eventBus.emit("presence:updated", { peers: [] });
+      eventBus.emit("auth:changed", this.getAuthStateSnapshot());
+    }
+    async unlockMainWorkspace(password) {
+      if (!this.isAuthenticated()) {
+        throw new Error("Silakan login akun terlebih dahulu untuk membuka akses edit Server Utama.");
+      }
+      const rawServerPass = String(password || "");
+      if (!rawServerPass) {
+        throw new Error("Password akses Server Utama wajib diisi.");
+      }
+      if (this.apiAvailable) {
+        const res = await this.apiFetch("/api/workspaces/main/unlock", {
+          method: "POST",
+          body: JSON.stringify({ password: rawServerPass })
+        });
+        this.mainWorkspaceUnlocked = Boolean(res.mainUnlocked);
+        this.mainOwnerUsername = res.mainOwnerUsername || this.mainOwnerUsername;
+        eventBus.emit("auth:changed", this.getAuthStateSnapshot());
+        return true;
+      }
+      const db = this.readLocalDb();
+      if (!this._verifyLocalMainPassword(db, rawServerPass)) {
+        throw new Error("Password akses Server Utama salah.");
+      }
+      if (this.authToken && db.sessions[this.authToken]) {
+        db.sessions[this.authToken].mainUnlocked = true;
+        this.writeLocalDb(db);
+      }
+      this.mainWorkspaceUnlocked = true;
+      this.mainOwnerUsername = db.mainSecurity?.ownerUsername || "admin";
+      eventBus.emit("auth:changed", this.getAuthStateSnapshot());
+      return true;
+    }
+    async lockMainWorkspace() {
+      if (!this.isAuthenticated()) return false;
+      if (this.apiAvailable) {
+        await this.apiFetch("/api/workspaces/main/lock", { method: "POST" });
+      } else {
+        const db = this.readLocalDb();
+        if (this.authToken && db.sessions[this.authToken]) {
+          db.sessions[this.authToken].mainUnlocked = false;
+          this.writeLocalDb(db);
+        }
+      }
+      this.mainWorkspaceUnlocked = false;
+      eventBus.emit("auth:changed", this.getAuthStateSnapshot());
+      return true;
+    }
+    async changeMainWorkspacePassword(newPassword, currentPassword = "") {
+      if (!this.isAuthenticated()) {
+        throw new Error("Silakan login terlebih dahulu.");
+      }
+      if (!this.isMainServerAdmin()) {
+        throw new Error("Hanya Admin Utama atau pembuat server yang boleh mengubah password Server Utama.");
+      }
+      const cleanNew = String(newPassword || "");
+      if (cleanNew.length < 4) {
+        throw new Error("Password server baru minimal 4 karakter.");
+      }
+      if (this.apiAvailable) {
+        const res = await this.apiFetch("/api/workspaces/main/password", {
+          method: "POST",
+          body: JSON.stringify({
+            newPassword: cleanNew,
+            currentPassword: String(currentPassword || "")
+          })
+        });
+        this.mainWorkspaceUnlocked = Boolean(res.mainUnlocked ?? true);
+        this.mainOwnerUsername = res.ownerUsername || this.mainOwnerUsername;
+        eventBus.emit("auth:changed", this.getAuthStateSnapshot());
+        return res;
+      }
+      const db = this.readLocalDb();
+      if (typeof currentPassword === "string" && currentPassword.length > 0) {
+        if (!this._verifyLocalMainPassword(db, currentPassword)) {
+          throw new Error("Password server saat ini salah.");
+        }
+      }
+      const salt = `${DEFAULT_SEED_SALT}_${Date.now().toString(36)}`;
+      const now = (/* @__PURE__ */ new Date()).toISOString();
+      const ownerUsername = db.mainSecurity?.ownerUsername || this.currentUser.username || "admin";
+      db.mainSecurity = {
+        ownerUsername,
+        passwordSalt: salt,
+        passwordHash: sha256Hex(`${salt}:${cleanNew}`),
+        isPublicViewable: true,
+        updatedAt: now,
+        updatedBy: this.currentUser.username
+      };
+      Object.entries(db.sessions || {}).forEach(([tok, sess]) => {
+        if (sess && typeof sess === "object") {
+          sess.mainUnlocked = tok === this.authToken;
+        }
+      });
+      this.writeLocalDb(db);
+      this.mainWorkspaceUnlocked = true;
+      this.mainOwnerUsername = ownerUsername;
+      eventBus.emit("auth:changed", this.getAuthStateSnapshot());
+      return {
+        ok: true,
+        mainUnlocked: true,
+        ownerUsername,
+        updatedBy: this.currentUser.username,
+        updatedAt: now,
+        storageBackend: "local"
+      };
+    }
+    async loadPublicMainWorkspace() {
+      if (this.apiAvailable) {
+        const res = await this.apiFetch("/api/workspaces/main");
+        this.lastUpdatedBy = res.updatedBy || null;
+        this.lastSyncedAt = res.updatedAt || null;
+        this.mainOwnerUsername = res.ownerUsername || this.mainOwnerUsername;
+        if (typeof res.mainUnlocked === "boolean") {
+          this.mainWorkspaceUnlocked = res.mainUnlocked;
+        }
+        if (!this.isAuthenticated()) {
+          this.publicPreviewMode = true;
+          this.startPresenceSync();
+          eventBus.emit("auth:changed", this.getAuthStateSnapshot());
+        }
+        return res;
+      }
+      const db = this.readLocalDb();
+      const ws = db.workspaces?.main || null;
+      this.lastUpdatedBy = ws?.updatedBy || null;
+      this.lastSyncedAt = ws?.updatedAt || null;
+      this.mainOwnerUsername = db.mainSecurity?.ownerUsername || "admin";
+      if (!this.isAuthenticated()) {
+        this.publicPreviewMode = true;
+        this.startPresenceSync();
+        eventBus.emit("auth:changed", this.getAuthStateSnapshot());
+      }
+      return ws ? {
+        ...ws,
+        ownerUsername: this.mainOwnerUsername,
+        isProtected: true,
+        isPublicViewable: true,
+        mainUnlocked: this.isMainWorkspaceUnlocked(),
+        storageBackend: "local"
+      } : {
+        workspaceKey: "main",
+        title: "Server Utama",
+        ownerUsername: this.mainOwnerUsername,
+        projectData: null,
+        updatedBy: null,
+        updatedAt: null,
+        isProtected: true,
+        isPublicViewable: true,
+        mainUnlocked: this.isMainWorkspaceUnlocked(),
+        storageBackend: "local"
+      };
+    }
+    startRemoteSyncPolling() {
+      this.stopRemoteSyncPolling();
+      if (!this.apiAvailable || !this.isAuthenticated() || typeof setInterval === "undefined") return;
+      this._pollTimer = setInterval(() => {
+        if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+        this.checkRemoteWorkspaceUpdate().catch(() => {
+        });
+      }, 12e3);
+    }
+    stopRemoteSyncPolling() {
+      if (this._pollTimer) {
+        clearInterval(this._pollTimer);
+        this._pollTimer = null;
+      }
+    }
+    // --------------------------------------------------------------------------
+    // Real-Time Multi-Technician Character & Cursor Presence Sync
+    // --------------------------------------------------------------------------
+    getRemotePeers() {
+      const now = Date.now();
+      const targetWs = this.isAuthenticated() ? this.getActiveWorkspaceKey() : this.isPublicPreviewActive() ? "main" : null;
+      if (!targetWs) return [];
+      const list = [];
+      for (const [cid, peer] of this.remotePeers.entries()) {
+        if (!peer || cid === this.clientId) continue;
+        if (now - (peer.updatedAt || 0) > PRESENCE_TTL_MS) {
+          this.remotePeers.delete(cid);
+          continue;
+        }
+        if (peer.workspaceKey === targetWs) {
+          list.push(peer);
+        }
+      }
+      return list;
+    }
+    _pruneAndEmitPresence() {
+      const peers = this.getRemotePeers();
+      eventBus.emit("presence:updated", { peers });
+      return peers;
+    }
+    _buildLocalPresencePayload() {
+      if (!this.isAuthenticated()) return null;
+      const wsKey = this.getActiveWorkspaceKey() || "main";
+      return {
+        clientId: this.clientId,
+        username: this.currentUser.username,
+        displayName: this.currentUser.displayName || this.currentUser.username,
+        role: this.currentUser.role || "teknisi",
+        workspaceKey: wsKey,
+        colorHex: getPeerColorHex(this.currentUser.username || this.clientId),
+        ...this.localPresenceState,
+        updatedAt: Date.now()
+      };
+    }
+    _syncPresenceFromLocalStorage(ownPayload = null) {
+      try {
+        if (typeof localStorage === "undefined") return;
+        const now = Date.now();
+        const raw = localStorage.getItem(LOCAL_PRESENCE_STORAGE_KEY);
+        const parsed = raw ? JSON.parse(raw) : {};
+        const store = parsed && typeof parsed === "object" ? parsed : {};
+        let dirtyStorage = false;
+        Object.keys(store).forEach((cid) => {
+          const entry = store[cid];
+          if (!entry || now - (entry.updatedAt || 0) > PRESENCE_TTL_MS) {
+            delete store[cid];
+            dirtyStorage = true;
+          }
+        });
+        if (ownPayload) {
+          store[ownPayload.clientId] = ownPayload;
+          dirtyStorage = true;
+        }
+        if (dirtyStorage) {
+          localStorage.setItem(LOCAL_PRESENCE_STORAGE_KEY, JSON.stringify(store));
+        }
+        const targetWs = this.isAuthenticated() ? this.getActiveWorkspaceKey() : this.isPublicPreviewActive() ? "main" : null;
+        if (!targetWs) return;
+        for (const [cid, peer] of Object.entries(store)) {
+          if (cid !== this.clientId && peer?.workspaceKey === targetWs) {
+            this.remotePeers.set(cid, peer);
+          }
+        }
+        this._pruneAndEmitPresence();
+      } catch {
+      }
+    }
+    updateLocalPresence(partialState = {}) {
+      if (!partialState || typeof partialState !== "object") return;
+      Object.assign(this.localPresenceState, partialState);
+      this._presenceDirty = true;
+      if (!this.isAuthenticated()) return;
+      const payload = this._buildLocalPresencePayload();
+      if (!payload) return;
+      const now = Date.now();
+      if (now - this._lastBroadcastAt >= 60 || !this._lastBroadcastAt) {
+        this._lastBroadcastAt = now;
+        this._channel?.postMessage({ type: "presence-heartbeat", peer: payload });
+        this._syncPresenceFromLocalStorage(payload);
+      }
+      if (this.apiAvailable && now - this._lastPresencePushAt >= 200) {
+        this.pushPresenceNow().catch(() => {
+        });
+      }
+    }
+    async pushPresenceNow({ force = false } = {}) {
+      if (this._presenceInFlight) return this.getRemotePeers();
+      const isAuth = this.isAuthenticated();
+      const isPublic = !isAuth && this.isPublicPreviewActive();
+      if (!isAuth && !isPublic) return [];
+      const wsKey = isAuth ? this.getActiveWorkspaceKey() || "main" : "main";
+      const ownPayload = isAuth ? this._buildLocalPresencePayload() : null;
+      if (ownPayload) {
+        this._channel?.postMessage({ type: "presence-heartbeat", peer: ownPayload });
+        this._syncPresenceFromLocalStorage(ownPayload);
+      } else if (isPublic) {
+        this._syncPresenceFromLocalStorage(null);
+      }
+      if (!this.apiAvailable) {
+        return this.getRemotePeers();
+      }
+      const now = Date.now();
+      if (!force && !this._presenceDirty && now - this._lastPresencePushAt < 1100) {
+        return this.getRemotePeers();
+      }
+      this._presenceInFlight = true;
+      this._lastPresencePushAt = now;
+      this._presenceDirty = false;
+      try {
+        const res = isAuth ? await this.apiFetch("/api/presence", {
+          method: "POST",
+          body: JSON.stringify(ownPayload)
+        }) : await this.apiFetch(`/api/presence?workspace=${encodeURIComponent(wsKey)}`);
+        const peers = Array.isArray(res?.peers) ? res.peers : [];
+        this.applyRemotePeerList(peers);
+        return this.getRemotePeers();
+      } catch {
+        return this.getRemotePeers();
+      } finally {
+        this._presenceInFlight = false;
+      }
+    }
+    applyRemotePeerList(peers = []) {
+      const incomingIds = /* @__PURE__ */ new Set();
+      const now = Date.now();
+      for (const peer of peers) {
+        if (!peer || !peer.clientId || peer.clientId === this.clientId) continue;
+        incomingIds.add(peer.clientId);
+        this.remotePeers.set(peer.clientId, { ...peer, updatedAt: peer.updatedAt || now });
+      }
+      for (const [cid, existing] of Array.from(this.remotePeers.entries())) {
+        if (!incomingIds.has(cid) && (!existing || now - (existing.updatedAt || 0) > 2e3)) {
+          this.remotePeers.delete(cid);
+        }
+      }
+      return this._pruneAndEmitPresence();
+    }
+    leavePresence() {
+      this._channel?.postMessage({ type: "presence-leave", clientId: this.clientId });
+      try {
+        if (typeof localStorage !== "undefined") {
+          const raw = localStorage.getItem(LOCAL_PRESENCE_STORAGE_KEY);
+          if (raw) {
+            const store = JSON.parse(raw);
+            if (store && store[this.clientId]) {
+              delete store[this.clientId];
+              localStorage.setItem(LOCAL_PRESENCE_STORAGE_KEY, JSON.stringify(store));
+            }
+          }
+        }
+      } catch {
+      }
+      if (this.apiAvailable && this.authToken && typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
+        try {
+          const blob = new Blob([JSON.stringify({ clientId: this.clientId, token: this.authToken })], { type: "application/json" });
+          navigator.sendBeacon("/api/presence/leave", blob);
+        } catch {
+        }
+      }
+    }
+    startPresenceSync() {
+      this.stopPresenceSync();
+      const isBrowserRuntime = typeof window !== "undefined" && typeof window.location === "object" && typeof setTimeout !== "undefined";
+      if (!isBrowserRuntime) return;
+      if (!this.isAuthenticated() && !this.isPublicPreviewActive()) return;
+      this.pushPresenceNow({ force: true }).catch(() => {
+      });
+      const tick = () => {
+        if (!this.isAuthenticated() && !this.isPublicPreviewActive()) {
+          this.stopPresenceSync();
+          return;
+        }
+        const isHidden = typeof document !== "undefined" && document.visibilityState === "hidden";
+        const fastMode = !isHidden && (this.localPresenceState.avatarMode || this.localPresenceState.isMoving);
+        const delayMs = isHidden ? 4e3 : fastMode ? 240 : 1200;
+        this._presenceTimer = setTimeout(async () => {
+          await this.pushPresenceNow({ force: true }).catch(() => {
+          });
+          if (this._presenceTimer !== null) {
+            tick();
+          }
+        }, delayMs);
+        if (typeof this._presenceTimer?.unref === "function") {
+          this._presenceTimer.unref();
+        }
+      };
+      tick();
+    }
+    stopPresenceSync() {
+      if (this._presenceTimer !== null && this._presenceTimer !== void 0) {
+        clearTimeout(this._presenceTimer);
+        this._presenceTimer = null;
+      }
+    }
+    async checkRemoteWorkspaceUpdate() {
+      if (!this.apiAvailable || !this.isAuthenticated()) return false;
+      const key = this.getActiveWorkspaceKey();
+      if (key !== "main") return false;
+      const meta = await this.apiFetch(`/api/workspaces/${encodeURIComponent(key)}?meta=1`);
+      if (typeof meta?.mainUnlocked === "boolean" && meta.mainUnlocked !== this.mainWorkspaceUnlocked) {
+        this.mainWorkspaceUnlocked = meta.mainUnlocked;
+        eventBus.emit("auth:changed", this.getAuthStateSnapshot());
+      }
+      if (meta?.updatedAt && this.lastSyncedAt && meta.updatedAt !== this.lastSyncedAt) {
+        eventBus.emit("workspace:remote-updated", {
+          workspaceKey: key,
+          updatedBy: meta.updatedBy,
+          updatedAt: meta.updatedAt
+        });
+        return true;
+      }
+      return false;
+    }
+    async listTechnicians() {
+      if (!this.isAuthenticated()) return [];
+      if (this.apiAvailable) {
+        const res = await this.apiFetch("/api/users");
+        return Array.isArray(res.users) ? res.users : [];
+      }
+      const db = this.readLocalDb();
+      return db.users.map((u) => ({
+        id: u.id,
+        username: u.username,
+        displayName: u.displayName,
+        role: u.role,
+        lastLoginAt: u.lastLoginAt
+      }));
+    }
+    async loadWorkspaceProject(workspaceKey = this.getActiveWorkspaceKey()) {
+      if (workspaceKey === "main" && !this.isAuthenticated()) {
+        return this.loadPublicMainWorkspace();
+      }
+      if (!this.isAuthenticated() || !workspaceKey) return null;
+      if (this.apiAvailable) {
+        const res = await this.apiFetch(`/api/workspaces/${encodeURIComponent(workspaceKey)}`);
+        this.lastUpdatedBy = res.updatedBy || null;
+        this.lastSyncedAt = res.updatedAt || null;
+        if (workspaceKey === "main") {
+          this.mainOwnerUsername = res.ownerUsername || this.mainOwnerUsername;
+          if (typeof res.mainUnlocked === "boolean") {
+            this.mainWorkspaceUnlocked = res.mainUnlocked;
+          }
+        }
+        return res;
+      }
+      const db = this.readLocalDb();
+      const ws = db.workspaces?.[workspaceKey] || null;
+      this.lastUpdatedBy = ws?.updatedBy || null;
+      this.lastSyncedAt = ws?.updatedAt || null;
+      if (workspaceKey === "main") {
+        this.mainOwnerUsername = db.mainSecurity?.ownerUsername || "admin";
+      }
+      return ws ? { ...ws, storageBackend: "local" } : { workspaceKey, projectData: null, updatedBy: null, updatedAt: null, storageBackend: "local" };
+    }
+    async saveWorkspaceProject(workspaceKey = this.getActiveWorkspaceKey(), projectData) {
+      if (!this.isAuthenticated() || !workspaceKey || !projectData) return null;
+      if (workspaceKey === "main" && !this.isMainWorkspaceUnlocked()) {
+        throw new Error("Workspace Server Utama terkunci. Masukkan password akses Server Utama terlebih dahulu.");
+      }
+      let savedMeta;
+      if (this.apiAvailable) {
+        savedMeta = await this.apiFetch(`/api/workspaces/${encodeURIComponent(workspaceKey)}`, {
+          method: "PUT",
+          body: JSON.stringify({ projectData })
+        });
+      } else {
+        const db = this.readLocalDb();
+        const updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+        const mainOwner = db.mainSecurity?.ownerUsername || "admin";
+        db.workspaces[workspaceKey] = {
+          workspaceKey,
+          ownerUsername: workspaceKey === "main" ? mainOwner : this.currentUser.username,
+          title: workspaceKey === "main" ? "Server Utama" : projectData.name || this.currentUser.displayName,
+          projectData,
+          updatedBy: this.currentUser.username,
+          updatedAt
+        };
+        this.writeLocalDb(db);
+        savedMeta = {
+          ok: true,
+          workspaceKey,
+          ownerUsername: workspaceKey === "main" ? mainOwner : this.currentUser.username,
+          updatedBy: this.currentUser.username,
+          updatedAt,
+          storageBackend: "local"
+        };
+      }
+      this.lastUpdatedBy = savedMeta.updatedBy || this.currentUser.username;
+      this.lastSyncedAt = savedMeta.updatedAt || (/* @__PURE__ */ new Date()).toISOString();
+      this._channel?.postMessage({
+        type: "workspace-updated",
+        workspaceKey,
+        updatedBy: this.lastUpdatedBy,
+        updatedAt: this.lastSyncedAt
+      });
+      return savedMeta;
+    }
+    async copyWorkspaceProject(fromKey, toKey) {
+      if (!this.isAuthenticated() || !fromKey || !toKey) return null;
+      if (toKey === "main" && !this.isMainWorkspaceUnlocked()) {
+        throw new Error("Workspace Server Utama terkunci. Masukkan password akses Server Utama terlebih dahulu.");
+      }
+      let res;
+      if (this.apiAvailable) {
+        res = await this.apiFetch("/api/workspaces/clone", {
+          method: "POST",
+          body: JSON.stringify({ fromKey, toKey })
+        });
+      } else {
+        const db = this.readLocalDb();
+        const src = db.workspaces?.[fromKey];
+        if (!src || !src.projectData) {
+          throw new Error(`Workspace sumber "${fromKey}" masih kosong.`);
+        }
+        const clonedData = {
+          ...JSON.parse(JSON.stringify(src.projectData)),
+          updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+        };
+        const updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+        const mainOwner = db.mainSecurity?.ownerUsername || "admin";
+        db.workspaces[toKey] = {
+          workspaceKey: toKey,
+          ownerUsername: toKey === "main" ? mainOwner : this.currentUser.username,
+          title: toKey === "main" ? "Server Utama" : `Workspace ${this.currentUser.displayName}`,
+          projectData: clonedData,
+          updatedBy: this.currentUser.username,
+          updatedAt
+        };
+        this.writeLocalDb(db);
+        res = {
+          ok: true,
+          workspaceKey: toKey,
+          projectData: clonedData,
+          updatedBy: this.currentUser.username,
+          updatedAt,
+          storageBackend: "local"
+        };
+      }
+      if (toKey === this.getActiveWorkspaceKey()) {
+        this.lastUpdatedBy = res.updatedBy;
+        this.lastSyncedAt = res.updatedAt;
+      }
+      this._channel?.postMessage({
+        type: "workspace-updated",
+        workspaceKey: toKey,
+        updatedBy: res.updatedBy,
+        updatedAt: res.updatedAt
+      });
+      return res;
+    }
+  };
+  var authManager = new AuthManager();
+
   // js/map/map-engine.js
   var MapEngine = class {
     /**
@@ -1157,7 +2387,103 @@
       this.setupResizeObserver();
       await this.loadMapImage("assets/maps/campus-map.jpg");
       this.interactions.fitToScreen(30);
+      this.setupMultiplayerPresence2D();
       return this;
+    }
+    setupMultiplayerPresence2D() {
+      if (!this.stage || !this.layers?.presenceLayer) return;
+      let last2dEmitAt = 0;
+      this.stage.on("mousemove", () => {
+        if (stateManager.getViewMode?.() !== "2d") return;
+        if (!authManager?.isAuthenticated?.()) return;
+        const now = Date.now();
+        if (now - last2dEmitAt < 180) return;
+        const pointer = this.stage.getPointerPosition();
+        if (!pointer) return;
+        const transform = this.stage.getAbsoluteTransform().copy().invert();
+        const mapPt = transform.point(pointer);
+        const natW = this.mapDimensions.width || 1024;
+        const natH = this.mapDimensions.height || 1024;
+        const normX = Math.max(0.01, Math.min(0.99, mapPt.x / natW));
+        const normY = Math.max(0.01, Math.min(0.99, mapPt.y / natH));
+        last2dEmitAt = now;
+        authManager.updateLocalPresence({
+          viewMode: "2d",
+          avatarMode: false,
+          normX: Number(normX.toFixed(4)),
+          normY: Number(normY.toFixed(4))
+        });
+      });
+      eventBus.on("presence:updated", ({ peers } = {}) => {
+        this.renderRemotePeers2D(peers || authManager.getRemotePeers());
+      });
+      eventBus.on("auth:changed", () => {
+        this.renderRemotePeers2D(authManager.getRemotePeers());
+      });
+      eventBus.on("zoom:changed", () => {
+        if (this.layers?.presenceLayer?.getChildren?.().length > 0) {
+          this.renderRemotePeers2D(authManager.getRemotePeers());
+        }
+      });
+    }
+    renderRemotePeers2D(peers = []) {
+      const layer = this.layers?.presenceLayer;
+      if (!layer || !window.Konva) return;
+      layer.destroyChildren();
+      const list = Array.isArray(peers) ? peers : [];
+      const natW = this.mapDimensions.width || 1024;
+      const natH = this.mapDimensions.height || 1024;
+      const invScale = this.stage ? 1 / Math.max(0.35, Math.min(2.5, this.stage.scaleX() || 1)) : 1;
+      for (const peer of list) {
+        if (!peer || peer.clientId === authManager?.clientId) continue;
+        const nx = Number.isFinite(Number(peer.normX)) ? Number(peer.normX) : 0.5;
+        const ny = Number.isFinite(Number(peer.normY)) ? Number(peer.normY) : 0.5;
+        const px2 = nx * natW;
+        const py2 = ny * natH;
+        const color = peer.colorHex || getPeerColorHex(peer.username || peer.clientId);
+        const textLabel = peer.avatarMode ? `@${peer.username} (3D)` : `@${peer.username}`;
+        const grp = new Konva.Group({
+          x: px2,
+          y: py2,
+          scaleX: invScale,
+          scaleY: invScale,
+          listening: false
+        });
+        grp.add(new Konva.Circle({
+          radius: 9,
+          fill: color,
+          stroke: "#ffffff",
+          strokeWidth: 2.5,
+          shadowColor: "rgba(0,0,0,0.35)",
+          shadowBlur: 6
+        }));
+        const tagWidth = Math.max(66, textLabel.length * 7 + 16);
+        grp.add(new Konva.Rect({
+          x: -tagWidth / 2,
+          y: -30,
+          width: tagWidth,
+          height: 18,
+          cornerRadius: 9,
+          fill: color,
+          stroke: "#ffffff",
+          strokeWidth: 1.2
+        }));
+        grp.add(new Konva.Text({
+          x: -tagWidth / 2,
+          y: -29,
+          width: tagWidth,
+          height: 16,
+          text: textLabel,
+          fontSize: 10.5,
+          fontFamily: "Poppins, sans-serif",
+          fontStyle: "bold",
+          fill: "#ffffff",
+          align: "center",
+          verticalAlign: "middle"
+        }));
+        layer.add(grp);
+      }
+      layer.batchDraw();
     }
     /**
      * Asynchronously load map image and render it to bgLayer
@@ -12530,935 +13856,6 @@ ${dev.network?.ip || ""}`,
       }
     }
   };
-
-  // js/storage/auth-manager.js
-  var LOCAL_DB_STORAGE_KEY = "netmap_multi_db_v1";
-  var LOCAL_TOKEN_STORAGE_KEY = "netmap_auth_token_v1";
-  var LOCAL_WS_MODE_STORAGE_KEY = "netmap_workspace_mode_v1";
-  var DEFAULT_SEED_SALT = "netmap_salt_2026";
-  var DEFAULT_MAIN_SERVER_PASSWORD = "server123";
-  var SHA256_K = new Uint32Array([
-    1116352408,
-    1899447441,
-    3049323471,
-    3921009573,
-    961987163,
-    1508970993,
-    2453635748,
-    2870763221,
-    3624381080,
-    310598401,
-    607225278,
-    1426881987,
-    1925078388,
-    2162078206,
-    2614888103,
-    3248222580,
-    3835390401,
-    4022224774,
-    264347078,
-    604807628,
-    770255983,
-    1249150122,
-    1555081692,
-    1996064986,
-    2554220882,
-    2821834349,
-    2952996808,
-    3210313671,
-    3336571891,
-    3584528711,
-    113926993,
-    338241895,
-    666307205,
-    773529912,
-    1294757372,
-    1396182291,
-    1695183700,
-    1986661051,
-    2177026350,
-    2456956037,
-    2730485921,
-    2820302411,
-    3259730800,
-    3345764771,
-    3516065817,
-    3600352804,
-    4094571909,
-    275423344,
-    430227734,
-    506948616,
-    659060556,
-    883997877,
-    958139571,
-    1322822218,
-    1537002063,
-    1747873779,
-    1955562222,
-    2024104815,
-    2227730452,
-    2361852424,
-    2428436474,
-    2756734187,
-    3204031479,
-    3329325298
-  ]);
-  function sha256Hex(message) {
-    const bytes = new TextEncoder().encode(String(message));
-    const bitLen = bytes.length * 8;
-    const paddedLen = Math.ceil((bytes.length + 9) / 64) * 64;
-    const buf = new Uint8Array(paddedLen);
-    buf.set(bytes);
-    buf[bytes.length] = 128;
-    const view = new DataView(buf.buffer);
-    view.setUint32(paddedLen - 8, Math.floor(bitLen / 4294967296), false);
-    view.setUint32(paddedLen - 4, bitLen >>> 0, false);
-    const H = new Uint32Array([
-      1779033703,
-      3144134277,
-      1013904242,
-      2773480762,
-      1359893119,
-      2600822924,
-      528734635,
-      1541459225
-    ]);
-    const W = new Uint32Array(64);
-    const rotr = (n, x) => x >>> n | x << 32 - n;
-    for (let offset = 0; offset < paddedLen; offset += 64) {
-      for (let i = 0; i < 16; i++) W[i] = view.getUint32(offset + i * 4, false);
-      for (let i = 16; i < 64; i++) {
-        const s0 = rotr(7, W[i - 15]) ^ rotr(18, W[i - 15]) ^ W[i - 15] >>> 3;
-        const s1 = rotr(17, W[i - 2]) ^ rotr(19, W[i - 2]) ^ W[i - 2] >>> 10;
-        W[i] = W[i - 16] + s0 + W[i - 7] + s1 >>> 0;
-      }
-      let [a, b, c, d, e, f, g, h] = H;
-      for (let i = 0; i < 64; i++) {
-        const S1 = rotr(6, e) ^ rotr(11, e) ^ rotr(25, e);
-        const ch = e & f ^ ~e & g;
-        const temp1 = h + S1 + ch + SHA256_K[i] + W[i] >>> 0;
-        const S0 = rotr(2, a) ^ rotr(13, a) ^ rotr(22, a);
-        const maj = a & b ^ a & c ^ b & c;
-        const temp2 = S0 + maj >>> 0;
-        h = g;
-        g = f;
-        f = e;
-        e = d + temp1 >>> 0;
-        d = c;
-        c = b;
-        b = a;
-        a = temp1 + temp2 >>> 0;
-      }
-      H[0] = H[0] + a >>> 0;
-      H[1] = H[1] + b >>> 0;
-      H[2] = H[2] + c >>> 0;
-      H[3] = H[3] + d >>> 0;
-      H[4] = H[4] + e >>> 0;
-      H[5] = H[5] + f >>> 0;
-      H[6] = H[6] + g >>> 0;
-      H[7] = H[7] + h >>> 0;
-    }
-    return Array.from(H).map((v) => v.toString(16).padStart(8, "0")).join("");
-  }
-  function defaultOfflineSeedState() {
-    const now = (/* @__PURE__ */ new Date()).toISOString();
-    return {
-      nextUserId: 4,
-      users: [
-        {
-          id: 1,
-          username: "admin",
-          displayName: "Admin Utama Jaringan",
-          role: "admin",
-          passwordSalt: DEFAULT_SEED_SALT,
-          passwordHash: sha256Hex(`${DEFAULT_SEED_SALT}:admin123`),
-          createdAt: now,
-          lastLoginAt: null
-        },
-        {
-          id: 2,
-          username: "teknisi1",
-          displayName: "Teknisi Lapangan 1",
-          role: "teknisi",
-          passwordSalt: DEFAULT_SEED_SALT,
-          passwordHash: sha256Hex(`${DEFAULT_SEED_SALT}:teknisi123`),
-          createdAt: now,
-          lastLoginAt: null
-        },
-        {
-          id: 3,
-          username: "teknisi2",
-          displayName: "Teknisi Lapangan 2",
-          role: "teknisi",
-          passwordSalt: DEFAULT_SEED_SALT,
-          passwordHash: sha256Hex(`${DEFAULT_SEED_SALT}:teknisi123`),
-          createdAt: now,
-          lastLoginAt: null
-        }
-      ],
-      sessions: {},
-      workspaces: {},
-      mainSecurity: {
-        ownerUsername: "admin",
-        passwordSalt: DEFAULT_SEED_SALT,
-        passwordHash: sha256Hex(`${DEFAULT_SEED_SALT}:${DEFAULT_MAIN_SERVER_PASSWORD}`),
-        isPublicViewable: true,
-        updatedAt: now,
-        updatedBy: "admin"
-      }
-    };
-  }
-  var AuthManager = class {
-    constructor() {
-      this.currentUser = null;
-      this.authToken = "";
-      this.workspaceMode = "main";
-      this.mainWorkspaceUnlocked = false;
-      this.mainOwnerUsername = "admin";
-      this.publicPreviewMode = false;
-      this.apiAvailable = false;
-      this.storageBackend = "local";
-      this.lastUpdatedBy = null;
-      this.lastSyncedAt = null;
-      this._channel = null;
-      this._pollTimer = null;
-      this._memoryStore = null;
-      this.restoreLocalMeta();
-      this.initSyncChannel();
-    }
-    restoreLocalMeta() {
-      try {
-        if (typeof localStorage !== "undefined") {
-          this.authToken = localStorage.getItem(LOCAL_TOKEN_STORAGE_KEY) || "";
-          const savedMode = localStorage.getItem(LOCAL_WS_MODE_STORAGE_KEY);
-          if (savedMode === "personal" || savedMode === "main") {
-            this.workspaceMode = savedMode;
-          }
-        }
-      } catch {
-      }
-    }
-    initSyncChannel() {
-      if (typeof BroadcastChannel !== "undefined") {
-        try {
-          this._channel = new BroadcastChannel("netmap_multiplayer_sync");
-          if (typeof this._channel.unref === "function") {
-            this._channel.unref();
-          }
-          this._channel.onmessage = (evt) => {
-            const msg = evt?.data;
-            if (!msg || !this.isAuthenticated()) return;
-            if (msg.type === "workspace-updated" && msg.workspaceKey === this.getActiveWorkspaceKey()) {
-              if (msg.updatedAt && msg.updatedAt !== this.lastSyncedAt) {
-                this.lastUpdatedBy = msg.updatedBy || this.lastUpdatedBy;
-                eventBus.emit("workspace:remote-updated", {
-                  workspaceKey: msg.workspaceKey,
-                  updatedBy: msg.updatedBy,
-                  updatedAt: msg.updatedAt
-                });
-              }
-            }
-          };
-        } catch {
-        }
-      }
-    }
-    readLocalDb() {
-      const ensureDefaults = (db) => {
-        if (!db.mainSecurity || !db.mainSecurity.passwordHash) {
-          db.mainSecurity = defaultOfflineSeedState().mainSecurity;
-        }
-        if (!db.sessions || typeof db.sessions !== "object") db.sessions = {};
-        if (!db.workspaces || typeof db.workspaces !== "object") db.workspaces = {};
-        return db;
-      };
-      try {
-        if (typeof localStorage !== "undefined") {
-          const raw = localStorage.getItem(LOCAL_DB_STORAGE_KEY);
-          if (raw) {
-            const parsed = JSON.parse(raw);
-            if (parsed && Array.isArray(parsed.users)) {
-              return ensureDefaults(parsed);
-            }
-          }
-          const seeded = defaultOfflineSeedState();
-          localStorage.setItem(LOCAL_DB_STORAGE_KEY, JSON.stringify(seeded));
-          return seeded;
-        }
-      } catch {
-      }
-      if (!this._memoryStore) {
-        this._memoryStore = defaultOfflineSeedState();
-      }
-      return ensureDefaults(this._memoryStore);
-    }
-    writeLocalDb(dbState) {
-      this._memoryStore = dbState;
-      try {
-        if (typeof localStorage !== "undefined") {
-          localStorage.setItem(LOCAL_DB_STORAGE_KEY, JSON.stringify(dbState));
-        }
-      } catch {
-      }
-    }
-    persistToken(token) {
-      this.authToken = token || "";
-      try {
-        if (typeof localStorage !== "undefined") {
-          if (this.authToken) {
-            localStorage.setItem(LOCAL_TOKEN_STORAGE_KEY, this.authToken);
-          } else {
-            localStorage.removeItem(LOCAL_TOKEN_STORAGE_KEY);
-          }
-        }
-      } catch {
-      }
-    }
-    isAuthenticated() {
-      return Boolean(this.currentUser && this.currentUser.username);
-    }
-    getCurrentUser() {
-      return this.currentUser;
-    }
-    isMainWorkspaceUnlocked() {
-      return Boolean(this.isAuthenticated() && this.mainWorkspaceUnlocked);
-    }
-    isMainServerAdmin() {
-      if (!this.isAuthenticated()) return false;
-      const uname = String(this.currentUser?.username || "").toLowerCase();
-      const owner = String(this.mainOwnerUsername || "admin").toLowerCase();
-      return uname === "admin" || this.currentUser?.role === "admin" || uname === owner;
-    }
-    isPublicPreviewActive() {
-      return Boolean(!this.isAuthenticated() && this.publicPreviewMode);
-    }
-    setPublicPreviewMode(active) {
-      this.publicPreviewMode = Boolean(active) && !this.isAuthenticated();
-      eventBus.emit("auth:changed", this.getAuthStateSnapshot());
-      return this.publicPreviewMode;
-    }
-    canWriteActiveWorkspace() {
-      if (!this.isAuthenticated()) return false;
-      if (this.getWorkspaceMode() === "personal") return true;
-      return this.mainWorkspaceUnlocked === true;
-    }
-    getWorkspaceMode() {
-      return this.workspaceMode === "personal" ? "personal" : "main";
-    }
-    setWorkspaceMode(mode) {
-      const next = mode === "personal" ? "personal" : "main";
-      this.workspaceMode = next;
-      try {
-        if (typeof localStorage !== "undefined") {
-          localStorage.setItem(LOCAL_WS_MODE_STORAGE_KEY, next);
-        }
-      } catch {
-      }
-      eventBus.emit("auth:workspace-mode-changed", {
-        workspaceMode: next,
-        workspaceKey: this.getActiveWorkspaceKey()
-      });
-      return next;
-    }
-    getActiveWorkspaceKey() {
-      if (!this.isAuthenticated()) return null;
-      if (this.workspaceMode === "personal") {
-        return `user_${this.currentUser.username}`;
-      }
-      return "main";
-    }
-    _verifyLocalMainPassword(db, rawPassword) {
-      const sec = db?.mainSecurity;
-      if (!sec || !sec.passwordHash) return true;
-      return sha256Hex(`${sec.passwordSalt || DEFAULT_SEED_SALT}:${String(rawPassword || "")}`) === sec.passwordHash;
-    }
-    async apiFetch(apiPath, options = {}) {
-      const headers = {
-        "Content-Type": "application/json",
-        ...options.headers || {}
-      };
-      if (this.authToken) {
-        headers.Authorization = `Bearer ${this.authToken}`;
-      }
-      const resp = await fetch(apiPath, {
-        ...options,
-        headers
-      });
-      const payload = await resp.json().catch(() => ({}));
-      if (!resp.ok) {
-        const err = new Error(payload.error || `HTTP ${resp.status}`);
-        err.status = resp.status;
-        throw err;
-      }
-      return payload;
-    }
-    async initSession() {
-      const isHttpOrigin = typeof window !== "undefined" && (window.location?.protocol === "http:" || window.location?.protocol === "https:") && typeof fetch === "function";
-      if (isHttpOrigin) {
-        try {
-          const health = await this.apiFetch("/api/health");
-          if (health && health.ok) {
-            this.apiAvailable = true;
-            this.storageBackend = health.storageBackend || "file";
-            if (this.authToken) {
-              const sess = await this.apiFetch("/api/auth/session");
-              if (sess.authenticated && sess.user) {
-                this.currentUser = sess.user;
-                this.mainWorkspaceUnlocked = Boolean(sess.mainUnlocked);
-                this.mainOwnerUsername = sess.mainOwnerUsername || "admin";
-                this.publicPreviewMode = false;
-              } else {
-                this.currentUser = null;
-                this.mainWorkspaceUnlocked = false;
-                this.persistToken("");
-              }
-            }
-            eventBus.emit("auth:changed", this.getAuthStateSnapshot());
-            if (this.isAuthenticated()) this.startRemoteSyncPolling();
-            return this.getAuthStateSnapshot();
-          }
-        } catch {
-          this.apiAvailable = false;
-        }
-      }
-      this.apiAvailable = false;
-      this.storageBackend = "local";
-      const db = this.readLocalDb();
-      this.mainOwnerUsername = db.mainSecurity?.ownerUsername || "admin";
-      if (this.authToken) {
-        const sess = db.sessions?.[this.authToken];
-        const user = sess ? db.users.find((u) => u.username.toLowerCase() === String(sess.username).toLowerCase()) : null;
-        if (user) {
-          this.currentUser = {
-            id: user.id,
-            username: user.username,
-            displayName: user.displayName,
-            role: user.role,
-            lastLoginAt: user.lastLoginAt
-          };
-          this.mainWorkspaceUnlocked = Boolean(sess?.mainUnlocked);
-          this.publicPreviewMode = false;
-        } else {
-          this.currentUser = null;
-          this.mainWorkspaceUnlocked = false;
-          this.persistToken("");
-        }
-      } else {
-        this.mainWorkspaceUnlocked = false;
-      }
-      eventBus.emit("auth:changed", this.getAuthStateSnapshot());
-      return this.getAuthStateSnapshot();
-    }
-    getAuthStateSnapshot() {
-      return {
-        authenticated: this.isAuthenticated(),
-        user: this.currentUser,
-        workspaceMode: this.getWorkspaceMode(),
-        workspaceKey: this.getActiveWorkspaceKey(),
-        mainUnlocked: this.isMainWorkspaceUnlocked(),
-        mainOwnerUsername: this.mainOwnerUsername,
-        canManageServerPassword: this.isMainServerAdmin(),
-        canWriteActive: this.canWriteActiveWorkspace(),
-        publicPreviewMode: this.isPublicPreviewActive(),
-        storageBackend: this.storageBackend,
-        apiAvailable: this.apiAvailable,
-        lastUpdatedBy: this.lastUpdatedBy,
-        lastSyncedAt: this.lastSyncedAt
-      };
-    }
-    async login(username, password, options = {}) {
-      const cleanUser = String(username || "").trim();
-      const rawPass = String(password || "");
-      const workspacePassword = typeof options.workspacePassword === "string" ? options.workspacePassword : "";
-      const requireMainUnlock = Boolean(options.requireMainUnlock);
-      if (!cleanUser || !rawPass) {
-        throw new Error("Username dan password wajib diisi.");
-      }
-      if (this.apiAvailable) {
-        const res = await this.apiFetch("/api/auth/login", {
-          method: "POST",
-          body: JSON.stringify({
-            username: cleanUser,
-            password: rawPass,
-            workspacePassword,
-            requireMainUnlock
-          })
-        });
-        this.persistToken(res.token);
-        this.currentUser = res.user;
-        this.mainWorkspaceUnlocked = Boolean(res.mainUnlocked);
-        this.mainOwnerUsername = res.mainOwnerUsername || "admin";
-        this.publicPreviewMode = false;
-        this.storageBackend = res.storageBackend || this.storageBackend;
-        this.startRemoteSyncPolling();
-        eventBus.emit("auth:changed", this.getAuthStateSnapshot());
-        return res.user;
-      }
-      const db = this.readLocalDb();
-      const userRow = db.users.find((u) => u.username.toLowerCase() === cleanUser.toLowerCase());
-      if (!userRow || sha256Hex(`${userRow.passwordSalt}:${rawPass}`) !== userRow.passwordHash) {
-        throw new Error("Username atau password salah.");
-      }
-      let mainUnlocked = false;
-      if (workspacePassword) {
-        if (!this._verifyLocalMainPassword(db, workspacePassword)) {
-          throw new Error("Password akses Server Utama salah.");
-        }
-        mainUnlocked = true;
-      } else if (requireMainUnlock) {
-        throw new Error("Masukkan password akses Server Utama untuk menggunakan workspace Server Utama.");
-      }
-      userRow.lastLoginAt = (/* @__PURE__ */ new Date()).toISOString();
-      const token = `local-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-      db.sessions[token] = {
-        username: userRow.username,
-        mainUnlocked,
-        createdAt: userRow.lastLoginAt
-      };
-      this.writeLocalDb(db);
-      this.persistToken(token);
-      this.currentUser = {
-        id: userRow.id,
-        username: userRow.username,
-        displayName: userRow.displayName,
-        role: userRow.role,
-        lastLoginAt: userRow.lastLoginAt
-      };
-      this.mainWorkspaceUnlocked = mainUnlocked;
-      this.mainOwnerUsername = db.mainSecurity?.ownerUsername || "admin";
-      this.publicPreviewMode = false;
-      eventBus.emit("auth:changed", this.getAuthStateSnapshot());
-      return this.currentUser;
-    }
-    async register({ username, displayName, password, role = "teknisi", workspacePassword = "", requireMainUnlock = false }) {
-      const cleanUser = String(username || "").trim();
-      const cleanName = String(displayName || cleanUser).trim() || cleanUser;
-      const rawPass = String(password || "");
-      const serverPass = typeof workspacePassword === "string" ? workspacePassword : "";
-      if (!/^[a-zA-Z0-9._-]{3,32}$/.test(cleanUser)) {
-        throw new Error("Username harus 3-32 karakter (huruf, angka, titik, _ atau -).");
-      }
-      if (rawPass.length < 4) {
-        throw new Error("Password minimal 4 karakter.");
-      }
-      if (this.apiAvailable) {
-        const res = await this.apiFetch("/api/auth/register", {
-          method: "POST",
-          body: JSON.stringify({
-            username: cleanUser,
-            displayName: cleanName,
-            password: rawPass,
-            role,
-            workspacePassword: serverPass,
-            requireMainUnlock: Boolean(requireMainUnlock)
-          })
-        });
-        this.persistToken(res.token);
-        this.currentUser = res.user;
-        this.mainWorkspaceUnlocked = Boolean(res.mainUnlocked);
-        this.mainOwnerUsername = res.mainOwnerUsername || "admin";
-        this.publicPreviewMode = false;
-        this.storageBackend = res.storageBackend || this.storageBackend;
-        this.startRemoteSyncPolling();
-        eventBus.emit("auth:changed", this.getAuthStateSnapshot());
-        return res.user;
-      }
-      const db = this.readLocalDb();
-      if (db.users.some((u) => u.username.toLowerCase() === cleanUser.toLowerCase())) {
-        throw new Error(`Username "${cleanUser}" sudah terdaftar.`);
-      }
-      if (role === "admin") {
-        if (!serverPass || !this._verifyLocalMainPassword(db, serverPass)) {
-          throw new Error("Password Server Utama diperlukan untuk mendaftar sebagai Admin Utama.");
-        }
-      }
-      let mainUnlocked = false;
-      if (serverPass) {
-        if (!this._verifyLocalMainPassword(db, serverPass)) {
-          throw new Error("Password akses Server Utama salah.");
-        }
-        mainUnlocked = true;
-      } else if (requireMainUnlock) {
-        throw new Error("Masukkan password akses Server Utama untuk menggunakan workspace Server Utama.");
-      }
-      const salt = `${DEFAULT_SEED_SALT}_${Date.now().toString(36)}`;
-      const now = (/* @__PURE__ */ new Date()).toISOString();
-      const newUser = {
-        id: db.nextUserId++,
-        username: cleanUser,
-        displayName: cleanName,
-        role: role === "admin" ? "admin" : "teknisi",
-        passwordSalt: salt,
-        passwordHash: sha256Hex(`${salt}:${rawPass}`),
-        createdAt: now,
-        lastLoginAt: now
-      };
-      db.users.push(newUser);
-      const token = `local-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-      db.sessions[token] = {
-        username: newUser.username,
-        mainUnlocked,
-        createdAt: now
-      };
-      this.writeLocalDb(db);
-      this.persistToken(token);
-      this.currentUser = {
-        id: newUser.id,
-        username: newUser.username,
-        displayName: newUser.displayName,
-        role: newUser.role,
-        lastLoginAt: now
-      };
-      this.mainWorkspaceUnlocked = mainUnlocked;
-      this.mainOwnerUsername = db.mainSecurity?.ownerUsername || "admin";
-      this.publicPreviewMode = false;
-      eventBus.emit("auth:changed", this.getAuthStateSnapshot());
-      return this.currentUser;
-    }
-    async logout() {
-      if (this.apiAvailable && this.authToken) {
-        try {
-          await this.apiFetch("/api/auth/logout", { method: "POST" });
-        } catch {
-        }
-      } else if (this.authToken) {
-        const db = this.readLocalDb();
-        if (db.sessions?.[this.authToken]) {
-          delete db.sessions[this.authToken];
-          this.writeLocalDb(db);
-        }
-      }
-      this.currentUser = null;
-      this.mainWorkspaceUnlocked = false;
-      this.publicPreviewMode = false;
-      this.lastUpdatedBy = null;
-      this.lastSyncedAt = null;
-      this.stopRemoteSyncPolling();
-      this.persistToken("");
-      eventBus.emit("auth:changed", this.getAuthStateSnapshot());
-    }
-    async unlockMainWorkspace(password) {
-      if (!this.isAuthenticated()) {
-        throw new Error("Silakan login akun terlebih dahulu untuk membuka akses edit Server Utama.");
-      }
-      const rawServerPass = String(password || "");
-      if (!rawServerPass) {
-        throw new Error("Password akses Server Utama wajib diisi.");
-      }
-      if (this.apiAvailable) {
-        const res = await this.apiFetch("/api/workspaces/main/unlock", {
-          method: "POST",
-          body: JSON.stringify({ password: rawServerPass })
-        });
-        this.mainWorkspaceUnlocked = Boolean(res.mainUnlocked);
-        this.mainOwnerUsername = res.mainOwnerUsername || this.mainOwnerUsername;
-        eventBus.emit("auth:changed", this.getAuthStateSnapshot());
-        return true;
-      }
-      const db = this.readLocalDb();
-      if (!this._verifyLocalMainPassword(db, rawServerPass)) {
-        throw new Error("Password akses Server Utama salah.");
-      }
-      if (this.authToken && db.sessions[this.authToken]) {
-        db.sessions[this.authToken].mainUnlocked = true;
-        this.writeLocalDb(db);
-      }
-      this.mainWorkspaceUnlocked = true;
-      this.mainOwnerUsername = db.mainSecurity?.ownerUsername || "admin";
-      eventBus.emit("auth:changed", this.getAuthStateSnapshot());
-      return true;
-    }
-    async lockMainWorkspace() {
-      if (!this.isAuthenticated()) return false;
-      if (this.apiAvailable) {
-        await this.apiFetch("/api/workspaces/main/lock", { method: "POST" });
-      } else {
-        const db = this.readLocalDb();
-        if (this.authToken && db.sessions[this.authToken]) {
-          db.sessions[this.authToken].mainUnlocked = false;
-          this.writeLocalDb(db);
-        }
-      }
-      this.mainWorkspaceUnlocked = false;
-      eventBus.emit("auth:changed", this.getAuthStateSnapshot());
-      return true;
-    }
-    async changeMainWorkspacePassword(newPassword, currentPassword = "") {
-      if (!this.isAuthenticated()) {
-        throw new Error("Silakan login terlebih dahulu.");
-      }
-      if (!this.isMainServerAdmin()) {
-        throw new Error("Hanya Admin Utama atau pembuat server yang boleh mengubah password Server Utama.");
-      }
-      const cleanNew = String(newPassword || "");
-      if (cleanNew.length < 4) {
-        throw new Error("Password server baru minimal 4 karakter.");
-      }
-      if (this.apiAvailable) {
-        const res = await this.apiFetch("/api/workspaces/main/password", {
-          method: "POST",
-          body: JSON.stringify({
-            newPassword: cleanNew,
-            currentPassword: String(currentPassword || "")
-          })
-        });
-        this.mainWorkspaceUnlocked = Boolean(res.mainUnlocked ?? true);
-        this.mainOwnerUsername = res.ownerUsername || this.mainOwnerUsername;
-        eventBus.emit("auth:changed", this.getAuthStateSnapshot());
-        return res;
-      }
-      const db = this.readLocalDb();
-      if (typeof currentPassword === "string" && currentPassword.length > 0) {
-        if (!this._verifyLocalMainPassword(db, currentPassword)) {
-          throw new Error("Password server saat ini salah.");
-        }
-      }
-      const salt = `${DEFAULT_SEED_SALT}_${Date.now().toString(36)}`;
-      const now = (/* @__PURE__ */ new Date()).toISOString();
-      const ownerUsername = db.mainSecurity?.ownerUsername || this.currentUser.username || "admin";
-      db.mainSecurity = {
-        ownerUsername,
-        passwordSalt: salt,
-        passwordHash: sha256Hex(`${salt}:${cleanNew}`),
-        isPublicViewable: true,
-        updatedAt: now,
-        updatedBy: this.currentUser.username
-      };
-      Object.entries(db.sessions || {}).forEach(([tok, sess]) => {
-        if (sess && typeof sess === "object") {
-          sess.mainUnlocked = tok === this.authToken;
-        }
-      });
-      this.writeLocalDb(db);
-      this.mainWorkspaceUnlocked = true;
-      this.mainOwnerUsername = ownerUsername;
-      eventBus.emit("auth:changed", this.getAuthStateSnapshot());
-      return {
-        ok: true,
-        mainUnlocked: true,
-        ownerUsername,
-        updatedBy: this.currentUser.username,
-        updatedAt: now,
-        storageBackend: "local"
-      };
-    }
-    async loadPublicMainWorkspace() {
-      if (this.apiAvailable) {
-        const res = await this.apiFetch("/api/workspaces/main");
-        this.lastUpdatedBy = res.updatedBy || null;
-        this.lastSyncedAt = res.updatedAt || null;
-        this.mainOwnerUsername = res.ownerUsername || this.mainOwnerUsername;
-        if (typeof res.mainUnlocked === "boolean") {
-          this.mainWorkspaceUnlocked = res.mainUnlocked;
-        }
-        if (!this.isAuthenticated()) {
-          this.publicPreviewMode = true;
-          eventBus.emit("auth:changed", this.getAuthStateSnapshot());
-        }
-        return res;
-      }
-      const db = this.readLocalDb();
-      const ws = db.workspaces?.main || null;
-      this.lastUpdatedBy = ws?.updatedBy || null;
-      this.lastSyncedAt = ws?.updatedAt || null;
-      this.mainOwnerUsername = db.mainSecurity?.ownerUsername || "admin";
-      if (!this.isAuthenticated()) {
-        this.publicPreviewMode = true;
-        eventBus.emit("auth:changed", this.getAuthStateSnapshot());
-      }
-      return ws ? {
-        ...ws,
-        ownerUsername: this.mainOwnerUsername,
-        isProtected: true,
-        isPublicViewable: true,
-        mainUnlocked: this.isMainWorkspaceUnlocked(),
-        storageBackend: "local"
-      } : {
-        workspaceKey: "main",
-        title: "Server Utama",
-        ownerUsername: this.mainOwnerUsername,
-        projectData: null,
-        updatedBy: null,
-        updatedAt: null,
-        isProtected: true,
-        isPublicViewable: true,
-        mainUnlocked: this.isMainWorkspaceUnlocked(),
-        storageBackend: "local"
-      };
-    }
-    startRemoteSyncPolling() {
-      this.stopRemoteSyncPolling();
-      if (!this.apiAvailable || !this.isAuthenticated() || typeof setInterval === "undefined") return;
-      this._pollTimer = setInterval(() => {
-        if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
-        this.checkRemoteWorkspaceUpdate().catch(() => {
-        });
-      }, 12e3);
-    }
-    stopRemoteSyncPolling() {
-      if (this._pollTimer) {
-        clearInterval(this._pollTimer);
-        this._pollTimer = null;
-      }
-    }
-    async checkRemoteWorkspaceUpdate() {
-      if (!this.apiAvailable || !this.isAuthenticated()) return false;
-      const key = this.getActiveWorkspaceKey();
-      if (key !== "main") return false;
-      const meta = await this.apiFetch(`/api/workspaces/${encodeURIComponent(key)}?meta=1`);
-      if (typeof meta?.mainUnlocked === "boolean" && meta.mainUnlocked !== this.mainWorkspaceUnlocked) {
-        this.mainWorkspaceUnlocked = meta.mainUnlocked;
-        eventBus.emit("auth:changed", this.getAuthStateSnapshot());
-      }
-      if (meta?.updatedAt && this.lastSyncedAt && meta.updatedAt !== this.lastSyncedAt) {
-        eventBus.emit("workspace:remote-updated", {
-          workspaceKey: key,
-          updatedBy: meta.updatedBy,
-          updatedAt: meta.updatedAt
-        });
-        return true;
-      }
-      return false;
-    }
-    async listTechnicians() {
-      if (!this.isAuthenticated()) return [];
-      if (this.apiAvailable) {
-        const res = await this.apiFetch("/api/users");
-        return Array.isArray(res.users) ? res.users : [];
-      }
-      const db = this.readLocalDb();
-      return db.users.map((u) => ({
-        id: u.id,
-        username: u.username,
-        displayName: u.displayName,
-        role: u.role,
-        lastLoginAt: u.lastLoginAt
-      }));
-    }
-    async loadWorkspaceProject(workspaceKey = this.getActiveWorkspaceKey()) {
-      if (workspaceKey === "main" && !this.isAuthenticated()) {
-        return this.loadPublicMainWorkspace();
-      }
-      if (!this.isAuthenticated() || !workspaceKey) return null;
-      if (this.apiAvailable) {
-        const res = await this.apiFetch(`/api/workspaces/${encodeURIComponent(workspaceKey)}`);
-        this.lastUpdatedBy = res.updatedBy || null;
-        this.lastSyncedAt = res.updatedAt || null;
-        if (workspaceKey === "main") {
-          this.mainOwnerUsername = res.ownerUsername || this.mainOwnerUsername;
-          if (typeof res.mainUnlocked === "boolean") {
-            this.mainWorkspaceUnlocked = res.mainUnlocked;
-          }
-        }
-        return res;
-      }
-      const db = this.readLocalDb();
-      const ws = db.workspaces?.[workspaceKey] || null;
-      this.lastUpdatedBy = ws?.updatedBy || null;
-      this.lastSyncedAt = ws?.updatedAt || null;
-      if (workspaceKey === "main") {
-        this.mainOwnerUsername = db.mainSecurity?.ownerUsername || "admin";
-      }
-      return ws ? { ...ws, storageBackend: "local" } : { workspaceKey, projectData: null, updatedBy: null, updatedAt: null, storageBackend: "local" };
-    }
-    async saveWorkspaceProject(workspaceKey = this.getActiveWorkspaceKey(), projectData) {
-      if (!this.isAuthenticated() || !workspaceKey || !projectData) return null;
-      if (workspaceKey === "main" && !this.isMainWorkspaceUnlocked()) {
-        throw new Error("Workspace Server Utama terkunci. Masukkan password akses Server Utama terlebih dahulu.");
-      }
-      let savedMeta;
-      if (this.apiAvailable) {
-        savedMeta = await this.apiFetch(`/api/workspaces/${encodeURIComponent(workspaceKey)}`, {
-          method: "PUT",
-          body: JSON.stringify({ projectData })
-        });
-      } else {
-        const db = this.readLocalDb();
-        const updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-        const mainOwner = db.mainSecurity?.ownerUsername || "admin";
-        db.workspaces[workspaceKey] = {
-          workspaceKey,
-          ownerUsername: workspaceKey === "main" ? mainOwner : this.currentUser.username,
-          title: workspaceKey === "main" ? "Server Utama" : projectData.name || this.currentUser.displayName,
-          projectData,
-          updatedBy: this.currentUser.username,
-          updatedAt
-        };
-        this.writeLocalDb(db);
-        savedMeta = {
-          ok: true,
-          workspaceKey,
-          ownerUsername: workspaceKey === "main" ? mainOwner : this.currentUser.username,
-          updatedBy: this.currentUser.username,
-          updatedAt,
-          storageBackend: "local"
-        };
-      }
-      this.lastUpdatedBy = savedMeta.updatedBy || this.currentUser.username;
-      this.lastSyncedAt = savedMeta.updatedAt || (/* @__PURE__ */ new Date()).toISOString();
-      this._channel?.postMessage({
-        type: "workspace-updated",
-        workspaceKey,
-        updatedBy: this.lastUpdatedBy,
-        updatedAt: this.lastSyncedAt
-      });
-      return savedMeta;
-    }
-    async copyWorkspaceProject(fromKey, toKey) {
-      if (!this.isAuthenticated() || !fromKey || !toKey) return null;
-      if (toKey === "main" && !this.isMainWorkspaceUnlocked()) {
-        throw new Error("Workspace Server Utama terkunci. Masukkan password akses Server Utama terlebih dahulu.");
-      }
-      let res;
-      if (this.apiAvailable) {
-        res = await this.apiFetch("/api/workspaces/clone", {
-          method: "POST",
-          body: JSON.stringify({ fromKey, toKey })
-        });
-      } else {
-        const db = this.readLocalDb();
-        const src = db.workspaces?.[fromKey];
-        if (!src || !src.projectData) {
-          throw new Error(`Workspace sumber "${fromKey}" masih kosong.`);
-        }
-        const clonedData = {
-          ...JSON.parse(JSON.stringify(src.projectData)),
-          updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-        };
-        const updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-        const mainOwner = db.mainSecurity?.ownerUsername || "admin";
-        db.workspaces[toKey] = {
-          workspaceKey: toKey,
-          ownerUsername: toKey === "main" ? mainOwner : this.currentUser.username,
-          title: toKey === "main" ? "Server Utama" : `Workspace ${this.currentUser.displayName}`,
-          projectData: clonedData,
-          updatedBy: this.currentUser.username,
-          updatedAt
-        };
-        this.writeLocalDb(db);
-        res = {
-          ok: true,
-          workspaceKey: toKey,
-          projectData: clonedData,
-          updatedBy: this.currentUser.username,
-          updatedAt,
-          storageBackend: "local"
-        };
-      }
-      if (toKey === this.getActiveWorkspaceKey()) {
-        this.lastUpdatedBy = res.updatedBy;
-        this.lastSyncedAt = res.updatedAt;
-      }
-      this._channel?.postMessage({
-        type: "workspace-updated",
-        workspaceKey: toKey,
-        updatedBy: res.updatedBy,
-        updatedAt: res.updatedAt
-      });
-      return res;
-    }
-  };
-  var authManager = new AuthManager();
 
   // js/storage/json-importer-exporter.js
   var JsonImporterExporter = class _JsonImporterExporter {
@@ -52347,24 +52744,62 @@ void main() {
     }
     return group;
   }
-  function createRobloxAvatar3DGroup(label = "Teknisi Jaringan") {
+  function drawAvatarLabelCanvas(canvas, label, accentHex = "#76c457") {
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "rgba(18, 28, 16, 0.92)";
+    roundRect(ctx, 8, 8, 304, 60, 14);
+    ctx.fill();
+    ctx.strokeStyle = accentHex || "#76c457";
+    ctx.lineWidth = 3;
+    roundRect(ctx, 8, 8, 304, 60, 14);
+    ctx.stroke();
+    ctx.fillStyle = "#fff8cf";
+    ctx.font = "bold 24px Poppins, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(truncateText(ctx, label || "Teknisi", 278), 160, 38);
+  }
+  function updateRobloxAvatarLabel(avatarGroup, newLabel, accentHex = "#76c457") {
+    if (!avatarGroup?.userData) return;
+    const safeLabel = String(newLabel || "Teknisi");
+    const safeAccent = accentHex || avatarGroup.userData.accentHex || "#76c457";
+    if (avatarGroup.userData.currentLabel === safeLabel && avatarGroup.userData.accentHex === safeAccent) {
+      return;
+    }
+    const canvas = avatarGroup.userData.labelCanvas;
+    const tex = avatarGroup.userData.labelTexture;
+    if (canvas && tex) {
+      drawAvatarLabelCanvas(canvas, safeLabel, safeAccent);
+      tex.needsUpdate = true;
+    }
+    avatarGroup.userData.currentLabel = safeLabel;
+    avatarGroup.userData.accentHex = safeAccent;
+  }
+  function createRobloxAvatar3DGroup(label = "Teknisi Jaringan", options = {}) {
     const root = new Group();
-    root.name = "RobloxNetworkEngineer";
+    root.name = options.isRemote ? "RemoteRobloxNetworkEngineer" : "RobloxNetworkEngineer";
     const rigRoot = new Group();
     rigRoot.name = "RobloxAvatarRig";
     root.add(rigRoot);
+    const vestHex = options.vestColor !== void 0 ? new Color(options.vestColor).getHex() : 2784275;
+    const helmetHex = options.helmetColor !== void 0 ? new Color(options.helmetColor).getHex() : options.isRemote ? vestHex : 7783511;
+    const ringHex = options.ringColor !== void 0 ? new Color(options.ringColor).getHex() : helmetHex;
+    const accentCss = options.accentHex || `#${helmetHex.toString(16).padStart(6, "0")}`;
     const skinMat = makeMat(16436245, { roughness: 0.42, metalness: 0.05 });
     const torsoNavyMat = makeMat(1976635, { roughness: 0.55, metalness: 0.1 });
-    const vestGreenMat = makeMat(2784275, { roughness: 0.4, metalness: 0.12 });
-    const stripeMat = makeMat(14285213, { emissive: 7783511, emissiveIntensity: 0.35, roughness: 0.25 });
+    const vestGreenMat = makeMat(vestHex, { roughness: 0.4, metalness: 0.12 });
+    const stripeMat = makeMat(14285213, { emissive: vestHex, emissiveIntensity: 0.35, roughness: 0.25 });
     const pantsMat = makeMat(3359061, { roughness: 0.65, metalness: 0.05 });
     const bootMat = makeMat(988970, { roughness: 0.7, metalness: 0.1 });
-    const helmetMat = makeMat(7783511, { roughness: 0.32, metalness: 0.18 });
+    const helmetMat = makeMat(helmetHex, { roughness: 0.32, metalness: 0.18 });
     const tabletBodyMat = makeMat(988970, { roughness: 0.35, metalness: 0.4 });
     const tabletScreenMat = makeMat(3718648, { emissive: 165063, emissiveIntensity: 0.75, roughness: 0.2 });
     const faceDarkMat = makeMat(1120295, { roughness: 0.3 });
     const ringMat = new MeshBasicMaterial({
-      color: 7783511,
+      color: ringHex,
       side: DoubleSide,
       transparent: true,
       opacity: 0.65
@@ -52422,34 +52857,24 @@ void main() {
     addBox(headPivot, 0.28, 0.07, 0.48, 0, 0.48, 0, helmetMat);
     addBox(headPivot, 0.42, 0.04, 0.18, 0, 0.36, 0.24, helmetMat);
     rigRoot.add(headPivot);
+    root.userData.currentLabel = label || "";
+    root.userData.accentHex = accentCss;
     if (typeof document !== "undefined" && label) {
       try {
         const canvas = document.createElement("canvas");
         canvas.width = 320;
         canvas.height = 76;
-        const ctx = canvas.getContext("2d");
-        if (ctx) {
-          ctx.fillStyle = "rgba(22, 40, 18, 0.90)";
-          roundRect(ctx, 8, 8, 304, 60, 14);
-          ctx.fill();
-          ctx.strokeStyle = "#76c457";
-          ctx.lineWidth = 3;
-          roundRect(ctx, 8, 8, 304, 60, 14);
-          ctx.stroke();
-          ctx.fillStyle = "#fff8cf";
-          ctx.font = "bold 26px Poppins, sans-serif";
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText(truncateText(ctx, label, 280), 160, 38);
-          const tex = new CanvasTexture(canvas);
-          tex.needsUpdate = true;
-          const spriteMat = new SpriteMaterial({ map: tex, transparent: true, depthTest: false });
-          const sprite = new Sprite(spriteMat);
-          sprite.position.set(0, 2.28, 0);
-          sprite.scale.set(2.1, 0.5, 1);
-          sprite.renderOrder = 25;
-          rigRoot.add(sprite);
-        }
+        drawAvatarLabelCanvas(canvas, label, accentCss);
+        const tex = new CanvasTexture(canvas);
+        tex.needsUpdate = true;
+        const spriteMat = new SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+        const sprite = new Sprite(spriteMat);
+        sprite.position.set(0, 2.28, 0);
+        sprite.scale.set(2.1, 0.5, 1);
+        sprite.renderOrder = 25;
+        rigRoot.add(sprite);
+        root.userData.labelCanvas = canvas;
+        root.userData.labelTexture = tex;
       } catch {
       }
     }
@@ -55144,6 +55569,11 @@ void main() {
       this.avatarPerspective = "tpp";
       this.avatarGroup = null;
       this.fppViewmodelGroup = null;
+      this.remoteAvatarsGroup = new Group();
+      this.remoteAvatarsGroup.name = "RemoteTechniciansGroup";
+      this.remoteAvatarMap = /* @__PURE__ */ new Map();
+      this._lastPresenceEmitAt = 0;
+      this._lastPresenceSnapshotKey = "";
       this.avatarState = {
         x: 0,
         y: 0,
@@ -55209,6 +55639,7 @@ void main() {
       this.scene.add(this.coverageGroup);
       this.scene.add(this.devicesGroup);
       this.scene.add(this.cablesGroup);
+      this.scene.add(this.remoteAvatarsGroup);
       const dom = this.renderer.domElement;
       dom.addEventListener("contextmenu", (e) => e.preventDefault());
       this.container?.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -55416,6 +55847,8 @@ void main() {
       if (!this.groundTexture) {
         this.rebuildGround();
       }
+      this.syncRemoteAvatars(authManager.getRemotePeers());
+      this.publishLocalPresence(true);
       this.lastFrameTime = performance.now();
       this.startLoop();
     }
@@ -55433,6 +55866,7 @@ void main() {
       this.avatarState._lastMouseClient = null;
       if (this.avatarGroup) this.avatarGroup.visible = false;
       if (this.fppViewmodelGroup) this.fppViewmodelGroup.visible = false;
+      authManager.updateLocalPresence({ viewMode: "2d", avatarMode: false, isMoving: false, isRunning: false });
       this.releaseAvatarPointerLock();
       this.syncAvatarCrosshair();
       this.syncAvatarControlsUI();
@@ -55469,7 +55903,9 @@ void main() {
           this.updateAvatarController(dt);
         } else {
           this.updateWalkMovement(dt);
+          this.publishLocalPresence(false);
         }
+        this.updateRemoteAvatars(dt);
         this.controls?.update();
         this.syncFppViewmodelTransform();
         this.renderer?.render(this.scene, this.camera);
@@ -57892,10 +58328,15 @@ void main() {
           }
         }
         this.showStatusHint("Mode Teknisi dimatikan \u2014 kembali ke navigasi kamera bebas.");
+        this.publishLocalPresence?.(true);
         return false;
       }
+      const activeUser = authManager.getCurrentUser?.();
+      const localAvatarLabel = activeUser ? `@${activeUser.username}` : "Teknisi Jaringan";
       if (!this.avatarGroup) {
-        this.avatarGroup = createRobloxAvatar3DGroup("Teknisi Jaringan");
+        this.avatarGroup = createRobloxAvatar3DGroup(localAvatarLabel);
+      } else {
+        updateRobloxAvatarLabel(this.avatarGroup, localAvatarLabel, "#76c457");
       }
       if (this.scene && !this.scene.children.includes(this.avatarGroup)) {
         this.scene.add(this.avatarGroup);
@@ -57925,6 +58366,14 @@ void main() {
           spawnZ = fp.z + 2.8;
           spawnYaw = Math.PI;
         }
+        if (this.remoteAvatarMap?.size > 0) {
+          const cid = String(authManager.clientId || "local");
+          let h = 0;
+          for (let i = 0; i < cid.length; i++) h = (h << 5) - h + cid.charCodeAt(i) | 0;
+          const ang = Math.abs(h) % 360 * (Math.PI / 180);
+          spawnX = Math.max(-worldW * 0.55, Math.min(worldW * 0.55, spawnX + Math.cos(ang) * 1.6));
+          spawnZ = Math.max(-worldD * 0.55, Math.min(worldD * 0.55, spawnZ + Math.sin(ang) * 1.6));
+        }
         this.avatarState.x = spawnX;
         this.avatarState.y = 0;
         this.avatarState.z = spawnZ;
@@ -57946,6 +58395,7 @@ void main() {
       this.findNearestDeviceToAvatar();
       this.renderAvatarHudBar();
       this.tryLockAvatarPointer();
+      this.publishLocalPresence?.(true);
       this.showStatusHint(
         this.avatarPerspective === "fpp" ? "Mode FPP aktif: Gerakkan mouse lihat dari mata teknisi, WASD jalan, Spasi lompat, V ke TPP, F inspeksi." : "Mode Teknisi aktif: Gerakkan mouse lihat sekeliling, WASD jalan, Shift lari, Spasi lompat, V ke FPP, F inspeksi."
       );
@@ -57982,6 +58432,7 @@ void main() {
       this.animateCameraTo(camPose.endPos, camPose.target, duration);
       this.findNearestDeviceToAvatar();
       this.updateAvatarProximityHud();
+      this.publishLocalPresence?.(true);
       return true;
     }
     findNearestDeviceToAvatar() {
@@ -58096,6 +58547,200 @@ void main() {
       }
       this.findNearestDeviceToAvatar();
       this.updateAvatarProximityHud();
+      this.publishLocalPresence?.(false);
+    }
+    publishLocalPresence(force = false) {
+      if (!authManager?.isAuthenticated?.()) return;
+      const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+      const minIntervalMs = this.avatarMode ? 90 : 450;
+      if (!force && now - this._lastPresenceEmitAt < minIntervalMs) return;
+      let wx = 0;
+      let wy = 0;
+      let wz = 0;
+      let yaw = 0;
+      let moving = false;
+      let running = false;
+      let grounded = true;
+      let walkPhase = 0;
+      if (this.avatarMode) {
+        wx = Number(this.avatarState.x) || 0;
+        wy = Number(this.avatarState.y) || 0;
+        wz = Number(this.avatarState.z) || 0;
+        yaw = Number(this.avatarState.yaw) || 0;
+        moving = Boolean(this.avatarState.isMoving);
+        running = Boolean(this.avatarState.isRunning);
+        grounded = this.avatarState.isGrounded !== false;
+        walkPhase = Number(this.avatarState.walkPhase) || 0;
+      } else if (this.controls?.target) {
+        const { worldW, worldD } = this.getWorldDimensions();
+        wx = Math.max(-worldW * 0.55, Math.min(worldW * 0.55, Number(this.controls.target.x) || 0));
+        wz = Math.max(-worldD * 0.55, Math.min(worldD * 0.55, Number(this.controls.target.z) || 0));
+        wy = 0;
+        if (this.camera) {
+          yaw = Math.atan2(wx - this.camera.position.x, wz - this.camera.position.z);
+        }
+      }
+      const snapKey = `${this.avatarMode ? 1 : 0}:${this.avatarPerspective}:${wx.toFixed(2)}:${wy.toFixed(2)}:${wz.toFixed(2)}:${yaw.toFixed(2)}:${moving ? 1 : 0}:${grounded ? 1 : 0}`;
+      if (!force && snapKey === this._lastPresenceSnapshotKey) return;
+      this._lastPresenceEmitAt = now;
+      this._lastPresenceSnapshotKey = snapKey;
+      const { normX, normY } = this.worldToNorm(wx, wz);
+      authManager.updateLocalPresence({
+        viewMode: "3d",
+        avatarMode: Boolean(this.avatarMode),
+        perspective: this.avatarPerspective,
+        x: Number(wx.toFixed(3)),
+        y: Number(wy.toFixed(3)),
+        z: Number(wz.toFixed(3)),
+        normX: Number(normX.toFixed(4)),
+        normY: Number(normY.toFixed(4)),
+        yaw: Number(yaw.toFixed(3)),
+        isMoving: moving,
+        isRunning: running,
+        isGrounded: grounded,
+        walkPhase: Number(walkPhase.toFixed(3)),
+        nearestDeviceId: this.avatarState.nearestDeviceId || null
+      });
+    }
+    _disposeAvatarMeshGroup(group) {
+      if (!group) return;
+      group.traverse((obj) => {
+        if (obj.geometry) obj.geometry.dispose();
+        if (obj.material) {
+          if (Array.isArray(obj.material)) {
+            obj.material.forEach((m) => {
+              if (m.map) m.map.dispose();
+              m.dispose();
+            });
+          } else {
+            if (obj.material.map) obj.material.map.dispose();
+            obj.material.dispose();
+          }
+        }
+      });
+    }
+    syncRemoteAvatars(peers = []) {
+      const activeIds = /* @__PURE__ */ new Set();
+      const list = Array.isArray(peers) ? peers : [];
+      for (const peer of list) {
+        if (!peer || !peer.clientId) continue;
+        if (authManager?.clientId && peer.clientId === authManager.clientId) continue;
+        activeIds.add(peer.clientId);
+        let tx = Number(peer.x);
+        let ty = Number(peer.y) || 0;
+        let tz = Number(peer.z);
+        if (peer.viewMode === "2d" || !Number.isFinite(tx) || !Number.isFinite(tz)) {
+          const wpos = this.normToWorld(
+            Number.isFinite(Number(peer.normX)) ? Number(peer.normX) : 0.5,
+            Number.isFinite(Number(peer.normY)) ? Number(peer.normY) : 0.5
+          );
+          tx = wpos.x;
+          tz = wpos.z;
+          ty = 0;
+        }
+        const tyaw = Number.isFinite(Number(peer.yaw)) ? Number(peer.yaw) : 0;
+        const colorHex = peer.colorHex || getPeerColorHex(peer.username || peer.clientId);
+        const labelText = peer.viewMode === "2d" ? `@${peer.username} (2D)` : `@${peer.username}`;
+        let entry = this.remoteAvatarMap.get(peer.clientId);
+        if (!entry) {
+          const group = createRobloxAvatar3DGroup(labelText, {
+            isRemote: true,
+            vestColor: colorHex,
+            helmetColor: colorHex,
+            ringColor: colorHex,
+            accentHex: colorHex
+          });
+          group.visible = true;
+          group.position.set(tx, ty, tz);
+          group.rotation.y = tyaw;
+          this.remoteAvatarsGroup.add(group);
+          entry = {
+            clientId: peer.clientId,
+            group,
+            currentX: tx,
+            currentY: ty,
+            currentZ: tz,
+            currentYaw: tyaw,
+            targetX: tx,
+            targetY: ty,
+            targetZ: tz,
+            targetYaw: tyaw,
+            state: {
+              isMoving: Boolean(peer.isMoving),
+              isRunning: Boolean(peer.isRunning),
+              isGrounded: peer.isGrounded !== false,
+              walkPhase: Number(peer.walkPhase) || 0
+            },
+            peer
+          };
+          animateRobloxAvatarRig(group, entry.state, 0.016);
+          this.remoteAvatarMap.set(peer.clientId, entry);
+        } else {
+          updateRobloxAvatarLabel(entry.group, labelText, colorHex);
+          entry.targetX = tx;
+          entry.targetY = ty;
+          entry.targetZ = tz;
+          entry.targetYaw = tyaw;
+          entry.state.isMoving = Boolean(peer.isMoving);
+          entry.state.isRunning = Boolean(peer.isRunning);
+          entry.state.isGrounded = peer.isGrounded !== false;
+          if (Number.isFinite(Number(peer.walkPhase))) {
+            entry.state.walkPhase = Number(peer.walkPhase);
+          }
+          entry.peer = peer;
+        }
+      }
+      for (const [cid, entry] of Array.from(this.remoteAvatarMap.entries())) {
+        if (!activeIds.has(cid)) {
+          this.remoteAvatarsGroup.remove(entry.group);
+          this._disposeAvatarMeshGroup(entry.group);
+          this.remoteAvatarMap.delete(cid);
+        }
+      }
+      this.updateRemotePeersHud(list);
+    }
+    updateRemoteAvatars(dt = 0.016) {
+      if (this.remoteAvatarMap.size === 0) return;
+      const alpha = Math.min(1, Math.max(0.05, dt * 12));
+      for (const entry of this.remoteAvatarMap.values()) {
+        const dist = Math.hypot(entry.targetX - entry.currentX, entry.targetZ - entry.currentZ);
+        if (dist > 25) {
+          entry.currentX = entry.targetX;
+          entry.currentY = entry.targetY;
+          entry.currentZ = entry.targetZ;
+          entry.currentYaw = entry.targetYaw;
+        } else {
+          entry.currentX += (entry.targetX - entry.currentX) * alpha;
+          entry.currentY += (entry.targetY - entry.currentY) * alpha;
+          entry.currentZ += (entry.targetZ - entry.currentZ) * alpha;
+          const yawDiff = Math.atan2(
+            Math.sin(entry.targetYaw - entry.currentYaw),
+            Math.cos(entry.targetYaw - entry.currentYaw)
+          );
+          entry.currentYaw += yawDiff * alpha;
+        }
+        if (entry.state.isMoving || dist > 0.04) {
+          entry.state.walkPhase += dt * (entry.state.isRunning ? 14.5 : 9.5);
+        }
+        entry.group.position.set(entry.currentX, entry.currentY, entry.currentZ);
+        entry.group.rotation.y = entry.currentYaw;
+        animateRobloxAvatarRig(entry.group, {
+          ...entry.state,
+          isMoving: entry.state.isMoving || dist > 0.05
+        }, dt);
+      }
+    }
+    updateRemotePeersHud(peers = authManager?.getRemotePeers?.() || []) {
+      if (typeof document === "undefined") return;
+      const badge = document.getElementById("avatar-online-peers-slot");
+      if (!badge) return;
+      const count = Array.isArray(peers) ? peers.length : 0;
+      if (count === 0) {
+        badge.textContent = "Rekan: 0 online";
+      } else {
+        const names = peers.slice(0, 3).map((p) => `@${p.username}`).join(", ");
+        badge.textContent = `Rekan (${count}): ${names}${count > 3 ? "\u2026" : ""}`;
+      }
     }
     renderAvatarHudBar() {
       if (typeof document === "undefined") return;
@@ -58114,6 +58759,7 @@ void main() {
         <span class="avatar-bar-title">
           <span class="avatar-bar-dot"></span>
           <span>${isFpp ? "Mode Teknisi (FPP)" : "Mode Teknisi (TPP)"}</span>
+          <span id="avatar-online-peers-slot" class="sim-inspector-badge">Rekan: 0 online</span>
         </span>
         <span class="avatar-bar-controls-hint"><strong>Mouse</strong> Lihat \u2022 <strong>Scroll</strong> Zoom/FPP \u2022 <strong>WASD</strong> Jalan \u2022 <strong>Spasi</strong> Lompat \u2022 <strong>V</strong> Ganti View</span>
       </div>
@@ -58164,6 +58810,7 @@ void main() {
         this.setAvatarMode(false);
       });
       this.updateAvatarProximityHud();
+      this.updateRemotePeersHud?.(authManager.getRemotePeers());
     }
     updateAvatarProximityHud() {
       if (typeof document === "undefined" || !this.avatarMode || this.simulatorFocusedDeviceId) return;
@@ -58790,6 +59437,16 @@ void main() {
       });
       eventBus.on("theme:changed", () => {
         this.applyThemeColors();
+      });
+      eventBus.on("presence:updated", ({ peers } = {}) => {
+        this.syncRemoteAvatars(peers || authManager.getRemotePeers());
+      });
+      eventBus.on("auth:changed", () => {
+        const u = authManager.getCurrentUser?.();
+        if (this.avatarGroup) {
+          updateRobloxAvatarLabel(this.avatarGroup, u ? `@${u.username}` : "Teknisi Jaringan", "#76c457");
+        }
+        this.syncRemoteAvatars(authManager.getRemotePeers());
       });
       eventBus.on("mode:changed", ({ mode }) => {
         if (this.container) {

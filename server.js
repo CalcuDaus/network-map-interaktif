@@ -18,6 +18,7 @@ const ROOT_DIR = __dirname;
 const DEFAULT_DB_FILE = path.join(ROOT_DIR, 'data', 'netmap-server-db.json');
 const MAX_BODY_BYTES = 25 * 1024 * 1024;
 const SESSION_TTL_DAYS = 30;
+const PRESENCE_TTL_MS = 15000;
 const DEFAULT_SEED_SALT = 'netmap_salt_2026';
 const DEFAULT_MAIN_SERVER_PASSWORD = 'server123';
 
@@ -751,7 +752,76 @@ function extractBearerToken(req) {
   return '';
 }
 
+function getPresenceStore(store) {
+  if (!store._presenceMap) {
+    store._presenceMap = new Map();
+  }
+  const map = store._presenceMap;
+  const prune = () => {
+    const cutoff = Date.now() - PRESENCE_TTL_MS;
+    for (const [cid, entry] of map.entries()) {
+      if (!entry || (entry.updatedAt || 0) < cutoff) {
+        map.delete(cid);
+      }
+    }
+  };
+  return {
+    list(workspaceKey = 'main') {
+      prune();
+      const targetKey = workspaceKey || 'main';
+      return Array.from(map.values()).filter((p) => p.workspaceKey === targetKey);
+    },
+    upsert(sessionUser, payload = {}, token = '') {
+      prune();
+      const clientId = String(payload.clientId || '').trim();
+      if (!clientId) return this.list(payload.workspaceKey || 'main');
+      const requestedWs = String(payload.workspaceKey || 'main').trim();
+      const workspaceKey = requestedWs === `user_${sessionUser.username}` ? requestedWs : 'main';
+      const entry = {
+        clientId,
+        tokenHash: token ? hashSha256('pres', token).slice(0, 16) : '',
+        username: sessionUser.username,
+        displayName: sessionUser.displayName || sessionUser.username,
+        role: sessionUser.role || 'teknisi',
+        workspaceKey,
+        viewMode: payload.viewMode === '2d' ? '2d' : '3d',
+        avatarMode: Boolean(payload.avatarMode),
+        perspective: payload.perspective === 'fpp' ? 'fpp' : 'tpp',
+        x: Number.isFinite(Number(payload.x)) ? Number(payload.x) : 0,
+        y: Number.isFinite(Number(payload.y)) ? Number(payload.y) : 0,
+        z: Number.isFinite(Number(payload.z)) ? Number(payload.z) : 0,
+        normX: Number.isFinite(Number(payload.normX)) ? Number(payload.normX) : 0.5,
+        normY: Number.isFinite(Number(payload.normY)) ? Number(payload.normY) : 0.5,
+        yaw: Number.isFinite(Number(payload.yaw)) ? Number(payload.yaw) : 0,
+        isMoving: Boolean(payload.isMoving),
+        isRunning: Boolean(payload.isRunning),
+        isGrounded: payload.isGrounded !== false,
+        walkPhase: Number.isFinite(Number(payload.walkPhase)) ? Number(payload.walkPhase) : 0,
+        nearestDeviceId: payload.nearestDeviceId || null,
+        colorHex: typeof payload.colorHex === 'string' ? payload.colorHex : '#2563eb',
+        updatedAt: Date.now()
+      };
+      map.set(clientId, entry);
+      return this.list(workspaceKey);
+    },
+    remove({ clientId = '', token = '', username = '' } = {}) {
+      if (clientId && map.has(clientId)) {
+        map.delete(clientId);
+      }
+      if (token) {
+        const th = hashSha256('pres', token).slice(0, 16);
+        for (const [cid, entry] of map.entries()) {
+          if (entry.tokenHash === th || (username && entry.username === username)) {
+            map.delete(cid);
+          }
+        }
+      }
+    }
+  };
+}
+
 function createNetMapRequestHandler(store, rootDir = ROOT_DIR) {
+  const presence = getPresenceStore(store);
   return async (req, res) => {
     const reqUrl = req.url || '/';
     const rawPath = decodeURI(reqUrl.split('?')[0]);
@@ -897,7 +967,46 @@ function createNetMapRequestHandler(store, rootDir = ROOT_DIR) {
 
         if (req.method === 'POST' && rawPath === '/api/auth/logout') {
           const token = extractBearerToken(req);
+          let clientId = '';
+          try {
+            const body = await readJsonBody(req);
+            clientId = String(body?.clientId || '');
+          } catch { /* ignore empty body */ }
+          const sessUser = token ? await store.getSessionUser(token) : null;
+          presence.remove({ clientId, token, username: sessUser?.username || '' });
           await store.deleteSession(token);
+          sendJson(res, 200, { ok: true });
+          return;
+        }
+
+        // Public Read-Only presence listing for Server Utama ('main')
+        if (req.method === 'GET' && rawPath === '/api/presence') {
+          const parsedUrl = new URL(reqUrl, 'http://localhost');
+          const requestedWs = parsedUrl.searchParams.get('workspace') || 'main';
+          const token = extractBearerToken(req);
+          const sessionUser = token ? await store.getSessionUser(token) : null;
+          if (requestedWs !== 'main' && (!sessionUser || requestedWs !== `user_${sessionUser.username}`)) {
+            sendJson(res, 403, { error: 'Akses daftar kehadiran workspace ditolak.' });
+            return;
+          }
+          sendJson(res, 200, {
+            ok: true,
+            workspaceKey: requestedWs,
+            peers: presence.list(requestedWs)
+          });
+          return;
+        }
+
+        // Beacon/tab-close cleanup endpoint (accepts token in body or query when sendBeacon is used)
+        if (req.method === 'POST' && rawPath === '/api/presence/leave') {
+          const body = await readJsonBody(req);
+          const token = extractBearerToken(req) || String(body?.token || '');
+          const sessUser = token ? await store.getSessionUser(token) : null;
+          presence.remove({
+            clientId: String(body?.clientId || ''),
+            token,
+            username: sessUser?.username || ''
+          });
           sendJson(res, 200, { ok: true });
           return;
         }
@@ -935,6 +1044,21 @@ function createNetMapRequestHandler(store, rootDir = ROOT_DIR) {
         const sessionUser = sessionInfo?.user || null;
         if (!sessionUser) {
           sendJson(res, 401, { error: 'Silakan login terlebih dahulu.' });
+          return;
+        }
+
+        if (rawPath === '/api/presence' && (req.method === 'POST' || req.method === 'PUT')) {
+          const body = await readJsonBody(req);
+          const peers = presence.upsert(sessionUser, body, token);
+          sendJson(res, 200, { ok: true, peers });
+          return;
+        }
+
+        if (req.method === 'DELETE' && rawPath === '/api/presence') {
+          const parsedUrl = new URL(reqUrl, 'http://localhost');
+          const clientId = parsedUrl.searchParams.get('clientId') || '';
+          presence.remove({ clientId, token, username: sessionUser.username });
+          sendJson(res, 200, { ok: true });
           return;
         }
 

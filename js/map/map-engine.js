@@ -8,6 +8,7 @@ import { stateManager } from '../core/state-manager.js';
 import { coordinateSystem } from './coordinate-system.js';
 import { MapLayers } from './map-layers.js';
 import { MapInteractions } from './map-interactions.js';
+import { authManager, getPeerColorHex } from '../storage/auth-manager.js';
 
 export class MapEngine {
   /**
@@ -81,7 +82,118 @@ export class MapEngine {
     // 6. Automatically Fit Map to Viewport on initial load
     this.interactions.fitToScreen(30);
 
+    // 7. Multiplayer Presence Pins on 2D Canvas
+    this.setupMultiplayerPresence2D();
+
     return this;
+  }
+
+  setupMultiplayerPresence2D() {
+    if (!this.stage || !this.layers?.presenceLayer) return;
+    let last2dEmitAt = 0;
+
+    this.stage.on('mousemove', () => {
+      if (stateManager.getViewMode?.() !== '2d') return;
+      if (!authManager?.isAuthenticated?.()) return;
+      const now = Date.now();
+      if (now - last2dEmitAt < 180) return;
+
+      const pointer = this.stage.getPointerPosition();
+      if (!pointer) return;
+      const transform = this.stage.getAbsoluteTransform().copy().invert();
+      const mapPt = transform.point(pointer);
+      const natW = this.mapDimensions.width || 1024;
+      const natH = this.mapDimensions.height || 1024;
+      const normX = Math.max(0.01, Math.min(0.99, mapPt.x / natW));
+      const normY = Math.max(0.01, Math.min(0.99, mapPt.y / natH));
+
+      last2dEmitAt = now;
+      authManager.updateLocalPresence({
+        viewMode: '2d',
+        avatarMode: false,
+        normX: Number(normX.toFixed(4)),
+        normY: Number(normY.toFixed(4))
+      });
+    });
+
+    eventBus.on('presence:updated', ({ peers } = {}) => {
+      this.renderRemotePeers2D(peers || authManager.getRemotePeers());
+    });
+    eventBus.on('auth:changed', () => {
+      this.renderRemotePeers2D(authManager.getRemotePeers());
+    });
+    eventBus.on('zoom:changed', () => {
+      if (this.layers?.presenceLayer?.getChildren?.().length > 0) {
+        this.renderRemotePeers2D(authManager.getRemotePeers());
+      }
+    });
+  }
+
+  renderRemotePeers2D(peers = []) {
+    const layer = this.layers?.presenceLayer;
+    if (!layer || !window.Konva) return;
+
+    layer.destroyChildren();
+    const list = Array.isArray(peers) ? peers : [];
+    const natW = this.mapDimensions.width || 1024;
+    const natH = this.mapDimensions.height || 1024;
+    const invScale = this.stage ? (1 / Math.max(0.35, Math.min(2.5, this.stage.scaleX() || 1))) : 1;
+
+    for (const peer of list) {
+      if (!peer || peer.clientId === authManager?.clientId) continue;
+      const nx = Number.isFinite(Number(peer.normX)) ? Number(peer.normX) : 0.5;
+      const ny = Number.isFinite(Number(peer.normY)) ? Number(peer.normY) : 0.5;
+      const px = nx * natW;
+      const py = ny * natH;
+      const color = peer.colorHex || getPeerColorHex(peer.username || peer.clientId);
+      const textLabel = peer.avatarMode ? `@${peer.username} (3D)` : `@${peer.username}`;
+
+      const grp = new Konva.Group({
+        x: px,
+        y: py,
+        scaleX: invScale,
+        scaleY: invScale,
+        listening: false
+      });
+
+      grp.add(new Konva.Circle({
+        radius: 9,
+        fill: color,
+        stroke: '#ffffff',
+        strokeWidth: 2.5,
+        shadowColor: 'rgba(0,0,0,0.35)',
+        shadowBlur: 6
+      }));
+
+      const tagWidth = Math.max(66, textLabel.length * 7 + 16);
+      grp.add(new Konva.Rect({
+        x: -tagWidth / 2,
+        y: -30,
+        width: tagWidth,
+        height: 18,
+        cornerRadius: 9,
+        fill: color,
+        stroke: '#ffffff',
+        strokeWidth: 1.2
+      }));
+
+      grp.add(new Konva.Text({
+        x: -tagWidth / 2,
+        y: -29,
+        width: tagWidth,
+        height: 16,
+        text: textLabel,
+        fontSize: 10.5,
+        fontFamily: 'Poppins, sans-serif',
+        fontStyle: 'bold',
+        fill: '#ffffff',
+        align: 'center',
+        verticalAlign: 'middle'
+      }));
+
+      layer.add(grp);
+    }
+    layer.batchDraw();
   }
 
   /**
