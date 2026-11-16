@@ -1303,6 +1303,56 @@ export function animateRobloxAvatarRig(avatarGroup, animState = {}, dt = 0.016) 
   headPivot.rotation.y += (0 - headPivot.rotation.y) * damp;
 }
 
+/**
+ * Create a lightweight first-person (FPP) Roblox blocky right hand + glowing Network Cable Tester viewmodel.
+ * Positioned in camera-local frame at bottom-right; raycasting disabled on all child meshes.
+ * @returns {THREE.Group}
+ */
+export function createFppHandsViewmodelGroup() {
+  const root = new THREE.Group();
+  root.name = 'FppHandsViewmodel';
+
+  const swayRoot = new THREE.Group();
+  swayRoot.name = 'FppSwayRoot';
+  swayRoot.position.set(0.32, -0.27, -0.52);
+  swayRoot.rotation.set(0.18, -0.24, 0.06);
+  root.add(swayRoot);
+
+  const sleeveMat = makeMat(0x1e293b, { roughness: 0.55, metalness: 0.1 });
+  const vestCuffMat = makeMat(0x2a7c13, { roughness: 0.45 });
+  const skinMat = makeMat(0xfacc15, { roughness: 0.42 });
+  const tabletBodyMat = makeMat(0x0f172a, { roughness: 0.32, metalness: 0.45 });
+  const tabletScreenMat = makeMat(0x38bdf8, { emissive: 0x0284c7, emissiveIntensity: 0.85, roughness: 0.18 });
+  const ledOnlineMat = makeMat(0x22c55e, { emissive: 0x16a34a, emissiveIntensity: 0.9 });
+
+  // Blocky sleeve + cuff + yellow Roblox hand
+  const sleeve = addBox(swayRoot, 0.11, 0.11, 0.24, 0.08, -0.05, 0.14, sleeveMat);
+  sleeve.rotation.x = -0.25;
+  addBox(swayRoot, 0.115, 0.115, 0.04, 0.08, -0.02, 0.04, vestCuffMat);
+  addBox(swayRoot, 0.10, 0.10, 0.12, 0.04, 0.01, -0.03, skinMat);
+
+  // Handheld SmartSchool Network Tester / Mini Tablet
+  const testerGroup = new THREE.Group();
+  testerGroup.position.set(-0.02, 0.04, -0.06);
+  testerGroup.rotation.set(-0.32, 0.18, -0.06);
+  addBox(testerGroup, 0.16, 0.024, 0.22, 0, 0, 0, tabletBodyMat);
+  addBox(testerGroup, 0.13, 0.008, 0.15, 0, 0.014, 0.01, tabletScreenMat);
+  addBox(testerGroup, 0.02, 0.01, 0.02, -0.04, 0.014, -0.085, ledOnlineMat);
+  addBox(testerGroup, 0.02, 0.01, 0.02, 0.0, 0.014, -0.085, ledOnlineMat);
+  swayRoot.add(testerGroup);
+
+  root.traverse((child) => {
+    child.userData.isAvatarMesh = true;
+    child.raycast = () => {};
+    if (child.isMesh) {
+      child.castShadow = false;
+    }
+  });
+
+  root.userData.swayRoot = swayRoot;
+  return root;
+}
+
 function roundRect(ctx, x, y, w, h, r) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);

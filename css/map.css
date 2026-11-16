@@ -809,3 +809,72 @@
   cursor: pointer;
   outline: none;
 }
+
+/* Game-style Center Crosshair for Mode Teknisi Direct Mouse-Look */
+.hud-3d-crosshair {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 20px;
+  height: 20px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 30;
+}
+
+.hud-3d-crosshair.hidden {
+  display: none !important;
+}
+
+.hud-3d-crosshair::before,
+.hud-3d-crosshair::after {
+  content: '';
+  position: absolute;
+  background-color: rgba(255, 248, 207, 0.92);
+  box-shadow: 0 0 3px rgba(14, 25, 11, 0.95);
+}
+
+.hud-3d-crosshair::before {
+  top: 9px;
+  left: 2px;
+  width: 16px;
+  height: 2px;
+}
+
+.hud-3d-crosshair::after {
+  top: 2px;
+  left: 9px;
+  width: 2px;
+  height: 16px;
+}
+
+.avatar-perspective-switch {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-primary);
+  overflow: hidden;
+}
+
+.avatar-persp-btn {
+  height: 25px;
+  padding: 0 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+}
+
+.avatar-persp-btn:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.avatar-persp-btn.active {
+  background-color: var(--accent-blue);
+  color: var(--text-inverse);
+}

@@ -18,7 +18,7 @@
   <link rel="stylesheet" href="css/main.css?v=20261113-3d-sketchup">
   <link rel="stylesheet" href="css/layout.css?v=20261115-search">
   <link rel="stylesheet" href="css/components.css?v=20261115-simplecm">
-  <link rel="stylesheet" href="css/map.css?v=20261116-roblox-sim">
+  <link rel="stylesheet" href="css/map.css?v=20261116-fpp">
 
   <!-- Vendor Libraries (Offline-First with CDN fallback) -->
   <script src="assets/vendor/konva.min.js"></script>
@@ -460,6 +460,11 @@
             <span>Mode Teknisi</span>
           </button>
 
+          <button id="btn-3d-fpp" class="hud-3d-btn" title="Mode FPP / Orang Pertama (V) — Sudut pandang mata teknisi langsung">
+            <i data-lucide="eye" style="width: 13px; height: 13px;"></i>
+            <span>Mode FPP</span>
+          </button>
+
           <div class="hud-3d-divider"></div>
 
           <button id="btn-3d-rooms" class="hud-3d-btn hud-3d-btn-accent"
@@ -484,6 +489,9 @@
             <span>Keluar Fullscreen</span>
           </button>
         </div>
+
+        <!-- Center Crosshair Reticle for Direct Mouse-Look Mode Teknisi -->
+        <div id="hud-3d-crosshair" class="hud-3d-crosshair hidden" style="display: none;"></div>
 
         <!-- Mode Teknisi Roblox Avatar Radar & Control Bar (Bottom Center in 3D Mode) -->
         <div id="hud-3d-avatar-bar" class="hud-3d-avatar-bar hidden" style="display: none;"></div>
@@ -633,7 +641,7 @@
   </div>
 
   <!-- Application Bootstrap (Bundled for file:// and http:// compatibility) -->
-  <script src="js/bundle.js?v=20261116-roblox-sim"></script>
+  <script src="js/bundle.js?v=20261116-fpp"></script>
 </body>
 
 </html>

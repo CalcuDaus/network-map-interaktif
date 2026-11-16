@@ -20,7 +20,8 @@ import {
   loadCustomGlbModel,
   create3DPortsSubGroup,
   createRobloxAvatar3DGroup,
-  animateRobloxAvatarRig
+  animateRobloxAvatarRig,
+  createFppHandsViewmodelGroup
 } from './map-3d-models.js';
 import { clamp, generateId } from '../utils/helpers.js';
 import { CAMPUS_MAP_DATA_URL } from './campus-map-data.js';
@@ -114,15 +115,21 @@ export class Map3DEngine {
     this.simulatorFocusedDeviceId = null;
     this.savedPreFocusCamera = null;
 
-    // Mode Teknisi (Roblox-style third-person engineer character) state
+    // Mode Teknisi (Roblox-style engineer character + TPP/FPP perspective) state
     this.avatarMode = false;
+    this.avatarPerspective = 'tpp'; // 'tpp' | 'fpp'
     this.avatarGroup = null;
+    this.fppViewmodelGroup = null;
     this.avatarState = {
       x: 0,
       y: 0,
       z: 0,
       yaw: 0,
       vy: 0,
+      camYaw: 0,
+      camPitch: 0.32,
+      camDist: 5.8,
+      _lastMouseClient: null,
       isGrounded: true,
       walkPhase: 0,
       isMoving: false,
@@ -272,6 +279,32 @@ export class Map3DEngine {
         this.updateDeviceDragRotate(e);
         return;
       }
+      if (this.avatarMode && !this.simulatorFocusedDeviceId) {
+        const isLocked = typeof document !== 'undefined' && document.pointerLockElement === dom;
+        if (isLocked) {
+          this.avatarState._lastMouseClient = null;
+          const dx = Math.abs(e.movementX || 0) <= 250 ? (e.movementX || 0) : 0;
+          const dy = Math.abs(e.movementY || 0) <= 250 ? (e.movementY || 0) : 0;
+          if (dx !== 0 || dy !== 0) {
+            this.applyAvatarMouseLookDelta(dx, dy);
+          }
+          return;
+        }
+        if (e.buttons === 0 && !e.altKey) {
+          const prev = this.avatarState._lastMouseClient;
+          this.avatarState._lastMouseClient = { x: e.clientX, y: e.clientY };
+          if (prev) {
+            const dx = e.clientX - prev.x;
+            const dy = e.clientY - prev.y;
+            if ((dx !== 0 || dy !== 0) && Math.abs(dx) <= 200 && Math.abs(dy) <= 200) {
+              this.applyAvatarMouseLookDelta(dx, dy);
+            }
+          }
+          return;
+        }
+        this.avatarState._lastMouseClient = null;
+        return;
+      }
       if (!this.isLookDragging) return;
       const dx = e.clientX - this.lookPrevPointer.x;
       const dy = e.clientY - this.lookPrevPointer.y;
@@ -336,6 +369,31 @@ export class Map3DEngine {
 
     dom.addEventListener('pointercancel', endDrag);
 
+    dom.addEventListener('pointerleave', () => {
+      if (this.avatarState) this.avatarState._lastMouseClient = null;
+    });
+
+    dom.addEventListener('wheel', (e) => {
+      if (!this.isActive || !this.avatarMode || this.simulatorFocusedDeviceId) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (this.avatarPerspective === 'fpp') {
+        if (e.deltaY > 0) {
+          this.avatarState.camDist = 2.6;
+          this.setAvatarPerspective('tpp');
+        }
+        return;
+      }
+      const nextDist = (this.avatarState.camDist || 5.8) + Math.sign(e.deltaY) * 0.65;
+      if (e.deltaY < 0 && nextDist <= 1.6) {
+        this.avatarState.camDist = 2.0;
+        this.setAvatarPerspective('fpp');
+        return;
+      }
+      this.avatarState.camDist = clamp(nextDist, 2.0, 22.0);
+      this.syncAvatarCameraFromAngles();
+    }, { passive: false });
+
     // Double-click anywhere in 3D scene to smoothly focus & set orbit pivot (SketchUp feel)
     dom.addEventListener('dblclick', (e) => {
       if (!this.isActive) return;
@@ -389,9 +447,14 @@ export class Map3DEngine {
     this.pendingCableSourcePort = '';
     this.pending3dWaypoints = [];
     this.avatarMode = false;
+    this.avatarState._lastMouseClient = null;
     if (this.avatarGroup) this.avatarGroup.visible = false;
+    if (this.fppViewmodelGroup) this.fppViewmodelGroup.visible = false;
+    this.releaseAvatarPointerLock();
+    this.syncAvatarCrosshair();
+    this.syncAvatarControlsUI();
+    this.configureControlsForAvatarMode(false);
     if (typeof document !== 'undefined') {
-      document.getElementById('btn-3d-avatar')?.classList.remove('active');
       const avatarHudEl = document.getElementById('hud-3d-avatar-bar');
       if (avatarHudEl) {
         avatarHudEl.innerHTML = '';
@@ -428,6 +491,7 @@ export class Map3DEngine {
         this.updateWalkMovement(dt);
       }
       this.controls?.update();
+      this.syncFppViewmodelTransform();
       this.renderer?.render(this.scene, this.camera);
     };
     this.animFrameId = requestAnimationFrame(animate);
@@ -1444,9 +1508,14 @@ export class Map3DEngine {
   }
 
   handleCanvasClick(e) {
-    const rect = this.renderer.domElement.getBoundingClientRect();
-    this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-    this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    const isPointerLocked = typeof document !== 'undefined' && document.pointerLockElement === this.renderer?.domElement;
+    if (isPointerLocked) {
+      this.pointer.set(0, 0);
+    } else {
+      const rect = this.renderer.domElement.getBoundingClientRect();
+      this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    }
 
     this.raycaster.setFromCamera(this.pointer, this.camera);
 
@@ -1629,14 +1698,23 @@ export class Map3DEngine {
       stateManager.deselectObject3d?.();
       if (this.simulatorFocusedDeviceId) {
         this.exitSimulatorFocus({ restoreCamera: false });
+      } else if (this.avatarMode) {
+        // Clicking empty canvas while in Mode Teknisi re-locks mouse for 360-deg infinite look
+        this.tryLockAvatarPointer();
       }
     }
   }
 
   handleCanvasRightClick(e) {
-    const rect = this.renderer.domElement.getBoundingClientRect();
-    this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-    this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    const isPointerLocked = typeof document !== 'undefined' && document.pointerLockElement === this.renderer?.domElement;
+    if (isPointerLocked) {
+      this.pointer.set(0, 0);
+      this.releaseAvatarPointerLock();
+    } else {
+      const rect = this.renderer.domElement.getBoundingClientRect();
+      this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    }
     this.raycaster.setFromCamera(this.pointer, this.camera);
 
     const devHits = this.raycaster.intersectObjects(this.devicesGroup.children, true);
@@ -2974,33 +3052,208 @@ export class Map3DEngine {
     this.controls.target.add(moveVec);
   }
 
-  getAvatarFollowCameraPose(followDist = 6.2, heightOffset = 2.75) {
-    const yaw = Number(this.avatarState.yaw) || 0;
+  tryLockAvatarPointer() {
+    if (typeof document === 'undefined' || !this.renderer?.domElement) return;
+    if (document.pointerLockElement === this.renderer.domElement) return;
+    try {
+      const res = this.renderer.domElement.requestPointerLock?.();
+      if (res && typeof res.catch === 'function') {
+        res.catch(() => {});
+      }
+    } catch { /* ignore pointer lock gesture restrictions */ }
+  }
+
+  releaseAvatarPointerLock() {
+    if (typeof document === 'undefined') return;
+    if (document.pointerLockElement && (!this.renderer?.domElement || document.pointerLockElement === this.renderer.domElement)) {
+      try {
+        document.exitPointerLock?.();
+      } catch { /* ignore */ }
+    }
+    if (this.avatarState) {
+      this.avatarState._lastMouseClient = null;
+    }
+  }
+
+  syncAvatarCrosshair() {
+    if (typeof document === 'undefined') return;
+    const ch = document.getElementById('hud-3d-crosshair');
+    if (!ch) return;
+    const visible = Boolean(this.isActive && this.avatarMode && !this.simulatorFocusedDeviceId);
+    ch.classList.toggle('hidden', !visible);
+    ch.style.display = visible ? 'block' : 'none';
+  }
+
+  configureControlsForAvatarMode(active) {
+    if (!this.controls) return;
+    if (active && !this.simulatorFocusedDeviceId) {
+      this.controls.enableRotate = false;
+      this.controls.enableZoom = false;
+      this.controls.enablePan = false;
+      this.controls.minPolarAngle = 0.05;
+      this.controls.maxPolarAngle = Math.PI - 0.05;
+    } else {
+      this.controls.enableRotate = true;
+      this.controls.enableZoom = true;
+      this.controls.enablePan = true;
+      this.controls.minPolarAngle = 0;
+      this.applyNavToolConfig();
+    }
+  }
+
+  syncAvatarControlsUI() {
+    if (typeof document === 'undefined') return;
+    document.getElementById('btn-3d-avatar')?.classList.toggle('active', Boolean(this.avatarMode));
+    document.getElementById('btn-3d-fpp')?.classList.toggle('active', Boolean(this.avatarMode && this.avatarPerspective === 'fpp'));
+  }
+
+  syncAvatarMeshVisibilityForPerspective() {
+    const isFppFreeRoam = Boolean(this.isActive && this.avatarMode && this.avatarPerspective === 'fpp' && !this.simulatorFocusedDeviceId);
+    const isFocusedHide = Boolean(this.simulatorFocusedDeviceId);
+    if (this.avatarGroup) {
+      this.avatarGroup.visible = Boolean(this.avatarMode && !isFppFreeRoam && !isFocusedHide);
+    }
+    if (isFppFreeRoam && !this.fppViewmodelGroup) {
+      this.fppViewmodelGroup = createFppHandsViewmodelGroup();
+    }
+    if (this.fppViewmodelGroup) {
+      if (isFppFreeRoam && this.scene && !this.scene.children.includes(this.fppViewmodelGroup)) {
+        this.scene.add(this.fppViewmodelGroup);
+      }
+      this.fppViewmodelGroup.visible = isFppFreeRoam;
+    }
+  }
+
+  syncFppViewmodelTransform() {
+    if (!this.fppViewmodelGroup || !this.fppViewmodelGroup.visible || !this.camera) return;
+    this.fppViewmodelGroup.position.copy(this.camera.position);
+    this.fppViewmodelGroup.quaternion.copy(this.camera.quaternion);
+    const swayRoot = this.fppViewmodelGroup.userData?.swayRoot;
+    if (swayRoot) {
+      const moving = Boolean(this.avatarState.isMoving && this.avatarState.isGrounded);
+      const phase = Number(this.avatarState.walkPhase) || 0;
+      const amp = this.avatarState.isRunning ? 0.018 : 0.011;
+      const sx = moving ? Math.cos(phase) * amp : 0;
+      const sy = moving ? Math.abs(Math.sin(phase)) * amp : 0;
+      swayRoot.position.set(0.32 + sx, -0.27 + sy, -0.52);
+    }
+  }
+
+  setAvatarPerspective(mode) {
+    const nextPersp = mode === 'fpp' ? 'fpp' : 'tpp';
+    if (!this.avatarMode) {
+      return this.setAvatarMode(true, { perspective: nextPersp });
+    }
+    this.avatarPerspective = nextPersp;
+    if (nextPersp === 'fpp') {
+      this.avatarState.camPitch = clamp(Number.isFinite(this.avatarState.camPitch) ? this.avatarState.camPitch : 0, -0.5, 0.55);
+      this.avatarState.yaw = Number(this.avatarState.camYaw) || 0;
+    } else {
+      this.avatarState.camPitch = clamp(Number.isFinite(this.avatarState.camPitch) ? this.avatarState.camPitch : 0.32, -0.1, 0.85);
+      this.avatarState.camDist = clamp(this.avatarState.camDist || 5.8, 2.2, 22.0);
+    }
+    this.syncAvatarMeshVisibilityForPerspective();
+    this.syncAvatarControlsUI();
+    this.syncAvatarCameraFromAngles();
+    this.renderAvatarHudBar();
+    this.showStatusHint(
+      nextPersp === 'fpp'
+        ? 'Mode FPP (Orang Pertama) aktif: Gerakkan mouse lihat dari mata teknisi, tekan V atau Scroll mundur untuk TPP.'
+        : 'Mode TPP (Orang Ketiga) aktif: Tekan V atau Scroll maju ke karakter untuk masuk ke Mode FPP.'
+    );
+    return this.avatarPerspective;
+  }
+
+  toggleAvatarPerspective() {
+    return this.setAvatarPerspective(this.avatarPerspective === 'fpp' ? 'tpp' : 'fpp');
+  }
+
+  getAvatarFollowCameraPose(followDist = this.avatarState.camDist || 5.8) {
+    const camYaw = Number.isFinite(this.avatarState.camYaw)
+      ? this.avatarState.camYaw
+      : (Number(this.avatarState.yaw) || 0);
+
+    if (this.avatarPerspective === 'fpp') {
+      const bobOffset = (this.avatarState.isMoving && this.avatarState.isGrounded)
+        ? Math.sin((Number(this.avatarState.walkPhase) || 0) * 2) * 0.032
+        : 0;
+      const eyePos = new THREE.Vector3(
+        this.avatarState.x,
+        Math.max(0.45, this.avatarState.y + 1.66 + bobOffset),
+        this.avatarState.z
+      );
+      const lookPitch = clamp(-(Number.isFinite(this.avatarState.camPitch) ? this.avatarState.camPitch : 0), -1.35, 1.35);
+      const cosP = Math.cos(lookPitch);
+      const lookTarget = eyePos.clone().add(new THREE.Vector3(
+        Math.sin(camYaw) * cosP * 5,
+        Math.sin(lookPitch) * 5,
+        Math.cos(camYaw) * cosP * 5
+      ));
+      return { endPos: eyePos, target: lookTarget };
+    }
+
+    const camPitch = clamp(
+      Number.isFinite(this.avatarState.camPitch) ? this.avatarState.camPitch : 0.32,
+      -0.15,
+      1.18
+    );
+    const dist = clamp(Number(followDist) || 5.8, 2.0, 22.0);
     const target = new THREE.Vector3(
       this.avatarState.x,
-      this.avatarState.y + 1.35,
+      this.avatarState.y + 1.38,
       this.avatarState.z
     );
+    const horiz = Math.cos(camPitch) * dist;
+    const vert = Math.sin(camPitch) * dist;
     const endPos = new THREE.Vector3(
-      this.avatarState.x - Math.sin(yaw) * followDist,
-      Math.max(0.6, this.avatarState.y + heightOffset),
-      this.avatarState.z - Math.cos(yaw) * followDist
+      target.x - Math.sin(camYaw) * horiz,
+      Math.max(0.35, target.y + vert),
+      target.z - Math.cos(camYaw) * horiz
     );
     return { endPos, target };
   }
 
-  setAvatarMode(enabled) {
+  syncAvatarCameraFromAngles() {
+    if (!this.camera || !this.controls) return;
+    this.cameraAnim = null;
+    const { endPos, target } = this.getAvatarFollowCameraPose(this.avatarState.camDist);
+    this.controls.target.copy(target);
+    this.camera.position.copy(endPos);
+  }
+
+  applyAvatarMouseLookDelta(dx, dy) {
+    if (!this.avatarMode || this.simulatorFocusedDeviceId) return;
+    if (!Number.isFinite(dx) || !Number.isFinite(dy)) return;
+    const sensitivity = 0.0032;
+    const minPitch = this.avatarPerspective === 'fpp' ? -1.35 : -0.15;
+    const maxPitch = this.avatarPerspective === 'fpp' ? 1.35 : 1.18;
+    this.avatarState.camYaw = (Number(this.avatarState.camYaw) || 0) - dx * sensitivity;
+    this.avatarState.camPitch = clamp((Number(this.avatarState.camPitch) ?? 0.32) + dy * sensitivity, minPitch, maxPitch);
+    if (this.avatarPerspective === 'fpp') {
+      this.avatarState.yaw = this.avatarState.camYaw;
+    }
+    this.syncAvatarCameraFromAngles();
+  }
+
+  setAvatarMode(enabled, { perspective } = {}) {
     const next = Boolean(enabled);
     this.avatarMode = next;
-
-    if (typeof document !== 'undefined') {
-      document.getElementById('btn-3d-avatar')?.classList.toggle('active', next);
+    this.avatarState._lastMouseClient = null;
+    if (perspective === 'fpp' || perspective === 'tpp') {
+      this.avatarPerspective = perspective;
     }
 
     if (!next) {
       if (this.avatarGroup) {
         this.avatarGroup.visible = false;
       }
+      if (this.fppViewmodelGroup) {
+        this.fppViewmodelGroup.visible = false;
+      }
+      this.releaseAvatarPointerLock();
+      this.syncAvatarCrosshair();
+      this.syncAvatarControlsUI();
+      this.configureControlsForAvatarMode(false);
       if (typeof document !== 'undefined') {
         const hudEl = document.getElementById('hud-3d-avatar-bar');
         if (hudEl) {
@@ -3019,7 +3272,6 @@ export class Map3DEngine {
     if (this.scene && !this.scene.children.includes(this.avatarGroup)) {
       this.scene.add(this.avatarGroup);
     }
-    this.avatarGroup.visible = true;
 
     // Exit open port inspector if switching directly into Mode Teknisi
     if (this.simulatorFocusedDeviceId) {
@@ -3058,6 +3310,8 @@ export class Map3DEngine {
       this.avatarState.y = 0;
       this.avatarState.z = spawnZ;
       this.avatarState.yaw = spawnYaw;
+      this.avatarState.camYaw = spawnYaw;
+      this.avatarState.camPitch = this.avatarPerspective === 'fpp' ? 0.02 : 0.32;
       this.avatarState.vy = 0;
       this.avatarState.isGrounded = true;
       this.avatarGroup.position.set(spawnX, 0, spawnZ);
@@ -3068,9 +3322,18 @@ export class Map3DEngine {
       this.animateCameraTo(camPose.endPos, camPose.target, 380);
     }
 
+    this.configureControlsForAvatarMode(true);
+    this.syncAvatarMeshVisibilityForPerspective();
+    this.syncAvatarControlsUI();
+    this.syncAvatarCrosshair();
     this.findNearestDeviceToAvatar();
     this.renderAvatarHudBar();
-    this.showStatusHint('Mode Teknisi aktif: WASD/Panah untuk berjalan, Shift lari, Spasi lompat, F inspeksi perangkat terdekat.');
+    this.tryLockAvatarPointer();
+    this.showStatusHint(
+      this.avatarPerspective === 'fpp'
+        ? 'Mode FPP aktif: Gerakkan mouse lihat dari mata teknisi, WASD jalan, Spasi lompat, V ke TPP, F inspeksi.'
+        : 'Mode Teknisi aktif: Gerakkan mouse lihat sekeliling, WASD jalan, Shift lari, Spasi lompat, V ke FPP, F inspeksi.'
+    );
     return true;
   }
 
@@ -3095,6 +3358,8 @@ export class Map3DEngine {
     this.avatarState.y = 0;
     this.avatarState.z = tz;
     this.avatarState.yaw = yaw;
+    this.avatarState.camYaw = yaw;
+    this.avatarState.camPitch = this.avatarPerspective === 'fpp' ? 0.02 : 0.28;
     this.avatarState.vy = 0;
     this.avatarState.isGrounded = true;
     this.avatarState.isMoving = false;
@@ -3158,11 +3423,7 @@ export class Map3DEngine {
     // Walking or jumping out of Simulator Port Focus immediately resumes third-person tracking
     if ((hasMoveInput || jumpPressed) && this.simulatorFocusedDeviceId) {
       this.exitSimulatorFocus({ restoreCamera: false });
-      const pose = this.getAvatarFollowCameraPose();
-      if (this.camera && this.controls) {
-        this.camera.position.copy(pose.endPos);
-        this.controls.target.copy(pose.target);
-      }
+      this.syncAvatarCameraFromAngles();
     }
 
     // Do not hijack camera when port inspector zoom is open
@@ -3200,7 +3461,7 @@ export class Map3DEngine {
         viewDir.y = 0;
       }
       if (viewDir.lengthSq() < 0.0001) {
-        viewDir.set(-Math.sin(this.avatarState.yaw), 0, -Math.cos(this.avatarState.yaw));
+        viewDir.set(Math.sin(this.avatarState.camYaw || 0), 0, Math.cos(this.avatarState.camYaw || 0));
       } else {
         viewDir.normalize();
       }
@@ -3237,17 +3498,15 @@ export class Map3DEngine {
 
     if (this.avatarGroup) {
       this.avatarGroup.position.set(this.avatarState.x, this.avatarState.y, this.avatarState.z);
+      if (this.avatarPerspective === 'fpp') {
+        this.avatarState.yaw = Number(this.avatarState.camYaw) || 0;
+      }
       this.avatarGroup.rotation.y = this.avatarState.yaw;
       animateRobloxAvatarRig(this.avatarGroup, this.avatarState, dt);
     }
 
-    if (this.camera && this.controls && !this.cameraAnim && (dx !== 0 || dy !== 0 || dz !== 0)) {
-      this.camera.position.x += dx;
-      this.camera.position.y = Math.max(0.35, this.camera.position.y + dy * 0.65);
-      this.camera.position.z += dz;
-      this.controls.target.x += dx;
-      this.controls.target.y += dy * 0.65;
-      this.controls.target.z += dz;
+    if (this.camera && this.controls && !this.cameraAnim && (dx !== 0 || dy !== 0 || dz !== 0 || (this.avatarPerspective === 'fpp' && hasMoveInput))) {
+      this.syncAvatarCameraFromAngles();
     }
 
     this.findNearestDeviceToAvatar();
@@ -3267,19 +3526,24 @@ export class Map3DEngine {
 
     const allDevs = (this.deviceManager?.getAllDevices?.() || []).filter((d) => d.layerVisible !== false);
     const optionsHtml = allDevs.map((d) => `<option value="${this.escapeHudHtml(d.id)}">${this.escapeHudHtml(d.name)}${d.network?.ip ? ` (${this.escapeHudHtml(d.network.ip)})` : ''}</option>`).join('');
+    const isFpp = this.avatarPerspective === 'fpp';
 
     hudEl.innerHTML = `
       <div class="avatar-bar-status">
         <span class="avatar-bar-title">
           <span class="avatar-bar-dot"></span>
-          <span>Mode Teknisi 3D</span>
+          <span>${isFpp ? 'Mode Teknisi (FPP)' : 'Mode Teknisi (TPP)'}</span>
         </span>
-        <span class="avatar-bar-controls-hint"><strong>WASD / Panah</strong> Jalan • <strong>Shift</strong> Lari • <strong>Spasi</strong> Lompat • <strong>Orbit</strong> Putar Kamera</span>
+        <span class="avatar-bar-controls-hint"><strong>Mouse</strong> Lihat • <strong>Scroll</strong> Zoom/FPP • <strong>WASD</strong> Jalan • <strong>Spasi</strong> Lompat • <strong>V</strong> Ganti View</span>
       </div>
       <div class="avatar-bar-nearest" id="avatar-nearest-slot">
         <span>Terdekat: --</span>
       </div>
       <div class="avatar-bar-actions">
+        <div class="avatar-perspective-switch" title="Pilih perspektif kamera (Pintasan: V atau Scroll)">
+          <button type="button" class="avatar-persp-btn ${!isFpp ? 'active' : ''}" data-avatar-persp="tpp">TPP</button>
+          <button type="button" class="avatar-persp-btn ${isFpp ? 'active' : ''}" data-avatar-persp="fpp">FPP (V)</button>
+        </div>
         <select id="select-avatar-teleport" class="avatar-teleport-select" title="Teleport karakter ke depan perangkat">
           <option value="">Teleport ke Perangkat...</option>
           ${optionsHtml}
@@ -3295,6 +3559,14 @@ export class Map3DEngine {
     this._lastAvatarHudDistKey = '';
 
     hudEl.onpointerdown = (ev) => ev.stopPropagation();
+
+    hudEl.querySelectorAll('[data-avatar-persp]')?.forEach((btn) => {
+      btn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        const mode = btn.getAttribute('data-avatar-persp');
+        if (mode) this.setAvatarPerspective(mode);
+      });
+    });
 
     const teleportSel = hudEl.querySelector('#select-avatar-teleport');
     if (teleportSel) {
@@ -3587,6 +3859,11 @@ export class Map3DEngine {
     this.simulatorFocusedDeviceId = deviceId;
     this.simulatorViewAngle = pose.viewAngle;
 
+    this.releaseAvatarPointerLock?.();
+    this.syncAvatarCrosshair?.();
+    this.syncAvatarMeshVisibilityForPerspective?.();
+    this.syncAvatarControlsUI?.();
+    this.configureControlsForAvatarMode?.(false);
     this.animateCameraTo(pose.endPos, pose.target, duration);
     if (typeof document !== 'undefined') {
       const avatarHud = document.getElementById('hud-3d-avatar-bar');
@@ -3613,8 +3890,12 @@ export class Map3DEngine {
         hudEl.style.display = 'none';
       }
     }
+    this.configureControlsForAvatarMode?.(this.avatarMode);
+    this.syncAvatarMeshVisibilityForPerspective?.();
+    this.syncAvatarControlsUI?.();
+    this.syncAvatarCrosshair?.();
     if (this.avatarMode && this.isActive) {
-      this.renderAvatarHudBar();
+      this.renderAvatarHudBar?.();
     }
   }
 
@@ -4163,6 +4444,9 @@ export class Map3DEngine {
     window.addEventListener('keydown', (e) => {
       if (!this.isActive) return;
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) return;
+      if (e.key === 'Alt' && this.avatarMode) {
+        this.releaseAvatarPointerLock();
+      }
       if (e.code === 'Space' || e.key === ' ') {
         if (this.avatarMode) {
           e.preventDefault();

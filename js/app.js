@@ -593,11 +593,19 @@ class NetMapApp {
       this.map3DEngine?.setShowLabels(showLabels);
     });
 
-    // Mode Teknisi (Roblox-like 3D character walker) toggle
+    // Mode Teknisi (Roblox-like 3D character walker) & FPP toggles
     const btnAvatar = document.getElementById('btn-3d-avatar');
+    const btnFpp = document.getElementById('btn-3d-fpp');
     btnAvatar?.addEventListener('click', () => {
-      const nextState = this.map3DEngine?.toggleAvatarMode();
-      btnAvatar.classList.toggle('active', Boolean(nextState));
+      this.map3DEngine?.toggleAvatarMode();
+    });
+    btnFpp?.addEventListener('click', () => {
+      if (!this.map3DEngine) return;
+      if (this.map3DEngine.avatarMode && this.map3DEngine.avatarPerspective === 'fpp') {
+        this.map3DEngine.setAvatarPerspective('tpp');
+      } else {
+        this.map3DEngine.setAvatarPerspective('fpp');
+      }
     });
 
     // Minimize / Expand toggles for #hud-3d-controls and #hud-3d-hints (persisted in localStorage)
@@ -796,6 +804,15 @@ class NetMapApp {
         if (lower === 'g' && !e.ctrlKey && !e.metaKey) {
           e.preventDefault();
           this.map3DEngine?.toggleAvatarMode();
+          return;
+        }
+        if (lower === 'v' && !e.ctrlKey && !e.metaKey) {
+          e.preventDefault();
+          if (this.map3DEngine?.avatarMode) {
+            this.map3DEngine.toggleAvatarPerspective();
+          } else {
+            this.map3DEngine?.setAvatarMode(true, { perspective: 'fpp' });
+          }
           return;
         }
         if (lower === 'f' && this.map3DEngine?.avatarMode && !e.ctrlKey && !e.metaKey) {
