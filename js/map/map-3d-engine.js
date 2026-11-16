@@ -94,6 +94,7 @@ export class Map3DEngine {
     this.boxSelectState = null;
     this.activeDraw3dTemplate = { ...OBJECT3D_PRESETS.pole };
     this.object3dDragState = null;
+    this.cableDragState = null;
     this._marqueeEl = null;
     this._temporarilyDisabledControlsForBox = false;
     this._pendingSyncRaf = null;
@@ -161,7 +162,7 @@ export class Map3DEngine {
     dom.addEventListener('contextmenu', (e) => e.preventDefault());
     this.container?.addEventListener('contextmenu', (e) => e.preventDefault());
 
-    // Capture-phase guard so Box Select, Draw 3D, or Push/Pull Gizmos intercept before OrbitControls starts orbiting/panning
+    // Capture-phase guard so Box Select, Draw 3D, Cable Handles, or Push/Pull Gizmos intercept before OrbitControls starts orbiting/panning
     dom.addEventListener('pointerdown', (e) => {
       if (!this.isActive) return;
       if (stateManager.getMode() !== 'draw-cable' && e.button === 0) {
@@ -171,6 +172,7 @@ export class Map3DEngine {
           this.navTool === 'rotate' ||
           e.ctrlKey ||
           e.metaKey ||
+          Boolean(this.checkCableHandleHitAtEvent(e)) ||
           Boolean(this.checkGizmoHitAtEvent(e));
         if (shouldBlockOrbit && this.controls && this.controls.enabled) {
           this.controls.enabled = false;
@@ -186,6 +188,11 @@ export class Map3DEngine {
       this.container.classList.add('is-dragging');
 
       if (stateManager.getMode() !== 'draw-cable' && e.button === 0) {
+        const cableHandleHit = this.checkCableHandleHitAtEvent(e);
+        if (cableHandleHit) {
+          this.startCableHandleDrag(e, dom, cableHandleHit);
+          return;
+        }
         const gizmoHit = this.checkGizmoHitAtEvent(e);
         if (gizmoHit) {
           this.startObject3dGizmoDrag(e, dom, gizmoHit);
@@ -211,6 +218,10 @@ export class Map3DEngine {
 
     dom.addEventListener('pointermove', (e) => {
       if (!this.isActive) return;
+      if (this.cableDragState) {
+        this.updateCableHandleDrag(e);
+        return;
+      }
       if (this.object3dDragState) {
         this.updateObject3dDrag(e);
         return;
@@ -250,6 +261,9 @@ export class Map3DEngine {
       if (this._temporarilyDisabledControlsForBox) {
         this._temporarilyDisabledControlsForBox = false;
         if (this.controls) this.controls.enabled = true;
+      }
+      if (this.cableDragState) {
+        this.finishCableHandleDrag(e, dom);
       }
       if (this.object3dDragState) {
         this.finishObject3dDrag(e, dom);
@@ -929,12 +943,57 @@ export class Map3DEngine {
       const dstDir = (hasDstPort && this.portWorldDirMap.get(dstPortKey))
         || new THREE.Vector3(0, 0, 1).applyEuler(this.getDeviceEuler(dstDev)).normalize();
 
+      // Local orthonormal frame for the cable span
+      const outDir = srcDir.clone().add(dstDir);
+      if (outDir.lengthSq() < 0.01) {
+        outDir.set(-(dstPos.z - srcPos.z), 0, dstPos.x - srcPos.x);
+      }
+      if (outDir.lengthSq() < 0.01) {
+        outDir.set(0, 0, 1);
+      }
+      outDir.normalize();
+
+      const sideDir = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), outDir);
+      if (sideDir.lengthSq() < 0.01) {
+        sideDir.set(1, 0, 0);
+      }
+      sideDir.normalize();
+
+      const vertDist = Math.abs(srcPos.y - dstPos.y);
+      const portDist = srcPos.distanceTo(dstPos);
+
+      const fanStep = ((cableIdx % 5) - 2) * 0.008 * avgPortScale;
+      const autoBowUnits = (hasSrcPort || hasDstPort)
+        ? Math.max(0.09, Math.min(0.36, (vertDist / Math.max(0.3, avgPortScale)) * 0.42 + (portDist / Math.max(0.3, avgPortScale)) * 0.14))
+        : 0.04;
+      const bowUnits = (typeof cable.details?.bowOut === 'number' && !isNaN(cable.details.bowOut))
+        ? cable.details.bowOut
+        : autoBowUnits;
+      const bowDist = bowUnits * avgPortScale
+        + (cable.details?.bowOut === null || cable.details?.bowOut === undefined ? fanStep : 0);
+
+      const autoSagUnits = (vertDist < 0.18 * avgPortScale)
+        ? (0.09 + Math.min(0.08, portDist / Math.max(0.3, avgPortScale) * 0.12))
+        : Math.min(0.14, portDist / Math.max(0.3, avgPortScale) * 0.12);
+      const sagUnits = (typeof cable.details?.sagDrop === 'number' && !isNaN(cable.details.sagDrop))
+        ? cable.details.sagDrop
+        : autoSagUnits;
+      const sagDist = sagUnits * avgPortScale;
+
+      const sideUnits = (typeof cable.details?.sideOffset === 'number' && !isNaN(cable.details.sideOffset))
+        ? cable.details.sideOffset
+        : 0;
+      const sideDist = sideUnits * avgPortScale;
+
+      const bootLenSrc = 0.028 * srcScale;
+      const bootLenDst = 0.028 * dstScale;
+
       const pts = [];
       if (hasSrcPort && !isWireless) {
         // Anchor slightly inside the RJ45/SFP socket cavity so the cable plugs in 100% flush with zero gap
         pts.push(srcPos.clone().addScaledVector(srcDir, -0.008 * srcScale));
         pts.push(srcPos.clone());
-        pts.push(srcPos.clone().addScaledVector(srcDir, 0.022 * srcScale));
+        pts.push(srcPos.clone().addScaledVector(srcDir, bootLenSrc));
       } else {
         pts.push(srcPos.clone());
       }
@@ -971,16 +1030,22 @@ export class Map3DEngine {
             pts.push(new THREE.Vector3(dstPos.x, prevPt.y, prevPt.z));
           }
           if (Math.abs(dstPos.y - prevPt.y) > 0.05) {
-            const dstExitRef = hasDstPort ? dstPos.clone().addScaledVector(dstDir, 0.022 * dstScale) : dstPos;
+            const dstExitRef = hasDstPort ? dstPos.clone().addScaledVector(dstDir, bootLenDst) : dstPos;
             pts.push(new THREE.Vector3(dstExitRef.x, prevPt.y, dstExitRef.z));
           }
         } else {
+          if (pathStyle === 'curve' && hasSrcPort && !isWireless) {
+            pts.push(srcPos.clone().addScaledVector(srcDir, Math.max(0.045 * srcScale, Math.abs(bowDist) * 0.35)));
+          }
           rawWps.forEach((wpVec) => pts.push(wpVec));
+          if (pathStyle === 'curve' && hasDstPort && !isWireless) {
+            pts.push(dstPos.clone().addScaledVector(dstDir, Math.max(0.045 * dstScale, Math.abs(bowDist) * 0.35)));
+          }
         }
       } else if (hasCustomElev && !isWireless) {
         // Lift/drop direct cable cleanly to the custom Z tray elevation
         const srcExitPt = pts[pts.length - 1];
-        const dstExitPt = hasDstPort ? dstPos.clone().addScaledVector(dstDir, 0.022 * dstScale) : dstPos;
+        const dstExitPt = hasDstPort ? dstPos.clone().addScaledVector(dstDir, bootLenDst) : dstPos;
         const riserA = srcExitPt.clone().lerp(dstExitPt, 0.06);
         riserA.y = trayY;
         const riserB = srcExitPt.clone().lerp(dstExitPt, 0.94);
@@ -995,18 +1060,30 @@ export class Map3DEngine {
         if (Math.abs(dstPos.x - prevPt.x) > 0.1 && Math.abs(dstPos.z - prevPt.z) > 0.1) {
           pts.push(new THREE.Vector3(dstPos.x, trayY, prevPt.z));
         }
-      } else if (!isWireless && srcPos.distanceTo(dstPos) > 0.6) {
-        // Gentle mid-arc that respects port elevation without ballooning above the device
-        const srcExitPt = pts[pts.length - 1];
-        const dstExitPt = hasDstPort ? dstPos.clone().addScaledVector(dstDir, 0.022 * dstScale) : dstPos;
-        const mid = srcExitPt.clone().add(dstExitPt).multiplyScalar(0.5);
-        const sag = Math.min(0.08 * avgPortScale, srcPos.distanceTo(dstPos) * 0.025);
-        mid.y = Math.max(0.03, Math.min(srcPos.y, dstPos.y) - sag * 0.25);
-        pts.push(mid);
+      } else if (!isWireless && pathStyle === 'curve') {
+        const srcBootTip = hasSrcPort ? srcPos.clone().addScaledVector(srcDir, bootLenSrc) : srcPos.clone();
+        const dstBootTip = hasDstPort ? dstPos.clone().addScaledVector(dstDir, bootLenDst) : dstPos.clone();
+
+        const srcShoulder = srcBootTip.clone().lerp(dstBootTip, 0.22)
+          .addScaledVector(srcDir, bowDist * 0.72)
+          .addScaledVector(sideDir, sideDist * 0.55);
+        srcShoulder.y = Math.max(0.02, srcShoulder.y - sagDist * 0.38);
+
+        const midApex = srcBootTip.clone().lerp(dstBootTip, 0.50)
+          .addScaledVector(outDir, bowDist)
+          .addScaledVector(sideDir, sideDist);
+        midApex.y = Math.max(0.02, midApex.y - sagDist);
+
+        const dstShoulder = srcBootTip.clone().lerp(dstBootTip, 0.78)
+          .addScaledVector(dstDir, bowDist * 0.72)
+          .addScaledVector(sideDir, sideDist * 0.55);
+        dstShoulder.y = Math.max(0.02, dstShoulder.y - sagDist * 0.38);
+
+        pts.push(srcShoulder, midApex, dstShoulder);
       }
 
       if (hasDstPort && !isWireless) {
-        pts.push(dstPos.clone().addScaledVector(dstDir, 0.022 * dstScale));
+        pts.push(dstPos.clone().addScaledVector(dstDir, bootLenDst));
         pts.push(dstPos.clone());
         pts.push(dstPos.clone().addScaledVector(dstDir, -0.008 * dstScale));
       } else {
@@ -1044,12 +1121,13 @@ export class Map3DEngine {
         0.005,
         portMatchedLocalRadius * avgPortScale * this.cableDiameterMultiplier * perCableScale * selectBoost
       );
-      const tubeGeo = new THREE.TubeGeometry(curve, Math.max(24, cleanPts.length * 12), radius, 8, false);
+      const tubeGeo = new THREE.TubeGeometry(curve, Math.max(40, cleanPts.length * 16), radius, 12, false);
       const tubeMat = new THREE.MeshStandardMaterial({
-        color: isSelected ? '#facc15' : color,
-        emissive: isSelected ? '#eab308' : color,
-        emissiveIntensity: isSelected ? 0.7 : (isWireless ? 0.55 : 0.32),
-        roughness: 0.3,
+        color: color,
+        emissive: color,
+        emissiveIntensity: isSelected ? 0.48 : (isWireless ? 0.55 : 0.16),
+        roughness: 0.4,
+        metalness: 0.08,
         transparent: isWireless,
         opacity: isWireless ? 0.72 : 1.0
       });
@@ -1060,14 +1138,85 @@ export class Map3DEngine {
       this.cablesGroup.add(mesh);
       this.cableMeshMap.set(cable.id, mesh);
 
+      // 3D RJ45 Strain-Relief Boots at port endpoints
+      if (!isWireless) {
+        const upAxis = new THREE.Vector3(0, 1, 0);
+        const bootMat = new THREE.MeshStandardMaterial({
+          color: color,
+          emissive: color,
+          emissiveIntensity: isSelected ? 0.42 : 0.1,
+          roughness: 0.35,
+          metalness: 0.12
+        });
+        if (hasSrcPort) {
+          const srcBootGeo = new THREE.CylinderGeometry(radius * 1.15, radius * 1.45, bootLenSrc, 10);
+          const srcBoot = new THREE.Mesh(srcBootGeo, bootMat);
+          srcBoot.position.copy(srcPos).addScaledVector(srcDir, bootLenSrc * 0.45);
+          srcBoot.quaternion.setFromUnitVectors(upAxis, srcDir.clone().normalize());
+          srcBoot.userData.cableId = cable.id;
+          this.cablesGroup.add(srcBoot);
+        }
+        if (hasDstPort) {
+          const dstBootGeo = new THREE.CylinderGeometry(radius * 1.15, radius * 1.45, bootLenDst, 10);
+          const dstBoot = new THREE.Mesh(dstBootGeo, bootMat);
+          dstBoot.position.copy(dstPos).addScaledVector(dstDir, bootLenDst * 0.45);
+          dstBoot.quaternion.setFromUnitVectors(upAxis, dstDir.clone().normalize());
+          dstBoot.userData.cableId = cable.id;
+          this.cablesGroup.add(dstBoot);
+        }
+      }
+
+      // Interactive 3D Curve Handles when selected
+      if (isSelected && !isWireless) {
+        const apexPt = curve.getPoint(0.5);
+        const apexGeo = new THREE.SphereGeometry(Math.max(0.055, radius * 2.6), 14, 14);
+        const apexMat = new THREE.MeshStandardMaterial({
+          color: 0x38bdf8,
+          emissive: 0xffffff,
+          emissiveIntensity: 0.45,
+          roughness: 0.2
+        });
+        const apexDot = new THREE.Mesh(apexGeo, apexMat);
+        apexDot.position.copy(apexPt);
+        apexDot.userData = {
+          cableId: cable.id,
+          cableHandleType: 'apex',
+          linearMid: srcPos.clone().add(dstPos).multiplyScalar(0.5),
+          outDir: outDir.clone(),
+          sideDir: sideDir.clone(),
+          avgPortScale
+        };
+        this.cablesGroup.add(apexDot);
+
+        if (waypointMarkers.length === 0) {
+          const qGeo = new THREE.SphereGeometry(Math.max(0.038, radius * 1.8), 12, 12);
+          const qMat = new THREE.MeshBasicMaterial({ color: 0xfacc15 });
+          [0.25, 0.75].forEach((tVal) => {
+            const qPt = curve.getPoint(tVal);
+            const qDot = new THREE.Mesh(qGeo, qMat);
+            qDot.position.copy(qPt);
+            qDot.userData = {
+              cableId: cable.id,
+              cableHandleType: 'add-waypoint',
+              tVal
+            };
+            this.cablesGroup.add(qDot);
+          });
+        }
+      }
+
       if (isSelected && waypointMarkers.length > 0) {
         const wpGeo = new THREE.SphereGeometry(Math.max(0.06, radius * 2.1), 10, 10);
         const wpMat = new THREE.MeshBasicMaterial({ color: 0xfacc15 });
         const stemMat = new THREE.LineBasicMaterial({ color: 0xfacc15, transparent: true, opacity: 0.45 });
-        waypointMarkers.forEach((wpVec) => {
+        waypointMarkers.forEach((wpVec, idx) => {
           const wpDot = new THREE.Mesh(wpGeo, wpMat);
           wpDot.position.copy(wpVec);
-          wpDot.userData.cableId = cable.id;
+          wpDot.userData = {
+            cableId: cable.id,
+            cableHandleType: 'waypoint',
+            waypointIdx: idx
+          };
           this.cablesGroup.add(wpDot);
 
           const stemGeo = new THREE.BufferGeometry().setFromPoints([
@@ -1951,6 +2100,107 @@ export class Map3DEngine {
         }
       }
     }
+  }
+
+  checkCableHandleHitAtEvent(e) {
+    if (!this.isInitialized || !this.camera || !this.renderer?.domElement) return null;
+    if (!this.cableManager?.selectedCableId || this.cablesGroup.children.length === 0) return null;
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    const hits = this.raycaster.intersectObjects(this.cablesGroup.children, false);
+    for (const hit of hits) {
+      if (hit.object?.userData?.cableHandleType) {
+        return {
+          object: hit.object,
+          point: hit.point.clone(),
+          ...hit.object.userData
+        };
+      }
+    }
+    return null;
+  }
+
+  startCableHandleDrag(e, dom, handleHit) {
+    const cable = this.cableManager.getConnectionById(handleHit.cableId);
+    if (!cable) return;
+    const camDir = new THREE.Vector3();
+    this.camera.getWorldDirection(camDir);
+    const initPos = handleHit.object?.position?.clone() || handleHit.point?.clone() || new THREE.Vector3();
+    const dragPlane = new THREE.Plane().setFromNormalAndCoplanarPoint(camDir.normalize(), initPos);
+    this.cableDragState = {
+      cableId: cable.id,
+      handleType: handleHit.cableHandleType,
+      waypointIdx: typeof handleHit.waypointIdx === 'number' ? handleHit.waypointIdx : -1,
+      tVal: typeof handleHit.tVal === 'number' ? handleHit.tVal : 0.5,
+      linearMid: handleHit.linearMid?.clone() || initPos.clone(),
+      outDir: handleHit.outDir?.clone() || new THREE.Vector3(0, 0, 1),
+      sideDir: handleHit.sideDir?.clone() || new THREE.Vector3(1, 0, 0),
+      avgPortScale: Number(handleHit.avgPortScale) || 1,
+      dragPlane,
+      moved: false
+    };
+    dom.setPointerCapture?.(e.pointerId);
+  }
+
+  updateCableHandleDrag(e) {
+    const state = this.cableDragState;
+    if (!state || !this.renderer?.domElement) return;
+    const cable = this.cableManager.getConnectionById(state.cableId);
+    if (!cable) return;
+
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+
+    const hitPt = new THREE.Vector3();
+    if (!this.raycaster.ray.intersectPlane(state.dragPlane, hitPt)) return;
+
+    state.moved = true;
+    if (state.handleType === 'apex') {
+      if (!cable.details) cable.details = {};
+      const scale = Math.max(0.1, state.avgPortScale);
+      const rel = hitPt.clone().sub(state.linearMid);
+      cable.details.bowOut = Number(Math.max(-0.6, Math.min(1.5, rel.dot(state.outDir) / scale)).toFixed(2));
+      cable.details.sideOffset = Number(Math.max(-1.5, Math.min(1.5, rel.dot(state.sideDir) / scale)).toFixed(2));
+      cable.details.sagDrop = Number(Math.max(-0.8, Math.min(1.2, -rel.y / scale)).toFixed(2));
+      this.syncCables();
+      return;
+    }
+
+    const rawNorm = this.worldToNorm(hitPt.x, hitPt.z);
+    const normX = Math.max(0.01, Math.min(0.99, rawNorm.normX));
+    const normY = Math.max(0.01, Math.min(0.99, rawNorm.normY));
+    const wpZ = Math.max(0.02, Number(hitPt.y.toFixed(2)));
+    const wp = { x: normX, y: normY, z: wpZ };
+
+    if (!Array.isArray(cable.route)) cable.route = [];
+    if (state.handleType === 'add-waypoint') {
+      const insertIdx = state.tVal < 0.5 ? 0 : cable.route.length;
+      cable.route.splice(insertIdx, 0, wp);
+      state.handleType = 'waypoint';
+      state.waypointIdx = insertIdx;
+    } else if (state.handleType === 'waypoint' && state.waypointIdx >= 0 && state.waypointIdx < cable.route.length) {
+      cable.route[state.waypointIdx] = wp;
+    }
+    this.syncCables();
+  }
+
+  finishCableHandleDrag(e, dom) {
+    const state = this.cableDragState;
+    this.cableDragState = null;
+    dom.releasePointerCapture?.(e.pointerId);
+    if (!state || !state.moved) return;
+
+    this._suppressNextClick = true;
+    const cable = this.cableManager.getConnectionById(state.cableId);
+    if (!cable) return;
+    this.cableManager.updateConnection(cable.id, {
+      details: { ...(cable.details || {}) },
+      route: Array.isArray(cable.route) ? cable.route.map((p) => ({ ...p })) : []
+    });
   }
 
   startDeviceDragMove(e, dom) {

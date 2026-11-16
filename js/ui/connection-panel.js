@@ -341,15 +341,71 @@ export class ConnectionPanel {
             <div class="form-group">
               <label>Gaya Jalur (Pen Tool)</label>
               <select id="prop-cable-path-style">
-                <option value="curve" ${(details.pathStyle || 'curve') === 'curve' ? 'selected' : ''}>〰️ Bezier Curve (Lengkung)</option>
-                <option value="straight" ${details.pathStyle === 'straight' ? 'selected' : ''}>📐 Lurus (Sudut Tajam)</option>
-                <option value="orthogonal" ${details.pathStyle === 'orthogonal' ? 'selected' : ''}>🪜 Orthogonal 90° (Tray)</option>
+                <option value="curve" ${(details.pathStyle || 'curve') === 'curve' ? 'selected' : ''}>Bezier Curve (Lengkung)</option>
+                <option value="straight" ${details.pathStyle === 'straight' ? 'selected' : ''}>Lurus (Sudut Tajam)</option>
+                <option value="orthogonal" ${details.pathStyle === 'orthogonal' ? 'selected' : ''}>Orthogonal 90° (Tray)</option>
               </select>
             </div>
             <div class="form-group">
               <label>Kelengkungan Bezier</label>
               <input type="number" id="prop-cable-curve-tension" min="0" max="0.8" step="0.05"
                      value="${typeof details.curveTension === 'number' ? details.curveTension : 0.38}">
+            </div>
+
+            <!-- Lengkungan & Bentuk Kabel 3D (Real Patch Cord) -->
+            <div style="grid-column: span 2; display: flex; flex-direction: column; gap: 7px; padding: 8px 10px; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 6px;">
+              <div style="display: flex; flex-direction: column; gap: 1px;">
+                <label style="font-size: 11px; color: var(--text-primary); font-weight: 700;">Lengkungan &amp; Bentuk Kabel 3D (Real Patch Cord)</label>
+                <span style="font-size: 10px; color: var(--text-muted);">Atur arah lekukan patch cord atau tarik langsung titik biru/kuning di 3D.</span>
+              </div>
+
+              <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;">
+                <button type="button" class="btn btn-secondary btn-sm btn-cable-curve-preset" data-bow="auto" data-side="0" data-sag="auto" style="font-size: 10px; height: 22px; padding: 1px 5px; ${(details.bowOut === null || details.bowOut === undefined) && !(details.sideOffset) && (details.sagDrop === null || details.sagDrop === undefined) ? 'border-color: var(--accent-blue); color: var(--accent-blue); font-weight: 700;' : ''}">Auto Natural</button>
+                <button type="button" class="btn btn-secondary btn-sm btn-cable-curve-preset" data-bow="0.32" data-side="0" data-sag="0.06" style="font-size: 10px; height: 22px; padding: 1px 5px;">Loop Depan</button>
+                <button type="button" class="btn btn-secondary btn-sm btn-cable-curve-preset" data-bow="0.28" data-side="0" data-sag="0.34" style="font-size: 10px; height: 22px; padding: 1px 5px;">Loop Gantung Bawah</button>
+                <button type="button" class="btn btn-secondary btn-sm btn-cable-curve-preset" data-bow="0.24" data-side="-0.36" data-sag="0.16" style="font-size: 10px; height: 22px; padding: 1px 5px;">Sapuan Kiri Rak</button>
+                <button type="button" class="btn btn-secondary btn-sm btn-cable-curve-preset" data-bow="0.24" data-side="0.36" data-sag="0.16" style="font-size: 10px; height: 22px; padding: 1px 5px;">Sapuan Kanan Rak</button>
+                <button type="button" class="btn btn-secondary btn-sm btn-cable-curve-preset" data-bow="0.06" data-side="0" data-sag="0.02" style="font-size: 10px; height: 22px; padding: 1px 5px;">Rapat / Tegang</button>
+              </div>
+
+              <!-- Bow Out -->
+              <div style="display: flex; flex-direction: column; gap: 2px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <label style="font-size: 10.5px; color: var(--text-muted);">Lengkungan Depan (Bow Out)</label>
+                  <input type="number" id="prop-cable-bow" min="-0.6" max="1.5" step="0.02" placeholder="Auto"
+                         value="${typeof details.bowOut === 'number' && !isNaN(details.bowOut) ? details.bowOut : ''}"
+                         style="width: 58px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 11px; padding: 2px 5px; text-align: right; font-family: var(--font-mono);">
+                </div>
+                <input type="range" id="prop-cable-bow-slider" min="-0.6" max="1.5" step="0.02"
+                       value="${typeof details.bowOut === 'number' && !isNaN(details.bowOut) ? details.bowOut : 0.22}"
+                       style="width: 100%; accent-color: var(--accent-blue); cursor: pointer;">
+              </div>
+
+              <!-- Side Offset -->
+              <div style="display: flex; flex-direction: column; gap: 2px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <label style="font-size: 10.5px; color: var(--text-muted);">Lengkungan Samping (Kiri/Kanan)</label>
+                  <input type="number" id="prop-cable-side" min="-1.5" max="1.5" step="0.02"
+                         value="${typeof details.sideOffset === 'number' && !isNaN(details.sideOffset) ? details.sideOffset : 0}"
+                         style="width: 58px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 11px; padding: 2px 5px; text-align: right; font-family: var(--font-mono);">
+                </div>
+                <input type="range" id="prop-cable-side-slider" min="-1.5" max="1.5" step="0.02"
+                       value="${typeof details.sideOffset === 'number' && !isNaN(details.sideOffset) ? details.sideOffset : 0}"
+                       style="width: 100%; accent-color: var(--accent-blue); cursor: pointer;">
+              </div>
+
+              <!-- Sag / Slack -->
+              <div style="display: flex; flex-direction: column; gap: 2px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <label style="font-size: 10.5px; color: var(--text-muted);">Kelendutan Bawah (Sag/Slack)</label>
+                  <input type="number" id="prop-cable-sag" min="-0.8" max="1.2" step="0.02" placeholder="Auto"
+                         value="${typeof details.sagDrop === 'number' && !isNaN(details.sagDrop) ? details.sagDrop : ''}"
+                         style="width: 58px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 11px; padding: 2px 5px; text-align: right; font-family: var(--font-mono);">
+                </div>
+                <input type="range" id="prop-cable-sag-slider" min="-0.8" max="1.2" step="0.02"
+                       value="${typeof details.sagDrop === 'number' && !isNaN(details.sagDrop) ? details.sagDrop : 0.1}"
+                       style="width: 100%; accent-color: var(--accent-blue); cursor: pointer;">
+              </div>
             </div>
 
             <!-- Elevasi Kabel 3D (Level Sumbu Z) -->
@@ -383,7 +439,7 @@ export class ConnectionPanel {
               <div style="grid-column: span 2; display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">
                 <div style="display: flex; align-items: center; justify-content: space-between; gap: 4px;">
                   <span style="font-size: 11px; font-weight: 600; color: var(--text-primary);">
-                    📏 Segmen & Level Z Titik Belok (${(cable.route || []).length} titik)
+                    Segmen & Level Z Titik Belok (${(cable.route || []).length} titik)
                   </span>
                   <div style="display: flex; gap: 4px;">
                     <button type="button" id="btn-add-mid-waypoint" class="btn btn-secondary btn-sm" style="font-size: 10px; height: 22px; padding: 2px 6px;" title="Tambah titik belok di tengah jalur">+ Titik</button>
@@ -504,6 +560,94 @@ export class ConnectionPanel {
       e.target.value = tensionVal;
       const nextDetails = { ...(this.currentCable.details || {}), curveTension: tensionVal };
       this.cableManager.updateConnection(cableId, { details: nextDetails });
+    });
+
+    // Live 3D Patch Cord Curve Shaping Controls (Bow Out, Side Offset, Sag Drop & Presets)
+    const bowInput = document.getElementById('prop-cable-bow');
+    const bowSlider = document.getElementById('prop-cable-bow-slider');
+    const sideInput = document.getElementById('prop-cable-side');
+    const sideSlider = document.getElementById('prop-cable-side-slider');
+    const sagInput = document.getElementById('prop-cable-sag');
+    const sagSlider = document.getElementById('prop-cable-sag-slider');
+
+    const applyCurveShapePatch = (patch) => {
+      const curCab = this.cableManager.getConnectionById(cableId) || this.currentCable;
+      const nextDetails = { ...(curCab?.details || {}), ...patch };
+      if (patch.bowOut !== undefined) {
+        if (bowInput && document.activeElement !== bowInput) {
+          bowInput.value = patch.bowOut === null ? '' : patch.bowOut;
+        }
+        if (bowSlider && document.activeElement !== bowSlider) {
+          bowSlider.value = patch.bowOut === null ? 0.22 : patch.bowOut;
+        }
+      }
+      if (patch.sideOffset !== undefined) {
+        if (sideInput && document.activeElement !== sideInput) sideInput.value = patch.sideOffset;
+        if (sideSlider && document.activeElement !== sideSlider) sideSlider.value = patch.sideOffset;
+      }
+      if (patch.sagDrop !== undefined) {
+        if (sagInput && document.activeElement !== sagInput) {
+          sagInput.value = patch.sagDrop === null ? '' : patch.sagDrop;
+        }
+        if (sagSlider && document.activeElement !== sagSlider) {
+          sagSlider.value = patch.sagDrop === null ? 0.1 : patch.sagDrop;
+        }
+      }
+      const updated = this.cableManager.updateConnection(cableId, { details: nextDetails });
+      if (updated) this.currentCable = updated;
+    };
+
+    const clampRange = (val, min, max, fallback = 0) => {
+      const n = parseFloat(val);
+      if (isNaN(n)) return fallback;
+      return Number(Math.max(min, Math.min(max, n)).toFixed(2));
+    };
+
+    bowSlider?.addEventListener('input', (e) => {
+      const val = clampRange(e.target.value, -0.6, 1.5, 0.22);
+      if (bowInput) bowInput.value = val;
+      applyCurveShapePatch({ bowOut: val });
+    });
+    bowInput?.addEventListener('change', (e) => {
+      const raw = e.target.value.trim();
+      const val = raw === '' ? null : clampRange(raw, -0.6, 1.5, 0.22);
+      applyCurveShapePatch({ bowOut: val });
+    });
+
+    sideSlider?.addEventListener('input', (e) => {
+      const val = clampRange(e.target.value, -1.5, 1.5, 0);
+      if (sideInput) sideInput.value = val;
+      applyCurveShapePatch({ sideOffset: val });
+    });
+    sideInput?.addEventListener('change', (e) => {
+      const val = clampRange(e.target.value, -1.5, 1.5, 0);
+      e.target.value = val;
+      applyCurveShapePatch({ sideOffset: val });
+    });
+
+    sagSlider?.addEventListener('input', (e) => {
+      const val = clampRange(e.target.value, -0.8, 1.2, 0.1);
+      if (sagInput) sagInput.value = val;
+      applyCurveShapePatch({ sagDrop: val });
+    });
+    sagInput?.addEventListener('change', (e) => {
+      const raw = e.target.value.trim();
+      const val = raw === '' ? null : clampRange(raw, -0.8, 1.2, 0.1);
+      applyCurveShapePatch({ sagDrop: val });
+    });
+
+    document.querySelectorAll('.btn-cable-curve-preset').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const bowAttr = btn.getAttribute('data-bow');
+        const sideAttr = btn.getAttribute('data-side');
+        const sagAttr = btn.getAttribute('data-sag');
+        applyCurveShapePatch({
+          bowOut: bowAttr === 'auto' ? null : clampRange(bowAttr, -0.6, 1.5, 0.22),
+          sideOffset: clampRange(sideAttr, -1.5, 1.5, 0),
+          sagDrop: sagAttr === 'auto' ? null : clampRange(sagAttr, -0.8, 1.2, 0.1)
+        });
+        this.renderCableForm(this.cableManager.getConnectionById(cableId));
+      });
     });
 
     // Live 3D Cable Z-Level elevation controls
@@ -673,7 +817,7 @@ export class ConnectionPanel {
         previewDot.style.boxShadow = `0 0 6px ${hexVal}88`;
       }
       if (colorBadge) {
-        colorBadge.innerText = '🎨 Custom';
+        colorBadge.innerText = 'Custom';
         colorBadge.style.background = 'rgba(245, 158, 11, 0.15)';
         colorBadge.style.color = '#b45309';
         colorBadge.style.borderColor = 'rgba(245, 158, 11, 0.3)';
@@ -825,6 +969,20 @@ export class ConnectionPanel {
       if (tensionInput) {
         details.curveTension = Math.max(0, Math.min(0.8, parseFloat(tensionInput.value) || 0.38));
       }
+      const bowInput = document.getElementById('prop-cable-bow');
+      if (bowInput) {
+        const rawBow = bowInput.value.trim();
+        details.bowOut = rawBow === '' ? null : Number(Math.max(-0.6, Math.min(1.5, parseFloat(rawBow) || 0)).toFixed(2));
+      }
+      const sideInput = document.getElementById('prop-cable-side');
+      if (sideInput) {
+        details.sideOffset = Number(Math.max(-1.5, Math.min(1.5, parseFloat(sideInput.value) || 0)).toFixed(2));
+      }
+      const sagInput = document.getElementById('prop-cable-sag');
+      if (sagInput) {
+        const rawSag = sagInput.value.trim();
+        details.sagDrop = rawSag === '' ? null : Number(Math.max(-0.8, Math.min(1.2, parseFloat(rawSag) || 0)).toFixed(2));
+      }
 
       // Collect technical media properties
       if (mediaType === 'fiber') {
@@ -896,6 +1054,25 @@ export class ConnectionPanel {
   bindEvents() {
     eventBus.on('connection:selected', (cable) => {
       this.renderCableForm(cable);
+    });
+
+    eventBus.on('connection:updated', (cable) => {
+      if (!cable || this.currentCable?.id !== cable.id) return;
+      this.currentCable = cable;
+      const d = cable.details || {};
+      const syncPair = (numId, sldId, rawVal, sliderFallback) => {
+        const numEl = document.getElementById(numId);
+        const sldEl = document.getElementById(sldId);
+        if (numEl && document.activeElement !== numEl) {
+          numEl.value = (typeof rawVal === 'number' && !isNaN(rawVal)) ? rawVal : '';
+        }
+        if (sldEl && document.activeElement !== sldEl) {
+          sldEl.value = (typeof rawVal === 'number' && !isNaN(rawVal)) ? rawVal : sliderFallback;
+        }
+      };
+      syncPair('prop-cable-bow', 'prop-cable-bow-slider', d.bowOut, 0.22);
+      syncPair('prop-cable-side', 'prop-cable-side-slider', typeof d.sideOffset === 'number' ? d.sideOffset : 0, 0);
+      syncPair('prop-cable-sag', 'prop-cable-sag-slider', d.sagDrop, 0.1);
     });
 
     eventBus.on('connection:deselected', () => {

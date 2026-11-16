@@ -7566,6 +7566,9 @@ ${device.network.ip}`;
           pathStyle: params.details?.pathStyle || "curve",
           // 'curve' (Bezier Pen Tool) | 'straight' (Corner) | 'orthogonal' (90° Tray)
           curveTension: typeof params.details?.curveTension === "number" ? params.details.curveTension : 0.38,
+          bowOut: typeof params.details?.bowOut === "number" && !isNaN(params.details.bowOut) ? params.details.bowOut : null,
+          sideOffset: typeof params.details?.sideOffset === "number" && !isNaN(params.details.sideOffset) ? params.details.sideOffset : 0,
+          sagDrop: typeof params.details?.sagDrop === "number" && !isNaN(params.details.sagDrop) ? params.details.sagDrop : null,
           jacketType: params.details?.jacketType || "indoor-pvc",
           // Accurate physical measurement fields (real-world network installation)
           horizontalLength: typeof params.details?.horizontalLength === "number" ? params.details.horizontalLength : typeof params.length === "number" ? params.length : 0,
@@ -9350,15 +9353,71 @@ ${device.network.ip}`;
             <div class="form-group">
               <label>Gaya Jalur (Pen Tool)</label>
               <select id="prop-cable-path-style">
-                <option value="curve" ${(details.pathStyle || "curve") === "curve" ? "selected" : ""}>\u3030\uFE0F Bezier Curve (Lengkung)</option>
-                <option value="straight" ${details.pathStyle === "straight" ? "selected" : ""}>\u{1F4D0} Lurus (Sudut Tajam)</option>
-                <option value="orthogonal" ${details.pathStyle === "orthogonal" ? "selected" : ""}>\u{1FA9C} Orthogonal 90\xB0 (Tray)</option>
+                <option value="curve" ${(details.pathStyle || "curve") === "curve" ? "selected" : ""}>Bezier Curve (Lengkung)</option>
+                <option value="straight" ${details.pathStyle === "straight" ? "selected" : ""}>Lurus (Sudut Tajam)</option>
+                <option value="orthogonal" ${details.pathStyle === "orthogonal" ? "selected" : ""}>Orthogonal 90\xB0 (Tray)</option>
               </select>
             </div>
             <div class="form-group">
               <label>Kelengkungan Bezier</label>
               <input type="number" id="prop-cable-curve-tension" min="0" max="0.8" step="0.05"
                      value="${typeof details.curveTension === "number" ? details.curveTension : 0.38}">
+            </div>
+
+            <!-- Lengkungan & Bentuk Kabel 3D (Real Patch Cord) -->
+            <div style="grid-column: span 2; display: flex; flex-direction: column; gap: 7px; padding: 8px 10px; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 6px;">
+              <div style="display: flex; flex-direction: column; gap: 1px;">
+                <label style="font-size: 11px; color: var(--text-primary); font-weight: 700;">Lengkungan &amp; Bentuk Kabel 3D (Real Patch Cord)</label>
+                <span style="font-size: 10px; color: var(--text-muted);">Atur arah lekukan patch cord atau tarik langsung titik biru/kuning di 3D.</span>
+              </div>
+
+              <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;">
+                <button type="button" class="btn btn-secondary btn-sm btn-cable-curve-preset" data-bow="auto" data-side="0" data-sag="auto" style="font-size: 10px; height: 22px; padding: 1px 5px; ${(details.bowOut === null || details.bowOut === void 0) && !details.sideOffset && (details.sagDrop === null || details.sagDrop === void 0) ? "border-color: var(--accent-blue); color: var(--accent-blue); font-weight: 700;" : ""}">Auto Natural</button>
+                <button type="button" class="btn btn-secondary btn-sm btn-cable-curve-preset" data-bow="0.32" data-side="0" data-sag="0.06" style="font-size: 10px; height: 22px; padding: 1px 5px;">Loop Depan</button>
+                <button type="button" class="btn btn-secondary btn-sm btn-cable-curve-preset" data-bow="0.28" data-side="0" data-sag="0.34" style="font-size: 10px; height: 22px; padding: 1px 5px;">Loop Gantung Bawah</button>
+                <button type="button" class="btn btn-secondary btn-sm btn-cable-curve-preset" data-bow="0.24" data-side="-0.36" data-sag="0.16" style="font-size: 10px; height: 22px; padding: 1px 5px;">Sapuan Kiri Rak</button>
+                <button type="button" class="btn btn-secondary btn-sm btn-cable-curve-preset" data-bow="0.24" data-side="0.36" data-sag="0.16" style="font-size: 10px; height: 22px; padding: 1px 5px;">Sapuan Kanan Rak</button>
+                <button type="button" class="btn btn-secondary btn-sm btn-cable-curve-preset" data-bow="0.06" data-side="0" data-sag="0.02" style="font-size: 10px; height: 22px; padding: 1px 5px;">Rapat / Tegang</button>
+              </div>
+
+              <!-- Bow Out -->
+              <div style="display: flex; flex-direction: column; gap: 2px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <label style="font-size: 10.5px; color: var(--text-muted);">Lengkungan Depan (Bow Out)</label>
+                  <input type="number" id="prop-cable-bow" min="-0.6" max="1.5" step="0.02" placeholder="Auto"
+                         value="${typeof details.bowOut === "number" && !isNaN(details.bowOut) ? details.bowOut : ""}"
+                         style="width: 58px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 11px; padding: 2px 5px; text-align: right; font-family: var(--font-mono);">
+                </div>
+                <input type="range" id="prop-cable-bow-slider" min="-0.6" max="1.5" step="0.02"
+                       value="${typeof details.bowOut === "number" && !isNaN(details.bowOut) ? details.bowOut : 0.22}"
+                       style="width: 100%; accent-color: var(--accent-blue); cursor: pointer;">
+              </div>
+
+              <!-- Side Offset -->
+              <div style="display: flex; flex-direction: column; gap: 2px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <label style="font-size: 10.5px; color: var(--text-muted);">Lengkungan Samping (Kiri/Kanan)</label>
+                  <input type="number" id="prop-cable-side" min="-1.5" max="1.5" step="0.02"
+                         value="${typeof details.sideOffset === "number" && !isNaN(details.sideOffset) ? details.sideOffset : 0}"
+                         style="width: 58px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 11px; padding: 2px 5px; text-align: right; font-family: var(--font-mono);">
+                </div>
+                <input type="range" id="prop-cable-side-slider" min="-1.5" max="1.5" step="0.02"
+                       value="${typeof details.sideOffset === "number" && !isNaN(details.sideOffset) ? details.sideOffset : 0}"
+                       style="width: 100%; accent-color: var(--accent-blue); cursor: pointer;">
+              </div>
+
+              <!-- Sag / Slack -->
+              <div style="display: flex; flex-direction: column; gap: 2px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <label style="font-size: 10.5px; color: var(--text-muted);">Kelendutan Bawah (Sag/Slack)</label>
+                  <input type="number" id="prop-cable-sag" min="-0.8" max="1.2" step="0.02" placeholder="Auto"
+                         value="${typeof details.sagDrop === "number" && !isNaN(details.sagDrop) ? details.sagDrop : ""}"
+                         style="width: 58px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 11px; padding: 2px 5px; text-align: right; font-family: var(--font-mono);">
+                </div>
+                <input type="range" id="prop-cable-sag-slider" min="-0.8" max="1.2" step="0.02"
+                       value="${typeof details.sagDrop === "number" && !isNaN(details.sagDrop) ? details.sagDrop : 0.1}"
+                       style="width: 100%; accent-color: var(--accent-blue); cursor: pointer;">
+              </div>
             </div>
 
             <!-- Elevasi Kabel 3D (Level Sumbu Z) -->
@@ -9392,7 +9451,7 @@ ${device.network.ip}`;
               <div style="grid-column: span 2; display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">
                 <div style="display: flex; align-items: center; justify-content: space-between; gap: 4px;">
                   <span style="font-size: 11px; font-weight: 600; color: var(--text-primary);">
-                    \u{1F4CF} Segmen & Level Z Titik Belok (${(cable.route || []).length} titik)
+                    Segmen & Level Z Titik Belok (${(cable.route || []).length} titik)
                   </span>
                   <div style="display: flex; gap: 4px;">
                     <button type="button" id="btn-add-mid-waypoint" class="btn btn-secondary btn-sm" style="font-size: 10px; height: 22px; padding: 2px 6px;" title="Tambah titik belok di tengah jalur">+ Titik</button>
@@ -9500,6 +9559,86 @@ ${device.network.ip}`;
         e.target.value = tensionVal;
         const nextDetails = { ...this.currentCable.details || {}, curveTension: tensionVal };
         this.cableManager.updateConnection(cableId, { details: nextDetails });
+      });
+      const bowInput = document.getElementById("prop-cable-bow");
+      const bowSlider = document.getElementById("prop-cable-bow-slider");
+      const sideInput = document.getElementById("prop-cable-side");
+      const sideSlider = document.getElementById("prop-cable-side-slider");
+      const sagInput = document.getElementById("prop-cable-sag");
+      const sagSlider = document.getElementById("prop-cable-sag-slider");
+      const applyCurveShapePatch = (patch) => {
+        const curCab = this.cableManager.getConnectionById(cableId) || this.currentCable;
+        const nextDetails = { ...curCab?.details || {}, ...patch };
+        if (patch.bowOut !== void 0) {
+          if (bowInput && document.activeElement !== bowInput) {
+            bowInput.value = patch.bowOut === null ? "" : patch.bowOut;
+          }
+          if (bowSlider && document.activeElement !== bowSlider) {
+            bowSlider.value = patch.bowOut === null ? 0.22 : patch.bowOut;
+          }
+        }
+        if (patch.sideOffset !== void 0) {
+          if (sideInput && document.activeElement !== sideInput) sideInput.value = patch.sideOffset;
+          if (sideSlider && document.activeElement !== sideSlider) sideSlider.value = patch.sideOffset;
+        }
+        if (patch.sagDrop !== void 0) {
+          if (sagInput && document.activeElement !== sagInput) {
+            sagInput.value = patch.sagDrop === null ? "" : patch.sagDrop;
+          }
+          if (sagSlider && document.activeElement !== sagSlider) {
+            sagSlider.value = patch.sagDrop === null ? 0.1 : patch.sagDrop;
+          }
+        }
+        const updated = this.cableManager.updateConnection(cableId, { details: nextDetails });
+        if (updated) this.currentCable = updated;
+      };
+      const clampRange = (val, min, max, fallback = 0) => {
+        const n = parseFloat(val);
+        if (isNaN(n)) return fallback;
+        return Number(Math.max(min, Math.min(max, n)).toFixed(2));
+      };
+      bowSlider?.addEventListener("input", (e) => {
+        const val = clampRange(e.target.value, -0.6, 1.5, 0.22);
+        if (bowInput) bowInput.value = val;
+        applyCurveShapePatch({ bowOut: val });
+      });
+      bowInput?.addEventListener("change", (e) => {
+        const raw = e.target.value.trim();
+        const val = raw === "" ? null : clampRange(raw, -0.6, 1.5, 0.22);
+        applyCurveShapePatch({ bowOut: val });
+      });
+      sideSlider?.addEventListener("input", (e) => {
+        const val = clampRange(e.target.value, -1.5, 1.5, 0);
+        if (sideInput) sideInput.value = val;
+        applyCurveShapePatch({ sideOffset: val });
+      });
+      sideInput?.addEventListener("change", (e) => {
+        const val = clampRange(e.target.value, -1.5, 1.5, 0);
+        e.target.value = val;
+        applyCurveShapePatch({ sideOffset: val });
+      });
+      sagSlider?.addEventListener("input", (e) => {
+        const val = clampRange(e.target.value, -0.8, 1.2, 0.1);
+        if (sagInput) sagInput.value = val;
+        applyCurveShapePatch({ sagDrop: val });
+      });
+      sagInput?.addEventListener("change", (e) => {
+        const raw = e.target.value.trim();
+        const val = raw === "" ? null : clampRange(raw, -0.8, 1.2, 0.1);
+        applyCurveShapePatch({ sagDrop: val });
+      });
+      document.querySelectorAll(".btn-cable-curve-preset").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const bowAttr = btn.getAttribute("data-bow");
+          const sideAttr = btn.getAttribute("data-side");
+          const sagAttr = btn.getAttribute("data-sag");
+          applyCurveShapePatch({
+            bowOut: bowAttr === "auto" ? null : clampRange(bowAttr, -0.6, 1.5, 0.22),
+            sideOffset: clampRange(sideAttr, -1.5, 1.5, 0),
+            sagDrop: sagAttr === "auto" ? null : clampRange(sagAttr, -0.8, 1.2, 0.1)
+          });
+          this.renderCableForm(this.cableManager.getConnectionById(cableId));
+        });
       });
       const applyCableElevZ = (val) => {
         const nextZ = val === null || val === "" || isNaN(Number(val)) ? null : Number(Math.max(0.02, Math.min(50, Number(val))).toFixed(2));
@@ -9634,7 +9773,7 @@ ${device.network.ip}`;
           previewDot.style.boxShadow = `0 0 6px ${hexVal}88`;
         }
         if (colorBadge) {
-          colorBadge.innerText = "\u{1F3A8} Custom";
+          colorBadge.innerText = "Custom";
           colorBadge.style.background = "rgba(245, 158, 11, 0.15)";
           colorBadge.style.color = "#b45309";
           colorBadge.style.borderColor = "rgba(245, 158, 11, 0.3)";
@@ -9758,6 +9897,20 @@ ${device.network.ip}`;
         if (tensionInput) {
           details.curveTension = Math.max(0, Math.min(0.8, parseFloat(tensionInput.value) || 0.38));
         }
+        const bowInput2 = document.getElementById("prop-cable-bow");
+        if (bowInput2) {
+          const rawBow = bowInput2.value.trim();
+          details.bowOut = rawBow === "" ? null : Number(Math.max(-0.6, Math.min(1.5, parseFloat(rawBow) || 0)).toFixed(2));
+        }
+        const sideInput2 = document.getElementById("prop-cable-side");
+        if (sideInput2) {
+          details.sideOffset = Number(Math.max(-1.5, Math.min(1.5, parseFloat(sideInput2.value) || 0)).toFixed(2));
+        }
+        const sagInput2 = document.getElementById("prop-cable-sag");
+        if (sagInput2) {
+          const rawSag = sagInput2.value.trim();
+          details.sagDrop = rawSag === "" ? null : Number(Math.max(-0.8, Math.min(1.2, parseFloat(rawSag) || 0)).toFixed(2));
+        }
         if (mediaType === "fiber") {
           const coreCountEl = document.getElementById("detail-fiber-cores");
           const tubeEl = document.getElementById("detail-fiber-tube");
@@ -9820,6 +9973,24 @@ ${device.network.ip}`;
     bindEvents() {
       eventBus.on("connection:selected", (cable) => {
         this.renderCableForm(cable);
+      });
+      eventBus.on("connection:updated", (cable) => {
+        if (!cable || this.currentCable?.id !== cable.id) return;
+        this.currentCable = cable;
+        const d = cable.details || {};
+        const syncPair = (numId, sldId, rawVal, sliderFallback) => {
+          const numEl = document.getElementById(numId);
+          const sldEl = document.getElementById(sldId);
+          if (numEl && document.activeElement !== numEl) {
+            numEl.value = typeof rawVal === "number" && !isNaN(rawVal) ? rawVal : "";
+          }
+          if (sldEl && document.activeElement !== sldEl) {
+            sldEl.value = typeof rawVal === "number" && !isNaN(rawVal) ? rawVal : sliderFallback;
+          }
+        };
+        syncPair("prop-cable-bow", "prop-cable-bow-slider", d.bowOut, 0.22);
+        syncPair("prop-cable-side", "prop-cable-side-slider", typeof d.sideOffset === "number" ? d.sideOffset : 0, 0);
+        syncPair("prop-cable-sag", "prop-cable-sag-slider", d.sagDrop, 0.1);
       });
       eventBus.on("connection:deselected", () => {
         if (!this.deviceManager.selectedDeviceId) {
@@ -52823,6 +52994,7 @@ void main() {
       this.boxSelectState = null;
       this.activeDraw3dTemplate = { ...OBJECT3D_PRESETS.pole };
       this.object3dDragState = null;
+      this.cableDragState = null;
       this._marqueeEl = null;
       this._temporarilyDisabledControlsForBox = false;
       this._pendingSyncRaf = null;
@@ -52878,7 +53050,7 @@ void main() {
       dom.addEventListener("pointerdown", (e) => {
         if (!this.isActive) return;
         if (stateManager.getMode() !== "draw-cable" && e.button === 0) {
-          const shouldBlockOrbit = this.navTool === "box" || this.navTool === "draw3d" || this.navTool === "rotate" || e.ctrlKey || e.metaKey || Boolean(this.checkGizmoHitAtEvent(e));
+          const shouldBlockOrbit = this.navTool === "box" || this.navTool === "draw3d" || this.navTool === "rotate" || e.ctrlKey || e.metaKey || Boolean(this.checkCableHandleHitAtEvent(e)) || Boolean(this.checkGizmoHitAtEvent(e));
           if (shouldBlockOrbit && this.controls && this.controls.enabled) {
             this.controls.enabled = false;
             this._temporarilyDisabledControlsForBox = true;
@@ -52891,6 +53063,11 @@ void main() {
         this.pointerDownScreen = { x: e.clientX, y: e.clientY };
         this.container.classList.add("is-dragging");
         if (stateManager.getMode() !== "draw-cable" && e.button === 0) {
+          const cableHandleHit = this.checkCableHandleHitAtEvent(e);
+          if (cableHandleHit) {
+            this.startCableHandleDrag(e, dom, cableHandleHit);
+            return;
+          }
           const gizmoHit = this.checkGizmoHitAtEvent(e);
           if (gizmoHit) {
             this.startObject3dGizmoDrag(e, dom, gizmoHit);
@@ -52915,6 +53092,10 @@ void main() {
       });
       dom.addEventListener("pointermove", (e) => {
         if (!this.isActive) return;
+        if (this.cableDragState) {
+          this.updateCableHandleDrag(e);
+          return;
+        }
         if (this.object3dDragState) {
           this.updateObject3dDrag(e);
           return;
@@ -52951,6 +53132,9 @@ void main() {
         if (this._temporarilyDisabledControlsForBox) {
           this._temporarilyDisabledControlsForBox = false;
           if (this.controls) this.controls.enabled = true;
+        }
+        if (this.cableDragState) {
+          this.finishCableHandleDrag(e, dom);
         }
         if (this.object3dDragState) {
           this.finishObject3dDrag(e, dom);
@@ -53533,11 +53717,37 @@ void main() {
         const isWireless = cable.type === "wireless" || cable.cableCategory === "wireless-ptp";
         const srcDir = hasSrcPort && this.portWorldDirMap.get(srcPortKey) || new Vector3(0, 0, 1).applyEuler(this.getDeviceEuler(srcDev)).normalize();
         const dstDir = hasDstPort && this.portWorldDirMap.get(dstPortKey) || new Vector3(0, 0, 1).applyEuler(this.getDeviceEuler(dstDev)).normalize();
+        const outDir = srcDir.clone().add(dstDir);
+        if (outDir.lengthSq() < 0.01) {
+          outDir.set(-(dstPos.z - srcPos.z), 0, dstPos.x - srcPos.x);
+        }
+        if (outDir.lengthSq() < 0.01) {
+          outDir.set(0, 0, 1);
+        }
+        outDir.normalize();
+        const sideDir = new Vector3().crossVectors(new Vector3(0, 1, 0), outDir);
+        if (sideDir.lengthSq() < 0.01) {
+          sideDir.set(1, 0, 0);
+        }
+        sideDir.normalize();
+        const vertDist = Math.abs(srcPos.y - dstPos.y);
+        const portDist = srcPos.distanceTo(dstPos);
+        const fanStep = (cableIdx % 5 - 2) * 8e-3 * avgPortScale;
+        const autoBowUnits = hasSrcPort || hasDstPort ? Math.max(0.09, Math.min(0.36, vertDist / Math.max(0.3, avgPortScale) * 0.42 + portDist / Math.max(0.3, avgPortScale) * 0.14)) : 0.04;
+        const bowUnits = typeof cable.details?.bowOut === "number" && !isNaN(cable.details.bowOut) ? cable.details.bowOut : autoBowUnits;
+        const bowDist = bowUnits * avgPortScale + (cable.details?.bowOut === null || cable.details?.bowOut === void 0 ? fanStep : 0);
+        const autoSagUnits = vertDist < 0.18 * avgPortScale ? 0.09 + Math.min(0.08, portDist / Math.max(0.3, avgPortScale) * 0.12) : Math.min(0.14, portDist / Math.max(0.3, avgPortScale) * 0.12);
+        const sagUnits = typeof cable.details?.sagDrop === "number" && !isNaN(cable.details.sagDrop) ? cable.details.sagDrop : autoSagUnits;
+        const sagDist = sagUnits * avgPortScale;
+        const sideUnits = typeof cable.details?.sideOffset === "number" && !isNaN(cable.details.sideOffset) ? cable.details.sideOffset : 0;
+        const sideDist = sideUnits * avgPortScale;
+        const bootLenSrc = 0.028 * srcScale;
+        const bootLenDst = 0.028 * dstScale;
         const pts = [];
         if (hasSrcPort && !isWireless) {
           pts.push(srcPos.clone().addScaledVector(srcDir, -8e-3 * srcScale));
           pts.push(srcPos.clone());
-          pts.push(srcPos.clone().addScaledVector(srcDir, 0.022 * srcScale));
+          pts.push(srcPos.clone().addScaledVector(srcDir, bootLenSrc));
         } else {
           pts.push(srcPos.clone());
         }
@@ -53569,15 +53779,21 @@ void main() {
               pts.push(new Vector3(dstPos.x, prevPt.y, prevPt.z));
             }
             if (Math.abs(dstPos.y - prevPt.y) > 0.05) {
-              const dstExitRef = hasDstPort ? dstPos.clone().addScaledVector(dstDir, 0.022 * dstScale) : dstPos;
+              const dstExitRef = hasDstPort ? dstPos.clone().addScaledVector(dstDir, bootLenDst) : dstPos;
               pts.push(new Vector3(dstExitRef.x, prevPt.y, dstExitRef.z));
             }
           } else {
+            if (pathStyle === "curve" && hasSrcPort && !isWireless) {
+              pts.push(srcPos.clone().addScaledVector(srcDir, Math.max(0.045 * srcScale, Math.abs(bowDist) * 0.35)));
+            }
             rawWps.forEach((wpVec) => pts.push(wpVec));
+            if (pathStyle === "curve" && hasDstPort && !isWireless) {
+              pts.push(dstPos.clone().addScaledVector(dstDir, Math.max(0.045 * dstScale, Math.abs(bowDist) * 0.35)));
+            }
           }
         } else if (hasCustomElev && !isWireless) {
           const srcExitPt = pts[pts.length - 1];
-          const dstExitPt = hasDstPort ? dstPos.clone().addScaledVector(dstDir, 0.022 * dstScale) : dstPos;
+          const dstExitPt = hasDstPort ? dstPos.clone().addScaledVector(dstDir, bootLenDst) : dstPos;
           const riserA = srcExitPt.clone().lerp(dstExitPt, 0.06);
           riserA.y = trayY;
           const riserB = srcExitPt.clone().lerp(dstExitPt, 0.94);
@@ -53592,16 +53808,19 @@ void main() {
           if (Math.abs(dstPos.x - prevPt.x) > 0.1 && Math.abs(dstPos.z - prevPt.z) > 0.1) {
             pts.push(new Vector3(dstPos.x, trayY, prevPt.z));
           }
-        } else if (!isWireless && srcPos.distanceTo(dstPos) > 0.6) {
-          const srcExitPt = pts[pts.length - 1];
-          const dstExitPt = hasDstPort ? dstPos.clone().addScaledVector(dstDir, 0.022 * dstScale) : dstPos;
-          const mid = srcExitPt.clone().add(dstExitPt).multiplyScalar(0.5);
-          const sag = Math.min(0.08 * avgPortScale, srcPos.distanceTo(dstPos) * 0.025);
-          mid.y = Math.max(0.03, Math.min(srcPos.y, dstPos.y) - sag * 0.25);
-          pts.push(mid);
+        } else if (!isWireless && pathStyle === "curve") {
+          const srcBootTip = hasSrcPort ? srcPos.clone().addScaledVector(srcDir, bootLenSrc) : srcPos.clone();
+          const dstBootTip = hasDstPort ? dstPos.clone().addScaledVector(dstDir, bootLenDst) : dstPos.clone();
+          const srcShoulder = srcBootTip.clone().lerp(dstBootTip, 0.22).addScaledVector(srcDir, bowDist * 0.72).addScaledVector(sideDir, sideDist * 0.55);
+          srcShoulder.y = Math.max(0.02, srcShoulder.y - sagDist * 0.38);
+          const midApex = srcBootTip.clone().lerp(dstBootTip, 0.5).addScaledVector(outDir, bowDist).addScaledVector(sideDir, sideDist);
+          midApex.y = Math.max(0.02, midApex.y - sagDist);
+          const dstShoulder = srcBootTip.clone().lerp(dstBootTip, 0.78).addScaledVector(dstDir, bowDist * 0.72).addScaledVector(sideDir, sideDist * 0.55);
+          dstShoulder.y = Math.max(0.02, dstShoulder.y - sagDist * 0.38);
+          pts.push(srcShoulder, midApex, dstShoulder);
         }
         if (hasDstPort && !isWireless) {
-          pts.push(dstPos.clone().addScaledVector(dstDir, 0.022 * dstScale));
+          pts.push(dstPos.clone().addScaledVector(dstDir, bootLenDst));
           pts.push(dstPos.clone());
           pts.push(dstPos.clone().addScaledVector(dstDir, -8e-3 * dstScale));
         } else {
@@ -53633,12 +53852,13 @@ void main() {
           5e-3,
           portMatchedLocalRadius * avgPortScale * this.cableDiameterMultiplier * perCableScale * selectBoost
         );
-        const tubeGeo = new TubeGeometry(curve, Math.max(24, cleanPts.length * 12), radius, 8, false);
+        const tubeGeo = new TubeGeometry(curve, Math.max(40, cleanPts.length * 16), radius, 12, false);
         const tubeMat = new MeshStandardMaterial({
-          color: isSelected ? "#facc15" : color,
-          emissive: isSelected ? "#eab308" : color,
-          emissiveIntensity: isSelected ? 0.7 : isWireless ? 0.55 : 0.32,
-          roughness: 0.3,
+          color,
+          emissive: color,
+          emissiveIntensity: isSelected ? 0.48 : isWireless ? 0.55 : 0.16,
+          roughness: 0.4,
+          metalness: 0.08,
           transparent: isWireless,
           opacity: isWireless ? 0.72 : 1
         });
@@ -53647,14 +53867,80 @@ void main() {
         mesh.castShadow = !isWireless;
         this.cablesGroup.add(mesh);
         this.cableMeshMap.set(cable.id, mesh);
+        if (!isWireless) {
+          const upAxis = new Vector3(0, 1, 0);
+          const bootMat = new MeshStandardMaterial({
+            color,
+            emissive: color,
+            emissiveIntensity: isSelected ? 0.42 : 0.1,
+            roughness: 0.35,
+            metalness: 0.12
+          });
+          if (hasSrcPort) {
+            const srcBootGeo = new CylinderGeometry(radius * 1.15, radius * 1.45, bootLenSrc, 10);
+            const srcBoot = new Mesh(srcBootGeo, bootMat);
+            srcBoot.position.copy(srcPos).addScaledVector(srcDir, bootLenSrc * 0.45);
+            srcBoot.quaternion.setFromUnitVectors(upAxis, srcDir.clone().normalize());
+            srcBoot.userData.cableId = cable.id;
+            this.cablesGroup.add(srcBoot);
+          }
+          if (hasDstPort) {
+            const dstBootGeo = new CylinderGeometry(radius * 1.15, radius * 1.45, bootLenDst, 10);
+            const dstBoot = new Mesh(dstBootGeo, bootMat);
+            dstBoot.position.copy(dstPos).addScaledVector(dstDir, bootLenDst * 0.45);
+            dstBoot.quaternion.setFromUnitVectors(upAxis, dstDir.clone().normalize());
+            dstBoot.userData.cableId = cable.id;
+            this.cablesGroup.add(dstBoot);
+          }
+        }
+        if (isSelected && !isWireless) {
+          const apexPt = curve.getPoint(0.5);
+          const apexGeo = new SphereGeometry(Math.max(0.055, radius * 2.6), 14, 14);
+          const apexMat = new MeshStandardMaterial({
+            color: 3718648,
+            emissive: 16777215,
+            emissiveIntensity: 0.45,
+            roughness: 0.2
+          });
+          const apexDot = new Mesh(apexGeo, apexMat);
+          apexDot.position.copy(apexPt);
+          apexDot.userData = {
+            cableId: cable.id,
+            cableHandleType: "apex",
+            linearMid: srcPos.clone().add(dstPos).multiplyScalar(0.5),
+            outDir: outDir.clone(),
+            sideDir: sideDir.clone(),
+            avgPortScale
+          };
+          this.cablesGroup.add(apexDot);
+          if (waypointMarkers.length === 0) {
+            const qGeo = new SphereGeometry(Math.max(0.038, radius * 1.8), 12, 12);
+            const qMat = new MeshBasicMaterial({ color: 16436245 });
+            [0.25, 0.75].forEach((tVal) => {
+              const qPt = curve.getPoint(tVal);
+              const qDot = new Mesh(qGeo, qMat);
+              qDot.position.copy(qPt);
+              qDot.userData = {
+                cableId: cable.id,
+                cableHandleType: "add-waypoint",
+                tVal
+              };
+              this.cablesGroup.add(qDot);
+            });
+          }
+        }
         if (isSelected && waypointMarkers.length > 0) {
           const wpGeo = new SphereGeometry(Math.max(0.06, radius * 2.1), 10, 10);
           const wpMat = new MeshBasicMaterial({ color: 16436245 });
           const stemMat = new LineBasicMaterial({ color: 16436245, transparent: true, opacity: 0.45 });
-          waypointMarkers.forEach((wpVec) => {
+          waypointMarkers.forEach((wpVec, idx) => {
             const wpDot = new Mesh(wpGeo, wpMat);
             wpDot.position.copy(wpVec);
-            wpDot.userData.cableId = cable.id;
+            wpDot.userData = {
+              cableId: cable.id,
+              cableHandleType: "waypoint",
+              waypointIdx: idx
+            };
             this.cablesGroup.add(wpDot);
             const stemGeo = new BufferGeometry().setFromPoints([
               new Vector3(wpVec.x, 0.01, wpVec.z),
@@ -54455,6 +54741,97 @@ void main() {
           }
         }
       }
+    }
+    checkCableHandleHitAtEvent(e) {
+      if (!this.isInitialized || !this.camera || !this.renderer?.domElement) return null;
+      if (!this.cableManager?.selectedCableId || this.cablesGroup.children.length === 0) return null;
+      const rect = this.renderer.domElement.getBoundingClientRect();
+      this.pointer.x = (e.clientX - rect.left) / rect.width * 2 - 1;
+      this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      this.raycaster.setFromCamera(this.pointer, this.camera);
+      const hits = this.raycaster.intersectObjects(this.cablesGroup.children, false);
+      for (const hit of hits) {
+        if (hit.object?.userData?.cableHandleType) {
+          return {
+            object: hit.object,
+            point: hit.point.clone(),
+            ...hit.object.userData
+          };
+        }
+      }
+      return null;
+    }
+    startCableHandleDrag(e, dom, handleHit) {
+      const cable = this.cableManager.getConnectionById(handleHit.cableId);
+      if (!cable) return;
+      const camDir = new Vector3();
+      this.camera.getWorldDirection(camDir);
+      const initPos = handleHit.object?.position?.clone() || handleHit.point?.clone() || new Vector3();
+      const dragPlane = new Plane().setFromNormalAndCoplanarPoint(camDir.normalize(), initPos);
+      this.cableDragState = {
+        cableId: cable.id,
+        handleType: handleHit.cableHandleType,
+        waypointIdx: typeof handleHit.waypointIdx === "number" ? handleHit.waypointIdx : -1,
+        tVal: typeof handleHit.tVal === "number" ? handleHit.tVal : 0.5,
+        linearMid: handleHit.linearMid?.clone() || initPos.clone(),
+        outDir: handleHit.outDir?.clone() || new Vector3(0, 0, 1),
+        sideDir: handleHit.sideDir?.clone() || new Vector3(1, 0, 0),
+        avgPortScale: Number(handleHit.avgPortScale) || 1,
+        dragPlane,
+        moved: false
+      };
+      dom.setPointerCapture?.(e.pointerId);
+    }
+    updateCableHandleDrag(e) {
+      const state = this.cableDragState;
+      if (!state || !this.renderer?.domElement) return;
+      const cable = this.cableManager.getConnectionById(state.cableId);
+      if (!cable) return;
+      const rect = this.renderer.domElement.getBoundingClientRect();
+      this.pointer.x = (e.clientX - rect.left) / rect.width * 2 - 1;
+      this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      this.raycaster.setFromCamera(this.pointer, this.camera);
+      const hitPt = new Vector3();
+      if (!this.raycaster.ray.intersectPlane(state.dragPlane, hitPt)) return;
+      state.moved = true;
+      if (state.handleType === "apex") {
+        if (!cable.details) cable.details = {};
+        const scale = Math.max(0.1, state.avgPortScale);
+        const rel = hitPt.clone().sub(state.linearMid);
+        cable.details.bowOut = Number(Math.max(-0.6, Math.min(1.5, rel.dot(state.outDir) / scale)).toFixed(2));
+        cable.details.sideOffset = Number(Math.max(-1.5, Math.min(1.5, rel.dot(state.sideDir) / scale)).toFixed(2));
+        cable.details.sagDrop = Number(Math.max(-0.8, Math.min(1.2, -rel.y / scale)).toFixed(2));
+        this.syncCables();
+        return;
+      }
+      const rawNorm = this.worldToNorm(hitPt.x, hitPt.z);
+      const normX = Math.max(0.01, Math.min(0.99, rawNorm.normX));
+      const normY = Math.max(0.01, Math.min(0.99, rawNorm.normY));
+      const wpZ = Math.max(0.02, Number(hitPt.y.toFixed(2)));
+      const wp = { x: normX, y: normY, z: wpZ };
+      if (!Array.isArray(cable.route)) cable.route = [];
+      if (state.handleType === "add-waypoint") {
+        const insertIdx = state.tVal < 0.5 ? 0 : cable.route.length;
+        cable.route.splice(insertIdx, 0, wp);
+        state.handleType = "waypoint";
+        state.waypointIdx = insertIdx;
+      } else if (state.handleType === "waypoint" && state.waypointIdx >= 0 && state.waypointIdx < cable.route.length) {
+        cable.route[state.waypointIdx] = wp;
+      }
+      this.syncCables();
+    }
+    finishCableHandleDrag(e, dom) {
+      const state = this.cableDragState;
+      this.cableDragState = null;
+      dom.releasePointerCapture?.(e.pointerId);
+      if (!state || !state.moved) return;
+      this._suppressNextClick = true;
+      const cable = this.cableManager.getConnectionById(state.cableId);
+      if (!cable) return;
+      this.cableManager.updateConnection(cable.id, {
+        details: { ...cable.details || {} },
+        route: Array.isArray(cable.route) ? cable.route.map((p) => ({ ...p })) : []
+      });
     }
     startDeviceDragMove(e, dom) {
       const rect = dom.getBoundingClientRect();

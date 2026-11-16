@@ -33,6 +33,9 @@ export const CableSchema = {
         elevationZ: (typeof params.details?.elevationZ === 'number' && !isNaN(params.details.elevationZ)) ? params.details.elevationZ : null,
         pathStyle: params.details?.pathStyle || 'curve', // 'curve' (Bezier Pen Tool) | 'straight' (Corner) | 'orthogonal' (90° Tray)
         curveTension: typeof params.details?.curveTension === 'number' ? params.details.curveTension : 0.38,
+        bowOut: (typeof params.details?.bowOut === 'number' && !isNaN(params.details.bowOut)) ? params.details.bowOut : null,
+        sideOffset: (typeof params.details?.sideOffset === 'number' && !isNaN(params.details.sideOffset)) ? params.details.sideOffset : 0,
+        sagDrop: (typeof params.details?.sagDrop === 'number' && !isNaN(params.details.sagDrop)) ? params.details.sagDrop : null,
         jacketType: params.details?.jacketType || 'indoor-pvc',
 
         // Accurate physical measurement fields (real-world network installation)
