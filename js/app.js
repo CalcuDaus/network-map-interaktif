@@ -934,6 +934,16 @@ class NetMapApp {
           this.map3DEngine.inspectNearestDeviceFromAvatar();
           return;
         }
+        if (lower === 'e' && this.map3DEngine?.avatarMode && !e.ctrlKey && !e.metaKey) {
+          e.preventDefault();
+          this.map3DEngine.pickupNearestObjectFromAvatar();
+          return;
+        }
+        if (lower === 'q' && this.map3DEngine?.avatarMode && !e.ctrlKey && !e.metaKey) {
+          e.preventDefault();
+          this.map3DEngine.dropCarriedObjectsFromAvatar({ dropAll: Boolean(e.shiftKey) });
+          return;
+        }
         if (e.key === '0') {
           e.preventDefault();
           this.map3DEngine?.zoomExtents();

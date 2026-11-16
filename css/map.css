@@ -722,7 +722,7 @@
   left: 50%;
   bottom: 58px;
   transform: translateX(-50%);
-  width: min(860px, calc(100% - 32px));
+  width: min(980px, calc(100% - 32px));
   z-index: 36;
   display: flex;
   flex-wrap: wrap;
@@ -877,4 +877,44 @@
 .avatar-persp-btn.active {
   background-color: var(--accent-blue);
   color: var(--text-inverse);
+}
+
+.sim-action-btn.is-carry {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  border-color: var(--accent-blue);
+}
+
+.sim-action-btn.is-carry:hover:not(:disabled) {
+  background-color: var(--accent-blue);
+  color: var(--text-inverse);
+}
+
+.sim-action-btn.is-carry:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.sim-action-btn.is-drop {
+  background-color: var(--accent-blue);
+  color: var(--text-inverse);
+  border-color: var(--accent-blue);
+}
+
+.sim-action-btn.is-drop.hidden {
+  display: none !important;
+}
+
+.sim-inspector-badge.is-carrying {
+  background-color: var(--bg-active);
+  color: var(--text-primary);
+  border-color: var(--accent-blue);
+  font-weight: 700;
+}
+
+.sim-inspector-badge.is-pickable {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--status-warning);
+  font-weight: 600;
 }

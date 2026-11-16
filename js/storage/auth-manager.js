@@ -156,7 +156,16 @@ export class AuthManager {
     this._presenceTimer = null;
     this._presenceInFlight = false;
     this._lastPresencePushAt = 0;
+    this._lastWsPushAt = 0;
+    this._lastLocalStorageSyncAt = 0;
     this._presenceDirty = false;
+    this._presenceWs = null;
+    this._presenceWsUrl = '';
+    this._presenceSse = null;
+    this._presenceSseUrl = '';
+    this._presenceReconnectTimer = null;
+    this._presenceReconnectAttempt = 0;
+    this._lastTransitionState = { isMoving: false, isGrounded: true };
     this.localPresenceState = {
       viewMode: '2d',
       avatarMode: false,
@@ -164,12 +173,16 @@ export class AuthManager {
       x: 0,
       y: 0,
       z: 0,
+      vx: 0,
+      vy: 0,
+      vz: 0,
       normX: 0.5,
       normY: 0.5,
       yaw: 0,
       isMoving: false,
       isRunning: false,
       isGrounded: true,
+      isCarrying: false,
       walkPhase: 0,
       nearestDeviceId: null
     };
@@ -201,16 +214,13 @@ export class AuthManager {
           const msg = evt?.data;
           if (!msg) return;
           if (msg.type === 'presence-heartbeat' && msg.peer && msg.peer.clientId !== this.clientId) {
-            const targetWs = this.isAuthenticated() ? this.getActiveWorkspaceKey() : (this.isPublicPreviewActive() ? 'main' : null);
-            if (targetWs && msg.peer.workspaceKey === targetWs) {
-              this.remotePeers.set(msg.peer.clientId, { ...msg.peer, updatedAt: Date.now() });
-              this._pruneAndEmitPresence();
-            }
+            this.applySingleRemotePeer(msg.peer);
             return;
           }
           if (msg.type === 'presence-leave' && msg.clientId) {
             if (this.remotePeers.delete(msg.clientId)) {
-              this._pruneAndEmitPresence();
+              const peers = this.getRemotePeers();
+              eventBus.emit('presence:updated', { peers, deltaClientId: msg.clientId, deltaType: 'remove' });
             }
             return;
           }
@@ -933,36 +943,259 @@ export class AuthManager {
     } catch { /* ignore storage errors */ }
   }
 
-  updateLocalPresence(partialState = {}) {
+  isPresenceRealtimeConnected() {
+    const wsOpen = typeof WebSocket !== 'undefined' && this._presenceWs?.readyState === 1;
+    const sseOpen = typeof EventSource !== 'undefined' && this._presenceSse?.readyState === 1;
+    return wsOpen || sseOpen;
+  }
+
+  applySingleRemotePeer(peer) {
+    if (!peer || !peer.clientId || peer.clientId === this.clientId) return [];
+    const targetWs = this.isAuthenticated()
+      ? this.getActiveWorkspaceKey()
+      : (this.isPublicPreviewActive() ? 'main' : null);
+    if (!targetWs || peer.workspaceKey !== targetWs) return this.getRemotePeers();
+
+    const updatedPeer = { ...peer, updatedAt: Date.now() };
+    this.remotePeers.set(peer.clientId, updatedPeer);
+    const peers = this.getRemotePeers();
+    eventBus.emit('presence:updated', {
+      peers,
+      deltaPeer: updatedPeer,
+      deltaType: 'update'
+    });
+    return peers;
+  }
+
+  _handleRealtimePresencePayload(rawData) {
+    if (!rawData) return;
+    try {
+      const msg = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
+      if (!msg || typeof msg !== 'object') return;
+      if (msg.type === 'peers-snapshot') {
+        this.applyRemotePeerList(msg.peers || []);
+      } else if (msg.type === 'peer-update' && msg.peer) {
+        this.applySingleRemotePeer(msg.peer);
+      } else if (msg.type === 'peer-remove' && msg.clientId && msg.clientId !== this.clientId) {
+        if (this.remotePeers.delete(msg.clientId)) {
+          const peers = this.getRemotePeers();
+          eventBus.emit('presence:updated', {
+            peers,
+            deltaClientId: msg.clientId,
+            deltaType: 'remove'
+          });
+        }
+      }
+    } catch { /* ignore malformed push frames */ }
+  }
+
+  _closePresenceWs() {
+    if (this._presenceWs) {
+      try {
+        this._presenceWs.onopen = null;
+        this._presenceWs.onmessage = null;
+        this._presenceWs.onerror = null;
+        this._presenceWs.onclose = null;
+        this._presenceWs.close();
+      } catch { /* ignore */ }
+      this._presenceWs = null;
+      this._presenceWsUrl = '';
+    }
+  }
+
+  _closePresenceSse() {
+    if (this._presenceSse) {
+      try {
+        this._presenceSse.onopen = null;
+        this._presenceSse.onmessage = null;
+        this._presenceSse.onerror = null;
+        this._presenceSse.close();
+      } catch { /* ignore */ }
+      this._presenceSse = null;
+      this._presenceSseUrl = '';
+    }
+  }
+
+  _disconnectPresenceStreams() {
+    if (this._presenceReconnectTimer) {
+      clearTimeout(this._presenceReconnectTimer);
+      this._presenceReconnectTimer = null;
+    }
+    this._closePresenceWs();
+    this._closePresenceSse();
+  }
+
+  _openPresenceSse(wsKey) {
+    if (!this.apiAvailable || typeof EventSource !== 'function') return;
+    if (typeof window === 'undefined' || !window.location?.host) return;
+    const qs = new URLSearchParams({ workspace: wsKey || 'main', clientId: this.clientId });
+    if (this.authToken) qs.set('token', this.authToken);
+    const sseUrl = `/api/presence/stream?${qs.toString()}`;
+    if (this._presenceSse && this._presenceSseUrl === sseUrl && this._presenceSse.readyState !== 2) {
+      return;
+    }
+    this._closePresenceSse();
+    try {
+      const es = new EventSource(sseUrl);
+      this._presenceSse = es;
+      this._presenceSseUrl = sseUrl;
+      es.addEventListener('presence', (evt) => this._handleRealtimePresencePayload(evt.data));
+      es.onmessage = (evt) => this._handleRealtimePresencePayload(evt.data);
+      es.onerror = () => {
+        if (this._presenceSse !== es) return;
+        if (es.readyState === 2) {
+          this._closePresenceSse();
+        }
+      };
+    } catch { /* fallback to polling if EventSource unsupported */ }
+  }
+
+  _connectPresenceStream() {
+    if (!this.apiAvailable || (!this.isAuthenticated() && !this.isPublicPreviewActive())) {
+      this._disconnectPresenceStreams();
+      return;
+    }
+    if (typeof window === 'undefined' || !window.location?.host) return;
+
+    const wsKey = this.isAuthenticated() ? (this.getActiveWorkspaceKey() || 'main') : 'main';
+
+    if (typeof WebSocket !== 'function') {
+      this._openPresenceSse(wsKey);
+      return;
+    }
+
+    const wsProto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const qs = new URLSearchParams({ workspace: wsKey, clientId: this.clientId });
+    if (this.authToken) qs.set('token', this.authToken);
+    const wsUrl = `${wsProto}//${window.location.host}/ws/presence?${qs.toString()}`;
+
+    if (this._presenceWs && this._presenceWsUrl === wsUrl && (this._presenceWs.readyState === 0 || this._presenceWs.readyState === 1)) {
+      return;
+    }
+
+    this._closePresenceWs();
+    try {
+      const ws = new WebSocket(wsUrl);
+      this._presenceWs = ws;
+      this._presenceWsUrl = wsUrl;
+
+      ws.onopen = () => {
+        if (this._presenceWs !== ws) return;
+        this._presenceReconnectAttempt = 0;
+        this._closePresenceSse();
+        const ownPayload = this.isAuthenticated() ? this._buildLocalPresencePayload() : null;
+        if (ownPayload) {
+          this._lastWsPushAt = Date.now();
+          this._presenceDirty = false;
+          try {
+            ws.send(JSON.stringify({ type: 'presence', ...ownPayload }));
+          } catch { /* ignore */ }
+        }
+      };
+
+      ws.onmessage = (evt) => {
+        if (this._presenceWs !== ws) return;
+        this._handleRealtimePresencePayload(evt.data);
+      };
+
+      const scheduleReconnect = () => {
+        if (this._presenceWs !== ws) return;
+        this._presenceWs = null;
+        this._presenceWsUrl = '';
+        if (!this.apiAvailable || (!this.isAuthenticated() && !this.isPublicPreviewActive())) return;
+
+        // Open SSE stream immediately so downstream updates keep arriving at <5ms while WS backs off
+        this._openPresenceSse(wsKey);
+
+        if (this._presenceReconnectTimer) return;
+        const delay = Math.min(5000, 600 * Math.pow(1.6, this._presenceReconnectAttempt++));
+        this._presenceReconnectTimer = setTimeout(() => {
+          this._presenceReconnectTimer = null;
+          this._connectPresenceStream();
+        }, delay);
+        this._presenceReconnectTimer?.unref?.();
+      };
+
+      ws.onclose = scheduleReconnect;
+      ws.onerror = () => {
+        if (ws.readyState !== 1) scheduleReconnect();
+      };
+    } catch {
+      this._openPresenceSse(wsKey);
+    }
+  }
+
+  updateLocalPresence(partialState = {}, { immediate = false } = {}) {
     if (!partialState || typeof partialState !== 'object') return;
+    const prevMoving = this._lastTransitionState.isMoving;
+    const prevGrounded = this._lastTransitionState.isGrounded;
+
     Object.assign(this.localPresenceState, partialState);
     this._presenceDirty = true;
+
+    const nowMoving = Boolean(this.localPresenceState.isMoving);
+    const nowGrounded = this.localPresenceState.isGrounded !== false;
+    const stateTransition = (prevMoving !== nowMoving) || (prevGrounded !== nowGrounded);
+    this._lastTransitionState.isMoving = nowMoving;
+    this._lastTransitionState.isGrounded = nowGrounded;
 
     if (!this.isAuthenticated()) return;
     const payload = this._buildLocalPresencePayload();
     if (!payload) return;
 
     const now = Date.now();
-    if (now - this._lastBroadcastAt >= 60 || !this._lastBroadcastAt) {
+    const shouldForce = immediate || stateTransition;
+
+    if (shouldForce || now - (this._lastBroadcastAt || 0) >= 25) {
       this._lastBroadcastAt = now;
       this._channel?.postMessage({ type: 'presence-heartbeat', peer: payload });
-      this._syncPresenceFromLocalStorage(payload);
+      // Throttle synchronous localStorage JSON writes to avoid main-thread stutter during movement
+      if (shouldForce || now - (this._lastLocalStorageSyncAt || 0) >= 600) {
+        this._lastLocalStorageSyncAt = now;
+        this._syncPresenceFromLocalStorage(payload);
+      }
     }
 
-    if (this.apiAvailable && (now - this._lastPresencePushAt >= 200)) {
-      this.pushPresenceNow().catch(() => {});
+    if (!this.apiAvailable) return;
+
+    // Fast path: push directly over open WebSocket at ~35Hz with zero HTTP overhead
+    if (this._presenceWs && this._presenceWs.readyState === 1) {
+      if (shouldForce || now - (this._lastWsPushAt || 0) >= 28) {
+        this._lastWsPushAt = now;
+        this._presenceDirty = false;
+        try {
+          this._presenceWs.send(JSON.stringify({ type: 'presence', ...payload }));
+        } catch {
+          this.pushPresenceNow({ force: shouldForce }).catch(() => {});
+        }
+      }
+      return;
+    }
+
+    // Fallback HTTP POST when WebSocket isn't open (throttled to ~18Hz or immediate on stop/jump)
+    if (shouldForce || now - (this._lastPresencePushAt || 0) >= 55) {
+      this.pushPresenceNow({ force: shouldForce }).catch(() => {});
     }
   }
 
   async pushPresenceNow({ force = false } = {}) {
-    if (this._presenceInFlight) return this.getRemotePeers();
-
     const isAuth = this.isAuthenticated();
     const isPublic = !isAuth && this.isPublicPreviewActive();
     if (!isAuth && !isPublic) return [];
 
     const wsKey = isAuth ? (this.getActiveWorkspaceKey() || 'main') : 'main';
     const ownPayload = isAuth ? this._buildLocalPresencePayload() : null;
+
+    if (ownPayload && this._presenceWs && this._presenceWs.readyState === 1) {
+      this._lastWsPushAt = Date.now();
+      this._presenceDirty = false;
+      try {
+        this._presenceWs.send(JSON.stringify({ type: 'presence', ...ownPayload }));
+        return this.getRemotePeers();
+      } catch { /* fall through to HTTP */ }
+    }
+
+    if (this._presenceInFlight) return this.getRemotePeers();
 
     if (ownPayload) {
       this._channel?.postMessage({ type: 'presence-heartbeat', peer: ownPayload });
@@ -976,7 +1209,7 @@ export class AuthManager {
     }
 
     const now = Date.now();
-    if (!force && !this._presenceDirty && (now - this._lastPresencePushAt < 1100)) {
+    if (!force && !this._presenceDirty && (now - this._lastPresencePushAt < 450)) {
       return this.getRemotePeers();
     }
 
@@ -1019,6 +1252,11 @@ export class AuthManager {
 
   leavePresence() {
     this._channel?.postMessage({ type: 'presence-leave', clientId: this.clientId });
+    if (this._presenceWs && this._presenceWs.readyState === 1) {
+      try {
+        this._presenceWs.send(JSON.stringify({ type: 'leave', clientId: this.clientId }));
+      } catch { /* ignore */ }
+    }
     try {
       if (typeof localStorage !== 'undefined') {
         const raw = localStorage.getItem(LOCAL_PRESENCE_STORAGE_KEY);
@@ -1046,6 +1284,7 @@ export class AuthManager {
     if (!isBrowserRuntime) return;
     if (!this.isAuthenticated() && !this.isPublicPreviewActive()) return;
 
+    this._connectPresenceStream();
     this.pushPresenceNow({ force: true }).catch(() => {});
 
     const tick = () => {
@@ -1054,10 +1293,14 @@ export class AuthManager {
         return;
       }
       const isHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
+      const hasRealtime = this.isPresenceRealtimeConnected();
       const fastMode = !isHidden && (this.localPresenceState.avatarMode || this.localPresenceState.isMoving);
-      const delayMs = isHidden ? 4000 : (fastMode ? 240 : 1200);
+      // When WS or SSE push is active, timer is only a lightweight 4s reconcile heartbeat
+      const delayMs = hasRealtime
+        ? (isHidden ? 10000 : 4000)
+        : (isHidden ? 4000 : (fastMode ? 65 : 480));
       this._presenceTimer = setTimeout(async () => {
-        await this.pushPresenceNow({ force: true }).catch(() => {});
+        await this.pushPresenceNow({ force: !hasRealtime }).catch(() => {});
         if (this._presenceTimer !== null) {
           tick();
         }
@@ -1074,6 +1317,7 @@ export class AuthManager {
       clearTimeout(this._presenceTimer);
       this._presenceTimer = null;
     }
+    this._disconnectPresenceStreams();
   }
 
   async checkRemoteWorkspaceUpdate() {

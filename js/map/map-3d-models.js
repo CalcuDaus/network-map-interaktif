@@ -1301,16 +1301,24 @@ export function animateRobloxAvatarRig(avatarGroup, animState = {}, dt = 0.016) 
   const isGrounded = animState.isGrounded !== false;
   const isMoving = Boolean(animState.isMoving);
   const isRunning = Boolean(animState.isRunning);
+  const isCarrying = Boolean(animState.isCarrying);
   const phase = Number(animState.walkPhase) || 0;
 
   if (!isGrounded) {
     // Crisp jump pose
     leftLegPivot.rotation.x = 0.38;
     rightLegPivot.rotation.x = -0.32;
-    leftArmPivot.rotation.x = -0.75;
-    rightArmPivot.rotation.x = -0.65;
-    leftArmPivot.rotation.z = 0.24;
-    rightArmPivot.rotation.z = -0.24;
+    if (isCarrying) {
+      leftArmPivot.rotation.x = -1.25;
+      rightArmPivot.rotation.x = -1.25;
+      leftArmPivot.rotation.z = -0.14;
+      rightArmPivot.rotation.z = 0.14;
+    } else {
+      leftArmPivot.rotation.x = -0.75;
+      rightArmPivot.rotation.x = -0.65;
+      leftArmPivot.rotation.z = 0.24;
+      rightArmPivot.rotation.z = -0.24;
+    }
     rigRoot.position.y = 0;
     headPivot.rotation.y = 0;
     return;
@@ -1321,23 +1329,38 @@ export function animateRobloxAvatarRig(avatarGroup, animState = {}, dt = 0.016) 
     const swing = Math.sin(phase) * amp;
     leftLegPivot.rotation.x = swing;
     rightLegPivot.rotation.x = -swing;
-    leftArmPivot.rotation.x = -swing * 0.85;
-    rightArmPivot.rotation.x = swing * 0.6 - 0.16;
-    leftArmPivot.rotation.z = 0.06;
-    rightArmPivot.rotation.z = -0.06;
+    if (isCarrying) {
+      const carryBounce = Math.sin(phase) * 0.06;
+      leftArmPivot.rotation.x = -1.25 + carryBounce;
+      rightArmPivot.rotation.x = -1.25 - carryBounce;
+      leftArmPivot.rotation.z = -0.14;
+      rightArmPivot.rotation.z = 0.14;
+    } else {
+      leftArmPivot.rotation.x = -swing * 0.85;
+      rightArmPivot.rotation.x = swing * 0.6 - 0.16;
+      leftArmPivot.rotation.z = 0.06;
+      rightArmPivot.rotation.z = -0.06;
+    }
     rigRoot.position.y = Math.abs(Math.cos(phase)) * (isRunning ? 0.085 : 0.045);
     headPivot.rotation.y = Math.sin(phase * 0.5) * 0.05;
     return;
   }
 
-  // Smooth damp back to idle pose
+  // Smooth damp back to idle (or standing carry) pose
   const damp = Math.min(1, Math.max(0.05, dt * 12));
   leftLegPivot.rotation.x += (0 - leftLegPivot.rotation.x) * damp;
   rightLegPivot.rotation.x += (0 - rightLegPivot.rotation.x) * damp;
-  leftArmPivot.rotation.x += (0 - leftArmPivot.rotation.x) * damp;
-  rightArmPivot.rotation.x += (-0.15 - rightArmPivot.rotation.x) * damp;
-  leftArmPivot.rotation.z += (0.04 - leftArmPivot.rotation.z) * damp;
-  rightArmPivot.rotation.z += (-0.04 - rightArmPivot.rotation.z) * damp;
+  if (isCarrying) {
+    leftArmPivot.rotation.x += (-1.25 - leftArmPivot.rotation.x) * damp;
+    rightArmPivot.rotation.x += (-1.25 - rightArmPivot.rotation.x) * damp;
+    leftArmPivot.rotation.z += (-0.14 - leftArmPivot.rotation.z) * damp;
+    rightArmPivot.rotation.z += (0.14 - rightArmPivot.rotation.z) * damp;
+  } else {
+    leftArmPivot.rotation.x += (0 - leftArmPivot.rotation.x) * damp;
+    rightArmPivot.rotation.x += (-0.15 - rightArmPivot.rotation.x) * damp;
+    leftArmPivot.rotation.z += (0.04 - leftArmPivot.rotation.z) * damp;
+    rightArmPivot.rotation.z += (-0.04 - rightArmPivot.rotation.z) * damp;
+  }
   rigRoot.position.y += (0 - rigRoot.position.y) * damp;
   headPivot.rotation.y += (0 - headPivot.rotation.y) * damp;
 }

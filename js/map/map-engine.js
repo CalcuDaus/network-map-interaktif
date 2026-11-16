@@ -117,6 +117,24 @@ export class MapEngine {
     });
 
     eventBus.on('presence:updated', ({ peers } = {}) => {
+      const vp3d = typeof document !== 'undefined' ? document.getElementById('map-3d-viewport') : null;
+      if (vp3d && !vp3d.classList.contains('hidden')) {
+        // Defer Konva 2D layer rebuild while 3D viewport covers the canvas
+        return;
+      }
+      const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      if (this._last2dPresenceRenderAt && (now - this._last2dPresenceRenderAt < 80)) {
+        if (!this._pending2dPresenceTimer) {
+          this._pending2dPresenceTimer = setTimeout(() => {
+            this._pending2dPresenceTimer = null;
+            this._last2dPresenceRenderAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+            this.renderRemotePeers2D(authManager.getRemotePeers());
+          }, 80);
+          this._pending2dPresenceTimer?.unref?.();
+        }
+        return;
+      }
+      this._last2dPresenceRenderAt = now;
       this.renderRemotePeers2D(peers || authManager.getRemotePeers());
     });
     eventBus.on('auth:changed', () => {

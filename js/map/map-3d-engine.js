@@ -127,10 +127,15 @@ export class Map3DEngine {
     this.remoteAvatarMap = new Map();
     this._lastPresenceEmitAt = 0;
     this._lastPresenceSnapshotKey = '';
+    this._lastPeersHudKey = '';
+    this.avatarCollider = { radius: 0.48, height: 1.88, stepHeight: 0.18 };
+    this.deviceColliders = [];
     this.avatarState = {
       x: 0,
       y: 0,
       z: 0,
+      vx: 0,
+      vz: 0,
       yaw: 0,
       vy: 0,
       camYaw: 0,
@@ -141,11 +146,16 @@ export class Map3DEngine {
       walkPhase: 0,
       isMoving: false,
       isRunning: false,
+      isCarrying: false,
       nearestDeviceId: null,
       nearestDist: Infinity
     };
+    this.carriedObjects = [];
+    this.maxCarriedObjects = 8;
+    this.objectCarryReachMeters = 6.5;
     this._lastAvatarHudNearestId = null;
     this._lastAvatarHudDistKey = '';
+    this._lastAvatarHudCarryKey = '';
 
     this.bindGlobalListeners();
   }
@@ -456,11 +466,15 @@ export class Map3DEngine {
     this.pendingCableSourceId = null;
     this.pendingCableSourcePort = '';
     this.pending3dWaypoints = [];
+    if (this.carriedObjects?.length > 0) {
+      this.dropCarriedObjectsFromAvatar?.({ dropAll: true, silent: true });
+    }
     this.avatarMode = false;
     this.avatarState._lastMouseClient = null;
+    this.avatarState.isCarrying = false;
     if (this.avatarGroup) this.avatarGroup.visible = false;
     if (this.fppViewmodelGroup) this.fppViewmodelGroup.visible = false;
-    authManager.updateLocalPresence({ viewMode: '2d', avatarMode: false, isMoving: false, isRunning: false });
+    authManager.updateLocalPresence({ viewMode: '2d', avatarMode: false, isMoving: false, isRunning: false, isCarrying: false });
     this.releaseAvatarPointerLock();
     this.syncAvatarCrosshair();
     this.syncAvatarControlsUI();
@@ -655,6 +669,9 @@ export class Map3DEngine {
       this.objects3dGroup.add(meshGroup);
       this.object3dMeshMap.set(obj.id, meshGroup);
     });
+    if (this.avatarMode && this.carriedObjects?.length > 0) {
+      this.updateCarriedObjectsTransform?.();
+    }
   }
 
   rebuildSingleObject3dMesh(obj, isSelected = true) {
@@ -676,6 +693,61 @@ export class Map3DEngine {
     return next;
   }
 
+  getDeviceCollisionFootprint(dev, userModelScale = 1) {
+    const scale = Math.max(0.1, Number(userModelScale) || this.deviceScaleMultiplier || 3.0);
+    const type = String(dev?.type || '').toLowerCase();
+    const model = String(dev?.model || '').toLowerCase();
+    let rawW = 0.72;
+    let rawH = 0.5;
+    let rawD = 0.5;
+
+    if (dev?.spatial3d?.customModelUrl) {
+      rawW = 1.05;
+      rawH = 1.1;
+      rawD = 0.85;
+    } else if (type === 'network-rack') {
+      rawW = 1.25;
+      rawH = 2.4;
+      rawD = 1.25;
+    } else if (['server', 'nvr', 'storage', 'database'].includes(type)) {
+      rawW = 1.0;
+      rawH = 0.34;
+      rawD = 1.3;
+    } else if (['odp', 'patch-panel', 'fo-terminal'].includes(type)) {
+      rawW = 0.68;
+      rawH = 0.85;
+      rawD = 0.35;
+    } else if (type === 'access-point' || model.includes('rap')) {
+      rawW = 0.72;
+      rawH = 0.14;
+      rawD = 0.72;
+    } else if (['wireless-bridge', 'network-pole'].includes(type) || model.includes('dish')) {
+      rawW = 0.7;
+      rawH = 0.9;
+      rawD = 0.5;
+    } else if (['managed-switch', 'core-switch', 'switch', 'hub', 'unmanaged-switch', 'ruijie-switch'].includes(type)) {
+      const isCompact = type === 'hub' || type === 'unmanaged-switch' || model.includes('8-port') || model.includes('5-port');
+      rawW = isCompact ? 0.66 : 1.04;
+      rawH = isCompact ? 0.14 : 0.2;
+      rawD = isCompact ? 0.44 : 0.68;
+    } else if (['router', 'firewall', 'ruijie-eg'].includes(type)) {
+      const isCompact = model.includes('mikrotik') || model.includes('hex') || model.includes('rb750');
+      rawW = isCompact ? 0.68 : 1.02;
+      rawH = 0.22;
+      rawD = isCompact ? 0.5 : 0.68;
+    } else if (type === 'cctv') {
+      rawW = 0.32;
+      rawH = 0.33;
+      rawD = 0.44;
+    }
+
+    return {
+      halfW: (rawW * 0.5) * scale,
+      halfD: (rawD * 0.5) * scale,
+      height: rawH * scale
+    };
+  }
+
   syncDevices() {
     if (!this.isActive || !this.isInitialized) return;
     this.clearGroup(this.devicesGroup);
@@ -684,6 +756,7 @@ export class Map3DEngine {
     this.effectivePosMap.clear();
     this.portWorldPosMap.clear();
     this.portWorldDirMap.clear();
+    this.deviceColliders = [];
 
     const devices = this.deviceManager.getAllDevices();
     const allCables = this.cableManager.getAllConnections();
@@ -760,6 +833,22 @@ export class Map3DEngine {
       const portStatusMap = this.buildPortStatusMap(dev.id, allCables);
       this.registerDevicePortTransforms(dev, devPorts, finalX, finalY, finalZ, userModelScale, devEuler);
 
+      const devFootprint = this.getDeviceCollisionFootprint(dev, userModelScale);
+      if (dev.layerVisible !== false) {
+        this.deviceColliders.push({
+          id: dev.id,
+          kind: 'box',
+          category: 'device',
+          x: finalX,
+          z: finalZ,
+          baseY: finalY,
+          topY: finalY + devFootprint.height,
+          halfW: devFootprint.halfW,
+          halfD: devFootprint.halfD,
+          rotY: devEuler.y || 0
+        });
+      }
+
       const hasCustomGlb = Boolean(dev.spatial3d?.customModelUrl);
       const modelContainer = new THREE.Group();
       modelContainer.name = 'DeviceModelContainer';
@@ -789,6 +878,25 @@ export class Map3DEngine {
             const updatedStatusMap = this.buildPortStatusMap(dev.id, latestCables);
             holder.userData.devPorts = devPorts;
             this.registerDevicePortTransforms(dev, devPorts, finalX, finalY, finalZ, userModelScale, this.getDeviceEuler(dev));
+
+            if (typeof THREE?.Box3 === 'function') {
+              try {
+                const glbBox = new THREE.Box3().setFromObject(glb);
+                if (!glbBox.isEmpty()) {
+                  const glbSize = new THREE.Vector3();
+                  glbBox.getSize(glbSize);
+                  const targetCollider = this.deviceColliders?.find((c) => c.id === dev.id);
+                  if (targetCollider) {
+                    targetCollider.halfW = Math.max(0.25, glbSize.x * 0.5 * userModelScale);
+                    targetCollider.halfD = Math.max(0.25, glbSize.z * 0.5 * userModelScale);
+                    targetCollider.baseY = Math.max(0, finalY + glbBox.min.y * userModelScale);
+                    targetCollider.topY = targetCollider.baseY + Math.max(0.15, glbSize.y * userModelScale);
+                  }
+                }
+              } catch {
+                // ignore mock/non-geometry bounds
+              }
+            }
 
             modelContainer.clear();
             modelContainer.add(glb);
@@ -902,6 +1010,9 @@ export class Map3DEngine {
         this.coverageGroup.add(ring);
       }
     });
+    if (this.avatarMode && this.carriedObjects?.length > 0) {
+      this.updateCarriedObjectsTransform?.();
+    }
   }
 
   isLegacyProceduralPortSet(ports) {
@@ -2219,6 +2330,44 @@ export class Map3DEngine {
     dom.setPointerCapture?.(e.pointerId);
   }
 
+  _collectMountedDevicePeersForObject(obj) {
+    if (!obj || typeof this.deviceManager?.getAllDevices !== 'function') return [];
+    const objWorld = this.normToWorld(obj.x ?? 0.5, obj.y ?? 0.5);
+    const objElev = Number(obj.elevationMeters) || 0;
+    return this.deviceManager
+      .getAllDevices()
+      .filter(
+        (d) =>
+          !d.layerLocked &&
+          Math.hypot((d.position?.x ?? 0) - (obj.x ?? 0.5), (d.position?.y ?? 0) - (obj.y ?? 0.5)) < 0.018 &&
+          (d.spatial3d?.elevationMeters ?? 0) >= objElev
+      )
+      .map((d) => {
+        const pMesh = this.deviceMeshMap.get(d.id);
+        const pWorld = this.normToWorld(d.position.x, d.position.y);
+        const pPrevEff = this.effectivePosMap.get(d.id);
+        const devElev = d.spatial3d?.elevationMeters ?? getDefaultSpatial3d(d.type).elevationMeters;
+        return {
+          id: d.id,
+          startNormX: d.position.x,
+          startNormY: d.position.y,
+          startWorldX: pWorld.x,
+          startWorldZ: pWorld.z,
+          startElev: Number(devElev) || 0,
+          localOffsetX: pWorld.x - objWorld.x,
+          localOffsetZ: pWorld.z - objWorld.z,
+          meshGroup: pMesh,
+          meshStartX: pMesh ? pMesh.position.x : pWorld.x,
+          meshStartY: pMesh ? pMesh.position.y : (Number(devElev) || 0),
+          meshStartZ: pMesh ? pMesh.position.z : pWorld.z,
+          effY: pPrevEff ? pPrevEff.y : (pMesh ? pMesh.position.y : 0),
+          portInitials: this._collectDevicePortInitials(d.id),
+          latestNorm: null,
+          latestElev: Number(devElev) || 0
+        };
+      });
+  }
+
   startObject3dMoveDrag(e, dom, objHit) {
     const obj = stateManager.getObject3dById(objHit.object3dId);
     if (!obj) return;
@@ -2231,35 +2380,9 @@ export class Map3DEngine {
     if (!this.raycaster.ray.intersectPlane(dragPlane, hitPt)) return;
 
     const objWorld = this.normToWorld(obj.x ?? 0.5, obj.y ?? 0.5);
-    const objElev = Number(obj.elevationMeters) || 0;
 
     // Co-move devices mounted on the same footprint
-    const mountedPeers = this.deviceManager
-      .getAllDevices()
-      .filter(
-        (d) =>
-          !d.layerLocked &&
-          Math.hypot((d.position?.x ?? 0) - (obj.x ?? 0.5), (d.position?.y ?? 0) - (obj.y ?? 0.5)) < 0.018 &&
-          (d.spatial3d?.elevationMeters ?? 0) >= objElev
-      )
-      .map((d) => {
-        const pMesh = this.deviceMeshMap.get(d.id);
-        const pWorld = this.normToWorld(d.position.x, d.position.y);
-        const pPrevEff = this.effectivePosMap.get(d.id);
-        return {
-          id: d.id,
-          startNormX: d.position.x,
-          startNormY: d.position.y,
-          startWorldX: pWorld.x,
-          startWorldZ: pWorld.z,
-          meshGroup: pMesh,
-          meshStartX: pMesh ? pMesh.position.x : pWorld.x,
-          meshStartZ: pMesh ? pMesh.position.z : pWorld.z,
-          effY: pPrevEff ? pPrevEff.y : (pMesh ? pMesh.position.y : 0),
-          portInitials: this._collectDevicePortInitials(d.id),
-          latestNorm: null
-        };
-      });
+    const mountedPeers = this._collectMountedDevicePeersForObject(obj);
 
     this.object3dDragState = {
       kind: 'move-obj3d',
@@ -2945,6 +3068,18 @@ export class Map3DEngine {
   }
 
   rotateSelectedIn3D({ dX = 0, dY = 0, dZ = 0, reset = false } = {}) {
+    if (this.avatarMode && Array.isArray(this.carriedObjects) && this.carriedObjects.length > 0) {
+      const topItem = this.carriedObjects[this.carriedObjects.length - 1];
+      if (reset) {
+        topItem.relativeYawOffset = 0;
+      } else {
+        topItem.relativeYawOffset = ((Number(topItem.relativeYawOffset) || 0) + (dY || dZ || 0));
+      }
+      this.updateCarriedObjectsTransform?.();
+      this.showStatusHint(`🔄 Putar "${topItem.name}" sebelum ditaruh (${this.carriedObjects.length} objek dibawa)`);
+      return true;
+    }
+
     const selectedIds = this.deviceManager?.getSelectedDeviceIds?.() || [];
     if (selectedIds.length > 0) {
       let summary = null;
@@ -3244,19 +3379,29 @@ export class Map3DEngine {
     this.avatarState.camPitch = clamp((Number(this.avatarState.camPitch) ?? 0.32) + dy * sensitivity, minPitch, maxPitch);
     if (this.avatarPerspective === 'fpp') {
       this.avatarState.yaw = this.avatarState.camYaw;
+      if (this.carriedObjects?.length > 0) {
+        this.updateCarriedObjectsTransform?.();
+      }
     }
     this.syncAvatarCameraFromAngles();
   }
 
   setAvatarMode(enabled, { perspective } = {}) {
     const next = Boolean(enabled);
+    if (!next && this.carriedObjects?.length > 0) {
+      this.dropCarriedObjectsFromAvatar?.({ dropAll: true, silent: true });
+    }
     this.avatarMode = next;
     this.avatarState._lastMouseClient = null;
     if (perspective === 'fpp' || perspective === 'tpp') {
       this.avatarPerspective = perspective;
+      if (this.carriedObjects?.length > 0) {
+        this.updateCarriedObjectsTransform?.();
+      }
     }
 
     if (!next) {
+      this.avatarState.isCarrying = false;
       if (this.avatarGroup) {
         this.avatarGroup.visible = false;
       }
@@ -3335,15 +3480,22 @@ export class Map3DEngine {
         spawnZ = Math.max(-worldD * 0.55, Math.min(worldD * 0.55, spawnZ + Math.sin(ang) * 1.6));
       }
 
+      const resolvedSpawn = this.resolveAvatarCollisionStep
+        ? this.resolveAvatarCollisionStep(spawnX, 0, spawnZ, { prevY: 0, vy: 0, isTeleport: true })
+        : { x: spawnX, y: 0, z: spawnZ };
+      spawnX = resolvedSpawn.x;
+      const spawnY = resolvedSpawn.y;
+      spawnZ = resolvedSpawn.z;
+
       this.avatarState.x = spawnX;
-      this.avatarState.y = 0;
+      this.avatarState.y = spawnY;
       this.avatarState.z = spawnZ;
       this.avatarState.yaw = spawnYaw;
       this.avatarState.camYaw = spawnYaw;
       this.avatarState.camPitch = this.avatarPerspective === 'fpp' ? 0.02 : 0.32;
       this.avatarState.vy = 0;
       this.avatarState.isGrounded = true;
-      this.avatarGroup.position.set(spawnX, 0, spawnZ);
+      this.avatarGroup.position.set(spawnX, spawnY, spawnZ);
       this.avatarGroup.rotation.y = spawnYaw;
       animateRobloxAvatarRig(this.avatarGroup, this.avatarState, 0.016);
 
@@ -3382,11 +3534,18 @@ export class Map3DEngine {
     const tx = Math.max(-worldW * 0.55, Math.min(worldW * 0.55, rawX));
     const tz = Math.max(-worldD * 0.55, Math.min(worldD * 0.55, rawZ));
 
+    const resolvedTeleport = this.resolveAvatarCollisionStep
+      ? this.resolveAvatarCollisionStep(tx, 0, tz, { prevY: 0, vy: 0, isTeleport: true })
+      : { x: tx, y: 0, z: tz };
+    const finalTx = resolvedTeleport.x;
+    const finalTy = resolvedTeleport.y;
+    const finalTz = resolvedTeleport.z;
+
     // Face the device ports cleanly
-    const yaw = Math.atan2(panelCenter.x - tx, panelCenter.z - tz);
-    this.avatarState.x = tx;
-    this.avatarState.y = 0;
-    this.avatarState.z = tz;
+    const yaw = Math.atan2(panelCenter.x - finalTx, panelCenter.z - finalTz);
+    this.avatarState.x = finalTx;
+    this.avatarState.y = finalTy;
+    this.avatarState.z = finalTz;
     this.avatarState.yaw = yaw;
     this.avatarState.camYaw = yaw;
     this.avatarState.camPitch = this.avatarPerspective === 'fpp' ? 0.02 : 0.28;
@@ -3395,13 +3554,16 @@ export class Map3DEngine {
     this.avatarState.isMoving = false;
 
     if (this.avatarGroup) {
-      this.avatarGroup.position.set(tx, 0, tz);
+      this.avatarGroup.position.set(finalTx, finalTy, finalTz);
       this.avatarGroup.rotation.y = yaw;
       animateRobloxAvatarRig(this.avatarGroup, this.avatarState, 0.016);
     }
 
     const camPose = this.getAvatarFollowCameraPose();
     this.animateCameraTo(camPose.endPos, camPose.target, duration);
+    if (this.carriedObjects?.length > 0) {
+      this.updateCarriedObjectsTransform?.();
+    }
     this.findNearestDeviceToAvatar();
     this.updateAvatarProximityHud();
     this.publishLocalPresence?.(true);
@@ -3438,6 +3600,536 @@ export class Map3DEngine {
     return true;
   }
 
+  findNearestPickableObjectToAvatar() {
+    const carriedIds = new Set();
+    if (Array.isArray(this.carriedObjects)) {
+      for (const c of this.carriedObjects) {
+        if (c.objId) carriedIds.add(c.objId);
+        if (c.devId) carriedIds.add(c.devId);
+        c.mountedPeers?.forEach((p) => { if (p?.id) carriedIds.add(p.id); });
+      }
+    }
+    const ax = Number(this.avatarState.x) || 0;
+    const az = Number(this.avatarState.z) || 0;
+    const yaw = Number(this.avatarState.yaw) || 0;
+    const fwdX = Math.sin(yaw);
+    const fwdZ = Math.cos(yaw);
+    const maxReach = Number(this.objectCarryReachMeters) || 6.5;
+
+    let best = null;
+
+    // 1) Custom 3D Objects (walls, racks, poles, tables, boxes, cylinders, cabinets)
+    const objects = typeof stateManager?.getObjects3d === 'function' ? stateManager.getObjects3d() : [];
+    for (const obj of objects) {
+      if (!obj || obj.visible === false || obj.locked === true || carriedIds.has(obj.id)) continue;
+      const pos = this.normToWorld ? this.normToWorld(obj.x ?? 0.5, obj.y ?? 0.5) : { x: 0, z: 0 };
+      const w = Math.max(0.15, Number(obj.widthMeters) || 1);
+      const d = Math.max(0.15, Number(obj.depthMeters) || 1);
+      const dx = pos.x - ax;
+      const dz = pos.z - az;
+      const centerDist = Math.hypot(dx, dz);
+      const halfReach = Math.min(2.6, Math.hypot(w, d) * 0.4);
+      const edgeDist = Math.max(0, centerDist - halfReach);
+      if (edgeDist > maxReach) continue;
+
+      const invD = centerDist > 0.001 ? 1 / centerDist : 0;
+      const dot = (dx * fwdX + dz * fwdZ) * invD;
+      const score = edgeDist - (dot > 0.45 ? 0.65 : 0);
+      if (!best || score < best.score || (Math.abs(score - best.score) < 0.05 && centerDist < best.centerDist)) {
+        best = {
+          kind: 'object3d',
+          id: obj.id,
+          name: obj.name || 'Objek 3D',
+          obj,
+          distance: edgeDist,
+          centerDist,
+          score
+        };
+      }
+    }
+
+    // 2) Visible unlocked Network Devices (routers, switches, APs, servers, racks, etc.)
+    const devices = typeof this.deviceManager?.getAllDevices === 'function' ? this.deviceManager.getAllDevices() : [];
+    for (const dev of devices) {
+      if (!dev || dev.layerVisible === false || dev.layerLocked === true || carriedIds.has(dev.id)) continue;
+      const effPos = this.effectivePosMap?.get(dev.id);
+      const pos = effPos || (this.normToWorld && dev.position ? this.normToWorld(dev.position.x, dev.position.y) : null);
+      if (!pos) continue;
+      const sp = dev.spatial3d || getDefaultSpatial3d(dev.type);
+      const userModelScale = (sp.modelScale || 1) * (this.deviceScaleMultiplier || 3.0);
+      const fp = this.getDeviceCollisionFootprint
+        ? this.getDeviceCollisionFootprint(dev, userModelScale)
+        : { halfW: 0.9, halfD: 0.7, height: 0.8 };
+      const dx = pos.x - ax;
+      const dz = pos.z - az;
+      const centerDist = Math.hypot(dx, dz);
+      const halfReach = Math.min(4.5, Math.hypot(fp.halfW, fp.halfD));
+      const edgeDist = Math.max(0, centerDist - halfReach);
+      if (edgeDist > maxReach) continue;
+
+      const invD = centerDist > 0.001 ? 1 / centerDist : 0;
+      const dot = (dx * fwdX + dz * fwdZ) * invD;
+      const devElev = Number(sp.elevationMeters) || 0;
+      const mountedOnUncarriedObj = objects.some(
+        (o) =>
+          o &&
+          o.visible !== false &&
+          !carriedIds.has(o.id) &&
+          Math.hypot((dev.position?.x ?? 0) - (o.x ?? 0.5), (dev.position?.y ?? 0) - (o.y ?? 0.5)) < 0.018 &&
+          devElev >= (Number(o.elevationMeters) || 0)
+      );
+      // If device is mounted onto an uncarried rack/pole/table, prefer lifting the parent structure first
+      const score = edgeDist - (dot > 0.45 ? 0.65 : 0) + (mountedOnUncarriedObj ? 1.8 : 0);
+      if (!best || score < best.score || (Math.abs(score - best.score) < 0.05 && centerDist < best.centerDist)) {
+        best = {
+          kind: 'device',
+          id: dev.id,
+          name: dev.name || 'Perangkat',
+          obj: dev,
+          dev,
+          distance: edgeDist,
+          centerDist,
+          score
+        };
+      }
+    }
+
+    return best
+      ? {
+          kind: best.kind,
+          id: best.id,
+          name: best.name,
+          obj: best.obj,
+          dev: best.dev || null,
+          distance: best.distance
+        }
+      : null;
+  }
+
+  pickupNearestObjectFromAvatar() {
+    if (!this.avatarMode) return false;
+    const nearest = this.findNearestPickableObjectToAvatar();
+    if (!nearest?.id) {
+      this.showStatusHint(`Tidak ada objek/perangkat dalam jangkauan (<= ${(this.objectCarryReachMeters || 6.5).toFixed(1)}m) untuk diangkat.`);
+      return false;
+    }
+    if (nearest.kind === 'device') {
+      return this.pickupDeviceFromAvatar(nearest.id);
+    }
+    return this.pickupObjectFromAvatar(nearest.id);
+  }
+
+  _canAvatarCarryMoreAndWrite() {
+    if (
+      authManager?.isAuthenticated?.()
+      && authManager.getActiveWorkspaceKey?.() === 'main'
+      && authManager.isMainWorkspaceUnlocked?.() === false
+    ) {
+      this.showStatusHint('Server Utama terkunci (hanya lihat). Buka kunci Server Utama dulu untuk memindahkan objek.');
+      return false;
+    }
+    if (!Array.isArray(this.carriedObjects)) this.carriedObjects = [];
+    const maxCarry = Number(this.maxCarriedObjects) || 8;
+    if (this.carriedObjects.length >= maxCarry) {
+      this.showStatusHint(`Maksimal ${maxCarry} objek/perangkat dapat dibawa sekaligus. Tekan Q untuk menaruh.`);
+      return false;
+    }
+    return true;
+  }
+
+  pickupObjectFromAvatar(objId) {
+    if (!this.avatarMode || !objId) return false;
+    if (!this._canAvatarCarryMoreAndWrite()) return false;
+
+    const obj = stateManager.getObject3dById?.(objId);
+    if (!obj || obj.visible === false || obj.locked === true) return false;
+    if (this.carriedObjects.some((c) => c.objId === obj.id || c.devId === obj.id)) return false;
+
+    const w = Math.max(0.15, Number(obj.widthMeters) || 1);
+    const d = Math.max(0.15, Number(obj.depthMeters) || 1);
+    const h = Math.max(0.15, Number(obj.heightMeters) || 2);
+    const maxDim = Math.max(w, d, h);
+    const tppScale = maxDim > 1.8 ? Math.max(0.38, 1.55 / maxDim) : 1.0;
+    const fppScale = maxDim > 0.9 ? Math.max(0.28, 0.72 / maxDim) : 0.75;
+
+    const avatarDeg = ((Number(this.avatarState.yaw) || 0) * 180) / Math.PI;
+    const origRotY = Number(obj.rotationY ?? obj.rotationDeg) || 0;
+    const mountedPeers = this._collectMountedDevicePeersForObject(obj);
+
+    if (stateManager.getSelectedObject3dId?.() === obj.id) {
+      stateManager.deselectObject3d?.();
+    }
+
+    this.carriedObjects.push({
+      kind: 'object3d',
+      objId: obj.id,
+      devId: null,
+      name: obj.name || 'Objek 3D',
+      shape: obj.shape || 'box',
+      initialNormX: obj.x ?? 0.5,
+      initialNormY: obj.y ?? 0.5,
+      initialElev: Number(obj.elevationMeters) || 0,
+      initialRotY: origRotY,
+      relativeYawOffset: origRotY - avatarDeg,
+      widthMeters: w,
+      depthMeters: d,
+      heightMeters: h,
+      tppScale,
+      fppScale,
+      mountedPeers
+    });
+
+    this.avatarState.isCarrying = true;
+    this.updateCarriedObjectsTransform();
+    this.updateAvatarProximityHud();
+    this.publishLocalPresence?.(true);
+    this.showStatusHint(
+      `📦 Mengangkat "${obj.name || 'Objek 3D'}" (${this.carriedObjects.length} dibawa) — E tambah lagi • Q taruh • Shift+Q taruh semua • [ / ] putar`
+    );
+    return true;
+  }
+
+  pickupDeviceFromAvatar(devId) {
+    if (!this.avatarMode || !devId) return false;
+    if (!this._canAvatarCarryMoreAndWrite()) return false;
+
+    const dev = this.deviceManager?.getDeviceById?.(devId);
+    if (!dev || dev.layerVisible === false || dev.layerLocked === true) return false;
+    if (this.carriedObjects.some((c) => c.devId === dev.id || c.objId === dev.id || c.mountedPeers?.some((p) => p?.id === dev.id))) return false;
+
+    const sp = { ...getDefaultSpatial3d(dev.type), ...(dev.spatial3d || {}) };
+    const userModelScale = (sp.modelScale || 1) * (this.deviceScaleMultiplier || 3.0);
+    const fp = this.getDeviceCollisionFootprint
+      ? this.getDeviceCollisionFootprint(dev, userModelScale)
+      : { halfW: 0.9, halfD: 0.7, height: 0.8 };
+    const w = Math.max(0.25, fp.halfW * 2);
+    const d = Math.max(0.25, fp.halfD * 2);
+    const h = Math.max(0.25, fp.height);
+    const maxDim = Math.max(w, d, h);
+    const tppScale = maxDim > 1.6 ? Math.max(0.32, 1.35 / maxDim) : 1.0;
+    const fppScale = maxDim > 0.8 ? Math.max(0.22, 0.65 / maxDim) : 0.72;
+
+    const avatarDeg = ((Number(this.avatarState.yaw) || 0) * 180) / Math.PI;
+    const origRotY = Number(sp.rotationY ?? dev.rotation ?? 0) || 0;
+    const pWorld = this.normToWorld ? this.normToWorld(dev.position.x, dev.position.y) : { x: 0, z: 0 };
+    const holder = this.deviceMeshMap?.get(dev.id);
+    const startX = holder ? holder.position.x : pWorld.x;
+    const startY = holder ? holder.position.y : Math.max(0, (Number(sp.elevationMeters) || 0) + (Number(sp.offsetY) || 0));
+    const startZ = holder ? holder.position.z : pWorld.z;
+
+    if (this.deviceManager?.selectedDeviceId === dev.id) {
+      this.deviceManager.deselectDevice?.();
+    }
+
+    this.carriedObjects.push({
+      kind: 'device',
+      objId: dev.id,
+      devId: dev.id,
+      name: dev.name || 'Perangkat',
+      shape: 'device',
+      initialNormX: dev.position?.x ?? 0.5,
+      initialNormY: dev.position?.y ?? 0.5,
+      initialWorldX: startX,
+      initialElev: startY,
+      initialWorldZ: startZ,
+      initialRotY: origRotY,
+      relativeYawOffset: origRotY - avatarDeg,
+      widthMeters: w,
+      depthMeters: d,
+      heightMeters: h,
+      tppScale,
+      fppScale,
+      portInitials: this._collectDevicePortInitials?.(dev.id) || [],
+      mountedPeers: []
+    });
+
+    this.avatarState.isCarrying = true;
+    this.updateCarriedObjectsTransform();
+    this.updateAvatarProximityHud();
+    this.publishLocalPresence?.(true);
+    this.showStatusHint(
+      `📦 Mengangkat "${dev.name}" (${this.carriedObjects.length} dibawa) — E tambah lagi • Q taruh • Shift+Q taruh semua • [ / ] putar`
+    );
+    return true;
+  }
+
+  getCarriedDropSupportElevation(dropX, dropZ, excludeId = '') {
+    const objects = typeof stateManager?.getObjects3d === 'function' ? stateManager.getObjects3d() : [];
+    const carriedIds = new Set((this.carriedObjects || []).map((c) => c.objId || c.devId));
+    if (excludeId) carriedIds.add(excludeId);
+    let supportY = 0;
+
+    for (const obj of objects) {
+      if (!obj || obj.visible === false || carriedIds.has(obj.id)) continue;
+      const shape = String(obj.shape || 'box').toLowerCase();
+      if (shape === 'pole' || shape === 'tower-lattice') continue;
+      const h = Math.max(0.15, Number(obj.heightMeters) || 2);
+      const elev = Math.max(0, Number(obj.elevationMeters) || 0);
+      const topY = elev + h;
+      if (topY > 2.4) continue;
+
+      const pos = this.normToWorld ? this.normToWorld(obj.x ?? 0.5, obj.y ?? 0.5) : { x: 0, z: 0 };
+      const w = Math.max(0.15, Number(obj.widthMeters) || 1);
+      const d = Math.max(0.15, Number(obj.depthMeters) || 1);
+      const rotY = ((Number(obj.rotationY ?? obj.rotationDeg) || 0) * Math.PI) / 180;
+      const inside = shape === 'cylinder'
+        ? Math.hypot(dropX - pos.x, dropZ - pos.z) <= Math.max(w, d) * 0.5
+        : this._isCircleOverRotatedBoxXZ(dropX, dropZ, 0.05, pos.x, pos.z, w * 0.5, d * 0.5, rotY);
+      if (inside && topY > supportY) {
+        supportY = topY;
+      }
+    }
+    return Number(supportY.toFixed(2));
+  }
+
+  updateCarriedObjectsTransform() {
+    if (!Array.isArray(this.carriedObjects) || this.carriedObjects.length === 0) return;
+    const ax = Number(this.avatarState.x) || 0;
+    const ay = Number(this.avatarState.y) || 0;
+    const az = Number(this.avatarState.z) || 0;
+    const yaw = Number(this.avatarState.yaw) || 0;
+    const fwdX = Math.sin(yaw);
+    const fwdZ = Math.cos(yaw);
+    const isFpp = this.avatarPerspective === 'fpp';
+
+    let maxFootRad = 0.35;
+    for (const item of this.carriedObjects) {
+      const scale = isFpp ? item.fppScale : item.tppScale;
+      const rad = Math.min(1.0, Math.max(item.widthMeters, item.depthMeters) * scale * 0.45);
+      if (rad > maxFootRad) maxFootRad = rad;
+    }
+
+    const carryFwdDist = isFpp ? (1.1 + maxFootRad * 0.55) : (0.95 + maxFootRad * 0.65);
+    const rawAnchorX = ax + fwdX * carryFwdDist;
+    const rawAnchorZ = az + fwdZ * carryFwdDist;
+    const anchorNorm = this.worldToNorm ? this.worldToNorm(rawAnchorX, rawAnchorZ) : { normX: 0.5, normY: 0.5 };
+    const anchorWorld = this.normToWorld ? this.normToWorld(anchorNorm.normX, anchorNorm.normY) : { x: rawAnchorX, z: rawAnchorZ };
+
+    let stackY = ay + (isFpp ? 0.68 : 0.86);
+    let anyMovedDevices = false;
+
+    for (const item of this.carriedObjects) {
+      const scale = isFpp ? item.fppScale : item.tppScale;
+      const worldRotY = ((yaw * 180) / Math.PI) + (Number(item.relativeYawOffset) || 0);
+
+      if (item.kind === 'device') {
+        const holder = this.deviceMeshMap?.get(item.devId);
+        const deltaRotRad = ((worldRotY - item.initialRotY) * Math.PI) / 180;
+        const cosD = Math.cos(deltaRotRad);
+        const sinD = Math.sin(deltaRotRad);
+        if (holder) {
+          holder.position.set(anchorWorld.x, stackY, anchorWorld.z);
+          holder.scale.setScalar(scale);
+          holder.rotation.y = deltaRotRad;
+          holder.userData.isCarriedByAvatar = true;
+        }
+        this.effectivePosMap?.set(item.devId, new THREE.Vector3(anchorWorld.x, stackY + 0.35 * scale, anchorWorld.z));
+        if (Array.isArray(item.portInitials) && item.portInitials.length > 0) {
+          anyMovedDevices = true;
+          item.portInitials.forEach(({ key, initial }) => {
+            const ox = initial.x - item.initialWorldX;
+            const oy = initial.y - item.initialElev;
+            const oz = initial.z - item.initialWorldZ;
+            const rx = ox * cosD + oz * sinD;
+            const rz = -ox * sinD + oz * cosD;
+            this.portWorldPosMap?.set(
+              key,
+              new THREE.Vector3(anchorWorld.x + rx * scale, stackY + oy * scale, anchorWorld.z + rz * scale)
+            );
+          });
+        }
+      } else {
+        const latestObj = stateManager.getObject3dById?.(item.objId);
+        const rxRad = ((Number(latestObj?.rotationX) || 0) * Math.PI) / 180;
+        const ryRad = (worldRotY * Math.PI) / 180;
+        const rzRad = ((Number(latestObj?.rotationZ) || 0) * Math.PI) / 180;
+
+        const meshGroup = this.object3dMeshMap?.get(item.objId);
+        if (meshGroup) {
+          meshGroup.position.set(anchorWorld.x, stackY, anchorWorld.z);
+          meshGroup.scale.setScalar(scale);
+          meshGroup.rotation.set(rxRad, ryRad, rzRad, 'YXZ');
+          meshGroup.userData.isCarriedByAvatar = true;
+        }
+
+        if (Array.isArray(item.mountedPeers) && item.mountedPeers.length > 0) {
+          anyMovedDevices = true;
+          const pShiftY = stackY - item.initialElev;
+          item.mountedPeers.forEach((peer) => {
+            const px = anchorWorld.x + (peer.localOffsetX || 0) * scale;
+            const pz = anchorWorld.z + (peer.localOffsetZ || 0) * scale;
+            if (peer.meshGroup) {
+              peer.meshGroup.position.x = px;
+              peer.meshGroup.position.y = peer.meshStartY + pShiftY;
+              peer.meshGroup.position.z = pz;
+            }
+            this.effectivePosMap?.set(peer.id, new THREE.Vector3(px, peer.effY + pShiftY, pz));
+            const deltaX = px - peer.startWorldX;
+            const deltaZ = pz - peer.startWorldZ;
+            peer.portInitials?.forEach(({ key, initial }) => {
+              this.portWorldPosMap?.set(key, new THREE.Vector3(initial.x + deltaX, initial.y + pShiftY, initial.z + deltaZ));
+            });
+          });
+        }
+      }
+
+      stackY += Math.min(0.85, Math.max(0.28, item.heightMeters * scale));
+    }
+
+    if (anyMovedDevices) {
+      this.syncCables?.();
+    }
+  }
+
+  dropCarriedObjectsFromAvatar({ dropAll = false, silent = false } = {}) {
+    if (!Array.isArray(this.carriedObjects) || this.carriedObjects.length === 0) return 0;
+
+    const toDrop = dropAll
+      ? [...this.carriedObjects]
+      : [this.carriedObjects.pop()];
+    if (dropAll) {
+      this.carriedObjects = [];
+    }
+    this.avatarState.isCarrying = this.carriedObjects.length > 0;
+
+    const ax = Number(this.avatarState.x) || 0;
+    const az = Number(this.avatarState.z) || 0;
+    const yaw = Number(this.avatarState.yaw) || 0;
+    const fwdX = Math.sin(yaw);
+    const fwdZ = Math.cos(yaw);
+    const rightX = -fwdZ;
+    const rightZ = fwdX;
+    const avatarRadius = Number(this.avatarCollider?.radius) || 0.48;
+
+    const placements = toDrop.map((item) => {
+      const worldRotY = (((yaw * 180) / Math.PI) + (Number(item.relativeYawOffset) || 0));
+      const normRotY = ((Math.round(worldRotY) % 360) + 360) % 360;
+      const rotRad = (normRotY * Math.PI) / 180;
+      const cosR = Math.cos(rotRad);
+      const sinR = Math.sin(rotRad);
+      const projFwd = Math.abs(fwdX * cosR - fwdZ * sinR) * (item.widthMeters * 0.5)
+        + Math.abs(fwdX * sinR + fwdZ * cosR) * (item.depthMeters * 0.5);
+      const projLat = Math.abs(rightX * cosR - rightZ * sinR) * (item.widthMeters * 0.5)
+        + Math.abs(rightX * sinR + rightZ * cosR) * (item.depthMeters * 0.5);
+      return { item, normRotY, projFwd, projLat };
+    });
+
+    const gap = 0.35;
+    const totalSpan = placements.reduce((acc, p) => acc + p.projLat * 2, 0) + Math.max(0, placements.length - 1) * gap;
+    const maxProjFwd = Math.max(...placements.map((p) => p.projFwd));
+    let latCursor = -totalSpan * 0.5;
+    let needsDeviceSync = false;
+
+    for (let i = 0; i < placements.length; i++) {
+      const { item, normRotY, projFwd, projLat } = placements[i];
+      const latOffset = placements.length === 1 ? 0 : (latCursor + projLat);
+      latCursor += projLat * 2 + gap;
+
+      const fwdDist = placements.length === 1
+        ? Math.max(1.35, avatarRadius + projFwd + 0.35)
+        : Math.max(1.5, avatarRadius + maxProjFwd + 0.4);
+
+      const rawDropX = ax + fwdX * fwdDist + rightX * latOffset;
+      const rawDropZ = az + fwdZ * fwdDist + rightZ * latOffset;
+      const dropNorm = this.worldToNorm ? this.worldToNorm(rawDropX, rawDropZ) : { normX: 0.5, normY: 0.5 };
+      const dropWorld = this.normToWorld ? this.normToWorld(dropNorm.normX, dropNorm.normY) : { x: rawDropX, z: rawDropZ };
+      const dropElev = this.getCarriedDropSupportElevation(dropWorld.x, dropWorld.z, item.objId || item.devId);
+
+      if (item.kind === 'device') {
+        needsDeviceSync = true;
+        const holder = this.deviceMeshMap?.get(item.devId);
+        if (holder) {
+          holder.scale.setScalar(1);
+          holder.rotation.y = 0;
+          holder.userData.isCarriedByAvatar = false;
+        }
+        const dev = this.deviceManager?.getDeviceById?.(item.devId);
+        if (dev && this.deviceManager) {
+          if (typeof this.deviceManager.moveDeviceGroup === 'function') {
+            this.deviceManager.moveDeviceGroup([{ id: item.devId, position: { x: dropNorm.normX, y: dropNorm.normY } }], { syncRenderer: false });
+          }
+          const latestDev = this.deviceManager.getDeviceById?.(item.devId) || dev;
+          const baseSp = { ...getDefaultSpatial3d(latestDev.type), ...(latestDev.spatial3d || {}) };
+          this.deviceManager.updateDevice?.(item.devId, {
+            spatial3d: {
+              ...baseSp,
+              elevationMeters: dropElev,
+              rotationY: normRotY,
+              offsetX: 0,
+              offsetY: 0,
+              offsetZ: 0
+            }
+          });
+        }
+        continue;
+      }
+
+      const meshGroup = this.object3dMeshMap?.get(item.objId);
+      if (meshGroup) {
+        meshGroup.scale.setScalar(1);
+        meshGroup.userData.isCarriedByAvatar = false;
+      }
+
+      const updatedObj = stateManager.updateObject3d?.(item.objId, {
+        x: dropNorm.normX,
+        y: dropNorm.normY,
+        elevationMeters: dropElev,
+        rotationY: normRotY
+      });
+      if (updatedObj && this.isInitialized) {
+        this.rebuildSingleObject3dMesh?.(updatedObj, false);
+      }
+
+      if (Array.isArray(item.mountedPeers) && item.mountedPeers.length > 0 && this.deviceManager) {
+        needsDeviceSync = true;
+        const deltaNormX = dropNorm.normX - item.initialNormX;
+        const deltaNormY = dropNorm.normY - item.initialNormY;
+        const deltaElev = dropElev - item.initialElev;
+        const moves = item.mountedPeers.map((p) => ({
+          id: p.id,
+          position: {
+            x: clamp(p.startNormX + deltaNormX, 0.01, 0.99),
+            y: clamp(p.startNormY + deltaNormY, 0.01, 0.99)
+          }
+        }));
+        if (moves.length > 0 && typeof this.deviceManager.moveDeviceGroup === 'function') {
+          this.deviceManager.moveDeviceGroup(moves, { syncRenderer: false });
+        }
+        if (Math.abs(deltaElev) > 0.01 && typeof this.deviceManager.updateDevice === 'function') {
+          item.mountedPeers.forEach((p) => {
+            const dev = this.deviceManager.getDeviceById?.(p.id);
+            if (!dev) return;
+            const baseSp = dev.spatial3d || {};
+            this.deviceManager.updateDevice(p.id, {
+              spatial3d: {
+                ...baseSp,
+                elevationMeters: Math.max(0, Number(((Number(p.startElev) || 0) + deltaElev).toFixed(2)))
+              }
+            });
+          });
+        }
+      }
+    }
+
+    if (needsDeviceSync && this.isActive && this.isInitialized) {
+      this.syncDevices();
+      this.syncCables();
+    }
+    if (this.carriedObjects.length > 0) {
+      this.updateCarriedObjectsTransform();
+    }
+    this.updateAvatarProximityHud();
+    this.publishLocalPresence?.(true);
+
+    if (!silent) {
+      const msg = toDrop.length === 1
+        ? `✅ Menaruh "${toDrop[0].name}"${this.carriedObjects.length > 0 ? ` (sisa dibawa: ${this.carriedObjects.length})` : ''}`
+        : `✅ Menaruh ${toDrop.length} item sekaligus ke posisi teknisi`;
+      this.showStatusHint(msg);
+    }
+    return toDrop.length;
+  }
+
   updateAvatarController(dt = 0.016) {
     if (!this.avatarMode) return;
 
@@ -3466,19 +4158,27 @@ export class Map3DEngine {
     const prevX = this.avatarState.x;
     const prevY = this.avatarState.y;
     const prevZ = this.avatarState.z;
+    const prevMoving = Boolean(this.avatarState.isMoving);
+    const prevGrounded = this.avatarState.isGrounded !== false;
 
-    if (jumpPressed && this.avatarState.isGrounded) {
-      this.avatarState.vy = 7.6;
-      this.avatarState.isGrounded = false;
+    let candX = prevX;
+    let candY = prevY;
+    let candZ = prevZ;
+    let candVy = Number(this.avatarState.vy) || 0;
+    let candGrounded = Boolean(this.avatarState.isGrounded);
+
+    if (jumpPressed && candGrounded) {
+      candVy = 7.6;
+      candGrounded = false;
     }
 
-    if (!this.avatarState.isGrounded || this.avatarState.y > 0) {
-      this.avatarState.vy -= 21.0 * dt;
-      this.avatarState.y += this.avatarState.vy * dt;
-      if (this.avatarState.y <= 0) {
-        this.avatarState.y = 0;
-        this.avatarState.vy = 0;
-        this.avatarState.isGrounded = true;
+    if (!candGrounded || prevY > 0) {
+      candVy -= 21.0 * dt;
+      candY += candVy * dt;
+      if (candY <= 0) {
+        candY = 0;
+        candVy = 0;
+        candGrounded = true;
       }
     }
 
@@ -3507,8 +4207,8 @@ export class Map3DEngine {
         const { worldW, worldD } = this.getWorldDimensions();
         const maxX = worldW * 0.55;
         const maxZ = worldD * 0.55;
-        this.avatarState.x = Math.max(-maxX, Math.min(maxX, this.avatarState.x + moveDir.x * speed * dt));
-        this.avatarState.z = Math.max(-maxZ, Math.min(maxZ, this.avatarState.z + moveDir.z * speed * dt));
+        candX = Math.max(-maxX, Math.min(maxX, prevX + moveDir.x * speed * dt));
+        candZ = Math.max(-maxZ, Math.min(maxZ, prevZ + moveDir.z * speed * dt));
 
         // Smoothly turn character toward travel direction
         const targetYaw = Math.atan2(moveDir.x, moveDir.z);
@@ -3523,9 +4223,22 @@ export class Map3DEngine {
       this.avatarState.isRunning = false;
     }
 
+    const resolved = this.resolveAvatarCollisionStep
+      ? this.resolveAvatarCollisionStep(candX, candY, candZ, { prevY, vy: candVy })
+      : { x: candX, y: candY, z: candZ, vy: candVy, isGrounded: candGrounded, collided: false };
+
+    this.avatarState.x = resolved.x;
+    this.avatarState.y = resolved.y;
+    this.avatarState.z = resolved.z;
+    this.avatarState.vy = resolved.vy;
+    this.avatarState.isGrounded = resolved.isGrounded;
+
     const dx = this.avatarState.x - prevX;
     const dy = this.avatarState.y - prevY;
     const dz = this.avatarState.z - prevZ;
+    const safeDt = Math.max(0.001, Number(dt) || 0.016);
+    this.avatarState.vx = dx / safeDt;
+    this.avatarState.vz = dz / safeDt;
 
     if (this.avatarGroup) {
       this.avatarGroup.position.set(this.avatarState.x, this.avatarState.y, this.avatarState.z);
@@ -3533,7 +4246,12 @@ export class Map3DEngine {
         this.avatarState.yaw = Number(this.avatarState.camYaw) || 0;
       }
       this.avatarGroup.rotation.y = this.avatarState.yaw;
+      this.avatarState.isCarrying = Array.isArray(this.carriedObjects) && this.carriedObjects.length > 0;
       animateRobloxAvatarRig(this.avatarGroup, this.avatarState, dt);
+    }
+
+    if (this.carriedObjects?.length > 0) {
+      this.updateCarriedObjectsTransform?.();
     }
 
     if (this.camera && this.controls && !this.cameraAnim && (dx !== 0 || dy !== 0 || dz !== 0 || (this.avatarPerspective === 'fpp' && hasMoveInput))) {
@@ -3542,32 +4260,352 @@ export class Map3DEngine {
 
     this.findNearestDeviceToAvatar();
     this.updateAvatarProximityHud();
-    this.publishLocalPresence?.(false);
+    const stateTransition = (prevMoving !== Boolean(this.avatarState.isMoving))
+      || (prevGrounded !== (this.avatarState.isGrounded !== false));
+    this.publishLocalPresence?.(stateTransition);
+  }
+
+  _isCircleOverRotatedBoxXZ(cx, cz, radius, bx, bz, halfW, halfD, rotY = 0) {
+    const hw = Math.max(0.05, Number(halfW) || 0.05);
+    const hd = Math.max(0.05, Number(halfD) || 0.05);
+    const cos = Math.cos(rotY);
+    const sin = Math.sin(rotY);
+    const dx = cx - bx;
+    const dz = cz - bz;
+    const lx = dx * cos - dz * sin;
+    const lz = dx * sin + dz * cos;
+    const clampedX = Math.max(-hw, Math.min(hw, lx));
+    const clampedZ = Math.max(-hd, Math.min(hd, lz));
+    const diffX = lx - clampedX;
+    const diffZ = lz - clampedZ;
+    return diffX * diffX + diffZ * diffZ <= radius * radius;
+  }
+
+  _resolveCircleVsRotatedBoxXZ(cx, cz, radius, bx, bz, halfW, halfD, rotY = 0) {
+    const hw = Math.max(0.05, Number(halfW) || 0.05);
+    const hd = Math.max(0.05, Number(halfD) || 0.05);
+    const cos = Math.cos(rotY);
+    const sin = Math.sin(rotY);
+    const dx = cx - bx;
+    const dz = cz - bz;
+
+    // Transform world delta into box-local XZ space (-rotY)
+    const lx = dx * cos - dz * sin;
+    const lz = dx * sin + dz * cos;
+
+    if (Math.abs(lx) >= hw + radius - 1e-6 || Math.abs(lz) >= hd + radius - 1e-6) {
+      return null;
+    }
+
+    const clampedX = Math.max(-hw, Math.min(hw, lx));
+    const clampedZ = Math.max(-hd, Math.min(hd, lz));
+    const diffX = lx - clampedX;
+    const diffZ = lz - clampedZ;
+    const distSq = diffX * diffX + diffZ * diffZ;
+
+    let plx = 0;
+    let plz = 0;
+
+    if (distSq > 1e-8) {
+      if (distSq >= radius * radius) return null;
+      const dist = Math.sqrt(distSq);
+      const pen = radius - dist;
+      plx = (diffX / dist) * pen;
+      plz = (diffZ / dist) * pen;
+    } else {
+      // Center is inside box; push out along the shallowest face
+      const penX = hw - Math.abs(lx) + radius;
+      const penZ = hd - Math.abs(lz) + radius;
+      if (penX < penZ) {
+        plx = (lx >= 0 ? 1 : -1) * penX;
+      } else {
+        plz = (lz >= 0 ? 1 : -1) * penZ;
+      }
+    }
+
+    // Transform local pushout vector back into world XZ (+rotY)
+    const wx = plx * cos + plz * sin;
+    const wz = -plx * sin + plz * cos;
+    return { nx: cx + wx, nz: cz + wz, collided: true };
+  }
+
+  _resolveCircleVsCircleXZ(cx, cz, radiusA, tx, tz, radiusB, seedKey = '') {
+    const minDist = radiusA + radiusB;
+    const dx = cx - tx;
+    const dz = cz - tz;
+    const distSq = dx * dx + dz * dz;
+    if (distSq >= minDist * minDist - 1e-6) return null;
+
+    if (distSq < 1e-8) {
+      let h = 0;
+      const s = String(seedKey || 'avatar');
+      for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+      const ang = (Math.abs(h) % 360) * (Math.PI / 180);
+      return {
+        nx: tx + Math.cos(ang) * minDist,
+        nz: tz + Math.sin(ang) * minDist,
+        collided: true
+      };
+    }
+
+    const dist = Math.sqrt(distSq);
+    const scale = minDist / dist;
+    return {
+      nx: tx + dx * scale,
+      nz: tz + dz * scale,
+      collided: true
+    };
+  }
+
+  collectAvatarColliders() {
+    const colliders = [];
+    const carriedObjIds = new Set();
+    const carriedDevIds = new Set();
+    if (Array.isArray(this.carriedObjects)) {
+      for (const c of this.carriedObjects) {
+        if (c.kind === 'device' || c.devId) {
+          carriedDevIds.add(c.devId || c.objId);
+        } else if (c.objId) {
+          carriedObjIds.add(c.objId);
+        }
+        c.mountedPeers?.forEach((p) => { if (p?.id) carriedDevIds.add(p.id); });
+      }
+    }
+
+    // 1. Custom 3D objects (walls, poles, racks, cylinders, tables, cabinets, boxes)
+    const objects = typeof stateManager?.getObjects3d === 'function' ? stateManager.getObjects3d() : [];
+    for (const obj of objects) {
+      if (!obj || obj.visible === false || carriedObjIds.has(obj.id)) continue;
+      const pos = this.normToWorld ? this.normToWorld(obj.x ?? 0.5, obj.y ?? 0.5) : { x: 0, z: 0 };
+      const elev = Math.max(0, Number(obj.elevationMeters) || 0);
+      const w = Math.max(0.15, Number(obj.widthMeters) || 1);
+      const d = Math.max(0.15, Number(obj.depthMeters) || 1);
+      const h = Math.max(0.15, Number(obj.heightMeters) || 2);
+      const rotY = ((Number(obj.rotationY ?? obj.rotationDeg) || 0) * Math.PI) / 180;
+      const shape = String(obj.shape || 'box').toLowerCase();
+
+      if (shape === 'pole' || shape === 'cylinder') {
+        const rad = shape === 'pole'
+          ? Math.max(0.28, w * 0.45)
+          : Math.max(0.15, Math.max(w, d) * 0.5);
+        colliders.push({
+          id: obj.id,
+          kind: 'circle',
+          category: 'object3d',
+          supportable: shape === 'cylinder',
+          x: pos.x,
+          z: pos.z,
+          baseY: elev,
+          topY: elev + h,
+          radius: rad
+        });
+      } else {
+        colliders.push({
+          id: obj.id,
+          kind: 'box',
+          category: 'object3d',
+          supportable: true,
+          x: pos.x,
+          z: pos.z,
+          baseY: elev,
+          topY: elev + h,
+          halfW: w * 0.5,
+          halfD: d * 0.5,
+          rotY
+        });
+      }
+    }
+
+    // 2. Visible network devices (using synced bounds or live fallback)
+    if (Array.isArray(this.deviceColliders) && this.deviceColliders.length > 0) {
+      for (const dc of this.deviceColliders) {
+        if (carriedDevIds.has(dc.id)) continue;
+        colliders.push({ ...dc, supportable: true });
+      }
+    } else if (typeof this.deviceManager?.getAllDevices === 'function') {
+      const devices = this.deviceManager.getAllDevices();
+      for (const dev of devices) {
+        if (!dev || dev.layerVisible === false || carriedDevIds.has(dev.id)) continue;
+        const p = this.effectivePosMap?.get(dev.id)
+          || (this.normToWorld && dev.position ? this.normToWorld(dev.position.x, dev.position.y) : null);
+        if (!p) continue;
+        const userModelScale = (dev.spatial3d?.modelScale || 1) * (this.deviceScaleMultiplier || 3.0);
+        const fp = this.getDeviceCollisionFootprint
+          ? this.getDeviceCollisionFootprint(dev, userModelScale)
+          : { halfW: 0.9, halfD: 0.7, height: 0.8 };
+        const elev = Math.max(0, Number(dev.spatial3d?.elevationMeters ?? 0) || 0);
+        const rotY = this.getDeviceEuler ? (this.getDeviceEuler(dev)?.y || 0) : 0;
+        colliders.push({
+          id: dev.id,
+          kind: 'box',
+          category: 'device',
+          supportable: true,
+          x: p.x,
+          z: p.z,
+          baseY: elev,
+          topY: elev + fp.height,
+          halfW: fp.halfW,
+          halfD: fp.halfD,
+          rotY
+        });
+      }
+    }
+
+    // 3. Online remote technician characters
+    const selfCid = String(authManager?.clientId || '');
+    const peerRadius = Number(this.avatarCollider?.radius) || 0.48;
+    const peerHeight = Number(this.avatarCollider?.height) || 1.88;
+    if (this.remoteAvatarMap instanceof Map) {
+      for (const [cid, entry] of this.remoteAvatarMap.entries()) {
+        if (!entry || String(cid) === selfCid) continue;
+        if (entry.group && entry.group.visible === false) continue;
+        const pos = entry.group?.position || entry.targetPos;
+        const px = Number(pos?.x ?? entry.currentX ?? entry.targetX);
+        const py = Math.max(0, Number(pos?.y ?? entry.currentY ?? entry.targetY) || 0);
+        const pz = Number(pos?.z ?? entry.currentZ ?? entry.targetZ);
+        if (!Number.isFinite(px) || !Number.isFinite(pz)) continue;
+        colliders.push({
+          id: `peer:${cid}`,
+          kind: 'circle',
+          category: 'peer',
+          supportable: false,
+          x: px,
+          z: pz,
+          baseY: py,
+          topY: py + peerHeight,
+          radius: peerRadius
+        });
+      }
+    }
+
+    return colliders;
+  }
+
+  resolveAvatarCollisionStep(candX, candY, candZ, { prevY = candY, vy = 0, isTeleport = false } = {}) {
+    const colCfg = this.avatarCollider || { radius: 0.48, height: 1.88, stepHeight: 0.18 };
+    const radius = Number(colCfg.radius) || 0.48;
+    const height = Number(colCfg.height) || 1.88;
+    const stepHeight = Number(colCfg.stepHeight) || 0.18;
+    const footRadius = radius * 0.65;
+
+    const { worldW, worldD } = this.getWorldDimensions ? this.getWorldDimensions() : { worldW: 48, worldD: 32 };
+    const maxX = worldW * 0.55;
+    const maxZ = worldD * 0.55;
+
+    let x = Math.max(-maxX, Math.min(maxX, Number(candX) || 0));
+    let y = Math.max(0, Number(candY) || 0);
+    let z = Math.max(-maxZ, Math.min(maxZ, Number(candZ) || 0));
+    let nextVy = Number(vy) || 0;
+    let isGrounded = y <= 0;
+    let collided = false;
+
+    const colliders = this.collectAvatarColliders();
+    const seedKey = String(authManager?.clientId || 'local');
+
+    // Vertical head-bonk against overhead undersides when jumping up
+    if (!isTeleport && nextVy > 0) {
+      for (const c of colliders) {
+        if (c.category === 'peer') continue;
+        if (prevY + height <= c.baseY + 0.15 && y + height > c.baseY) {
+          const overlapsXZ = c.kind === 'circle'
+            ? Math.hypot(x - c.x, z - c.z) < (radius * 0.85 + c.radius)
+            : this._isCircleOverRotatedBoxXZ(x, z, radius * 0.85, c.x, c.z, c.halfW, c.halfD, c.rotY);
+          if (overlapsXZ) {
+            y = Math.max(0, c.baseY - height);
+            nextVy = 0;
+            collided = true;
+          }
+        }
+      }
+    }
+
+    // Vertical platform landing / standing check (tables, low boxes, cabinets)
+    let supportY = 0;
+    if (!isTeleport) {
+      for (const c of colliders) {
+        if (!c.supportable) continue;
+        if (prevY >= c.topY - stepHeight && y <= c.topY + 0.04) {
+          const onFootprint = c.kind === 'circle'
+            ? Math.hypot(x - c.x, z - c.z) <= (c.radius + footRadius)
+            : this._isCircleOverRotatedBoxXZ(x, z, footRadius, c.x, c.z, c.halfW, c.halfD, c.rotY);
+          if (onFootprint && c.topY > supportY) {
+            supportY = c.topY;
+          }
+        }
+      }
+      if (y <= supportY + 0.001 && nextVy <= 0) {
+        y = supportY;
+        nextVy = 0;
+        isGrounded = true;
+      } else {
+        isGrounded = y <= 0;
+      }
+    }
+
+    // Iterative XZ pushout & wall sliding (2 passes handle wall corners & nearby peers)
+    const verticalFloorCheck = isTeleport ? y + 0.05 : y + stepHeight;
+    for (let pass = 0; pass < 2; pass++) {
+      let movedInPass = false;
+      for (const c of colliders) {
+        const minClearY = c.category === 'peer' ? y + 0.05 : verticalFloorCheck;
+        if (minClearY >= c.topY - 1e-4 || y + height <= c.baseY + 1e-4) {
+          continue;
+        }
+        const res = c.kind === 'circle'
+          ? this._resolveCircleVsCircleXZ(x, z, radius, c.x, c.z, c.radius, `${seedKey}:${c.id}`)
+          : this._resolveCircleVsRotatedBoxXZ(x, z, radius, c.x, c.z, c.halfW, c.halfD, c.rotY);
+        if (res && res.collided) {
+          x = Math.max(-maxX, Math.min(maxX, res.nx));
+          z = Math.max(-maxZ, Math.min(maxZ, res.nz));
+          collided = true;
+          movedInPass = true;
+        }
+      }
+      if (!movedInPass) break;
+    }
+
+    return {
+      x,
+      y,
+      z,
+      vy: nextVy,
+      isGrounded,
+      collided
+    };
   }
 
   publishLocalPresence(force = false) {
     if (!authManager?.isAuthenticated?.()) return;
     const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    const minIntervalMs = this.avatarMode ? 90 : 450;
+    const isActivelyMoving = this.avatarMode && Boolean(this.avatarState.isMoving);
+    const minIntervalMs = this.avatarMode ? (isActivelyMoving ? 28 : 90) : 220;
     if (!force && (now - this._lastPresenceEmitAt < minIntervalMs)) return;
 
     let wx = 0;
     let wy = 0;
     let wz = 0;
+    let vx = 0;
+    let vy = 0;
+    let vz = 0;
     let yaw = 0;
     let moving = false;
     let running = false;
     let grounded = true;
+    let carrying = false;
     let walkPhase = 0;
 
     if (this.avatarMode) {
       wx = Number(this.avatarState.x) || 0;
       wy = Number(this.avatarState.y) || 0;
       wz = Number(this.avatarState.z) || 0;
+      vx = Number(this.avatarState.vx) || 0;
+      vy = Number(this.avatarState.vy) || 0;
+      vz = Number(this.avatarState.vz) || 0;
       yaw = Number(this.avatarState.yaw) || 0;
       moving = Boolean(this.avatarState.isMoving);
       running = Boolean(this.avatarState.isRunning);
       grounded = this.avatarState.isGrounded !== false;
+      carrying = Array.isArray(this.carriedObjects) && this.carriedObjects.length > 0;
       walkPhase = Number(this.avatarState.walkPhase) || 0;
     } else if (this.controls?.target) {
       const { worldW, worldD } = this.getWorldDimensions();
@@ -3579,7 +4617,7 @@ export class Map3DEngine {
       }
     }
 
-    const snapKey = `${this.avatarMode ? 1 : 0}:${this.avatarPerspective}:${wx.toFixed(2)}:${wy.toFixed(2)}:${wz.toFixed(2)}:${yaw.toFixed(2)}:${moving ? 1 : 0}:${grounded ? 1 : 0}`;
+    const snapKey = `${this.avatarMode ? 1 : 0}:${this.avatarPerspective}:${wx.toFixed(2)}:${wy.toFixed(2)}:${wz.toFixed(2)}:${vx.toFixed(1)}:${vz.toFixed(1)}:${yaw.toFixed(2)}:${moving ? 1 : 0}:${grounded ? 1 : 0}:${carrying ? 1 : 0}`;
     if (!force && snapKey === this._lastPresenceSnapshotKey) return;
 
     this._lastPresenceEmitAt = now;
@@ -3592,15 +4630,20 @@ export class Map3DEngine {
       x: Number(wx.toFixed(3)),
       y: Number(wy.toFixed(3)),
       z: Number(wz.toFixed(3)),
+      vx: Number(vx.toFixed(3)),
+      vy: Number(vy.toFixed(3)),
+      vz: Number(vz.toFixed(3)),
       normX: Number(normX.toFixed(4)),
       normY: Number(normY.toFixed(4)),
       yaw: Number(yaw.toFixed(3)),
       isMoving: moving,
       isRunning: running,
       isGrounded: grounded,
+      isCarrying: carrying,
       walkPhase: Number(walkPhase.toFixed(3)),
-      nearestDeviceId: this.avatarState.nearestDeviceId || null
-    });
+      nearestDeviceId: this.avatarState.nearestDeviceId || null,
+      clientTs: Date.now()
+    }, { immediate: Boolean(force) });
   }
 
   _disposeAvatarMeshGroup(group) {
@@ -3619,6 +4662,128 @@ export class Map3DEngine {
         }
       }
     });
+    if (this.avatarMode && this.carriedObjects?.length > 0) {
+      this.updateCarriedObjectsTransform?.();
+    }
+  }
+
+  _resolveRemotePeerPose(peer) {
+    let tx = Number(peer.x);
+    let ty = Number(peer.y) || 0;
+    let tz = Number(peer.z);
+    if (peer.viewMode === '2d' || !Number.isFinite(tx) || !Number.isFinite(tz)) {
+      const wpos = this.normToWorld(
+        Number.isFinite(Number(peer.normX)) ? Number(peer.normX) : 0.5,
+        Number.isFinite(Number(peer.normY)) ? Number(peer.normY) : 0.5
+      );
+      tx = wpos.x;
+      tz = wpos.z;
+      ty = 0;
+    }
+    const tyaw = Number.isFinite(Number(peer.yaw)) ? Number(peer.yaw) : 0;
+    const colorHex = peer.colorHex || getPeerColorHex(peer.username || peer.clientId);
+    const labelText = peer.viewMode === '2d'
+      ? `@${peer.username} (2D)`
+      : `@${peer.username}`;
+    return { tx, ty, tz, tyaw, colorHex, labelText };
+  }
+
+  syncSingleRemoteAvatar(peer, { updateHud = true } = {}) {
+    if (!peer || !peer.clientId) return false;
+    if (authManager?.clientId && peer.clientId === authManager.clientId) return false;
+
+    const { tx, ty, tz, tyaw, colorHex, labelText } = this._resolveRemotePeerPose(peer);
+    const nowPerf = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const hasExplicitVel = Number.isFinite(Number(peer.vx)) && Number.isFinite(Number(peer.vz));
+    const maxSpeed = peer.isRunning ? 12.5 : 8.0;
+
+    let entry = this.remoteAvatarMap.get(peer.clientId);
+    if (!entry) {
+      const group = createRobloxAvatar3DGroup(labelText, {
+        isRemote: true,
+        vestColor: colorHex,
+        helmetColor: colorHex,
+        ringColor: colorHex,
+        accentHex: colorHex
+      });
+      group.visible = true;
+      group.position.set(tx, ty, tz);
+      group.rotation.y = tyaw;
+      this.remoteAvatarsGroup.add(group);
+      entry = {
+        clientId: peer.clientId,
+        group,
+        currentX: tx,
+        currentY: ty,
+        currentZ: tz,
+        currentYaw: tyaw,
+        targetX: tx,
+        targetY: ty,
+        targetZ: tz,
+        targetYaw: tyaw,
+        vx: hasExplicitVel ? Math.max(-maxSpeed, Math.min(maxSpeed, Number(peer.vx))) : 0,
+        vy: Number.isFinite(Number(peer.vy)) ? Number(peer.vy) : 0,
+        vz: hasExplicitVel ? Math.max(-maxSpeed, Math.min(maxSpeed, Number(peer.vz))) : 0,
+        lastPacketAt: nowPerf,
+        state: {
+          isMoving: Boolean(peer.isMoving),
+          isRunning: Boolean(peer.isRunning),
+          isGrounded: peer.isGrounded !== false,
+          isCarrying: Boolean(peer.isCarrying),
+          walkPhase: Number(peer.walkPhase) || 0
+        },
+        peer
+      };
+      animateRobloxAvatarRig(group, entry.state, 0.016);
+      this.remoteAvatarMap.set(peer.clientId, entry);
+      if (updateHud) this.updateRemotePeersHud();
+      return true;
+    }
+
+    updateRobloxAvatarLabel(entry.group, labelText, colorHex);
+    const dtPacket = Math.max(0.025, (nowPerf - (entry.lastPacketAt || nowPerf)) / 1000);
+    if (hasExplicitVel) {
+      entry.vx = Math.max(-maxSpeed, Math.min(maxSpeed, Number(peer.vx)));
+      entry.vy = Number.isFinite(Number(peer.vy)) ? Number(peer.vy) : 0;
+      entry.vz = Math.max(-maxSpeed, Math.min(maxSpeed, Number(peer.vz)));
+    } else if (peer.isMoving) {
+      const ivx = (tx - entry.targetX) / dtPacket;
+      const ivz = (tz - entry.targetZ) / dtPacket;
+      entry.vx = Math.max(-maxSpeed, Math.min(maxSpeed, ivx));
+      entry.vz = Math.max(-maxSpeed, Math.min(maxSpeed, ivz));
+      entry.vy = 0;
+    } else {
+      entry.vx = 0;
+      entry.vy = 0;
+      entry.vz = 0;
+    }
+
+    entry.targetX = tx;
+    entry.targetY = ty;
+    entry.targetZ = tz;
+    entry.targetYaw = tyaw;
+    entry.lastPacketAt = nowPerf;
+    entry.state.isMoving = Boolean(peer.isMoving);
+    entry.state.isRunning = Boolean(peer.isRunning);
+    entry.state.isGrounded = peer.isGrounded !== false;
+    entry.state.isCarrying = Boolean(peer.isCarrying);
+    if (!entry.state.isMoving && Number.isFinite(Number(peer.walkPhase))) {
+      entry.state.walkPhase = Number(peer.walkPhase);
+    }
+    entry.peer = peer;
+    if (updateHud) this.updateRemotePeersHud();
+    return false;
+  }
+
+  removeSingleRemoteAvatar(clientId, { updateHud = true } = {}) {
+    if (!clientId) return false;
+    const entry = this.remoteAvatarMap.get(clientId);
+    if (!entry) return false;
+    this.remoteAvatarsGroup.remove(entry.group);
+    this._disposeAvatarMeshGroup(entry.group);
+    this.remoteAvatarMap.delete(clientId);
+    if (updateHud) this.updateRemotePeersHud();
+    return true;
   }
 
   syncRemoteAvatars(peers = []) {
@@ -3629,81 +4794,12 @@ export class Map3DEngine {
       if (!peer || !peer.clientId) continue;
       if (authManager?.clientId && peer.clientId === authManager.clientId) continue;
       activeIds.add(peer.clientId);
-
-      let tx = Number(peer.x);
-      let ty = Number(peer.y) || 0;
-      let tz = Number(peer.z);
-      if (peer.viewMode === '2d' || !Number.isFinite(tx) || !Number.isFinite(tz)) {
-        const wpos = this.normToWorld(
-          Number.isFinite(Number(peer.normX)) ? Number(peer.normX) : 0.5,
-          Number.isFinite(Number(peer.normY)) ? Number(peer.normY) : 0.5
-        );
-        tx = wpos.x;
-        tz = wpos.z;
-        ty = 0;
-      }
-
-      const tyaw = Number.isFinite(Number(peer.yaw)) ? Number(peer.yaw) : 0;
-      const colorHex = peer.colorHex || getPeerColorHex(peer.username || peer.clientId);
-      const labelText = peer.viewMode === '2d'
-        ? `@${peer.username} (2D)`
-        : `@${peer.username}`;
-
-      let entry = this.remoteAvatarMap.get(peer.clientId);
-      if (!entry) {
-        const group = createRobloxAvatar3DGroup(labelText, {
-          isRemote: true,
-          vestColor: colorHex,
-          helmetColor: colorHex,
-          ringColor: colorHex,
-          accentHex: colorHex
-        });
-        group.visible = true;
-        group.position.set(tx, ty, tz);
-        group.rotation.y = tyaw;
-        this.remoteAvatarsGroup.add(group);
-        entry = {
-          clientId: peer.clientId,
-          group,
-          currentX: tx,
-          currentY: ty,
-          currentZ: tz,
-          currentYaw: tyaw,
-          targetX: tx,
-          targetY: ty,
-          targetZ: tz,
-          targetYaw: tyaw,
-          state: {
-            isMoving: Boolean(peer.isMoving),
-            isRunning: Boolean(peer.isRunning),
-            isGrounded: peer.isGrounded !== false,
-            walkPhase: Number(peer.walkPhase) || 0
-          },
-          peer
-        };
-        animateRobloxAvatarRig(group, entry.state, 0.016);
-        this.remoteAvatarMap.set(peer.clientId, entry);
-      } else {
-        updateRobloxAvatarLabel(entry.group, labelText, colorHex);
-        entry.targetX = tx;
-        entry.targetY = ty;
-        entry.targetZ = tz;
-        entry.targetYaw = tyaw;
-        entry.state.isMoving = Boolean(peer.isMoving);
-        entry.state.isRunning = Boolean(peer.isRunning);
-        entry.state.isGrounded = peer.isGrounded !== false;
-        if (Number.isFinite(Number(peer.walkPhase))) {
-          entry.state.walkPhase = Number(peer.walkPhase);
-        }
-        entry.peer = peer;
-      }
+      this.syncSingleRemoteAvatar(peer, { updateHud: false });
     }
 
-    for (const [cid, entry] of Array.from(this.remoteAvatarMap.entries())) {
+    for (const cid of Array.from(this.remoteAvatarMap.keys())) {
       if (!activeIds.has(cid)) {
-        this.remoteAvatarsGroup.remove(entry.group);
-        this._disposeAvatarMeshGroup(entry.group);
-        this.remoteAvatarMap.delete(cid);
+        this.removeSingleRemoteAvatar(cid, { updateHud: false });
       }
     }
 
@@ -3712,35 +4808,61 @@ export class Map3DEngine {
 
   updateRemoteAvatars(dt = 0.016) {
     if (this.remoteAvatarMap.size === 0) return;
-    const alpha = Math.min(1, Math.max(0.05, dt * 12));
+    const safeDt = Math.max(0.001, Math.min(0.1, Number(dt) || 0.016));
+    const nowPerf = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const posAlpha = 1 - Math.exp(-22 * safeDt);
+    const yAlpha = 1 - Math.exp(-26 * safeDt);
+    const yawAlpha = 1 - Math.exp(-24 * safeDt);
+
     for (const entry of this.remoteAvatarMap.values()) {
-      const dist = Math.hypot(entry.targetX - entry.currentX, entry.targetZ - entry.currentZ);
-      if (dist > 25) {
-        entry.currentX = entry.targetX;
-        entry.currentY = entry.targetY;
-        entry.currentZ = entry.targetZ;
+      const packetAge = Math.min(0.14, Math.max(0, (nowPerf - (entry.lastPacketAt || nowPerf)) / 1000));
+      const extrapTime = entry.state.isMoving
+        ? (packetAge <= 0.06 ? packetAge : 0.06 + (packetAge - 0.06) * 0.45)
+        : 0;
+      const predX = entry.targetX + (entry.vx || 0) * extrapTime;
+      const predZ = entry.targetZ + (entry.vz || 0) * extrapTime;
+      let predY = entry.targetY;
+      if ((!entry.state.isGrounded || entry.targetY > 0.01) && extrapTime > 0) {
+        predY = Math.max(0, entry.targetY + (entry.vy || 0) * extrapTime - 0.5 * 21.0 * extrapTime * extrapTime);
+      }
+
+      const dist = Math.hypot(predX - entry.currentX, predZ - entry.currentZ);
+      if (dist > 18) {
+        entry.currentX = predX;
+        entry.currentY = predY;
+        entry.currentZ = predZ;
         entry.currentYaw = entry.targetYaw;
-      } else {
-        entry.currentX += (entry.targetX - entry.currentX) * alpha;
-        entry.currentY += (entry.targetY - entry.currentY) * alpha;
-        entry.currentZ += (entry.targetZ - entry.currentZ) * alpha;
+      } else if (dist > 0.001 || Math.abs(predY - entry.currentY) > 0.001) {
+        entry.currentX += (predX - entry.currentX) * posAlpha;
+        entry.currentY += (predY - entry.currentY) * yAlpha;
+        entry.currentZ += (predZ - entry.currentZ) * posAlpha;
         const yawDiff = Math.atan2(
           Math.sin(entry.targetYaw - entry.currentYaw),
           Math.cos(entry.targetYaw - entry.currentYaw)
         );
-        entry.currentYaw += yawDiff * alpha;
+        entry.currentYaw += yawDiff * yawAlpha;
+      } else {
+        entry.currentX = predX;
+        entry.currentY = predY;
+        entry.currentZ = predZ;
+        const yawDiff = Math.atan2(
+          Math.sin(entry.targetYaw - entry.currentYaw),
+          Math.cos(entry.targetYaw - entry.currentYaw)
+        );
+        entry.currentYaw += yawDiff * yawAlpha;
       }
 
-      if (entry.state.isMoving || dist > 0.04) {
-        entry.state.walkPhase += dt * (entry.state.isRunning ? 14.5 : 9.5);
+      const animMoving = entry.state.isMoving || dist > 0.04;
+      if (animMoving) {
+        entry.state.walkPhase += safeDt * (entry.state.isRunning ? 14.5 : 9.5);
       }
 
       entry.group.position.set(entry.currentX, entry.currentY, entry.currentZ);
       entry.group.rotation.y = entry.currentYaw;
       animateRobloxAvatarRig(entry.group, {
         ...entry.state,
-        isMoving: entry.state.isMoving || dist > 0.05
-      }, dt);
+        isMoving: animMoving
+      }, safeDt);
     }
   }
 
@@ -3748,11 +4870,16 @@ export class Map3DEngine {
     if (typeof document === 'undefined') return;
     const badge = document.getElementById('avatar-online-peers-slot');
     if (!badge) return;
-    const count = Array.isArray(peers) ? peers.length : 0;
+    const list = Array.isArray(peers) ? peers : [];
+    const namesKey = list.map((p) => p?.username || p?.clientId || '').join('|');
+    if (namesKey === this._lastPeersHudKey) return;
+    this._lastPeersHudKey = namesKey;
+
+    const count = list.length;
     if (count === 0) {
       badge.textContent = 'Rekan: 0 online';
     } else {
-      const names = peers.slice(0, 3).map((p) => `@${p.username}`).join(', ');
+      const names = list.slice(0, 3).map((p) => `@${p.username}`).join(', ');
       badge.textContent = `Rekan (${count}): ${names}${count > 3 ? '…' : ''}`;
     }
   }
@@ -3779,7 +4906,7 @@ export class Map3DEngine {
           <span>${isFpp ? 'Mode Teknisi (FPP)' : 'Mode Teknisi (TPP)'}</span>
           <span id="avatar-online-peers-slot" class="sim-inspector-badge">Rekan: 0 online</span>
         </span>
-        <span class="avatar-bar-controls-hint"><strong>Mouse</strong> Lihat • <strong>Scroll</strong> Zoom/FPP • <strong>WASD</strong> Jalan • <strong>Spasi</strong> Lompat • <strong>V</strong> Ganti View</span>
+        <span class="avatar-bar-controls-hint"><strong>WASD</strong> Jalan • <strong>Spasi</strong> Lompat • <strong>E</strong> Angkat • <strong>Q</strong> Taruh • <strong>[ / ]</strong> Putar • <strong>V</strong> View</span>
       </div>
       <div class="avatar-bar-nearest" id="avatar-nearest-slot">
         <span>Terdekat: --</span>
@@ -3793,6 +4920,8 @@ export class Map3DEngine {
           <option value="">Teleport ke Perangkat...</option>
           ${optionsHtml}
         </select>
+        <button type="button" id="btn-avatar-carry-pickup" class="sim-action-btn is-carry" title="Angkat / tambah objek 3D terdekat agar mudah dipindahkan (E)">Angkat (E)</button>
+        <button type="button" id="btn-avatar-carry-drop" class="sim-action-btn is-drop hidden" title="Taruh 1 objek (Q) • Taruh Semua (Shift+Q)">Taruh (Q)</button>
         <button type="button" id="btn-avatar-inspect-nearest" class="sim-action-btn is-primary" title="Fokus & Inspeksi Port perangkat terdekat (F)">Inspeksi Port (F)</button>
         <button type="button" id="btn-avatar-exit" class="sim-action-btn is-exit" title="Keluar dari Mode Teknisi (G)">Keluar</button>
       </div>
@@ -3802,6 +4931,7 @@ export class Map3DEngine {
     hudEl.style.display = 'flex';
     this._lastAvatarHudNearestId = null;
     this._lastAvatarHudDistKey = '';
+    this._lastAvatarHudCarryKey = '';
 
     hudEl.onpointerdown = (ev) => ev.stopPropagation();
 
@@ -3823,6 +4953,16 @@ export class Map3DEngine {
         }
       };
     }
+
+    hudEl.querySelector('#btn-avatar-carry-pickup')?.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      this.pickupNearestObjectFromAvatar();
+    });
+
+    hudEl.querySelector('#btn-avatar-carry-drop')?.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      this.dropCarriedObjectsFromAvatar({ dropAll: Boolean(ev.shiftKey) });
+    });
 
     hudEl.querySelector('#btn-avatar-inspect-nearest')?.addEventListener('click', (ev) => {
       ev.stopPropagation();
@@ -3847,19 +4987,55 @@ export class Map3DEngine {
     const dist = this.avatarState.nearestDist;
     const distText = Number.isFinite(dist) ? `${dist.toFixed(1)}m` : '--';
 
-    if (this._lastAvatarHudNearestId === nearestId && this._lastAvatarHudDistKey === distText) {
+    const nearestPick = this.findNearestPickableObjectToAvatar?.();
+    const pickObjId = nearestPick?.id || nearestPick?.obj?.id || '';
+    const pickName = nearestPick?.name || nearestPick?.obj?.name || '';
+    const pickDistText = nearestPick ? `${nearestPick.distance.toFixed(1)}m` : '';
+    const carriedCount = Array.isArray(this.carriedObjects) ? this.carriedObjects.length : 0;
+    const carryNamesKey = carriedCount > 0
+      ? this.carriedObjects.map((c) => c.objId || c.devId).join(',')
+      : '';
+    const carryKey = `${carriedCount}:${carryNamesKey}:${pickObjId}:${pickDistText}`;
+
+    const btnPick = document.getElementById('btn-avatar-carry-pickup');
+    const btnDrop = document.getElementById('btn-avatar-carry-drop');
+    if (btnPick) {
+      btnPick.disabled = !nearestPick || carriedCount >= (this.maxCarriedObjects || 8);
+      btnPick.textContent = carriedCount > 0 ? `+Angkat (E)` : `Angkat (E)`;
+    }
+    if (btnDrop) {
+      btnDrop.classList.toggle('hidden', carriedCount === 0);
+      btnDrop.textContent = carriedCount > 1 ? `Taruh (${carriedCount}) (Q)` : `Taruh (Q)`;
+    }
+
+    if (
+      this._lastAvatarHudNearestId === nearestId
+      && this._lastAvatarHudDistKey === distText
+      && this._lastAvatarHudCarryKey === carryKey
+    ) {
       return;
     }
     this._lastAvatarHudNearestId = nearestId;
     this._lastAvatarHudDistKey = distText;
+    this._lastAvatarHudCarryKey = carryKey;
 
     const dev = nearestId ? this.deviceManager?.getDeviceById?.(nearestId) : null;
-    if (!dev) {
-      slot.innerHTML = '<span>Terdekat: Tidak ada perangkat</span>';
-    } else {
-      const ipBadge = dev.network?.ip ? ` <span class="sim-inspector-badge is-ip">${this.escapeHudHtml(dev.network.ip)}</span>` : '';
-      slot.innerHTML = `<span>Terdekat:</span> <span class="avatar-bar-nearest-name">${this.escapeHudHtml(dev.name)}</span>${ipBadge} <span class="sim-inspector-badge">${distText}</span>`;
+    const devPart = !dev
+      ? '<span>Perangkat: --</span>'
+      : `<span>Perangkat:</span> <span class="avatar-bar-nearest-name">${this.escapeHudHtml(dev.name)}</span>${dev.network?.ip ? ` <span class="sim-inspector-badge is-ip">${this.escapeHudHtml(dev.network.ip)}</span>` : ''} <span class="sim-inspector-badge">${distText}</span>`;
+
+    let carryPart = '';
+    if (carriedCount > 0) {
+      const names = this.carriedObjects.slice(-2).map((c) => this.escapeHudHtml(c.name)).join(', ');
+      const prefix = carriedCount > 2 ? `+${carriedCount - 2} lagi, ` : '';
+      carryPart = ` <span class="sim-inspector-badge is-carrying">Dibawa (${carriedCount}): ${prefix}${names}</span>`;
     }
+    if (pickObjId && carriedCount < (this.maxCarriedObjects || 8)) {
+      const hintVerb = carriedCount > 0 ? '+[E] Angkat' : '[E] Angkat';
+      carryPart += ` <span class="sim-inspector-badge is-pickable">${hintVerb} ${this.escapeHudHtml(pickName)} (${pickDistText})</span>`;
+    }
+
+    slot.innerHTML = `${devPart}${carryPart}`;
   }
 
   zoomExtents() {
@@ -4586,7 +5762,15 @@ export class Map3DEngine {
       this.applyThemeColors();
     });
 
-    eventBus.on('presence:updated', ({ peers } = {}) => {
+    eventBus.on('presence:updated', ({ peers, deltaPeer, deltaType, deltaClientId } = {}) => {
+      if (deltaType === 'update' && deltaPeer) {
+        this.syncSingleRemoteAvatar(deltaPeer);
+        return;
+      }
+      if (deltaType === 'remove' && deltaClientId) {
+        this.removeSingleRemoteAvatar(deltaClientId);
+        return;
+      }
       this.syncRemoteAvatars(peers || authManager.getRemotePeers());
     });
 

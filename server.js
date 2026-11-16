@@ -752,24 +752,111 @@ function extractBearerToken(req) {
   return '';
 }
 
+const WS_GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
+
+function encodeWsFrame(opcode, payloadInput = '') {
+  const payload = Buffer.isBuffer(payloadInput)
+    ? payloadInput
+    : Buffer.from(String(payloadInput), 'utf8');
+  const len = payload.length;
+  let header;
+  if (len < 126) {
+    header = Buffer.allocUnsafe(2);
+    header[0] = 0x80 | (opcode & 0x0f);
+    header[1] = len;
+  } else if (len <= 65535) {
+    header = Buffer.allocUnsafe(4);
+    header[0] = 0x80 | (opcode & 0x0f);
+    header[1] = 126;
+    header.writeUInt16BE(len, 2);
+  } else {
+    header = Buffer.allocUnsafe(10);
+    header[0] = 0x80 | (opcode & 0x0f);
+    header[1] = 127;
+    header.writeBigUInt64BE(BigInt(len), 2);
+  }
+  return Buffer.concat([header, payload]);
+}
+
 function getPresenceStore(store) {
   if (!store._presenceMap) {
     store._presenceMap = new Map();
   }
+  if (!store._presenceSseClients) {
+    store._presenceSseClients = new Set();
+  }
+  if (!store._presenceWsClients) {
+    store._presenceWsClients = new Set();
+  }
   const map = store._presenceMap;
-  const prune = () => {
-    const cutoff = Date.now() - PRESENCE_TTL_MS;
-    for (const [cid, entry] of map.entries()) {
-      if (!entry || (entry.updatedAt || 0) < cutoff) {
-        map.delete(cid);
+  const sseClients = store._presenceSseClients;
+  const wsClients = store._presenceWsClients;
+
+  const broadcast = (workspaceKey, payloadObj, excludeClientId = '') => {
+    const targetWs = workspaceKey || 'main';
+    const jsonStr = JSON.stringify(payloadObj);
+
+    if (wsClients.size > 0) {
+      const frame = encodeWsFrame(0x1, jsonStr);
+      for (const client of Array.from(wsClients)) {
+        if (client.workspaceKey !== targetWs) continue;
+        if (excludeClientId && client.clientId === excludeClientId) continue;
+        try {
+          if (!client.socket.destroyed && client.socket.writable) {
+            client.socket.write(frame);
+          } else {
+            wsClients.delete(client);
+          }
+        } catch {
+          wsClients.delete(client);
+        }
+      }
+    }
+
+    if (sseClients.size > 0) {
+      const ssePayload = `event: presence\ndata: ${jsonStr}\n\n`;
+      for (const client of Array.from(sseClients)) {
+        if (client.workspaceKey !== targetWs) continue;
+        if (excludeClientId && client.clientId === excludeClientId) continue;
+        try {
+          if (!client.res.writableEnded) {
+            client.res.write(ssePayload);
+          } else {
+            sseClients.delete(client);
+          }
+        } catch {
+          sseClients.delete(client);
+        }
       }
     }
   };
+
+  const prune = () => {
+    const cutoff = Date.now() - PRESENCE_TTL_MS;
+    const expired = [];
+    for (const [cid, entry] of map.entries()) {
+      if (!entry || (entry.updatedAt || 0) < cutoff) {
+        map.delete(cid);
+        if (entry?.clientId) expired.push(entry);
+      }
+    }
+    for (const item of expired) {
+      broadcast(item.workspaceKey, { type: 'peer-remove', clientId: item.clientId });
+    }
+  };
+
   return {
     list(workspaceKey = 'main') {
       prune();
       const targetKey = workspaceKey || 'main';
       return Array.from(map.values()).filter((p) => p.workspaceKey === targetKey);
+    },
+    hasActiveWsClient(clientId) {
+      if (!clientId) return false;
+      for (const client of wsClients) {
+        if (client.clientId === clientId && !client.socket.destroyed) return true;
+      }
+      return false;
     },
     upsert(sessionUser, payload = {}, token = '') {
       prune();
@@ -777,6 +864,11 @@ function getPresenceStore(store) {
       if (!clientId) return this.list(payload.workspaceKey || 'main');
       const requestedWs = String(payload.workspaceKey || 'main').trim();
       const workspaceKey = requestedWs === `user_${sessionUser.username}` ? requestedWs : 'main';
+      const prevEntry = map.get(clientId);
+      if (prevEntry && prevEntry.workspaceKey !== workspaceKey) {
+        broadcast(prevEntry.workspaceKey, { type: 'peer-remove', clientId }, clientId);
+      }
+      const now = Date.now();
       const entry = {
         clientId,
         tokenHash: token ? hashSha256('pres', token).slice(0, 16) : '',
@@ -790,34 +882,312 @@ function getPresenceStore(store) {
         x: Number.isFinite(Number(payload.x)) ? Number(payload.x) : 0,
         y: Number.isFinite(Number(payload.y)) ? Number(payload.y) : 0,
         z: Number.isFinite(Number(payload.z)) ? Number(payload.z) : 0,
+        vx: Number.isFinite(Number(payload.vx)) ? Number(payload.vx) : 0,
+        vy: Number.isFinite(Number(payload.vy)) ? Number(payload.vy) : 0,
+        vz: Number.isFinite(Number(payload.vz)) ? Number(payload.vz) : 0,
         normX: Number.isFinite(Number(payload.normX)) ? Number(payload.normX) : 0.5,
         normY: Number.isFinite(Number(payload.normY)) ? Number(payload.normY) : 0.5,
         yaw: Number.isFinite(Number(payload.yaw)) ? Number(payload.yaw) : 0,
         isMoving: Boolean(payload.isMoving),
         isRunning: Boolean(payload.isRunning),
         isGrounded: payload.isGrounded !== false,
+        isCarrying: Boolean(payload.isCarrying),
         walkPhase: Number.isFinite(Number(payload.walkPhase)) ? Number(payload.walkPhase) : 0,
         nearestDeviceId: payload.nearestDeviceId || null,
         colorHex: typeof payload.colorHex === 'string' ? payload.colorHex : '#2563eb',
-        updatedAt: Date.now()
+        clientTs: Number.isFinite(Number(payload.clientTs)) ? Number(payload.clientTs) : now,
+        updatedAt: now
       };
       map.set(clientId, entry);
+      broadcast(workspaceKey, { type: 'peer-update', peer: entry }, clientId);
       return this.list(workspaceKey);
     },
     remove({ clientId = '', token = '', username = '' } = {}) {
+      const removed = [];
       if (clientId && map.has(clientId)) {
+        removed.push(map.get(clientId));
         map.delete(clientId);
       }
       if (token) {
         const th = hashSha256('pres', token).slice(0, 16);
         for (const [cid, entry] of map.entries()) {
           if (entry.tokenHash === th || (username && entry.username === username)) {
+            removed.push(entry);
             map.delete(cid);
           }
         }
       }
-    }
+      for (const item of removed) {
+        if (item?.clientId) {
+          broadcast(item.workspaceKey, { type: 'peer-remove', clientId: item.clientId });
+        }
+      }
+    },
+    subscribeSse(res, workspaceKey = 'main', clientId = '') {
+      res.socket?.setNoDelay?.(true);
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        Connection: 'keep-alive',
+        'X-Accel-Buffering': 'no',
+        'Access-Control-Allow-Origin': '*'
+      });
+      const targetWs = workspaceKey || 'main';
+      const clientRec = { res, workspaceKey: targetWs, clientId };
+      sseClients.add(clientRec);
+
+      const snapshot = JSON.stringify({
+        type: 'peers-snapshot',
+        peers: this.list(targetWs)
+      });
+      res.write(`event: presence\ndata: ${snapshot}\n\n`);
+
+      const keepAlive = setInterval(() => {
+        if (res.writableEnded) {
+          clearInterval(keepAlive);
+          sseClients.delete(clientRec);
+          return;
+        }
+        try {
+          res.write(': ping\n\n');
+        } catch {
+          clearInterval(keepAlive);
+          sseClients.delete(clientRec);
+        }
+      }, 15000);
+      keepAlive.unref?.();
+
+      res.on('close', () => {
+        clearInterval(keepAlive);
+        sseClients.delete(clientRec);
+      });
+    },
+    _wsClients: wsClients
   };
+}
+
+function attachPresenceRealtime(server, store) {
+  if (!server || server._netmapWsAttached) return;
+  server._netmapWsAttached = true;
+  const presence = getPresenceStore(store);
+  const wsClients = presence._wsClients;
+
+  server.on('upgrade', async (req, socket, head) => {
+    try {
+      const parsedUrl = new URL(req.url || '/', 'http://localhost');
+      if (parsedUrl.pathname !== '/ws/presence') {
+        socket.destroy();
+        return;
+      }
+
+      const wsKey = req.headers['sec-websocket-key'];
+      if (!wsKey || typeof wsKey !== 'string') {
+        socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
+        socket.destroy();
+        return;
+      }
+
+      const requestedWs = parsedUrl.searchParams.get('workspace') || 'main';
+      const token = parsedUrl.searchParams.get('token') || extractBearerToken(req);
+      const clientId = String(parsedUrl.searchParams.get('clientId') || '').trim();
+      const sessionUser = token ? await store.getSessionUser(token) : null;
+
+      if (requestedWs !== 'main' && (!sessionUser || requestedWs !== `user_${sessionUser.username}`)) {
+        socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+        socket.destroy();
+        return;
+      }
+      if (requestedWs === 'main' && !sessionUser) {
+        const mainSec = await store.getMainWorkspaceSecurity();
+        if (mainSec.isPublicViewable === false) {
+          socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+          socket.destroy();
+          return;
+        }
+      }
+
+      const accept = crypto
+        .createHash('sha1')
+        .update(wsKey.trim() + WS_GUID)
+        .digest('base64');
+      socket.write(
+        'HTTP/1.1 101 Switching Protocols\r\n'
+        + 'Upgrade: websocket\r\n'
+        + 'Connection: Upgrade\r\n'
+        + `Sec-WebSocket-Accept: ${accept}\r\n\r\n`
+      );
+      socket.setNoDelay(true);
+      socket.setKeepAlive(true, 15000);
+
+      const clientRec = {
+        socket,
+        workspaceKey: requestedWs,
+        clientId,
+        token,
+        sessionUser,
+        hasPublished: false,
+        lastPongAt: Date.now()
+      };
+      wsClients.add(clientRec);
+
+      const snapshotMsg = JSON.stringify({
+        type: 'peers-snapshot',
+        peers: presence.list(requestedWs)
+      });
+      socket.write(encodeWsFrame(0x1, snapshotMsg));
+
+      let rxBuf = Buffer.alloc(0);
+      let fragOpcode = 0;
+      let fragChunks = [];
+
+      const handleJsonMessage = (rawText) => {
+        try {
+          const msg = JSON.parse(rawText);
+          if (!msg || typeof msg !== 'object') return;
+          if (msg.type === 'ping') {
+            if (!socket.destroyed && socket.writable) {
+              socket.write(encodeWsFrame(0x1, JSON.stringify({ type: 'pong', ts: Date.now() })));
+            }
+            return;
+          }
+          if (msg.type === 'presence' && clientRec.sessionUser) {
+            if (msg.clientId) clientRec.clientId = String(msg.clientId).trim();
+            if (msg.workspaceKey) {
+              const reqKey = String(msg.workspaceKey).trim();
+              clientRec.workspaceKey = reqKey === `user_${clientRec.sessionUser.username}` ? reqKey : 'main';
+            }
+            clientRec.hasPublished = true;
+            presence.upsert(clientRec.sessionUser, msg, clientRec.token);
+          } else if (msg.type === 'leave' && clientRec.sessionUser) {
+            presence.remove({
+              clientId: clientRec.clientId || String(msg.clientId || ''),
+              token: clientRec.token,
+              username: clientRec.sessionUser.username
+            });
+          }
+        } catch {
+          // ignore malformed JSON frames
+        }
+      };
+
+      const processFrames = () => {
+        while (rxBuf.length >= 2) {
+          const b0 = rxBuf[0];
+          const b1 = rxBuf[1];
+          const fin = Boolean(b0 & 0x80);
+          const opcode = b0 & 0x0f;
+          const masked = Boolean(b1 & 0x80);
+          let payloadLen = b1 & 0x7f;
+          let offset = 2;
+
+          if (payloadLen === 126) {
+            if (rxBuf.length < 4) return;
+            payloadLen = rxBuf.readUInt16BE(2);
+            offset = 4;
+          } else if (payloadLen === 127) {
+            if (rxBuf.length < 10) return;
+            const bigLen = rxBuf.readBigUInt64BE(2);
+            if (bigLen > 262144n) {
+              socket.destroy();
+              return;
+            }
+            payloadLen = Number(bigLen);
+            offset = 10;
+          }
+
+          if (!masked || payloadLen > 262144) {
+            socket.destroy();
+            return;
+          }
+
+          const totalLen = offset + 4 + payloadLen;
+          if (rxBuf.length < totalLen) return;
+
+          const mask = [rxBuf[offset], rxBuf[offset + 1], rxBuf[offset + 2], rxBuf[offset + 3]];
+          const payload = Buffer.allocUnsafe(payloadLen);
+          const dataStart = offset + 4;
+          for (let i = 0; i < payloadLen; i++) {
+            payload[i] = rxBuf[dataStart + i] ^ mask[i & 3];
+          }
+          rxBuf = rxBuf.subarray(totalLen);
+
+          if (opcode === 0x8) {
+            try { socket.write(encodeWsFrame(0x8, Buffer.alloc(0))); } catch {}
+            socket.end();
+            return;
+          }
+          if (opcode === 0x9) {
+            try { socket.write(encodeWsFrame(0xA, payload)); } catch {}
+            continue;
+          }
+          if (opcode === 0xA) {
+            clientRec.lastPongAt = Date.now();
+            continue;
+          }
+
+          if (opcode === 0x0) {
+            fragChunks.push(payload);
+          } else if (opcode === 0x1 || opcode === 0x2) {
+            fragOpcode = opcode;
+            fragChunks = [payload];
+          } else {
+            continue;
+          }
+
+          if (fin) {
+            if (fragOpcode === 0x1) {
+              const text = Buffer.concat(fragChunks).toString('utf8');
+              fragChunks = [];
+              fragOpcode = 0;
+              handleJsonMessage(text);
+            } else {
+              fragChunks = [];
+              fragOpcode = 0;
+            }
+          }
+        }
+      };
+
+      socket.on('data', (chunk) => {
+        rxBuf = rxBuf.length > 0 ? Buffer.concat([rxBuf, chunk]) : chunk;
+        processFrames();
+      });
+
+      const pingTimer = setInterval(() => {
+        if (socket.destroyed) {
+          clearInterval(pingTimer);
+          return;
+        }
+        if (Date.now() - clientRec.lastPongAt > 45000) {
+          socket.destroy();
+          return;
+        }
+        try {
+          socket.write(encodeWsFrame(0x9, Buffer.from('hb')));
+        } catch {
+          socket.destroy();
+        }
+      }, 15000);
+      pingTimer.unref?.();
+
+      const cleanup = () => {
+        clearInterval(pingTimer);
+        wsClients.delete(clientRec);
+        if (clientRec.hasPublished && clientRec.clientId && !presence.hasActiveWsClient(clientRec.clientId)) {
+          presence.remove({ clientId: clientRec.clientId });
+        }
+      };
+      socket.on('close', cleanup);
+      socket.on('error', cleanup);
+
+      if (head && head.length > 0) {
+        rxBuf = head;
+        processFrames();
+      }
+    } catch {
+      try { socket.destroy(); } catch {}
+    }
+  });
 }
 
 function createNetMapRequestHandler(store, rootDir = ROOT_DIR) {
@@ -976,6 +1346,28 @@ function createNetMapRequestHandler(store, rootDir = ROOT_DIR) {
           presence.remove({ clientId, token, username: sessUser?.username || '' });
           await store.deleteSession(token);
           sendJson(res, 200, { ok: true });
+          return;
+        }
+
+        // Real-time Server-Sent Events stream for workspace presence push
+        if (req.method === 'GET' && rawPath === '/api/presence/stream') {
+          const parsedUrl = new URL(reqUrl, 'http://localhost');
+          const requestedWs = parsedUrl.searchParams.get('workspace') || 'main';
+          const clientId = String(parsedUrl.searchParams.get('clientId') || '').trim();
+          const token = parsedUrl.searchParams.get('token') || extractBearerToken(req);
+          const sessionUser = token ? await store.getSessionUser(token) : null;
+          if (requestedWs !== 'main' && (!sessionUser || requestedWs !== `user_${sessionUser.username}`)) {
+            sendJson(res, 403, { error: 'Akses stream kehadiran workspace ditolak.' });
+            return;
+          }
+          if (requestedWs === 'main' && !sessionUser) {
+            const mainSec = await store.getMainWorkspaceSecurity();
+            if (mainSec.isPublicViewable === false) {
+              sendJson(res, 401, { error: 'Server Utama saat ini tidak dibuka untuk publik. Silakan login.' });
+              return;
+            }
+          }
+          presence.subscribeSse(res, requestedWs, clientId);
           return;
         }
 
@@ -1279,6 +1671,8 @@ async function startServer() {
     mysqlRetries: Number(process.env.MYSQL_CONNECT_RETRIES) || (process.env.NODE_ENV === 'production' ? 12 : 1)
   });
   const server = http.createServer(createNetMapRequestHandler(store, ROOT_DIR));
+  server.on('connection', (socket) => socket.setNoDelay(true));
+  attachPresenceRealtime(server, store);
   server.listen(PORT, HOST, () => {
     const url = `http://localhost:${PORT}`;
     console.log(`\n======================================================`);
@@ -1323,6 +1717,8 @@ if (require.main === module) {
 module.exports = {
   createStorageAdapter,
   createNetMapRequestHandler,
+  attachPresenceRealtime,
+  encodeWsFrame,
   JsonFileStore,
   MySqlStore,
   verifyPassword,
