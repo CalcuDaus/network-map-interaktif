@@ -31,6 +31,8 @@ class StateManager {
       mode: 'navigate',
       // Selected 3D builder object ID
       selectedObject3dId: null,
+      // Selected 3D room ID
+      selectedRoom3dId: null,
       // Viewport transform
       viewport: {
         x: 0,
@@ -104,11 +106,69 @@ class StateManager {
 
   setRooms3d(rooms) {
     this.state.project.rooms3d = Array.isArray(rooms) ? rooms : [];
+    if (
+      this.state.selectedRoom3dId &&
+      !this.state.project.rooms3d.some((r) => r.id === this.state.selectedRoom3dId)
+    ) {
+      this.state.selectedRoom3dId = null;
+      eventBus.emit('room3d:deselected', {});
+    }
     eventBus.emit('room3d:changed', { rooms: this.state.project.rooms3d });
   }
 
   getRooms3d() {
     return this.state.project.rooms3d || [];
+  }
+
+  getRoom3dById(id) {
+    return this.getRooms3d().find((r) => r.id === id) || null;
+  }
+
+  updateRoom3d(id, updates) {
+    const list = [...this.getRooms3d()];
+    const idx = list.findIndex((r) => r.id === id);
+    if (idx < 0) return null;
+    const updated = { ...list[idx], ...updates, id };
+    list[idx] = updated;
+    this.state.project.rooms3d = list;
+    eventBus.emit('room3d:changed', { rooms: list });
+    if (this.state.selectedRoom3dId === id) {
+      eventBus.emit('room3d:selected', updated);
+    }
+    return updated;
+  }
+
+  deleteRoom3d(id) {
+    const list = this.getRooms3d();
+    const next = list.filter((r) => r.id !== id);
+    if (next.length === list.length) return false;
+    const wasSelected = this.state.selectedRoom3dId === id;
+    this.state.project.rooms3d = next;
+    if (wasSelected) {
+      this.state.selectedRoom3dId = null;
+      eventBus.emit('room3d:deselected', { id });
+    }
+    eventBus.emit('room3d:changed', { rooms: next });
+    return true;
+  }
+
+  selectRoom3d(id) {
+    const room = this.getRoom3dById(id);
+    if (!room) return;
+    if (this.state.selectedRoom3dId === id) return;
+    this.state.selectedRoom3dId = id;
+    eventBus.emit('room3d:selected', room);
+  }
+
+  deselectRoom3d() {
+    if (!this.state.selectedRoom3dId) return;
+    const prevId = this.state.selectedRoom3dId;
+    this.state.selectedRoom3dId = null;
+    eventBus.emit('room3d:deselected', { id: prevId });
+  }
+
+  getSelectedRoom3dId() {
+    return this.state.selectedRoom3dId || null;
   }
 
   getObjects3d() {

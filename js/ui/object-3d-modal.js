@@ -6,7 +6,7 @@
 
 import { eventBus } from '../core/event-bus.js';
 import { stateManager } from '../core/state-manager.js';
-import { OBJECT3D_PRESETS } from '../map/map-3d-models.js';
+import { OBJECT3D_PRESETS, BUILTIN_ROOM_BUILDING_PRESETS, createBuildingRoomPresetData } from '../map/map-3d-models.js';
 import { clamp, generateId } from '../utils/helpers.js';
 
 const PRESET_LIST = [
@@ -149,6 +149,21 @@ export class Object3DModal {
           <button type="button" id="btn-o3d-add-now" class="btn btn-primary btn-sm" style="width: 100%; font-weight: 700; font-size: 11.5px;">
             + Tambahkan ke Peta 3D Sekarang
           </button>
+
+          <div style="border-top: 1px dashed var(--border-color); padding-top: 7px; margin-top: 2px; display: flex; flex-direction: column; gap: 5px;">
+            <div style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--accent-blue, #2a7c13);">
+              Pasang Gedung Sekolah 3D (.GLB)
+            </div>
+            <div id="o3d-building-preset-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px;">
+              ${BUILTIN_ROOM_BUILDING_PRESETS.map((b) => `
+                <button type="button" class="btn btn-secondary btn-sm o3d-bldg-btn" data-bldg-id="${b.id}"
+                        style="justify-content: flex-start; gap: 5px; padding: 5px 6px; font-size: 10px; text-align: left; line-height: 1.25;" title="${b.subtitle}">
+                  <i data-lucide="building-2" style="width: 12px; height: 12px; flex-shrink: 0;"></i>
+                  <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${b.name}</span>
+                </button>
+              `).join('')}
+            </div>
+          </div>
         </div>
 
         <!-- Section 2: Live Parametric Editor & Push/Pull Controls -->
@@ -332,6 +347,41 @@ export class Object3DModal {
     // Add Now button
     this.panelEl.querySelector('#btn-o3d-add-now')?.addEventListener('click', () => {
       this.addObjectFromDraftNow();
+    });
+
+    // Built-in 3D School Buildings (.GLB) quick insert buttons
+    this.panelEl.querySelectorAll('.o3d-bldg-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const bId = btn.getAttribute('data-bldg-id');
+        const preset = BUILTIN_ROOM_BUILDING_PRESETS.find((b) => b.id === bId);
+        if (!preset) return;
+        let x = 0.5;
+        let y = 0.5;
+        if (this.map3DEngine?.controls?.target && typeof this.map3DEngine?.worldToNorm === 'function') {
+          const t = this.map3DEngine.controls.target;
+          const n = this.map3DEngine.worldToNorm(t.x, t.z);
+          x = clamp(Number(n.normX.toFixed(3)), 0.05, 0.95);
+          y = clamp(Number(n.normY.toFixed(3)), 0.05, 0.95);
+        }
+        const existing = [...stateManager.getRooms3d()];
+        const roomData = createBuildingRoomPresetData(preset, {
+          x,
+          y,
+          existingRooms: existing,
+          id: generateId('room3d')
+        });
+        if (!roomData) return;
+        stateManager.setRooms3d([...existing, roomData]);
+        if (stateManager.getViewMode?.() !== '3d') {
+          stateManager.setViewMode?.('3d');
+        }
+        stateManager.selectRoom3d?.(roomData.id);
+        this.map3DEngine?.setNavTool?.('move');
+        this.map3DEngine?.focusOnRoom3d?.(roomData.id);
+        this.map3DEngine?.showStatusHint?.(
+          `Gedung "${roomData.name}" dipasang ke Peta 3D! Seret langsung di kanvas untuk memindahkannya (M = Geser, R / [ ] = Putar).`
+        );
+      });
     });
 
     // Pick selected device coordinates

@@ -581,16 +581,95 @@ export function create3DLabelSprite(device, elevationMeters = 0) {
   return sprite;
 }
 
+export const BUILTIN_ROOM_BUILDING_PRESETS = [
+  {
+    id: 'gedung-kepsek-tu-cutaway',
+    name: 'Gedung Kepsek & TU (Cutaway)',
+    subtitle: 'Interior terlihat (28×15×5.9m)',
+    widthMeters: 28,
+    depthMeters: 15,
+    heightMeters: 5.9,
+    wallColor: '#3b82f6',
+    floorColor: '#1e293b',
+    opacity: 0.18,
+    customModelUrl: 'assets/models/gedung_utama_kepsek_tu_cutaway.glb'
+  },
+  {
+    id: 'gedung-kepsek-tu-full',
+    name: 'Gedung Kepsek & TU (Full)',
+    subtitle: 'Atap lengkap (28×15×5.9m)',
+    widthMeters: 28,
+    depthMeters: 15,
+    heightMeters: 5.9,
+    wallColor: '#3b82f6',
+    floorColor: '#1e293b',
+    opacity: 0.18,
+    customModelUrl: 'assets/models/gedung_utama_kepsek_tu.glb'
+  },
+  {
+    id: 'gedung-3ruangan-cutaway',
+    name: 'Gedung 3 Ruangan (Cutaway)',
+    subtitle: 'Interior terlihat (27.9×9.5×5.25m)',
+    widthMeters: 27.9,
+    depthMeters: 9.5,
+    heightMeters: 5.25,
+    wallColor: '#2a7c13',
+    floorColor: '#1e293b',
+    opacity: 0.18,
+    customModelUrl: 'assets/models/gedung_sekolah_3ruangan_cutaway.glb'
+  },
+  {
+    id: 'gedung-3ruangan-full',
+    name: 'Gedung 3 Ruangan (Full)',
+    subtitle: 'Atap lengkap (27.9×9.5×5.25m)',
+    widthMeters: 27.9,
+    depthMeters: 9.5,
+    heightMeters: 5.25,
+    wallColor: '#2a7c13',
+    floorColor: '#1e293b',
+    opacity: 0.18,
+    customModelUrl: 'assets/models/gedung_sekolah_3ruangan.glb'
+  }
+];
+
+export function createBuildingRoomPresetData(presetOrId, { x = 0.5, y = 0.5, existingRooms = [], id = '' } = {}) {
+  const preset = typeof presetOrId === 'string'
+    ? BUILTIN_ROOM_BUILDING_PRESETS.find((b) => b.id === presetOrId)
+    : presetOrId;
+  if (!preset) return null;
+  const list = Array.isArray(existingRooms) ? existingRooms : [];
+  const countSame = list.filter((r) => r?.customModelUrl === preset.customModelUrl).length;
+  return {
+    id: id || `room3d-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+    name: countSame > 0 ? `${preset.name} #${countSame + 1}` : preset.name,
+    x,
+    y,
+    widthMeters: preset.widthMeters,
+    depthMeters: preset.depthMeters,
+    heightMeters: preset.heightMeters,
+    rotationY: 0,
+    wallColor: preset.wallColor || '#2a7c13',
+    floorColor: preset.floorColor || '#1e293b',
+    opacity: preset.opacity ?? 0.18,
+    customModelUrl: preset.customModelUrl
+  };
+}
+
 /**
- * Create a customizable 3D Room / Building zone mesh
+ * Create a customizable 3D Room / Building zone mesh with optional selection gizmos (Move, Resize, Height, Rotate)
  * @param {Object} room
  * @param {Function} normToWorldFn - (normX, normY) => { x, z }
+ * @param {boolean} [isSelected=false]
  * @returns {THREE.Group}
  */
-export function create3DRoomGroup(room, normToWorldFn) {
+export function create3DRoomGroup(room, normToWorldFn, isSelected = false) {
   const group = new THREE.Group();
-  const pos = normToWorldFn(room.x ?? 0.5, room.y ?? 0.5);
+  const pos = normToWorldFn ? normToWorldFn(room.x ?? 0.5, room.y ?? 0.5) : { x: 0, z: 0 };
   group.position.set(pos.x, 0, pos.z);
+  const rotX = ((Number(room.rotationX) || 0) * Math.PI) / 180;
+  const rotY = ((Number(room.rotationY ?? room.rotationDeg) || 0) * Math.PI) / 180;
+  const rotZ = ((Number(room.rotationZ) || 0) * Math.PI) / 180;
+  group.rotation.set(rotX, rotY, rotZ, 'YXZ');
 
   const w = Math.max(2, Number(room.widthMeters) || 14);
   const d = Math.max(2, Number(room.depthMeters) || 12);
@@ -598,47 +677,68 @@ export function create3DRoomGroup(room, normToWorldFn) {
   const wallColor = room.wallColor || '#2a7c13';
   const floorColor = room.floorColor || '#1e293b';
   const opacity = typeof room.opacity === 'number' ? room.opacity : 0.22;
-
-  // Floor pad
-  const floorGeo = new THREE.BoxGeometry(w, 0.08, d);
-  const floorMat = new THREE.MeshStandardMaterial({
-    color: floorColor,
-    roughness: 0.7,
-    metalness: 0.1,
-    transparent: true,
-    opacity: Math.min(0.85, opacity + 0.35)
-  });
-  const floorMesh = new THREE.Mesh(floorGeo, floorMat);
-  floorMesh.position.y = 0.04;
-  floorMesh.receiveShadow = true;
-  group.add(floorMesh);
-
-  // Translucent 4 walls enclosure box (without blocking interior view)
+  const hasCustomGlb = Boolean(room.customModelUrl);
   const wallBoxGeo = new THREE.BoxGeometry(w, h, d);
-  const wallMat = new THREE.MeshStandardMaterial({
-    color: wallColor,
-    transparent: true,
-    opacity: opacity,
-    side: THREE.DoubleSide,
-    depthWrite: false,
-    roughness: 0.25
-  });
-  const wallBox = new THREE.Mesh(wallBoxGeo, wallMat);
-  wallBox.position.y = h / 2;
-  group.add(wallBox);
 
-  // Crisp wireframe outline on walls
-  const edges = new THREE.EdgesGeometry(wallBoxGeo);
-  const lineMat = new THREE.LineBasicMaterial({ color: wallColor, transparent: true, opacity: 0.85 });
-  const wireframe = new THREE.LineSegments(edges, lineMat);
-  wireframe.position.y = h / 2;
-  group.add(wireframe);
+  if (!hasCustomGlb) {
+    // Procedural floor pad
+    const floorGeo = new THREE.BoxGeometry(w, 0.08, d);
+    const floorMat = new THREE.MeshStandardMaterial({
+      color: floorColor,
+      roughness: 0.7,
+      metalness: 0.1,
+      transparent: true,
+      opacity: Math.min(0.85, opacity + 0.35)
+    });
+    const floorMesh = new THREE.Mesh(floorGeo, floorMat);
+    floorMesh.position.y = 0.04;
+    floorMesh.receiveShadow = true;
+    group.add(floorMesh);
+
+    // Translucent 4 walls enclosure box (without blocking interior view)
+    const wallMat = new THREE.MeshStandardMaterial({
+      color: wallColor,
+      transparent: true,
+      opacity: isSelected ? Math.min(0.45, opacity + 0.08) : opacity,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      roughness: 0.25
+    });
+    const wallBox = new THREE.Mesh(wallBoxGeo, wallMat);
+    wallBox.position.y = h / 2;
+    group.add(wallBox);
+  }
+
+  // Crisp wireframe outline (permanent for procedural room, placeholder/selection outline for .GLB building)
+  if (!hasCustomGlb || isSelected) {
+    const edges = new THREE.EdgesGeometry(wallBoxGeo);
+    const lineMat = new THREE.LineBasicMaterial({
+      color: isSelected ? 0xfacc15 : wallColor,
+      transparent: true,
+      opacity: isSelected ? 0.98 : 0.85
+    });
+    const wireframe = new THREE.LineSegments(edges, lineMat);
+    wireframe.position.y = h / 2;
+    group.add(wireframe);
+  } else {
+    // Lightweight temporary wireframe removed automatically once the .GLB finishes loading
+    const edges = new THREE.EdgesGeometry(wallBoxGeo);
+    const lineMat = new THREE.LineBasicMaterial({
+      color: wallColor,
+      transparent: true,
+      opacity: 0.35
+    });
+    const placeholderWire = new THREE.LineSegments(edges, lineMat);
+    placeholderWire.position.y = h / 2;
+    group.userData.placeholderWireframe = placeholderWire;
+    group.add(placeholderWire);
+  }
 
   // Floating Room Label above roof
   const labelSprite = create3DLabelSprite(
     {
       name: room.name || 'Ruangan 3D',
-      network: { ip: `${w}x${d}m` },
+      network: { ip: `${w.toFixed(1)}×${d.toFixed(1)}m` },
       status: 'online'
     },
     h
@@ -646,6 +746,95 @@ export function create3DRoomGroup(room, normToWorldFn) {
   labelSprite.position.set(0, h + 1.4, 0);
   labelSprite.scale.set(6.4, 1.85, 1);
   group.add(labelSprite);
+
+  // Tag all base geometry descendants before attaching interactive handles
+  group.traverse((child) => {
+    child.userData.roomId = room.id;
+  });
+  group.userData.roomId = room.id;
+
+  if (isSelected) {
+    const handleScale = Math.max(1.0, Math.min(2.2, Math.hypot(w, d) * 0.045));
+
+    // 1. Orange Center Move Pad (drag anywhere in Orbit mode to relocate room cleanly)
+    const moveMat = makeMat(0xf97316, {
+      emissive: 0xea580c,
+      emissiveIntensity: 0.6,
+      roughness: 0.2
+    });
+    const roofMovePad = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.65 * handleScale, 0.72 * handleScale, 0.18 * handleScale, 8),
+      moveMat
+    );
+    roofMovePad.position.set(0, h + 0.25, 0);
+    roofMovePad.userData.roomId = room.id;
+    roofMovePad.userData.gizmoType = 'room-move';
+    group.add(roofMovePad);
+
+    const floorMovePad = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.55 * handleScale, 0.6 * handleScale, 0.14 * handleScale, 8),
+      moveMat
+    );
+    floorMovePad.position.set(0, 0.14, 0);
+    floorMovePad.userData.roomId = room.id;
+    floorMovePad.userData.gizmoType = 'room-move';
+    group.add(floorMovePad);
+
+    // 2. Blue Top Push/Pull Height Handle
+    const pushGroup = new THREE.Group();
+    pushGroup.position.set(Math.min(w * 0.3, 2.2), h + 0.35, 0);
+    const pushMat = makeMat(0x38bdf8, {
+      emissive: 0x0284c7,
+      emissiveIntensity: 0.55,
+      roughness: 0.2
+    });
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.32 * handleScale, 0.52 * handleScale, 14), pushMat);
+    cone.position.y = 0.22 * handleScale;
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(0.42 * handleScale, 0.42 * handleScale, 0.14 * handleScale, 20), pushMat);
+    disc.position.y = -0.1 * handleScale;
+    [cone, disc].forEach((m) => {
+      m.userData.roomId = room.id;
+      m.userData.gizmoType = 'room-pushpull';
+      pushGroup.add(m);
+    });
+    group.add(pushGroup);
+
+    // 3. Yellow Corner Scale Handle (drag to resize Width x Depth)
+    const cornerHandle = new THREE.Mesh(
+      new THREE.BoxGeometry(0.55 * handleScale, 0.55 * handleScale, 0.55 * handleScale),
+      makeMat(0xfacc15, { emissive: 0xca8a04, emissiveIntensity: 0.5, roughness: 0.2 })
+    );
+    cornerHandle.position.set(w / 2 + 0.38 * handleScale, 0.3 * handleScale, d / 2 + 0.38 * handleScale);
+    cornerHandle.userData.roomId = room.id;
+    cornerHandle.userData.gizmoType = 'room-scale';
+    group.add(cornerHandle);
+
+    // 4. Green Outer Rotate Ring + Knob (drag to align room angle with map building)
+    const ringRadius = Math.max(2.2, Math.hypot(w, d) * 0.5 + 0.65);
+    const rotMat = makeMat(0x22c55e, {
+      emissive: 0x16a34a,
+      emissiveIntensity: 0.5,
+      roughness: 0.25
+    });
+    const rotRing = new THREE.Mesh(
+      new THREE.TorusGeometry(ringRadius, 0.08 * handleScale, 10, 48),
+      rotMat
+    );
+    rotRing.rotation.x = Math.PI / 2;
+    rotRing.position.y = 0.1;
+    rotRing.userData.roomId = room.id;
+    rotRing.userData.gizmoType = 'room-rotate';
+    group.add(rotRing);
+
+    const rotKnob = new THREE.Mesh(
+      new THREE.SphereGeometry(0.38 * handleScale, 14, 14),
+      rotMat
+    );
+    rotKnob.position.set(0, 0.24 * handleScale, ringRadius);
+    rotKnob.userData.roomId = room.id;
+    rotKnob.userData.gizmoType = 'room-rotate';
+    group.add(rotKnob);
+  }
 
   return group;
 }
@@ -1018,7 +1207,7 @@ export function createCustomObject3DGroup(obj, normToWorldFn, isSelected = false
     selRing.rotation.x = -Math.PI / 2;
     selRing.position.y = 0.03;
     selRing.userData.object3dId = obj.id;
-    selRing.raycast = () => {};
+    selRing.raycast = () => { };
     group.add(selRing);
 
     // SketchUp Push/Pull Top Extrude Gizmo (blue handle above object)
@@ -1272,7 +1461,7 @@ export function createRobloxAvatar3DGroup(label = 'Teknisi Jaringan', options = 
   // Ensure avatar meshes never block picking devices, ports, or cables underneath
   root.traverse((child) => {
     child.userData.isAvatarMesh = true;
-    child.raycast = () => {};
+    child.raycast = () => { };
   });
 
   root.userData.rigs = {
@@ -1405,7 +1594,7 @@ export function createFppHandsViewmodelGroup() {
 
   root.traverse((child) => {
     child.userData.isAvatarMesh = true;
-    child.raycast = () => {};
+    child.raycast = () => { };
     if (child.isMesh) {
       child.castShadow = false;
     }

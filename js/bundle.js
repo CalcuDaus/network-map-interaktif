@@ -99,6 +99,8 @@
         mode: "navigate",
         // Selected 3D builder object ID
         selectedObject3dId: null,
+        // Selected 3D room ID
+        selectedRoom3dId: null,
         // Viewport transform
         viewport: {
           x: 0,
@@ -166,10 +168,59 @@
     }
     setRooms3d(rooms) {
       this.state.project.rooms3d = Array.isArray(rooms) ? rooms : [];
+      if (this.state.selectedRoom3dId && !this.state.project.rooms3d.some((r) => r.id === this.state.selectedRoom3dId)) {
+        this.state.selectedRoom3dId = null;
+        eventBus.emit("room3d:deselected", {});
+      }
       eventBus.emit("room3d:changed", { rooms: this.state.project.rooms3d });
     }
     getRooms3d() {
       return this.state.project.rooms3d || [];
+    }
+    getRoom3dById(id) {
+      return this.getRooms3d().find((r) => r.id === id) || null;
+    }
+    updateRoom3d(id, updates) {
+      const list = [...this.getRooms3d()];
+      const idx = list.findIndex((r) => r.id === id);
+      if (idx < 0) return null;
+      const updated = { ...list[idx], ...updates, id };
+      list[idx] = updated;
+      this.state.project.rooms3d = list;
+      eventBus.emit("room3d:changed", { rooms: list });
+      if (this.state.selectedRoom3dId === id) {
+        eventBus.emit("room3d:selected", updated);
+      }
+      return updated;
+    }
+    deleteRoom3d(id) {
+      const list = this.getRooms3d();
+      const next = list.filter((r) => r.id !== id);
+      if (next.length === list.length) return false;
+      const wasSelected = this.state.selectedRoom3dId === id;
+      this.state.project.rooms3d = next;
+      if (wasSelected) {
+        this.state.selectedRoom3dId = null;
+        eventBus.emit("room3d:deselected", { id });
+      }
+      eventBus.emit("room3d:changed", { rooms: next });
+      return true;
+    }
+    selectRoom3d(id) {
+      const room = this.getRoom3dById(id);
+      if (!room) return;
+      if (this.state.selectedRoom3dId === id) return;
+      this.state.selectedRoom3dId = id;
+      eventBus.emit("room3d:selected", room);
+    }
+    deselectRoom3d() {
+      if (!this.state.selectedRoom3dId) return;
+      const prevId = this.state.selectedRoom3dId;
+      this.state.selectedRoom3dId = null;
+      eventBus.emit("room3d:deselected", { id: prevId });
+    }
+    getSelectedRoom3dId() {
+      return this.state.selectedRoom3dId || null;
     }
     getObjects3d() {
       return this.state.project.objects3d || [];
@@ -15642,6 +15693,9 @@ ${dev.network?.ip || ""}`,
       });
       eventBus.on("object3d:changed", () => {
         handleMutation("Ubah Objek 3D");
+      });
+      eventBus.on("room3d:changed", () => {
+        handleMutation("Ubah Ruangan 3D");
       });
     }
     /**
@@ -63786,49 +63840,143 @@ void main() {
     sprite.renderOrder = 20;
     return sprite;
   }
-  function create3DRoomGroup(room, normToWorldFn) {
+  var BUILTIN_ROOM_BUILDING_PRESETS = [
+    {
+      id: "gedung-kepsek-tu-cutaway",
+      name: "Gedung Kepsek & TU (Cutaway)",
+      subtitle: "Interior terlihat (28\xD715\xD75.9m)",
+      widthMeters: 28,
+      depthMeters: 15,
+      heightMeters: 5.9,
+      wallColor: "#3b82f6",
+      floorColor: "#1e293b",
+      opacity: 0.18,
+      customModelUrl: "assets/models/gedung_utama_kepsek_tu_cutaway.glb"
+    },
+    {
+      id: "gedung-kepsek-tu-full",
+      name: "Gedung Kepsek & TU (Full)",
+      subtitle: "Atap lengkap (28\xD715\xD75.9m)",
+      widthMeters: 28,
+      depthMeters: 15,
+      heightMeters: 5.9,
+      wallColor: "#3b82f6",
+      floorColor: "#1e293b",
+      opacity: 0.18,
+      customModelUrl: "assets/models/gedung_utama_kepsek_tu.glb"
+    },
+    {
+      id: "gedung-3ruangan-cutaway",
+      name: "Gedung 3 Ruangan (Cutaway)",
+      subtitle: "Interior terlihat (27.9\xD79.5\xD75.25m)",
+      widthMeters: 27.9,
+      depthMeters: 9.5,
+      heightMeters: 5.25,
+      wallColor: "#2a7c13",
+      floorColor: "#1e293b",
+      opacity: 0.18,
+      customModelUrl: "assets/models/gedung_sekolah_3ruangan_cutaway.glb"
+    },
+    {
+      id: "gedung-3ruangan-full",
+      name: "Gedung 3 Ruangan (Full)",
+      subtitle: "Atap lengkap (27.9\xD79.5\xD75.25m)",
+      widthMeters: 27.9,
+      depthMeters: 9.5,
+      heightMeters: 5.25,
+      wallColor: "#2a7c13",
+      floorColor: "#1e293b",
+      opacity: 0.18,
+      customModelUrl: "assets/models/gedung_sekolah_3ruangan.glb"
+    }
+  ];
+  function createBuildingRoomPresetData(presetOrId, { x = 0.5, y = 0.5, existingRooms = [], id = "" } = {}) {
+    const preset = typeof presetOrId === "string" ? BUILTIN_ROOM_BUILDING_PRESETS.find((b) => b.id === presetOrId) : presetOrId;
+    if (!preset) return null;
+    const list = Array.isArray(existingRooms) ? existingRooms : [];
+    const countSame = list.filter((r) => r?.customModelUrl === preset.customModelUrl).length;
+    return {
+      id: id || `room3d-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+      name: countSame > 0 ? `${preset.name} #${countSame + 1}` : preset.name,
+      x,
+      y,
+      widthMeters: preset.widthMeters,
+      depthMeters: preset.depthMeters,
+      heightMeters: preset.heightMeters,
+      rotationY: 0,
+      wallColor: preset.wallColor || "#2a7c13",
+      floorColor: preset.floorColor || "#1e293b",
+      opacity: preset.opacity ?? 0.18,
+      customModelUrl: preset.customModelUrl
+    };
+  }
+  function create3DRoomGroup(room, normToWorldFn, isSelected = false) {
     const group = new Group();
-    const pos = normToWorldFn(room.x ?? 0.5, room.y ?? 0.5);
+    const pos = normToWorldFn ? normToWorldFn(room.x ?? 0.5, room.y ?? 0.5) : { x: 0, z: 0 };
     group.position.set(pos.x, 0, pos.z);
+    const rotX = (Number(room.rotationX) || 0) * Math.PI / 180;
+    const rotY = (Number(room.rotationY ?? room.rotationDeg) || 0) * Math.PI / 180;
+    const rotZ = (Number(room.rotationZ) || 0) * Math.PI / 180;
+    group.rotation.set(rotX, rotY, rotZ, "YXZ");
     const w = Math.max(2, Number(room.widthMeters) || 14);
     const d = Math.max(2, Number(room.depthMeters) || 12);
     const h = Math.max(1.5, Number(room.heightMeters) || 3.5);
     const wallColor = room.wallColor || "#2a7c13";
     const floorColor = room.floorColor || "#1e293b";
     const opacity = typeof room.opacity === "number" ? room.opacity : 0.22;
-    const floorGeo = new BoxGeometry(w, 0.08, d);
-    const floorMat = new MeshStandardMaterial({
-      color: floorColor,
-      roughness: 0.7,
-      metalness: 0.1,
-      transparent: true,
-      opacity: Math.min(0.85, opacity + 0.35)
-    });
-    const floorMesh = new Mesh(floorGeo, floorMat);
-    floorMesh.position.y = 0.04;
-    floorMesh.receiveShadow = true;
-    group.add(floorMesh);
+    const hasCustomGlb = Boolean(room.customModelUrl);
     const wallBoxGeo = new BoxGeometry(w, h, d);
-    const wallMat = new MeshStandardMaterial({
-      color: wallColor,
-      transparent: true,
-      opacity,
-      side: DoubleSide,
-      depthWrite: false,
-      roughness: 0.25
-    });
-    const wallBox = new Mesh(wallBoxGeo, wallMat);
-    wallBox.position.y = h / 2;
-    group.add(wallBox);
-    const edges = new EdgesGeometry(wallBoxGeo);
-    const lineMat = new LineBasicMaterial({ color: wallColor, transparent: true, opacity: 0.85 });
-    const wireframe = new LineSegments(edges, lineMat);
-    wireframe.position.y = h / 2;
-    group.add(wireframe);
+    if (!hasCustomGlb) {
+      const floorGeo = new BoxGeometry(w, 0.08, d);
+      const floorMat = new MeshStandardMaterial({
+        color: floorColor,
+        roughness: 0.7,
+        metalness: 0.1,
+        transparent: true,
+        opacity: Math.min(0.85, opacity + 0.35)
+      });
+      const floorMesh = new Mesh(floorGeo, floorMat);
+      floorMesh.position.y = 0.04;
+      floorMesh.receiveShadow = true;
+      group.add(floorMesh);
+      const wallMat = new MeshStandardMaterial({
+        color: wallColor,
+        transparent: true,
+        opacity: isSelected ? Math.min(0.45, opacity + 0.08) : opacity,
+        side: DoubleSide,
+        depthWrite: false,
+        roughness: 0.25
+      });
+      const wallBox = new Mesh(wallBoxGeo, wallMat);
+      wallBox.position.y = h / 2;
+      group.add(wallBox);
+    }
+    if (!hasCustomGlb || isSelected) {
+      const edges = new EdgesGeometry(wallBoxGeo);
+      const lineMat = new LineBasicMaterial({
+        color: isSelected ? 16436245 : wallColor,
+        transparent: true,
+        opacity: isSelected ? 0.98 : 0.85
+      });
+      const wireframe = new LineSegments(edges, lineMat);
+      wireframe.position.y = h / 2;
+      group.add(wireframe);
+    } else {
+      const edges = new EdgesGeometry(wallBoxGeo);
+      const lineMat = new LineBasicMaterial({
+        color: wallColor,
+        transparent: true,
+        opacity: 0.35
+      });
+      const placeholderWire = new LineSegments(edges, lineMat);
+      placeholderWire.position.y = h / 2;
+      group.userData.placeholderWireframe = placeholderWire;
+      group.add(placeholderWire);
+    }
     const labelSprite = create3DLabelSprite(
       {
         name: room.name || "Ruangan 3D",
-        network: { ip: `${w}x${d}m` },
+        network: { ip: `${w.toFixed(1)}\xD7${d.toFixed(1)}m` },
         status: "online"
       },
       h
@@ -63836,6 +63984,82 @@ void main() {
     labelSprite.position.set(0, h + 1.4, 0);
     labelSprite.scale.set(6.4, 1.85, 1);
     group.add(labelSprite);
+    group.traverse((child) => {
+      child.userData.roomId = room.id;
+    });
+    group.userData.roomId = room.id;
+    if (isSelected) {
+      const handleScale = Math.max(1, Math.min(2.2, Math.hypot(w, d) * 0.045));
+      const moveMat = makeMat(16347926, {
+        emissive: 15357964,
+        emissiveIntensity: 0.6,
+        roughness: 0.2
+      });
+      const roofMovePad = new Mesh(
+        new CylinderGeometry(0.65 * handleScale, 0.72 * handleScale, 0.18 * handleScale, 8),
+        moveMat
+      );
+      roofMovePad.position.set(0, h + 0.25, 0);
+      roofMovePad.userData.roomId = room.id;
+      roofMovePad.userData.gizmoType = "room-move";
+      group.add(roofMovePad);
+      const floorMovePad = new Mesh(
+        new CylinderGeometry(0.55 * handleScale, 0.6 * handleScale, 0.14 * handleScale, 8),
+        moveMat
+      );
+      floorMovePad.position.set(0, 0.14, 0);
+      floorMovePad.userData.roomId = room.id;
+      floorMovePad.userData.gizmoType = "room-move";
+      group.add(floorMovePad);
+      const pushGroup = new Group();
+      pushGroup.position.set(Math.min(w * 0.3, 2.2), h + 0.35, 0);
+      const pushMat = makeMat(3718648, {
+        emissive: 165063,
+        emissiveIntensity: 0.55,
+        roughness: 0.2
+      });
+      const cone = new Mesh(new ConeGeometry(0.32 * handleScale, 0.52 * handleScale, 14), pushMat);
+      cone.position.y = 0.22 * handleScale;
+      const disc = new Mesh(new CylinderGeometry(0.42 * handleScale, 0.42 * handleScale, 0.14 * handleScale, 20), pushMat);
+      disc.position.y = -0.1 * handleScale;
+      [cone, disc].forEach((m) => {
+        m.userData.roomId = room.id;
+        m.userData.gizmoType = "room-pushpull";
+        pushGroup.add(m);
+      });
+      group.add(pushGroup);
+      const cornerHandle = new Mesh(
+        new BoxGeometry(0.55 * handleScale, 0.55 * handleScale, 0.55 * handleScale),
+        makeMat(16436245, { emissive: 13273604, emissiveIntensity: 0.5, roughness: 0.2 })
+      );
+      cornerHandle.position.set(w / 2 + 0.38 * handleScale, 0.3 * handleScale, d / 2 + 0.38 * handleScale);
+      cornerHandle.userData.roomId = room.id;
+      cornerHandle.userData.gizmoType = "room-scale";
+      group.add(cornerHandle);
+      const ringRadius = Math.max(2.2, Math.hypot(w, d) * 0.5 + 0.65);
+      const rotMat = makeMat(2278750, {
+        emissive: 1483594,
+        emissiveIntensity: 0.5,
+        roughness: 0.25
+      });
+      const rotRing = new Mesh(
+        new TorusGeometry(ringRadius, 0.08 * handleScale, 10, 48),
+        rotMat
+      );
+      rotRing.rotation.x = Math.PI / 2;
+      rotRing.position.y = 0.1;
+      rotRing.userData.roomId = room.id;
+      rotRing.userData.gizmoType = "room-rotate";
+      group.add(rotRing);
+      const rotKnob = new Mesh(
+        new SphereGeometry(0.38 * handleScale, 14, 14),
+        rotMat
+      );
+      rotKnob.position.set(0, 0.24 * handleScale, ringRadius);
+      rotKnob.userData.roomId = room.id;
+      rotKnob.userData.gizmoType = "room-rotate";
+      group.add(rotKnob);
+    }
     return group;
   }
   var OBJECT3D_PRESETS = {
@@ -67032,6 +67256,7 @@ void main() {
       this.coverageGroup = new Group();
       this.deviceMeshMap = /* @__PURE__ */ new Map();
       this.object3dMeshMap = /* @__PURE__ */ new Map();
+      this.room3dMeshMap = /* @__PURE__ */ new Map();
       this.cableMeshMap = /* @__PURE__ */ new Map();
       this.effectivePosMap = /* @__PURE__ */ new Map();
       this.portWorldPosMap = /* @__PURE__ */ new Map();
@@ -67533,22 +67758,71 @@ void main() {
       this.syncDevices();
       this.syncCables();
     }
+    _attachRoomCustomGlb(room, roomGroup) {
+      if (!room?.customModelUrl || !roomGroup) return;
+      const targetSpan = Math.max(Number(room.widthMeters) || 14, Number(room.depthMeters) || 12);
+      loadCustomGlbModel(room.customModelUrl, targetSpan).then((glb) => {
+        if (!this.roomsGroup.children.includes(roomGroup)) return;
+        if (roomGroup.userData.placeholderWireframe) {
+          roomGroup.remove(roomGroup.userData.placeholderWireframe);
+          roomGroup.userData.placeholderWireframe.geometry?.dispose?.();
+          roomGroup.userData.placeholderWireframe.material?.dispose?.();
+          roomGroup.userData.placeholderWireframe = null;
+        }
+        glb.traverse((c) => {
+          c.userData.roomId = room.id;
+        });
+        roomGroup.add(glb);
+      }).catch((err) => console.warn("[Map3DEngine] Custom room GLB failed:", err));
+    }
     syncRooms() {
       if (!this.isActive || !this.isInitialized) return;
       this.clearGroup(this.roomsGroup);
+      this.room3dMeshMap.clear();
       const rooms = stateManager.getRooms3d();
+      const selectedRoomId = stateManager.getSelectedRoom3dId?.() || null;
       rooms.forEach((room) => {
-        const roomGroup = create3DRoomGroup(room, (nx, ny) => this.normToWorld(nx, ny));
+        const roomGroup = create3DRoomGroup(
+          room,
+          (nx, ny) => this.normToWorld(nx, ny),
+          room.id === selectedRoomId
+        );
         roomGroup.userData.roomId = room.id;
         this.roomsGroup.add(roomGroup);
-        if (room.customModelUrl) {
-          const targetSpan = Math.max(room.widthMeters || 10, room.depthMeters || 10);
-          loadCustomGlbModel(room.customModelUrl, targetSpan).then((glb) => {
-            if (!this.roomsGroup.children.includes(roomGroup)) return;
-            roomGroup.add(glb);
-          }).catch((err) => console.warn("[Map3DEngine] Custom room GLB failed:", err));
-        }
+        this.room3dMeshMap.set(room.id, roomGroup);
+        this._attachRoomCustomGlb(room, roomGroup);
       });
+    }
+    rebuildSingleRoom3dMesh(room, isSelected = true) {
+      if (!this.isInitialized || !room?.id) return null;
+      const prev = this.room3dMeshMap.get(room.id);
+      if (prev) {
+        this.roomsGroup.remove(prev);
+        prev.traverse((c) => {
+          if (c.geometry) c.geometry.dispose();
+          if (c.material) {
+            if (Array.isArray(c.material)) c.material.forEach((m) => m.dispose());
+            else c.material.dispose();
+          }
+        });
+      }
+      const next = create3DRoomGroup(room, (nx, ny) => this.normToWorld(nx, ny), isSelected);
+      next.userData.roomId = room.id;
+      this.roomsGroup.add(next);
+      this.room3dMeshMap.set(room.id, next);
+      this._attachRoomCustomGlb(room, next);
+      return next;
+    }
+    focusOnRoom3d(roomId, { duration = 450 } = {}) {
+      const room = stateManager.getRoom3dById?.(roomId);
+      if (!room) return false;
+      const wPos = this.normToWorld(room.x ?? 0.5, room.y ?? 0.5);
+      const span = Math.max(12, Math.max(Number(room.widthMeters) || 14, Number(room.depthMeters) || 12) * 1.45);
+      const h = Math.max(2, Number(room.heightMeters) || 4);
+      const target = new Vector3(wPos.x, h * 0.35, wPos.z);
+      const endPos = new Vector3(wPos.x + span * 0.6, Math.max(12, h + span * 0.55), wPos.z + span * 0.72);
+      this.animateCameraTo(endPos, target, duration);
+      return true;
     }
     syncObjects3d() {
       if (!this.isActive || !this.isInitialized) return;
@@ -68411,6 +68685,7 @@ void main() {
         const cabId = cableHitsPre[0].object.userData?.cableId;
         if (cabId) {
           stateManager.deselectObject3d?.();
+          stateManager.deselectRoom3d?.();
           this.cableManager.selectConnection(cabId);
           return;
         }
@@ -68478,6 +68753,7 @@ void main() {
             return;
           }
           stateManager.deselectObject3d?.();
+          stateManager.deselectRoom3d?.();
           this.deviceManager.selectDevice(devId, {
             toggle: Boolean(e.ctrlKey || e.metaKey),
             additive: Boolean(e.shiftKey)
@@ -68530,6 +68806,7 @@ void main() {
         if (objHit?.object3dId) {
           this.deviceManager.deselectDevice();
           this.cableManager.deselectConnection();
+          stateManager.deselectRoom3d?.();
           stateManager.selectObject3d(objHit.object3dId);
           return;
         }
@@ -68539,7 +68816,22 @@ void main() {
         const cabId = cableHits[0].object.userData?.cableId;
         if (cabId) {
           stateManager.deselectObject3d?.();
+          stateManager.deselectRoom3d?.();
           this.cableManager.selectConnection(cabId);
+          return;
+        }
+      }
+      if (stateManager.getMode() !== "draw-cable") {
+        const roomHit = this.findRoom3dHit?.(this.raycaster);
+        if (roomHit?.roomId) {
+          this.deviceManager.deselectDevice();
+          this.cableManager.deselectConnection();
+          stateManager.deselectObject3d?.();
+          stateManager.selectRoom3d?.(roomHit.roomId);
+          const room = stateManager.getRoom3dById?.(roomHit.roomId);
+          this.showStatusHint(
+            `\u{1F3E0} Ruangan "${room?.name || "Ruangan 3D"}" dipilih \u2014 Drag handle oranye / tool Move (M) untuk geser \u2022 Rotate (R) / [ ] putar \u2022 Kuning ubah ukuran`
+          );
           return;
         }
       }
@@ -68557,6 +68849,7 @@ void main() {
         this.deviceManager.deselectDevice();
         this.cableManager.deselectConnection();
         stateManager.deselectObject3d?.();
+        stateManager.deselectRoom3d?.();
         if (this.simulatorFocusedDeviceId) {
           this.exitSimulatorFocus({ restoreCamera: false });
         } else if (this.avatarMode) {
@@ -68893,17 +69186,47 @@ void main() {
       }
       return null;
     }
+    findRoom3dHit(raycaster = this.raycaster) {
+      if (!this.roomsGroup || this.roomsGroup.children.length === 0) return null;
+      const hits = raycaster.intersectObjects(this.roomsGroup.children, true);
+      for (let i = 0; i < hits.length; i++) {
+        let curr = hits[i].object;
+        let gizmoType = null;
+        let roomId = null;
+        while (curr && curr !== this.roomsGroup) {
+          if (!gizmoType && curr.userData?.gizmoType) gizmoType = curr.userData.gizmoType;
+          if (!roomId && curr.userData?.roomId) roomId = curr.userData.roomId;
+          if (roomId) {
+            return { roomId, gizmoType, point: hits[i].point.clone(), object: hits[i].object };
+          }
+          curr = curr.parent;
+        }
+      }
+      return null;
+    }
     checkGizmoHitAtEvent(e) {
       if (!this.isInitialized || !this.camera || !this.renderer?.domElement) return null;
-      if (!stateManager.getSelectedObject3dId() || this.objects3dGroup.children.length === 0) return null;
+      const hasSelObj = Boolean(stateManager.getSelectedObject3dId?.() && this.objects3dGroup?.children?.length > 0);
+      const hasSelRoom = Boolean(stateManager.getSelectedRoom3dId?.() && this.roomsGroup?.children?.length > 0);
+      if (!hasSelObj && !hasSelRoom) return null;
       const rect = this.renderer.domElement.getBoundingClientRect();
       this.pointer.x = (e.clientX - rect.left) / rect.width * 2 - 1;
       this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
       this.raycaster.setFromCamera(this.pointer, this.camera);
-      const hit = this.findObject3dHit(this.raycaster);
-      return hit && hit.gizmoType ? hit : null;
+      if (hasSelObj) {
+        const objHit = this.findObject3dHit(this.raycaster);
+        if (objHit && objHit.gizmoType) return objHit;
+      }
+      if (hasSelRoom) {
+        const roomHit = this.findRoom3dHit(this.raycaster);
+        if (roomHit && roomHit.gizmoType) return roomHit;
+      }
+      return null;
     }
     startObject3dGizmoDrag(e, dom, gizmoHit) {
+      if (gizmoHit?.roomId || String(gizmoHit?.gizmoType || "").startsWith("room-")) {
+        return this.startRoom3dGizmoDrag(e, dom, gizmoHit);
+      }
       const obj = stateManager.getObject3dById(gizmoHit.object3dId);
       if (!obj) return;
       if (gizmoHit.gizmoType === "pushpull") {
@@ -69070,6 +69393,96 @@ void main() {
       };
       dom.setPointerCapture?.(e.pointerId);
     }
+    startRoom3dGizmoDrag(e, dom, gizmoHit) {
+      const room = stateManager.getRoom3dById?.(gizmoHit.roomId);
+      if (!room) return;
+      if (gizmoHit.gizmoType === "room-move") {
+        return this.startRoom3dMoveDrag(e, dom, gizmoHit);
+      }
+      stateManager.selectRoom3d?.(room.id);
+      this.deviceManager.deselectDevice();
+      this.cableManager.deselectConnection();
+      stateManager.deselectObject3d?.();
+      if (gizmoHit.gizmoType === "room-pushpull") {
+        this.object3dDragState = {
+          kind: "room-pushpull",
+          roomId: room.id,
+          startClientY: e.clientY,
+          startHeight: Number(room.heightMeters) || 3.5,
+          latestHeight: Number(room.heightMeters) || 3.5,
+          draftRoom: { ...room }
+        };
+        dom.setPointerCapture?.(e.pointerId);
+      } else if (gizmoHit.gizmoType === "room-scale") {
+        const planeY = Math.max(0, Number(gizmoHit.point?.y) || 0);
+        const plane = new Plane(new Vector3(0, 1, 0), -planeY);
+        const worldCenter = this.normToWorld(room.x ?? 0.5, room.y ?? 0.5);
+        this.object3dDragState = {
+          kind: "room-scale",
+          roomId: room.id,
+          plane,
+          centerX: worldCenter.x,
+          centerZ: worldCenter.z,
+          rotYRad: (Number(room.rotationY ?? room.rotationDeg) || 0) * Math.PI / 180,
+          startWidth: Number(room.widthMeters) || 14,
+          startDepth: Number(room.depthMeters) || 12,
+          latestWidth: Number(room.widthMeters) || 14,
+          latestDepth: Number(room.depthMeters) || 12,
+          draftRoom: { ...room }
+        };
+        dom.setPointerCapture?.(e.pointerId);
+      } else if (gizmoHit.gizmoType === "room-rotate") {
+        const startRx = Number(room.rotationX) || 0;
+        const startRy = Number(room.rotationY ?? room.rotationDeg) || 0;
+        const startRz = Number(room.rotationZ) || 0;
+        this.object3dDragState = {
+          kind: "rotate-room3d",
+          roomId: room.id,
+          startClientX: e.clientX,
+          startClientY: e.clientY,
+          startRx,
+          startRy,
+          startRz,
+          latestRx: startRx,
+          latestRy: startRy,
+          latestRz: startRz,
+          moved: false,
+          draftRoom: { ...room }
+        };
+        dom.setPointerCapture?.(e.pointerId);
+      }
+    }
+    startRoom3dMoveDrag(e, dom, roomHit) {
+      const room = stateManager.getRoom3dById?.(roomHit?.roomId);
+      if (!room) return;
+      if (room.locked) {
+        stateManager.selectRoom3d?.(room.id);
+        this.showStatusHint(`\u{1F512} Ruangan "${room.name}" dikunci.`);
+        return;
+      }
+      stateManager.selectRoom3d?.(room.id);
+      this.deviceManager.deselectDevice();
+      this.cableManager.deselectConnection();
+      stateManager.deselectObject3d?.();
+      const planeY = Math.max(0, Number(roomHit?.point?.y) || 0);
+      const dragPlane = new Plane(new Vector3(0, 1, 0), -planeY);
+      const hitPt = new Vector3();
+      if (!this.raycaster.ray.intersectPlane(dragPlane, hitPt)) {
+        hitPt.copy(roomHit?.point || new Vector3());
+      }
+      const roomWorld = this.normToWorld(room.x ?? 0.5, room.y ?? 0.5);
+      this.object3dDragState = {
+        kind: "move-room3d",
+        roomId: room.id,
+        room,
+        plane: dragPlane,
+        grabOffsetX: roomWorld.x - hitPt.x,
+        grabOffsetZ: roomWorld.z - hitPt.z,
+        latestNorm: null,
+        moved: false
+      };
+      dom.setPointerCapture?.(e.pointerId);
+    }
     updateObject3dDrag(e) {
       const state = this.object3dDragState;
       if (!state || !this.renderer?.domElement) return;
@@ -69083,6 +69496,17 @@ void main() {
         state.draftObj = { ...state.draftObj, heightMeters: nextH };
         this.rebuildSingleObject3dMesh(state.draftObj, true);
         this.showStatusHint(`\u{1F4D0} Push/Pull Tinggi "${state.draftObj.name}": ${nextH.toFixed(2)}m`);
+        return;
+      }
+      if (state.kind === "room-pushpull") {
+        const dyPx = state.startClientY - e.clientY;
+        const camDist = this.camera ? this.camera.position.distanceTo(this.controls.target) : 25;
+        const deltaMeters = dyPx / Math.max(200, rect.height) * camDist * 1.15;
+        const nextH = clamp2(Number((state.startHeight + deltaMeters).toFixed(2)), 1.5, 40);
+        state.latestHeight = nextH;
+        state.draftRoom = { ...state.draftRoom, heightMeters: nextH };
+        this.rebuildSingleRoom3dMesh(state.draftRoom, true);
+        this.showStatusHint(`\u{1F4D0} Tinggi Ruangan "${state.draftRoom.name}": ${nextH.toFixed(2)}m`);
         return;
       }
       this.pointer.x = (e.clientX - rect.left) / rect.width * 2 - 1;
@@ -69103,6 +69527,24 @@ void main() {
         state.draftObj = { ...state.draftObj, widthMeters: nextW, depthMeters: nextD };
         this.rebuildSingleObject3dMesh(state.draftObj, true);
         this.showStatusHint(`\u{1F4D0} Ukuran "${state.draftObj.name}": ${nextW.toFixed(2)}m \xD7 ${nextD.toFixed(2)}m`);
+        return;
+      }
+      if (state.kind === "room-scale") {
+        const hitPt = new Vector3();
+        if (!this.raycaster.ray.intersectPlane(state.plane, hitPt)) return;
+        const dx = hitPt.x - state.centerX;
+        const dz = hitPt.z - state.centerZ;
+        const cos = Math.cos(state.rotYRad || 0);
+        const sin = Math.sin(state.rotYRad || 0);
+        const lx = dx * cos - dz * sin;
+        const lz = dx * sin + dz * cos;
+        const nextW = clamp2(Number((Math.abs(lx) * 2).toFixed(2)), 2, 200);
+        const nextD = clamp2(Number((Math.abs(lz) * 2).toFixed(2)), 2, 200);
+        state.latestWidth = nextW;
+        state.latestDepth = nextD;
+        state.draftRoom = { ...state.draftRoom, widthMeters: nextW, depthMeters: nextD };
+        this.rebuildSingleRoom3dMesh(state.draftRoom, true);
+        this.showStatusHint(`\u{1F4D0} Ukuran Ruangan "${state.draftRoom.name}": ${nextW.toFixed(2)}m \xD7 ${nextD.toFixed(2)}m`);
         return;
       }
       if (state.kind === "rotate-obj3d") {
@@ -69135,6 +69577,36 @@ void main() {
         );
         return;
       }
+      if (state.kind === "rotate-room3d") {
+        if (Math.hypot(e.clientX - state.startClientX, e.clientY - state.startClientY) > 3) {
+          state.moved = true;
+        }
+        const { rx, ry, rz } = this._computeDragAngles(
+          state.startRx,
+          state.startRy,
+          state.startRz,
+          state.startClientX,
+          state.startClientY,
+          e
+        );
+        state.latestRx = rx;
+        state.latestRy = ry;
+        state.latestRz = rz;
+        state.draftRoom = { ...state.draftRoom, rotationX: rx, rotationY: ry, rotationZ: rz };
+        const roomGroup = this.room3dMeshMap.get(state.roomId);
+        if (roomGroup) {
+          roomGroup.rotation.set(
+            rx * Math.PI / 180,
+            ry * Math.PI / 180,
+            rz * Math.PI / 180,
+            "YXZ"
+          );
+        }
+        this.showStatusHint(
+          `\u{1F504} Rotasi Ruangan "${state.draftRoom.name}": Y:${ry}\xB0 (Ctrl=Snap 15\xB0)`
+        );
+        return;
+      }
       if (state.kind === "create-draw") {
         const hitPt = new Vector3();
         if (!this.raycaster.ray.intersectPlane(state.dragPlane, hitPt)) return;
@@ -69156,6 +69628,25 @@ void main() {
           this.rebuildSingleObject3dMesh(state.draftObj, true);
           this.showStatusHint(`\u{1F4D0} Menggambar "${state.draftObj.name}": ${w.toFixed(1)}m \xD7 ${d.toFixed(1)}m`);
         }
+        return;
+      }
+      if (state.kind === "move-room3d") {
+        const hitPt = new Vector3();
+        if (!this.raycaster.ray.intersectPlane(state.plane, hitPt)) return;
+        state.moved = true;
+        const newWorldX = hitPt.x + state.grabOffsetX;
+        const newWorldZ = hitPt.z + state.grabOffsetZ;
+        const { normX, normY } = this.worldToNorm(newWorldX, newWorldZ);
+        const clampedWorld = this.normToWorld(normX, normY);
+        const roomGroup = this.room3dMeshMap.get(state.roomId);
+        if (roomGroup) {
+          roomGroup.position.x = clampedWorld.x;
+          roomGroup.position.z = clampedWorld.z;
+        }
+        state.latestNorm = { x: Number(normX.toFixed(4)), y: Number(normY.toFixed(4)) };
+        this.showStatusHint(
+          `\u{1F3E0} Geser Ruangan "${state.room?.name || "Ruangan 3D"}": X=${state.latestNorm.x.toFixed(3)}, Y=${state.latestNorm.y.toFixed(3)}`
+        );
         return;
       }
       if (state.kind === "move-obj3d") {
@@ -69210,9 +69701,22 @@ void main() {
         stateManager.updateObject3d(state.objId, { heightMeters: state.latestHeight });
         return;
       }
+      if (state.kind === "room-pushpull") {
+        this._suppressNextClick = true;
+        stateManager.updateRoom3d?.(state.roomId, { heightMeters: state.latestHeight });
+        return;
+      }
       if (state.kind === "scale") {
         this._suppressNextClick = true;
         stateManager.updateObject3d(state.objId, {
+          widthMeters: state.latestWidth,
+          depthMeters: state.latestDepth
+        });
+        return;
+      }
+      if (state.kind === "room-scale") {
+        this._suppressNextClick = true;
+        stateManager.updateRoom3d?.(state.roomId, {
           widthMeters: state.latestWidth,
           depthMeters: state.latestDepth
         });
@@ -69227,6 +69731,27 @@ void main() {
             rotationZ: state.latestRz
           });
         }
+        return;
+      }
+      if (state.kind === "rotate-room3d") {
+        if (state.moved) {
+          this._suppressNextClick = true;
+          stateManager.updateRoom3d?.(state.roomId, {
+            rotationX: state.latestRx,
+            rotationY: state.latestRy,
+            rotationZ: state.latestRz
+          });
+        }
+        return;
+      }
+      if (state.kind === "move-room3d" && state.latestNorm) {
+        if (state.moved) {
+          this._suppressNextClick = true;
+        }
+        stateManager.updateRoom3d?.(state.roomId, {
+          x: state.latestNorm.x,
+          y: state.latestNorm.y
+        });
         return;
       }
       if (state.kind === "create-draw") {
@@ -69382,6 +69907,11 @@ void main() {
         const objHit = this.findObject3dHit(this.raycaster);
         if (objHit?.object3dId) {
           this.startObject3dMoveDrag(e, dom, objHit);
+          return;
+        }
+        const roomHit = this.findRoom3dHit?.(this.raycaster);
+        if (roomHit?.roomId) {
+          this.startRoom3dMoveDrag(e, dom, roomHit);
         }
         return;
       }
@@ -69550,6 +70080,11 @@ void main() {
         const objHit = this.findObject3dHit(this.raycaster);
         if (objHit?.object3dId) {
           this.startObject3dGizmoDrag(e, dom, { ...objHit, gizmoType: "rotate" });
+          return;
+        }
+        const roomHit = this.findRoom3dHit?.(this.raycaster);
+        if (roomHit?.roomId) {
+          this.startRoom3dGizmoDrag(e, dom, { ...roomHit, gizmoType: "room-rotate" });
         }
         return;
       }
@@ -69706,6 +70241,17 @@ void main() {
         const rz = reset ? 0 : clamp2((Number(obj.rotationZ) || 0) + dZ, -180, 180);
         stateManager.updateObject3d(selObjId, { rotationX: rx, rotationY: ry, rotationZ: rz });
         this.showStatusHint(`\u{1F504} Rotasi "${obj.name}": X:${rx}\xB0 Y:${ry}\xB0 Z:${rz}\xB0`);
+        return true;
+      }
+      const selRoomId = stateManager.getSelectedRoom3dId?.();
+      if (selRoomId) {
+        const room = stateManager.getRoom3dById?.(selRoomId);
+        if (!room || room.locked) return false;
+        const rx = reset ? 0 : clamp2((Number(room.rotationX) || 0) + dX, -180, 180);
+        const ry = reset ? 0 : (((Number(room.rotationY ?? room.rotationDeg) || 0) + dY) % 360 + 360) % 360;
+        const rz = reset ? 0 : clamp2((Number(room.rotationZ) || 0) + dZ, -180, 180);
+        stateManager.updateRoom3d?.(selRoomId, { rotationX: rx, rotationY: ry, rotationZ: rz });
+        this.showStatusHint(`\u{1F504} Rotasi Ruangan "${room.name}": X:${rx}\xB0 Y:${ry}\xB0 Z:${rz}\xB0`);
         return true;
       }
       return false;
@@ -71939,9 +72485,14 @@ void main() {
       eventBus.on("connection:deleted", syncCablesOnly);
       eventBus.on("connection:selected", syncCablesOnly);
       eventBus.on("connection:deselected", syncCablesOnly);
-      eventBus.on("room3d:changed", () => {
-        if (this.isActive) this.syncRooms();
-      });
+      const syncRoomsOnly = () => {
+        if (this.isActive && !this.object3dDragState) {
+          this.syncRooms();
+        }
+      };
+      eventBus.on("room3d:changed", syncRoomsOnly);
+      eventBus.on("room3d:selected", syncRoomsOnly);
+      eventBus.on("room3d:deselected", syncRoomsOnly);
       const syncObjects3dOnly = () => {
         if (this.isActive && !this.object3dDragState) {
           this.syncObjects3d();
@@ -72163,6 +72714,9 @@ void main() {
                 + Isi Preset Ruang Control
               </button>
             </div>
+            <div style="font-size: 10.5px; color: var(--text-muted); line-height: 1.35;">
+              Tip: Anda bisa klik ruangan langsung di kanvas 3D lalu seret pakai tool <strong>Move (M)</strong> atau handle oranye, putar pakai <strong>Rotate (R)</strong> / <strong>[ ]</strong>.
+            </div>
 
             <div style="display: flex; flex-direction: column; gap: 3px;">
               <label style="font-size: 11px; font-weight: 600; color: var(--text-primary);">Nama Ruangan *</label>
@@ -72187,21 +72741,26 @@ void main() {
               Ambil Koordinat dari Perangkat Terpilih
             </button>
 
-            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;">
               <div style="display: flex; flex-direction: column; gap: 3px;">
                 <label style="font-size: 10.5px; font-weight: 600; color: var(--text-primary);">Lebar (m)</label>
                 <input type="number" id="r3d-width" min="2" max="200" step="1" value="28"
-                       style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 5px 8px; font-size: 12px; font-family: var(--font-mono);">
+                       style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 5px 6px; font-size: 12px; font-family: var(--font-mono);">
               </div>
               <div style="display: flex; flex-direction: column; gap: 3px;">
                 <label style="font-size: 10.5px; font-weight: 600; color: var(--text-primary);">Panjang (m)</label>
                 <input type="number" id="r3d-depth" min="2" max="200" step="1" value="22"
-                       style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 5px 8px; font-size: 12px; font-family: var(--font-mono);">
+                       style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 5px 6px; font-size: 12px; font-family: var(--font-mono);">
               </div>
               <div style="display: flex; flex-direction: column; gap: 3px;">
                 <label style="font-size: 10.5px; font-weight: 600; color: var(--text-primary);">Tinggi (m)</label>
-                <input type="number" id="r3d-height" min="2" max="40" step="0.5" value="5"
-                       style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 5px 8px; font-size: 12px; font-family: var(--font-mono);">
+                <input type="number" id="r3d-height" min="1.5" max="40" step="0.5" value="5"
+                       style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 5px 6px; font-size: 12px; font-family: var(--font-mono);">
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 3px;">
+                <label style="font-size: 10.5px; font-weight: 600; color: var(--text-primary);">Rotasi (\xB0)</label>
+                <input type="number" id="r3d-rot-y" min="-360" max="360" step="5" value="0"
+                       style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 5px 6px; font-size: 12px; font-family: var(--font-mono);">
               </div>
             </div>
 
@@ -72247,19 +72806,34 @@ void main() {
             </div>
           </div>
 
-          <!-- Right: Existing Rooms List & 3D Prep Guide -->
+          <!-- Right: Built-in 3D Building Presets & Existing Rooms List -->
           <div style="display: flex; flex-direction: column; gap: 10px;">
+            <div style="background: var(--bg-primary, #fff8cf); border: 1px solid var(--border-color, #e5cca0); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px;">
+              <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--accent-blue, #2a7c13);">Gedung Sekolah 3D Bawaan (.GLB)</span>
+              <div id="r3d-building-presets" style="display: grid; grid-template-columns: 1fr; gap: 5px;">
+                ${BUILTIN_ROOM_BUILDING_PRESETS.map((b) => `
+                  <div style="background: var(--bg-secondary, #fbe6c2); border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 8px; display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+                    <div style="min-width: 0;">
+                      <div style="font-size: 11.5px; font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${b.name}</div>
+                      <div style="font-size: 10px; color: var(--text-muted);">${b.subtitle}</div>
+                    </div>
+                    <div style="display: flex; gap: 4px; flex-shrink: 0;">
+                      <button type="button" class="btn btn-primary btn-sm btn-r3d-bldg-place" data-bldg-id="${b.id}" style="font-size: 10px; padding: 2px 7px;" title="Pasang langsung ke kanvas 3D dan aktifkan mode Geser">+ Pasang</button>
+                      <button type="button" class="btn btn-secondary btn-sm btn-r3d-bldg-fill" data-bldg-id="${b.id}" style="font-size: 10px; padding: 2px 6px;" title="Salin ukuran dan model ke form di sebelah kiri">Isi</button>
+                    </div>
+                  </div>
+                `).join("")}
+              </div>
+            </div>
+
             <div style="background: var(--bg-primary, #fff8cf); border: 1px solid var(--border-color, #e5cca0); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px; flex: 1;">
               <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--accent-blue, #2a7c13);">Daftar Ruangan 3D Tersimpan</span>
-              <div id="r3d-list-container" style="display: flex; flex-direction: column; gap: 6px; max-height: 250px; overflow-y: auto;"></div>
+              <div id="r3d-list-container" style="display: flex; flex-direction: column; gap: 6px; max-height: 190px; overflow-y: auto;"></div>
             </div>
 
             <div style="background: rgba(42, 124, 19, 0.08); border: 1px solid rgba(42, 124, 19, 0.25); border-radius: 8px; padding: 10px; font-size: 11px; color: var(--text-secondary); line-height: 1.45;">
-              <strong style="color: var(--accent-blue); display: block; margin-bottom: 4px;">Tips Penumpukan Perangkat 3D:</strong>
-              Klik perangkat apa pun di peta (2D atau 3D), lalu atur <strong>Ketinggian Z (Meter)</strong> di Panel Properti kanan. Misal:
-              <br>\u2022 Server 1: <code>0.4m</code>, Server 2: <code>0.9m</code>
-              <br>\u2022 Router 1: <code>1.4m</code>, Router 2: <code>1.9m</code>
-              <br>\u2022 Access Point Plafon: <code>2.8m</code>
+              <strong style="color: var(--accent-blue); display: block; margin-bottom: 4px;">Tips Penumpukan Perangkat di Dalam Gedung:</strong>
+              Pilih model <strong>Cutaway</strong> bila ingin atap terbuka sehingga switch/router/kabel di dalam ruangan tetap mudah diklik. Atur <strong>Ketinggian Z (Meter)</strong> di Panel Properti kanan.
             </div>
           </div>
         </div>
@@ -72314,9 +72888,77 @@ void main() {
         if (glbUrlInput) glbUrlInput.value = "";
         clearGlbBtn.style.display = "none";
       });
+      this.modalEl.querySelectorAll(".btn-r3d-bldg-place").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const bId = btn.getAttribute("data-bldg-id");
+          if (bId) this.applyBuildingPreset(bId, { autoPlace: true });
+        });
+      });
+      this.modalEl.querySelectorAll(".btn-r3d-bldg-fill").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const bId = btn.getAttribute("data-bldg-id");
+          if (bId) this.applyBuildingPreset(bId, { autoPlace: false });
+        });
+      });
       this.modalEl.querySelector("#btn-room3d-save")?.addEventListener("click", () => this.saveRoomFromForm());
       this.modalEl.querySelector("#btn-room3d-reset-form")?.addEventListener("click", () => this.resetForm());
       eventBus.on("modal:open-room-3d", () => this.show());
+    }
+    getViewportCenterNorm() {
+      if (this.map3DEngine?.controls?.target && typeof this.map3DEngine?.worldToNorm === "function") {
+        const t = this.map3DEngine.controls.target;
+        const { normX, normY } = this.map3DEngine.worldToNorm(t.x, t.z);
+        return {
+          x: clamp2(Number(normX.toFixed(3)), 0.05, 0.95),
+          y: clamp2(Number(normY.toFixed(3)), 0.05, 0.95)
+        };
+      }
+      return { x: 0.5, y: 0.5 };
+    }
+    applyBuildingPreset(presetId, { autoPlace = false } = {}) {
+      const preset = BUILTIN_ROOM_BUILDING_PRESETS.find((b) => b.id === presetId);
+      if (!preset) return null;
+      const pos = this.getViewportCenterNorm();
+      if (!autoPlace) {
+        this.editingRoomId = null;
+        this.uploadedRoomGlbUrl = "";
+        this.modalEl.querySelector("#room3d-form-title").textContent = `Tambah Gedung: ${preset.name}`;
+        this.modalEl.querySelector("#r3d-name").value = preset.name;
+        this.modalEl.querySelector("#r3d-x").value = pos.x.toFixed(3);
+        this.modalEl.querySelector("#r3d-y").value = pos.y.toFixed(3);
+        this.modalEl.querySelector("#r3d-width").value = preset.widthMeters;
+        this.modalEl.querySelector("#r3d-depth").value = preset.depthMeters;
+        this.modalEl.querySelector("#r3d-height").value = preset.heightMeters;
+        const rotInput = this.modalEl.querySelector("#r3d-rot-y");
+        if (rotInput) rotInput.value = "0";
+        this.modalEl.querySelector("#r3d-wall-color").value = preset.wallColor || "#2a7c13";
+        this.modalEl.querySelector("#r3d-floor-color").value = preset.floorColor || "#1e293b";
+        this.modalEl.querySelector("#r3d-opacity").value = Math.round((preset.opacity ?? 0.18) * 100);
+        this.modalEl.querySelector("#r3d-glb-url").value = preset.customModelUrl;
+        this.modalEl.querySelector("#btn-r3d-clear-glb").style.display = "inline-flex";
+        return null;
+      }
+      const existing = [...stateManager.getRooms3d()];
+      const roomData = createBuildingRoomPresetData(preset, {
+        x: pos.x,
+        y: pos.y,
+        existingRooms: existing,
+        id: generateId("room3d")
+      });
+      if (!roomData) return null;
+      stateManager.setRooms3d([...existing, roomData]);
+      this.renderRoomList();
+      this.hide();
+      if (stateManager.getViewMode?.() !== "3d") {
+        stateManager.setViewMode?.("3d");
+      }
+      stateManager.selectRoom3d?.(roomData.id);
+      this.map3DEngine?.setNavTool?.("move");
+      this.map3DEngine?.focusOnRoom3d?.(roomData.id);
+      this.map3DEngine?.showStatusHint?.(
+        `Gedung "${roomData.name}" dipasang! Seret langsung di kanvas untuk geser (M = Geser, R / [ ] = Putar).`
+      );
+      return roomData;
     }
     resetForm() {
       this.editingRoomId = null;
@@ -72328,6 +72970,8 @@ void main() {
       this.modalEl.querySelector("#r3d-width").value = "24";
       this.modalEl.querySelector("#r3d-depth").value = "20";
       this.modalEl.querySelector("#r3d-height").value = "4.5";
+      const rotInput = this.modalEl.querySelector("#r3d-rot-y");
+      if (rotInput) rotInput.value = "0";
       this.modalEl.querySelector("#r3d-glb-url").value = "";
       this.modalEl.querySelector("#btn-r3d-clear-glb").style.display = "none";
     }
@@ -72339,7 +72983,10 @@ void main() {
       }
       const urlVal = (this.modalEl.querySelector("#r3d-glb-url")?.value || "").trim();
       const customModelUrl = this.uploadedRoomGlbUrl || (urlVal && !urlVal.startsWith("[File GLB") ? urlVal : "");
+      const existing = [...stateManager.getRooms3d()];
+      const existingItem = this.editingRoomId ? existing.find((r) => r.id === this.editingRoomId) : null;
       const roomData = {
+        ...existingItem || {},
         id: this.editingRoomId || generateId("room3d"),
         name,
         x: clamp2(parseFloat(this.modalEl.querySelector("#r3d-x")?.value) || 0.5, 0, 1),
@@ -72347,12 +72994,12 @@ void main() {
         widthMeters: clamp2(parseFloat(this.modalEl.querySelector("#r3d-width")?.value) || 20, 2, 200),
         depthMeters: clamp2(parseFloat(this.modalEl.querySelector("#r3d-depth")?.value) || 16, 2, 200),
         heightMeters: clamp2(parseFloat(this.modalEl.querySelector("#r3d-height")?.value) || 4.5, 1.5, 40),
+        rotationY: clamp2(parseFloat(this.modalEl.querySelector("#r3d-rot-y")?.value) || 0, -360, 360),
         wallColor: this.modalEl.querySelector("#r3d-wall-color")?.value || "#2a7c13",
         floorColor: this.modalEl.querySelector("#r3d-floor-color")?.value || "#1e293b",
         opacity: clamp2((parseFloat(this.modalEl.querySelector("#r3d-opacity")?.value) || 20) / 100, 0.05, 0.85),
         customModelUrl
       };
-      const existing = [...stateManager.getRooms3d()];
       const idx = existing.findIndex((r) => r.id === roomData.id);
       if (idx >= 0) {
         existing[idx] = roomData;
@@ -72360,6 +73007,10 @@ void main() {
         existing.push(roomData);
       }
       stateManager.setRooms3d(existing);
+      stateManager.selectRoom3d?.(roomData.id);
+      this.map3DEngine?.showStatusHint?.(
+        `\u{1F3E0} Ruangan "${roomData.name}" tersimpan \u2014 Klik "Geser" atau pakai tool Move (M) / handle oranye di kanvas 3D untuk memindahkannya.`
+      );
       this.renderRoomList();
       this.resetForm();
     }
@@ -72375,22 +73026,42 @@ void main() {
       `;
         return;
       }
-      container.innerHTML = rooms.map((r) => `
+      container.innerHTML = rooms.map((r) => {
+        const rotDeg = Math.round(Number(r.rotationY ?? r.rotationDeg) || 0);
+        return `
       <div style="background: var(--bg-secondary, #fbe6c2); border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
         <div style="min-width: 0;">
           <div style="font-size: 12px; font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
             ${r.name}
           </div>
           <div style="font-size: 10px; color: var(--text-muted); font-family: var(--font-mono);">
-            ${r.widthMeters}x${r.depthMeters}x${r.heightMeters}m \u2022 (${r.x.toFixed(2)}, ${r.y.toFixed(2)})${r.customModelUrl ? " \u2022 GLB" : ""}
+            ${r.widthMeters}x${r.depthMeters}x${r.heightMeters}m \u2022 ${rotDeg}\xB0 \u2022 (${Number(r.x ?? 0.5).toFixed(2)}, ${Number(r.y ?? 0.5).toFixed(2)})${r.customModelUrl ? " \u2022 GLB" : ""}
           </div>
         </div>
         <div style="display: flex; gap: 4px; flex-shrink: 0;">
+          <button type="button" class="btn btn-primary btn-sm btn-r3d-move" data-id="${r.id}" style="font-size: 10px; padding: 2px 7px;" title="Tutup modal dan langsung geser ruangan di kanvas 3D">Geser</button>
           <button type="button" class="btn btn-secondary btn-sm btn-r3d-edit" data-id="${r.id}" style="font-size: 10px; padding: 2px 6px;">Edit</button>
           <button type="button" class="btn btn-sm btn-r3d-del" data-id="${r.id}" style="font-size: 10px; padding: 2px 6px; background: rgba(239,68,68,0.14); color: #dc2626;">Hapus</button>
         </div>
       </div>
-    `).join("");
+    `;
+      }).join("");
+      container.querySelectorAll(".btn-r3d-move").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const room = rooms.find((r) => r.id === btn.getAttribute("data-id"));
+          if (!room) return;
+          this.hide();
+          if (stateManager.getViewMode?.() !== "3d") {
+            stateManager.setViewMode?.("3d");
+          }
+          stateManager.selectRoom3d?.(room.id);
+          this.map3DEngine?.setNavTool?.("move");
+          this.map3DEngine?.focusOnRoom3d?.(room.id);
+          this.map3DEngine?.showStatusHint?.(
+            `\u{1F3E0} Seret ruangan "${room.name}" langsung di kanvas 3D untuk memindahkannya (M = Geser, R = Putar, [ / ] = Putar 15\xB0).`
+          );
+        });
+      });
       container.querySelectorAll(".btn-r3d-edit").forEach((btn) => {
         btn.addEventListener("click", () => {
           const room = rooms.find((r) => r.id === btn.getAttribute("data-id"));
@@ -72404,6 +73075,8 @@ void main() {
           this.modalEl.querySelector("#r3d-width").value = room.widthMeters;
           this.modalEl.querySelector("#r3d-depth").value = room.depthMeters;
           this.modalEl.querySelector("#r3d-height").value = room.heightMeters;
+          const rotInput = this.modalEl.querySelector("#r3d-rot-y");
+          if (rotInput) rotInput.value = Number(room.rotationY ?? room.rotationDeg) || 0;
           this.modalEl.querySelector("#r3d-wall-color").value = room.wallColor || "#2a7c13";
           this.modalEl.querySelector("#r3d-floor-color").value = room.floorColor || "#1e293b";
           this.modalEl.querySelector("#r3d-opacity").value = Math.round((room.opacity ?? 0.2) * 100);
@@ -72414,8 +73087,7 @@ void main() {
       container.querySelectorAll(".btn-r3d-del").forEach((btn) => {
         btn.addEventListener("click", () => {
           const id = btn.getAttribute("data-id");
-          const next = rooms.filter((r) => r.id !== id);
-          stateManager.setRooms3d(next);
+          stateManager.deleteRoom3d?.(id);
           this.renderRoomList();
         });
       });
@@ -72558,6 +73230,21 @@ void main() {
           <button type="button" id="btn-o3d-add-now" class="btn btn-primary btn-sm" style="width: 100%; font-weight: 700; font-size: 11.5px;">
             + Tambahkan ke Peta 3D Sekarang
           </button>
+
+          <div style="border-top: 1px dashed var(--border-color); padding-top: 7px; margin-top: 2px; display: flex; flex-direction: column; gap: 5px;">
+            <div style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--accent-blue, #2a7c13);">
+              Pasang Gedung Sekolah 3D (.GLB)
+            </div>
+            <div id="o3d-building-preset-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px;">
+              ${BUILTIN_ROOM_BUILDING_PRESETS.map((b) => `
+                <button type="button" class="btn btn-secondary btn-sm o3d-bldg-btn" data-bldg-id="${b.id}"
+                        style="justify-content: flex-start; gap: 5px; padding: 5px 6px; font-size: 10px; text-align: left; line-height: 1.25;" title="${b.subtitle}">
+                  <i data-lucide="building-2" style="width: 12px; height: 12px; flex-shrink: 0;"></i>
+                  <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${b.name}</span>
+                </button>
+              `).join("")}
+            </div>
+          </div>
         </div>
 
         <!-- Section 2: Live Parametric Editor & Push/Pull Controls -->
@@ -72731,6 +73418,39 @@ void main() {
       });
       this.panelEl.querySelector("#btn-o3d-add-now")?.addEventListener("click", () => {
         this.addObjectFromDraftNow();
+      });
+      this.panelEl.querySelectorAll(".o3d-bldg-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const bId = btn.getAttribute("data-bldg-id");
+          const preset = BUILTIN_ROOM_BUILDING_PRESETS.find((b) => b.id === bId);
+          if (!preset) return;
+          let x = 0.5;
+          let y = 0.5;
+          if (this.map3DEngine?.controls?.target && typeof this.map3DEngine?.worldToNorm === "function") {
+            const t = this.map3DEngine.controls.target;
+            const n = this.map3DEngine.worldToNorm(t.x, t.z);
+            x = clamp2(Number(n.normX.toFixed(3)), 0.05, 0.95);
+            y = clamp2(Number(n.normY.toFixed(3)), 0.05, 0.95);
+          }
+          const existing = [...stateManager.getRooms3d()];
+          const roomData = createBuildingRoomPresetData(preset, {
+            x,
+            y,
+            existingRooms: existing,
+            id: generateId("room3d")
+          });
+          if (!roomData) return;
+          stateManager.setRooms3d([...existing, roomData]);
+          if (stateManager.getViewMode?.() !== "3d") {
+            stateManager.setViewMode?.("3d");
+          }
+          stateManager.selectRoom3d?.(roomData.id);
+          this.map3DEngine?.setNavTool?.("move");
+          this.map3DEngine?.focusOnRoom3d?.(roomData.id);
+          this.map3DEngine?.showStatusHint?.(
+            `Gedung "${roomData.name}" dipasang ke Peta 3D! Seret langsung di kanvas untuk memindahkannya (M = Geser, R / [ ] = Putar).`
+          );
+        });
       });
       this.panelEl.querySelector("#btn-o3d-pick-device-pos")?.addEventListener("click", () => {
         const selDevId = this.deviceManager?.selectedDeviceId;
@@ -75905,6 +76625,7 @@ void main() {
             this.deviceManager.deselectDevice();
             this.cableManager.deselectConnection();
             stateManager.deselectObject3d?.();
+            stateManager.deselectRoom3d?.();
             this.map3DEngine?.setNavTool("orbit");
             return;
           }
@@ -76005,6 +76726,15 @@ void main() {
                 const curObj3d = stateManager.getObject3dById?.(selObj3dId);
                 if (curObj3d && confirm(`Hapus objek 3D "${curObj3d.name || selObj3dId}"?`)) {
                   stateManager.deleteObject3d(selObj3dId);
+                }
+              } else {
+                const selRoom3dId = stateManager.getSelectedRoom3dId?.();
+                if (selRoom3dId) {
+                  e.preventDefault();
+                  const curRoom3d = stateManager.getRoom3dById?.(selRoom3dId);
+                  if (curRoom3d && confirm(`Hapus ruangan 3D "${curRoom3d.name || selRoom3dId}"?`)) {
+                    stateManager.deleteRoom3d?.(selRoom3dId);
+                  }
                 }
               }
             }

@@ -971,6 +971,7 @@ class NetMapApp {
           this.deviceManager.deselectDevice();
           this.cableManager.deselectConnection();
           stateManager.deselectObject3d?.();
+          stateManager.deselectRoom3d?.();
           this.map3DEngine?.setNavTool('orbit');
           return;
         }
@@ -1073,6 +1074,15 @@ class NetMapApp {
               const curObj3d = stateManager.getObject3dById?.(selObj3dId);
               if (curObj3d && confirm(`Hapus objek 3D "${curObj3d.name || selObj3dId}"?`)) {
                 stateManager.deleteObject3d(selObj3dId);
+              }
+            } else {
+              const selRoom3dId = stateManager.getSelectedRoom3dId?.();
+              if (selRoom3dId) {
+                e.preventDefault();
+                const curRoom3d = stateManager.getRoom3dById?.(selRoom3dId);
+                if (curRoom3d && confirm(`Hapus ruangan 3D "${curRoom3d.name || selRoom3dId}"?`)) {
+                  stateManager.deleteRoom3d?.(selRoom3dId);
+                }
               }
             }
           }

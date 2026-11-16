@@ -62,6 +62,7 @@ export class Map3DEngine {
     // Lookup maps
     this.deviceMeshMap = new Map(); // deviceId -> THREE.Group
     this.object3dMeshMap = new Map(); // object3dId -> THREE.Group
+    this.room3dMeshMap = new Map(); // roomId -> THREE.Group
     this.cableMeshMap = new Map();  // cableId -> THREE.Mesh
     this.effectivePosMap = new Map(); // deviceId -> THREE.Vector3
     this.portWorldPosMap = new Map(); // "${deviceId}::${portName}" -> THREE.Vector3
@@ -631,26 +632,77 @@ export class Map3DEngine {
     this.syncCables();
   }
 
+  _attachRoomCustomGlb(room, roomGroup) {
+    if (!room?.customModelUrl || !roomGroup) return;
+    const targetSpan = Math.max(Number(room.widthMeters) || 14, Number(room.depthMeters) || 12);
+    loadCustomGlbModel(room.customModelUrl, targetSpan)
+      .then((glb) => {
+        if (!this.roomsGroup.children.includes(roomGroup)) return;
+        if (roomGroup.userData.placeholderWireframe) {
+          roomGroup.remove(roomGroup.userData.placeholderWireframe);
+          roomGroup.userData.placeholderWireframe.geometry?.dispose?.();
+          roomGroup.userData.placeholderWireframe.material?.dispose?.();
+          roomGroup.userData.placeholderWireframe = null;
+        }
+        glb.traverse((c) => {
+          c.userData.roomId = room.id;
+        });
+        roomGroup.add(glb);
+      })
+      .catch((err) => console.warn('[Map3DEngine] Custom room GLB failed:', err));
+  }
+
   syncRooms() {
     if (!this.isActive || !this.isInitialized) return;
     this.clearGroup(this.roomsGroup);
+    this.room3dMeshMap.clear();
 
     const rooms = stateManager.getRooms3d();
+    const selectedRoomId = stateManager.getSelectedRoom3dId?.() || null;
     rooms.forEach((room) => {
-      const roomGroup = create3DRoomGroup(room, (nx, ny) => this.normToWorld(nx, ny));
+      const roomGroup = create3DRoomGroup(
+        room,
+        (nx, ny) => this.normToWorld(nx, ny),
+        room.id === selectedRoomId
+      );
       roomGroup.userData.roomId = room.id;
       this.roomsGroup.add(roomGroup);
-
-      if (room.customModelUrl) {
-        const targetSpan = Math.max(room.widthMeters || 10, room.depthMeters || 10);
-        loadCustomGlbModel(room.customModelUrl, targetSpan)
-          .then((glb) => {
-            if (!this.roomsGroup.children.includes(roomGroup)) return;
-            roomGroup.add(glb);
-          })
-          .catch((err) => console.warn('[Map3DEngine] Custom room GLB failed:', err));
-      }
+      this.room3dMeshMap.set(room.id, roomGroup);
+      this._attachRoomCustomGlb(room, roomGroup);
     });
+  }
+
+  rebuildSingleRoom3dMesh(room, isSelected = true) {
+    if (!this.isInitialized || !room?.id) return null;
+    const prev = this.room3dMeshMap.get(room.id);
+    if (prev) {
+      this.roomsGroup.remove(prev);
+      prev.traverse((c) => {
+        if (c.geometry) c.geometry.dispose();
+        if (c.material) {
+          if (Array.isArray(c.material)) c.material.forEach((m) => m.dispose());
+          else c.material.dispose();
+        }
+      });
+    }
+    const next = create3DRoomGroup(room, (nx, ny) => this.normToWorld(nx, ny), isSelected);
+    next.userData.roomId = room.id;
+    this.roomsGroup.add(next);
+    this.room3dMeshMap.set(room.id, next);
+    this._attachRoomCustomGlb(room, next);
+    return next;
+  }
+
+  focusOnRoom3d(roomId, { duration = 450 } = {}) {
+    const room = stateManager.getRoom3dById?.(roomId);
+    if (!room) return false;
+    const wPos = this.normToWorld(room.x ?? 0.5, room.y ?? 0.5);
+    const span = Math.max(12, Math.max(Number(room.widthMeters) || 14, Number(room.depthMeters) || 12) * 1.45);
+    const h = Math.max(2, Number(room.heightMeters) || 4);
+    const target = new THREE.Vector3(wPos.x, h * 0.35, wPos.z);
+    const endPos = new THREE.Vector3(wPos.x + span * 0.6, Math.max(12, h + span * 0.55), wPos.z + span * 0.72);
+    this.animateCameraTo(endPos, target, duration);
+    return true;
   }
 
   syncObjects3d() {
@@ -1657,6 +1709,7 @@ export class Map3DEngine {
       const cabId = cableHitsPre[0].object.userData?.cableId;
       if (cabId) {
         stateManager.deselectObject3d?.();
+        stateManager.deselectRoom3d?.();
         this.cableManager.selectConnection(cabId);
         return;
       }
@@ -1731,6 +1784,7 @@ export class Map3DEngine {
         }
 
         stateManager.deselectObject3d?.();
+        stateManager.deselectRoom3d?.();
         this.deviceManager.selectDevice(devId, {
           toggle: Boolean(e.ctrlKey || e.metaKey),
           additive: Boolean(e.shiftKey)
@@ -1789,6 +1843,7 @@ export class Map3DEngine {
       if (objHit?.object3dId) {
         this.deviceManager.deselectDevice();
         this.cableManager.deselectConnection();
+        stateManager.deselectRoom3d?.();
         stateManager.selectObject3d(objHit.object3dId);
         return;
       }
@@ -1800,7 +1855,24 @@ export class Map3DEngine {
       const cabId = cableHits[0].object.userData?.cableId;
       if (cabId) {
         stateManager.deselectObject3d?.();
+        stateManager.deselectRoom3d?.();
         this.cableManager.selectConnection(cabId);
+        return;
+      }
+    }
+
+    // 3b. Check Ruangan 3D selection (drag/resize/rotate via gizmos or Move/Rotate tools)
+    if (stateManager.getMode() !== 'draw-cable') {
+      const roomHit = this.findRoom3dHit?.(this.raycaster);
+      if (roomHit?.roomId) {
+        this.deviceManager.deselectDevice();
+        this.cableManager.deselectConnection();
+        stateManager.deselectObject3d?.();
+        stateManager.selectRoom3d?.(roomHit.roomId);
+        const room = stateManager.getRoom3dById?.(roomHit.roomId);
+        this.showStatusHint(
+          `🏠 Ruangan "${room?.name || 'Ruangan 3D'}" dipilih — Drag handle oranye / tool Move (M) untuk geser • Rotate (R) / [ ] putar • Kuning ubah ukuran`
+        );
         return;
       }
     }
@@ -1820,6 +1892,7 @@ export class Map3DEngine {
       this.deviceManager.deselectDevice();
       this.cableManager.deselectConnection();
       stateManager.deselectObject3d?.();
+      stateManager.deselectRoom3d?.();
       if (this.simulatorFocusedDeviceId) {
         this.exitSimulatorFocus({ restoreCamera: false });
       } else if (this.avatarMode) {
@@ -2198,18 +2271,51 @@ export class Map3DEngine {
     return null;
   }
 
+  findRoom3dHit(raycaster = this.raycaster) {
+    if (!this.roomsGroup || this.roomsGroup.children.length === 0) return null;
+    const hits = raycaster.intersectObjects(this.roomsGroup.children, true);
+    for (let i = 0; i < hits.length; i++) {
+      let curr = hits[i].object;
+      let gizmoType = null;
+      let roomId = null;
+      while (curr && curr !== this.roomsGroup) {
+        if (!gizmoType && curr.userData?.gizmoType) gizmoType = curr.userData.gizmoType;
+        if (!roomId && curr.userData?.roomId) roomId = curr.userData.roomId;
+        if (roomId) {
+          return { roomId, gizmoType, point: hits[i].point.clone(), object: hits[i].object };
+        }
+        curr = curr.parent;
+      }
+    }
+    return null;
+  }
+
   checkGizmoHitAtEvent(e) {
     if (!this.isInitialized || !this.camera || !this.renderer?.domElement) return null;
-    if (!stateManager.getSelectedObject3dId() || this.objects3dGroup.children.length === 0) return null;
+    const hasSelObj = Boolean(stateManager.getSelectedObject3dId?.() && this.objects3dGroup?.children?.length > 0);
+    const hasSelRoom = Boolean(stateManager.getSelectedRoom3dId?.() && this.roomsGroup?.children?.length > 0);
+    if (!hasSelObj && !hasSelRoom) return null;
+
     const rect = this.renderer.domElement.getBoundingClientRect();
     this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
     this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
     this.raycaster.setFromCamera(this.pointer, this.camera);
-    const hit = this.findObject3dHit(this.raycaster);
-    return hit && hit.gizmoType ? hit : null;
+
+    if (hasSelObj) {
+      const objHit = this.findObject3dHit(this.raycaster);
+      if (objHit && objHit.gizmoType) return objHit;
+    }
+    if (hasSelRoom) {
+      const roomHit = this.findRoom3dHit(this.raycaster);
+      if (roomHit && roomHit.gizmoType) return roomHit;
+    }
+    return null;
   }
 
   startObject3dGizmoDrag(e, dom, gizmoHit) {
+    if (gizmoHit?.roomId || String(gizmoHit?.gizmoType || '').startsWith('room-')) {
+      return this.startRoom3dGizmoDrag(e, dom, gizmoHit);
+    }
     const obj = stateManager.getObject3dById(gizmoHit.object3dId);
     if (!obj) return;
     if (gizmoHit.gizmoType === 'pushpull') {
@@ -2399,6 +2505,103 @@ export class Map3DEngine {
     dom.setPointerCapture?.(e.pointerId);
   }
 
+  startRoom3dGizmoDrag(e, dom, gizmoHit) {
+    const room = stateManager.getRoom3dById?.(gizmoHit.roomId);
+    if (!room) return;
+    if (gizmoHit.gizmoType === 'room-move') {
+      return this.startRoom3dMoveDrag(e, dom, gizmoHit);
+    }
+
+    stateManager.selectRoom3d?.(room.id);
+    this.deviceManager.deselectDevice();
+    this.cableManager.deselectConnection();
+    stateManager.deselectObject3d?.();
+
+    if (gizmoHit.gizmoType === 'room-pushpull') {
+      this.object3dDragState = {
+        kind: 'room-pushpull',
+        roomId: room.id,
+        startClientY: e.clientY,
+        startHeight: Number(room.heightMeters) || 3.5,
+        latestHeight: Number(room.heightMeters) || 3.5,
+        draftRoom: { ...room }
+      };
+      dom.setPointerCapture?.(e.pointerId);
+    } else if (gizmoHit.gizmoType === 'room-scale') {
+      const planeY = Math.max(0, Number(gizmoHit.point?.y) || 0);
+      const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -planeY);
+      const worldCenter = this.normToWorld(room.x ?? 0.5, room.y ?? 0.5);
+      this.object3dDragState = {
+        kind: 'room-scale',
+        roomId: room.id,
+        plane,
+        centerX: worldCenter.x,
+        centerZ: worldCenter.z,
+        rotYRad: ((Number(room.rotationY ?? room.rotationDeg) || 0) * Math.PI) / 180,
+        startWidth: Number(room.widthMeters) || 14,
+        startDepth: Number(room.depthMeters) || 12,
+        latestWidth: Number(room.widthMeters) || 14,
+        latestDepth: Number(room.depthMeters) || 12,
+        draftRoom: { ...room }
+      };
+      dom.setPointerCapture?.(e.pointerId);
+    } else if (gizmoHit.gizmoType === 'room-rotate') {
+      const startRx = Number(room.rotationX) || 0;
+      const startRy = Number(room.rotationY ?? room.rotationDeg) || 0;
+      const startRz = Number(room.rotationZ) || 0;
+      this.object3dDragState = {
+        kind: 'rotate-room3d',
+        roomId: room.id,
+        startClientX: e.clientX,
+        startClientY: e.clientY,
+        startRx,
+        startRy,
+        startRz,
+        latestRx: startRx,
+        latestRy: startRy,
+        latestRz: startRz,
+        moved: false,
+        draftRoom: { ...room }
+      };
+      dom.setPointerCapture?.(e.pointerId);
+    }
+  }
+
+  startRoom3dMoveDrag(e, dom, roomHit) {
+    const room = stateManager.getRoom3dById?.(roomHit?.roomId);
+    if (!room) return;
+    if (room.locked) {
+      stateManager.selectRoom3d?.(room.id);
+      this.showStatusHint(`🔒 Ruangan "${room.name}" dikunci.`);
+      return;
+    }
+
+    stateManager.selectRoom3d?.(room.id);
+    this.deviceManager.deselectDevice();
+    this.cableManager.deselectConnection();
+    stateManager.deselectObject3d?.();
+
+    const planeY = Math.max(0, Number(roomHit?.point?.y) || 0);
+    const dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -planeY);
+    const hitPt = new THREE.Vector3();
+    if (!this.raycaster.ray.intersectPlane(dragPlane, hitPt)) {
+      hitPt.copy(roomHit?.point || new THREE.Vector3());
+    }
+
+    const roomWorld = this.normToWorld(room.x ?? 0.5, room.y ?? 0.5);
+    this.object3dDragState = {
+      kind: 'move-room3d',
+      roomId: room.id,
+      room,
+      plane: dragPlane,
+      grabOffsetX: roomWorld.x - hitPt.x,
+      grabOffsetZ: roomWorld.z - hitPt.z,
+      latestNorm: null,
+      moved: false
+    };
+    dom.setPointerCapture?.(e.pointerId);
+  }
+
   updateObject3dDrag(e) {
     const state = this.object3dDragState;
     if (!state || !this.renderer?.domElement) return;
@@ -2413,6 +2616,18 @@ export class Map3DEngine {
       state.draftObj = { ...state.draftObj, heightMeters: nextH };
       this.rebuildSingleObject3dMesh(state.draftObj, true);
       this.showStatusHint(`📐 Push/Pull Tinggi "${state.draftObj.name}": ${nextH.toFixed(2)}m`);
+      return;
+    }
+
+    if (state.kind === 'room-pushpull') {
+      const dyPx = state.startClientY - e.clientY;
+      const camDist = this.camera ? this.camera.position.distanceTo(this.controls.target) : 25;
+      const deltaMeters = (dyPx / Math.max(200, rect.height)) * camDist * 1.15;
+      const nextH = clamp(Number((state.startHeight + deltaMeters).toFixed(2)), 1.5, 40);
+      state.latestHeight = nextH;
+      state.draftRoom = { ...state.draftRoom, heightMeters: nextH };
+      this.rebuildSingleRoom3dMesh(state.draftRoom, true);
+      this.showStatusHint(`📐 Tinggi Ruangan "${state.draftRoom.name}": ${nextH.toFixed(2)}m`);
       return;
     }
 
@@ -2435,6 +2650,25 @@ export class Map3DEngine {
       state.draftObj = { ...state.draftObj, widthMeters: nextW, depthMeters: nextD };
       this.rebuildSingleObject3dMesh(state.draftObj, true);
       this.showStatusHint(`📐 Ukuran "${state.draftObj.name}": ${nextW.toFixed(2)}m × ${nextD.toFixed(2)}m`);
+      return;
+    }
+
+    if (state.kind === 'room-scale') {
+      const hitPt = new THREE.Vector3();
+      if (!this.raycaster.ray.intersectPlane(state.plane, hitPt)) return;
+      const dx = hitPt.x - state.centerX;
+      const dz = hitPt.z - state.centerZ;
+      const cos = Math.cos(state.rotYRad || 0);
+      const sin = Math.sin(state.rotYRad || 0);
+      const lx = dx * cos - dz * sin;
+      const lz = dx * sin + dz * cos;
+      const nextW = clamp(Number((Math.abs(lx) * 2).toFixed(2)), 2, 200);
+      const nextD = clamp(Number((Math.abs(lz) * 2).toFixed(2)), 2, 200);
+      state.latestWidth = nextW;
+      state.latestDepth = nextD;
+      state.draftRoom = { ...state.draftRoom, widthMeters: nextW, depthMeters: nextD };
+      this.rebuildSingleRoom3dMesh(state.draftRoom, true);
+      this.showStatusHint(`📐 Ukuran Ruangan "${state.draftRoom.name}": ${nextW.toFixed(2)}m × ${nextD.toFixed(2)}m`);
       return;
     }
 
@@ -2469,6 +2703,37 @@ export class Map3DEngine {
       return;
     }
 
+    if (state.kind === 'rotate-room3d') {
+      if (Math.hypot(e.clientX - state.startClientX, e.clientY - state.startClientY) > 3) {
+        state.moved = true;
+      }
+      const { rx, ry, rz } = this._computeDragAngles(
+        state.startRx,
+        state.startRy,
+        state.startRz,
+        state.startClientX,
+        state.startClientY,
+        e
+      );
+      state.latestRx = rx;
+      state.latestRy = ry;
+      state.latestRz = rz;
+      state.draftRoom = { ...state.draftRoom, rotationX: rx, rotationY: ry, rotationZ: rz };
+      const roomGroup = this.room3dMeshMap.get(state.roomId);
+      if (roomGroup) {
+        roomGroup.rotation.set(
+          (rx * Math.PI) / 180,
+          (ry * Math.PI) / 180,
+          (rz * Math.PI) / 180,
+          'YXZ'
+        );
+      }
+      this.showStatusHint(
+        `🔄 Rotasi Ruangan "${state.draftRoom.name}": Y:${ry}° (Ctrl=Snap 15°)`
+      );
+      return;
+    }
+
     if (state.kind === 'create-draw') {
       const hitPt = new THREE.Vector3();
       if (!this.raycaster.ray.intersectPlane(state.dragPlane, hitPt)) return;
@@ -2490,6 +2755,26 @@ export class Map3DEngine {
         this.rebuildSingleObject3dMesh(state.draftObj, true);
         this.showStatusHint(`📐 Menggambar "${state.draftObj.name}": ${w.toFixed(1)}m × ${d.toFixed(1)}m`);
       }
+      return;
+    }
+
+    if (state.kind === 'move-room3d') {
+      const hitPt = new THREE.Vector3();
+      if (!this.raycaster.ray.intersectPlane(state.plane, hitPt)) return;
+      state.moved = true;
+      const newWorldX = hitPt.x + state.grabOffsetX;
+      const newWorldZ = hitPt.z + state.grabOffsetZ;
+      const { normX, normY } = this.worldToNorm(newWorldX, newWorldZ);
+      const clampedWorld = this.normToWorld(normX, normY);
+      const roomGroup = this.room3dMeshMap.get(state.roomId);
+      if (roomGroup) {
+        roomGroup.position.x = clampedWorld.x;
+        roomGroup.position.z = clampedWorld.z;
+      }
+      state.latestNorm = { x: Number(normX.toFixed(4)), y: Number(normY.toFixed(4)) };
+      this.showStatusHint(
+        `🏠 Geser Ruangan "${state.room?.name || 'Ruangan 3D'}": X=${state.latestNorm.x.toFixed(3)}, Y=${state.latestNorm.y.toFixed(3)}`
+      );
       return;
     }
 
@@ -2548,9 +2833,22 @@ export class Map3DEngine {
       stateManager.updateObject3d(state.objId, { heightMeters: state.latestHeight });
       return;
     }
+    if (state.kind === 'room-pushpull') {
+      this._suppressNextClick = true;
+      stateManager.updateRoom3d?.(state.roomId, { heightMeters: state.latestHeight });
+      return;
+    }
     if (state.kind === 'scale') {
       this._suppressNextClick = true;
       stateManager.updateObject3d(state.objId, {
+        widthMeters: state.latestWidth,
+        depthMeters: state.latestDepth
+      });
+      return;
+    }
+    if (state.kind === 'room-scale') {
+      this._suppressNextClick = true;
+      stateManager.updateRoom3d?.(state.roomId, {
         widthMeters: state.latestWidth,
         depthMeters: state.latestDepth
       });
@@ -2565,6 +2863,27 @@ export class Map3DEngine {
           rotationZ: state.latestRz
         });
       }
+      return;
+    }
+    if (state.kind === 'rotate-room3d') {
+      if (state.moved) {
+        this._suppressNextClick = true;
+        stateManager.updateRoom3d?.(state.roomId, {
+          rotationX: state.latestRx,
+          rotationY: state.latestRy,
+          rotationZ: state.latestRz
+        });
+      }
+      return;
+    }
+    if (state.kind === 'move-room3d' && state.latestNorm) {
+      if (state.moved) {
+        this._suppressNextClick = true;
+      }
+      stateManager.updateRoom3d?.(state.roomId, {
+        x: state.latestNorm.x,
+        y: state.latestNorm.y
+      });
       return;
     }
     if (state.kind === 'create-draw') {
@@ -2742,6 +3061,12 @@ export class Map3DEngine {
       const objHit = this.findObject3dHit(this.raycaster);
       if (objHit?.object3dId) {
         this.startObject3dMoveDrag(e, dom, objHit);
+        return;
+      }
+      // Or drag a 3D Room / Building zone directly on the map ground
+      const roomHit = this.findRoom3dHit?.(this.raycaster);
+      if (roomHit?.roomId) {
+        this.startRoom3dMoveDrag(e, dom, roomHit);
       }
       return;
     }
@@ -2938,6 +3263,11 @@ export class Map3DEngine {
       const objHit = this.findObject3dHit(this.raycaster);
       if (objHit?.object3dId) {
         this.startObject3dGizmoDrag(e, dom, { ...objHit, gizmoType: 'rotate' });
+        return;
+      }
+      const roomHit = this.findRoom3dHit?.(this.raycaster);
+      if (roomHit?.roomId) {
+        this.startRoom3dGizmoDrag(e, dom, { ...roomHit, gizmoType: 'room-rotate' });
       }
       return;
     }
@@ -3110,6 +3440,18 @@ export class Map3DEngine {
       const rz = reset ? 0 : clamp((Number(obj.rotationZ) || 0) + dZ, -180, 180);
       stateManager.updateObject3d(selObjId, { rotationX: rx, rotationY: ry, rotationZ: rz });
       this.showStatusHint(`🔄 Rotasi "${obj.name}": X:${rx}° Y:${ry}° Z:${rz}°`);
+      return true;
+    }
+
+    const selRoomId = stateManager.getSelectedRoom3dId?.();
+    if (selRoomId) {
+      const room = stateManager.getRoom3dById?.(selRoomId);
+      if (!room || room.locked) return false;
+      const rx = reset ? 0 : clamp((Number(room.rotationX) || 0) + dX, -180, 180);
+      const ry = reset ? 0 : (((Number(room.rotationY ?? room.rotationDeg) || 0) + dY) % 360 + 360) % 360;
+      const rz = reset ? 0 : clamp((Number(room.rotationZ) || 0) + dZ, -180, 180);
+      stateManager.updateRoom3d?.(selRoomId, { rotationX: rx, rotationY: ry, rotationZ: rz });
+      this.showStatusHint(`🔄 Rotasi Ruangan "${room.name}": X:${rx}° Y:${ry}° Z:${rz}°`);
       return true;
     }
 
@@ -5730,9 +6072,14 @@ export class Map3DEngine {
     eventBus.on('connection:selected', syncCablesOnly);
     eventBus.on('connection:deselected', syncCablesOnly);
 
-    eventBus.on('room3d:changed', () => {
-      if (this.isActive) this.syncRooms();
-    });
+    const syncRoomsOnly = () => {
+      if (this.isActive && !this.object3dDragState) {
+        this.syncRooms();
+      }
+    };
+    eventBus.on('room3d:changed', syncRoomsOnly);
+    eventBus.on('room3d:selected', syncRoomsOnly);
+    eventBus.on('room3d:deselected', syncRoomsOnly);
 
     const syncObjects3dOnly = () => {
       if (this.isActive && !this.object3dDragState) {

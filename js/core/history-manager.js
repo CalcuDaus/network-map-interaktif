@@ -129,6 +129,10 @@ export class HistoryManager {
     eventBus.on('object3d:changed', () => {
       handleMutation('Ubah Objek 3D');
     });
+
+    eventBus.on('room3d:changed', () => {
+      handleMutation('Ubah Ruangan 3D');
+    });
   }
 
   /**
