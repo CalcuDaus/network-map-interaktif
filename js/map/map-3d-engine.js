@@ -962,26 +962,31 @@ export class Map3DEngine {
       const vertDist = Math.abs(srcPos.y - dstPos.y);
       const portDist = srcPos.distanceTo(dstPos);
 
-      const fanStep = ((cableIdx % 5) - 2) * 0.008 * avgPortScale;
-      const autoBowUnits = (hasSrcPort || hasDstPort)
-        ? Math.max(0.09, Math.min(0.36, (vertDist / Math.max(0.3, avgPortScale)) * 0.42 + (portDist / Math.max(0.3, avgPortScale)) * 0.14))
-        : 0.04;
-      const bowUnits = (typeof cable.details?.bowOut === 'number' && !isNaN(cable.details.bowOut))
-        ? cable.details.bowOut
-        : autoBowUnits;
-      const bowDist = bowUnits * avgPortScale
-        + (cable.details?.bowOut === null || cable.details?.bowOut === undefined ? fanStep : 0);
+      const rawTension = typeof cable.details?.curveTension === 'number' ? cable.details.curveTension : 0.38;
+      const tensionScale = Math.max(0.2, rawTension / 0.38);
+      const hasCustomBow = typeof cable.details?.bowOut === 'number' && !isNaN(cable.details.bowOut);
+      const hasCustomSag = typeof cable.details?.sagDrop === 'number' && !isNaN(cable.details.sagDrop);
+      const hasCustomSide = typeof cable.details?.sideOffset === 'number' && !isNaN(cable.details.sideOffset) && cable.details.sideOffset !== 0;
 
-      const autoSagUnits = (vertDist < 0.18 * avgPortScale)
+      const fanStep = ((cableIdx % 5) - 2) * 0.008 * avgPortScale;
+      const autoBowUnits = ((hasSrcPort || hasDstPort)
+        ? Math.max(0.09, Math.min(0.36, (vertDist / Math.max(0.3, avgPortScale)) * 0.42 + (portDist / Math.max(0.3, avgPortScale)) * 0.14))
+        : 0.04) * tensionScale;
+      const bowUnits = hasCustomBow
+        ? cable.details.bowOut * (0.6 + 0.4 * tensionScale)
+        : autoBowUnits;
+      const bowDist = bowUnits * avgPortScale + (!hasCustomBow ? fanStep : 0);
+
+      const autoSagUnits = ((vertDist < 0.18 * avgPortScale)
         ? (0.09 + Math.min(0.08, portDist / Math.max(0.3, avgPortScale) * 0.12))
-        : Math.min(0.14, portDist / Math.max(0.3, avgPortScale) * 0.12);
-      const sagUnits = (typeof cable.details?.sagDrop === 'number' && !isNaN(cable.details.sagDrop))
-        ? cable.details.sagDrop
+        : Math.min(0.14, portDist / Math.max(0.3, avgPortScale) * 0.12)) * tensionScale;
+      const sagUnits = hasCustomSag
+        ? cable.details.sagDrop * (0.6 + 0.4 * tensionScale)
         : autoSagUnits;
       const sagDist = sagUnits * avgPortScale;
 
       const sideUnits = (typeof cable.details?.sideOffset === 'number' && !isNaN(cable.details.sideOffset))
-        ? cable.details.sideOffset
+        ? cable.details.sideOffset * (0.6 + 0.4 * tensionScale)
         : 0;
       const sideDist = sideUnits * avgPortScale;
 
@@ -1003,17 +1008,16 @@ export class Map3DEngine {
       const trayY = hasCustomElev
         ? Math.max(0.02, cable.details.elevationZ)
         : Math.max(0.06, Math.min(srcPos.y, dstPos.y));
-      const waypointMarkers = [];
+      let waypointMarkers = [];
 
       if (Array.isArray(cable.route) && cable.route.length > 0) {
         const rawWps = cable.route.map((wp) => {
           const wpWorld = this.normToWorld(wp.x, wp.y);
           const wpY = (typeof wp.z === 'number' && !isNaN(wp.z)) ? Math.max(0.02, wp.z) : trayY;
-          const vec = new THREE.Vector3(wpWorld.x, wpY, wpWorld.z);
-          waypointMarkers.push(vec);
-          return vec;
+          return new THREE.Vector3(wpWorld.x, wpY, wpWorld.z);
         });
         if (pathStyle === 'orthogonal') {
+          waypointMarkers = rawWps;
           let prevPt = pts[pts.length - 1];
           rawWps.forEach((wpVec) => {
             // Vertical riser / drop to waypoint Z level first if Z differs noticeably
@@ -1034,10 +1038,20 @@ export class Map3DEngine {
             pts.push(new THREE.Vector3(dstExitRef.x, prevPt.y, dstExitRef.z));
           }
         } else {
+          const shapedWps = rawWps.map((wpVec) => {
+            const v = wpVec.clone();
+            if (pathStyle === 'curve' && (hasCustomBow || hasCustomSide || hasCustomSag)) {
+              if (hasCustomBow) v.addScaledVector(outDir, bowUnits * avgPortScale);
+              if (hasCustomSide) v.addScaledVector(sideDir, sideDist);
+              if (hasCustomSag) v.y = Math.max(0.02, v.y - sagDist * 0.5);
+            }
+            return v;
+          });
+          waypointMarkers = shapedWps;
           if (pathStyle === 'curve' && hasSrcPort && !isWireless) {
             pts.push(srcPos.clone().addScaledVector(srcDir, Math.max(0.045 * srcScale, Math.abs(bowDist) * 0.35)));
           }
-          rawWps.forEach((wpVec) => pts.push(wpVec));
+          shapedWps.forEach((wpVec) => pts.push(wpVec));
           if (pathStyle === 'curve' && hasDstPort && !isWireless) {
             pts.push(dstPos.clone().addScaledVector(dstDir, Math.max(0.045 * dstScale, Math.abs(bowDist) * 0.35)));
           }
@@ -1053,6 +1067,12 @@ export class Map3DEngine {
         pts.push(riserA);
         if (pathStyle === 'orthogonal' && Math.abs(riserB.x - riserA.x) > 0.1 && Math.abs(riserB.z - riserA.z) > 0.1) {
           pts.push(new THREE.Vector3(riserB.x, trayY, riserA.z));
+        } else if (pathStyle === 'curve' && (hasCustomBow || hasCustomSide || hasCustomSag)) {
+          const elevMid = riserA.clone().lerp(riserB, 0.5)
+            .addScaledVector(outDir, bowDist)
+            .addScaledVector(sideDir, sideDist);
+          elevMid.y = Math.max(0.02, elevMid.y - sagDist * 0.5);
+          pts.push(elevMid);
         }
         pts.push(riserB);
       } else if (pathStyle === 'orthogonal' && !isWireless) {
@@ -1064,20 +1084,53 @@ export class Map3DEngine {
         const srcBootTip = hasSrcPort ? srcPos.clone().addScaledVector(srcDir, bootLenSrc) : srcPos.clone();
         const dstBootTip = hasDstPort ? dstPos.clone().addScaledVector(dstDir, bootLenDst) : dstPos.clone();
 
+        const sameFace = srcDir.dot(dstDir) > 0.2;
+        const frontBaseProj = Math.max(srcBootTip.dot(outDir), dstBootTip.dot(outDir));
+        const pushToFrontPlane = (pt, extraBow) => {
+          if (!sameFace) {
+            pt.addScaledVector(outDir, extraBow);
+            return pt;
+          }
+          if (bowDist >= 0) {
+            const curProj = pt.dot(outDir);
+            const targetProj = frontBaseProj + extraBow;
+            if (targetProj > curProj) {
+              pt.addScaledVector(outDir, targetProj - curProj);
+            }
+          } else {
+            pt.addScaledVector(outDir, extraBow);
+          }
+          return pt;
+        };
+
         const srcShoulder = srcBootTip.clone().lerp(dstBootTip, 0.22)
-          .addScaledVector(srcDir, bowDist * 0.72)
           .addScaledVector(sideDir, sideDist * 0.55);
-        srcShoulder.y = Math.max(0.02, srcShoulder.y - sagDist * 0.38);
+        pushToFrontPlane(srcShoulder, bowDist * 0.72);
 
         const midApex = srcBootTip.clone().lerp(dstBootTip, 0.50)
-          .addScaledVector(outDir, bowDist)
           .addScaledVector(sideDir, sideDist);
-        midApex.y = Math.max(0.02, midApex.y - sagDist);
+        pushToFrontPlane(midApex, bowDist + (sagDist > 0 ? sagDist * 0.28 : 0));
 
         const dstShoulder = srcBootTip.clone().lerp(dstBootTip, 0.78)
-          .addScaledVector(dstDir, bowDist * 0.72)
           .addScaledVector(sideDir, sideDist * 0.55);
-        dstShoulder.y = Math.max(0.02, dstShoulder.y - sagDist * 0.38);
+        pushToFrontPlane(dstShoulder, bowDist * 0.72);
+
+        const minPortY = Math.min(srcBootTip.y, dstBootTip.y);
+        if (sagDist > 0) {
+          midApex.y = Math.max(0.02, Math.min(midApex.y - sagDist, minPortY - sagDist * 0.55 + vertDist * 0.12));
+          if (srcBootTip.y >= dstBootTip.y) {
+            srcShoulder.y = Math.max(0.02, srcShoulder.y - sagDist * 0.28);
+            dstShoulder.y = Math.max(0.02, minPortY - sagDist * 0.45);
+          } else {
+            srcShoulder.y = Math.max(0.02, minPortY - sagDist * 0.45);
+            dstShoulder.y = Math.max(0.02, dstShoulder.y - sagDist * 0.28);
+          }
+        } else if (sagDist < 0) {
+          const archUp = Math.abs(sagDist);
+          srcShoulder.y = Math.max(0.02, srcShoulder.y + archUp * 0.55);
+          midApex.y = Math.max(0.02, midApex.y + archUp);
+          dstShoulder.y = Math.max(0.02, dstShoulder.y + archUp * 0.55);
+        }
 
         pts.push(srcShoulder, midApex, dstShoulder);
       }
@@ -1133,7 +1186,14 @@ export class Map3DEngine {
       });
 
       const mesh = new THREE.Mesh(tubeGeo, tubeMat);
-      mesh.userData.cableId = cable.id;
+      mesh.userData = {
+        cableId: cable.id,
+        cableTubeSelected: isSelected,
+        linearMid: srcPos.clone().add(dstPos).multiplyScalar(0.5),
+        outDir: outDir.clone(),
+        sideDir: sideDir.clone(),
+        avgPortScale
+      };
       mesh.castShadow = !isWireless;
       this.cablesGroup.add(mesh);
       this.cableMeshMap.set(cable.id, mesh);
@@ -1169,7 +1229,7 @@ export class Map3DEngine {
       // Interactive 3D Curve Handles when selected
       if (isSelected && !isWireless) {
         const apexPt = curve.getPoint(0.5);
-        const apexGeo = new THREE.SphereGeometry(Math.max(0.055, radius * 2.6), 14, 14);
+        const apexGeo = new THREE.SphereGeometry(Math.max(0.11, radius * 3.2, 0.048 * avgPortScale), 14, 14);
         const apexMat = new THREE.MeshStandardMaterial({
           color: 0x38bdf8,
           emissive: 0xffffff,
@@ -1189,7 +1249,7 @@ export class Map3DEngine {
         this.cablesGroup.add(apexDot);
 
         if (waypointMarkers.length === 0) {
-          const qGeo = new THREE.SphereGeometry(Math.max(0.038, radius * 1.8), 12, 12);
+          const qGeo = new THREE.SphereGeometry(Math.max(0.08, radius * 2.4, 0.035 * avgPortScale), 12, 12);
           const qMat = new THREE.MeshBasicMaterial({ color: 0xfacc15 });
           [0.25, 0.75].forEach((tVal) => {
             const qPt = curve.getPoint(tVal);
@@ -1206,7 +1266,7 @@ export class Map3DEngine {
       }
 
       if (isSelected && waypointMarkers.length > 0) {
-        const wpGeo = new THREE.SphereGeometry(Math.max(0.06, radius * 2.1), 10, 10);
+        const wpGeo = new THREE.SphereGeometry(Math.max(0.08, radius * 2.4, 0.035 * avgPortScale), 12, 12);
         const wpMat = new THREE.MeshBasicMaterial({ color: 0xfacc15 });
         const stemMat = new THREE.LineBasicMaterial({ color: 0xfacc15, transparent: true, opacity: 0.45 });
         waypointMarkers.forEach((wpVec, idx) => {
@@ -1278,8 +1338,25 @@ export class Map3DEngine {
 
     this.raycaster.setFromCamera(this.pointer, this.camera);
 
-    // 1. Prioritize Device selection (or 3D cable drawing when mode === 'draw-cable')
+    // 1. Raycast Devices & Cables; prioritize foreground Cables/Handles outside draw-cable mode
     const devHits = this.raycaster.intersectObjects(this.devicesGroup.children, true);
+    const cableHitsPre = stateManager.getMode() !== 'draw-cable'
+      ? this.raycaster.intersectObjects(this.cablesGroup.children, true)
+      : [];
+
+    if (cableHitsPre.length > 0 && (
+      devHits.length === 0 ||
+      cableHitsPre[0].distance <= devHits[0].distance + 0.25 ||
+      Boolean(cableHitsPre[0].object?.userData?.cableHandleType)
+    )) {
+      const cabId = cableHitsPre[0].object.userData?.cableId;
+      if (cabId) {
+        stateManager.deselectObject3d?.();
+        this.cableManager.selectConnection(cabId);
+        return;
+      }
+    }
+
     if (devHits.length > 0) {
       const devId = this.findDeviceIdFromObject(devHits[0].object);
       if (devId) {
@@ -2119,6 +2196,22 @@ export class Map3DEngine {
         };
       }
     }
+    const canGrabSelectedTube = this.navTool === 'move'
+      || stateManager.getMode() === 'select'
+      || Boolean(e.shiftKey)
+      || Boolean(e.altKey);
+    if (canGrabSelectedTube) {
+      for (const hit of hits) {
+        if (hit.object?.userData?.cableTubeSelected === true) {
+          return {
+            object: hit.object,
+            point: hit.point.clone(),
+            cableHandleType: 'apex',
+            ...hit.object.userData
+          };
+        }
+      }
+    }
     return null;
   }
 
@@ -2127,7 +2220,7 @@ export class Map3DEngine {
     if (!cable) return;
     const camDir = new THREE.Vector3();
     this.camera.getWorldDirection(camDir);
-    const initPos = handleHit.object?.position?.clone() || handleHit.point?.clone() || new THREE.Vector3();
+    const initPos = handleHit.point?.clone() || handleHit.object?.position?.clone() || new THREE.Vector3();
     const dragPlane = new THREE.Plane().setFromNormalAndCoplanarPoint(camDir.normalize(), initPos);
     this.cableDragState = {
       cableId: cable.id,
@@ -2161,11 +2254,12 @@ export class Map3DEngine {
     state.moved = true;
     if (state.handleType === 'apex') {
       if (!cable.details) cable.details = {};
+      cable.details.pathStyle = 'curve';
       const scale = Math.max(0.1, state.avgPortScale);
       const rel = hitPt.clone().sub(state.linearMid);
-      cable.details.bowOut = Number(Math.max(-0.6, Math.min(1.5, rel.dot(state.outDir) / scale)).toFixed(2));
-      cable.details.sideOffset = Number(Math.max(-1.5, Math.min(1.5, rel.dot(state.sideDir) / scale)).toFixed(2));
-      cable.details.sagDrop = Number(Math.max(-0.8, Math.min(1.2, -rel.y / scale)).toFixed(2));
+      cable.details.bowOut = Number(Math.max(-1.5, Math.min(3.0, rel.dot(state.outDir) / scale)).toFixed(2));
+      cable.details.sideOffset = Number(Math.max(-3.0, Math.min(3.0, rel.dot(state.sideDir) / scale)).toFixed(2));
+      cable.details.sagDrop = Number(Math.max(-1.5, Math.min(2.5, -rel.y / scale)).toFixed(2));
       this.syncCables();
       return;
     }

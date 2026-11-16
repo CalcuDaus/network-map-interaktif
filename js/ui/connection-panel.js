@@ -361,22 +361,22 @@ export class ConnectionPanel {
 
               <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;">
                 <button type="button" class="btn btn-secondary btn-sm btn-cable-curve-preset" data-bow="auto" data-side="0" data-sag="auto" style="font-size: 10px; height: 22px; padding: 1px 5px; ${(details.bowOut === null || details.bowOut === undefined) && !(details.sideOffset) && (details.sagDrop === null || details.sagDrop === undefined) ? 'border-color: var(--accent-blue); color: var(--accent-blue); font-weight: 700;' : ''}">Auto Natural</button>
-                <button type="button" class="btn btn-secondary btn-sm btn-cable-curve-preset" data-bow="0.32" data-side="0" data-sag="0.06" style="font-size: 10px; height: 22px; padding: 1px 5px;">Loop Depan</button>
-                <button type="button" class="btn btn-secondary btn-sm btn-cable-curve-preset" data-bow="0.28" data-side="0" data-sag="0.34" style="font-size: 10px; height: 22px; padding: 1px 5px;">Loop Gantung Bawah</button>
-                <button type="button" class="btn btn-secondary btn-sm btn-cable-curve-preset" data-bow="0.24" data-side="-0.36" data-sag="0.16" style="font-size: 10px; height: 22px; padding: 1px 5px;">Sapuan Kiri Rak</button>
-                <button type="button" class="btn btn-secondary btn-sm btn-cable-curve-preset" data-bow="0.24" data-side="0.36" data-sag="0.16" style="font-size: 10px; height: 22px; padding: 1px 5px;">Sapuan Kanan Rak</button>
-                <button type="button" class="btn btn-secondary btn-sm btn-cable-curve-preset" data-bow="0.06" data-side="0" data-sag="0.02" style="font-size: 10px; height: 22px; padding: 1px 5px;">Rapat / Tegang</button>
+                <button type="button" class="btn btn-secondary btn-sm btn-cable-curve-preset" data-bow="0.45" data-side="0" data-sag="0.15" style="font-size: 10px; height: 22px; padding: 1px 5px;">Loop Depan</button>
+                <button type="button" class="btn btn-secondary btn-sm btn-cable-curve-preset" data-bow="0.42" data-side="0" data-sag="0.65" style="font-size: 10px; height: 22px; padding: 1px 5px;">Loop Gantung Bawah</button>
+                <button type="button" class="btn btn-secondary btn-sm btn-cable-curve-preset" data-bow="0.35" data-side="-0.65" data-sag="0.25" style="font-size: 10px; height: 22px; padding: 1px 5px;">Sapuan Kiri Rak</button>
+                <button type="button" class="btn btn-secondary btn-sm btn-cable-curve-preset" data-bow="0.35" data-side="0.65" data-sag="0.25" style="font-size: 10px; height: 22px; padding: 1px 5px;">Sapuan Kanan Rak</button>
+                <button type="button" class="btn btn-secondary btn-sm btn-cable-curve-preset" data-bow="0.10" data-side="0" data-sag="0.00" style="font-size: 10px; height: 22px; padding: 1px 5px;">Rapat / Tegang</button>
               </div>
 
               <!-- Bow Out -->
               <div style="display: flex; flex-direction: column; gap: 2px;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                   <label style="font-size: 10.5px; color: var(--text-muted);">Lengkungan Depan (Bow Out)</label>
-                  <input type="number" id="prop-cable-bow" min="-0.6" max="1.5" step="0.02" placeholder="Auto"
+                  <input type="number" id="prop-cable-bow" min="-1.5" max="3.0" step="0.02" placeholder="Auto"
                          value="${typeof details.bowOut === 'number' && !isNaN(details.bowOut) ? details.bowOut : ''}"
                          style="width: 58px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 11px; padding: 2px 5px; text-align: right; font-family: var(--font-mono);">
                 </div>
-                <input type="range" id="prop-cable-bow-slider" min="-0.6" max="1.5" step="0.02"
+                <input type="range" id="prop-cable-bow-slider" min="-1.5" max="3.0" step="0.02"
                        value="${typeof details.bowOut === 'number' && !isNaN(details.bowOut) ? details.bowOut : 0.22}"
                        style="width: 100%; accent-color: var(--accent-blue); cursor: pointer;">
               </div>
@@ -385,11 +385,11 @@ export class ConnectionPanel {
               <div style="display: flex; flex-direction: column; gap: 2px;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                   <label style="font-size: 10.5px; color: var(--text-muted);">Lengkungan Samping (Kiri/Kanan)</label>
-                  <input type="number" id="prop-cable-side" min="-1.5" max="1.5" step="0.02"
+                  <input type="number" id="prop-cable-side" min="-3.0" max="3.0" step="0.02"
                          value="${typeof details.sideOffset === 'number' && !isNaN(details.sideOffset) ? details.sideOffset : 0}"
                          style="width: 58px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 11px; padding: 2px 5px; text-align: right; font-family: var(--font-mono);">
                 </div>
-                <input type="range" id="prop-cable-side-slider" min="-1.5" max="1.5" step="0.02"
+                <input type="range" id="prop-cable-side-slider" min="-3.0" max="3.0" step="0.02"
                        value="${typeof details.sideOffset === 'number' && !isNaN(details.sideOffset) ? details.sideOffset : 0}"
                        style="width: 100%; accent-color: var(--accent-blue); cursor: pointer;">
               </div>
@@ -398,11 +398,11 @@ export class ConnectionPanel {
               <div style="display: flex; flex-direction: column; gap: 2px;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                   <label style="font-size: 10.5px; color: var(--text-muted);">Kelendutan Bawah (Sag/Slack)</label>
-                  <input type="number" id="prop-cable-sag" min="-0.8" max="1.2" step="0.02" placeholder="Auto"
+                  <input type="number" id="prop-cable-sag" min="-1.5" max="2.5" step="0.02" placeholder="Auto"
                          value="${typeof details.sagDrop === 'number' && !isNaN(details.sagDrop) ? details.sagDrop : ''}"
                          style="width: 58px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 11px; padding: 2px 5px; text-align: right; font-family: var(--font-mono);">
                 </div>
-                <input type="range" id="prop-cable-sag-slider" min="-0.8" max="1.2" step="0.02"
+                <input type="range" id="prop-cable-sag-slider" min="-1.5" max="2.5" step="0.02"
                        value="${typeof details.sagDrop === 'number' && !isNaN(details.sagDrop) ? details.sagDrop : 0.1}"
                        style="width: 100%; accent-color: var(--accent-blue); cursor: pointer;">
               </div>
@@ -555,11 +555,21 @@ export class ConnectionPanel {
       this.cableManager.updateConnection(cableId, { details: nextDetails });
     });
 
-    document.getElementById('prop-cable-curve-tension')?.addEventListener('change', (e) => {
+    const tensionInput = document.getElementById('prop-cable-curve-tension');
+    const applyCurveTension = (val) => {
+      const tensionVal = Math.max(0, Math.min(0.8, parseFloat(val) || 0.38));
+      const curCab = this.cableManager.getConnectionById(cableId) || this.currentCable;
+      const nextDetails = { ...(curCab?.details || {}), curveTension: tensionVal, pathStyle: 'curve' };
+      const pathSelect = document.getElementById('prop-cable-path-style');
+      if (pathSelect && pathSelect.value !== 'curve') pathSelect.value = 'curve';
+      const updated = this.cableManager.updateConnection(cableId, { details: nextDetails });
+      if (updated) this.currentCable = updated;
+    };
+    tensionInput?.addEventListener('input', (e) => applyCurveTension(e.target.value));
+    tensionInput?.addEventListener('change', (e) => {
       const tensionVal = Math.max(0, Math.min(0.8, parseFloat(e.target.value) || 0.38));
       e.target.value = tensionVal;
-      const nextDetails = { ...(this.currentCable.details || {}), curveTension: tensionVal };
-      this.cableManager.updateConnection(cableId, { details: nextDetails });
+      applyCurveTension(tensionVal);
     });
 
     // Live 3D Patch Cord Curve Shaping Controls (Bow Out, Side Offset, Sag Drop & Presets)
@@ -570,9 +580,12 @@ export class ConnectionPanel {
     const sagInput = document.getElementById('prop-cable-sag');
     const sagSlider = document.getElementById('prop-cable-sag-slider');
 
-    const applyCurveShapePatch = (patch) => {
+    const applyCurveShapePatch = (patch, extraCableUpdates = null) => {
       const curCab = this.cableManager.getConnectionById(cableId) || this.currentCable;
-      const nextDetails = { ...(curCab?.details || {}), ...patch };
+      const nextDetails = { ...(curCab?.details || {}), ...patch, pathStyle: 'curve' };
+      const pathSelect = document.getElementById('prop-cable-path-style');
+      if (pathSelect && pathSelect.value !== 'curve') pathSelect.value = 'curve';
+
       if (patch.bowOut !== undefined) {
         if (bowInput && document.activeElement !== bowInput) {
           bowInput.value = patch.bowOut === null ? '' : patch.bowOut;
@@ -593,7 +606,8 @@ export class ConnectionPanel {
           sagSlider.value = patch.sagDrop === null ? 0.1 : patch.sagDrop;
         }
       }
-      const updated = this.cableManager.updateConnection(cableId, { details: nextDetails });
+      const payload = { ...(extraCableUpdates || {}), details: nextDetails };
+      const updated = this.cableManager.updateConnection(cableId, payload);
       if (updated) this.currentCable = updated;
     };
 
@@ -604,37 +618,58 @@ export class ConnectionPanel {
     };
 
     bowSlider?.addEventListener('input', (e) => {
-      const val = clampRange(e.target.value, -0.6, 1.5, 0.22);
+      const val = clampRange(e.target.value, -1.5, 3.0, 0.22);
       if (bowInput) bowInput.value = val;
       applyCurveShapePatch({ bowOut: val });
     });
-    bowInput?.addEventListener('change', (e) => {
+    const handleBowNum = (e, isChange) => {
       const raw = e.target.value.trim();
-      const val = raw === '' ? null : clampRange(raw, -0.6, 1.5, 0.22);
+      if (raw === '') {
+        if (isChange) applyCurveShapePatch({ bowOut: null });
+        return;
+      }
+      const val = clampRange(raw, -1.5, 3.0, 0.22);
+      if (isChange) e.target.value = val;
+      if (bowSlider) bowSlider.value = val;
       applyCurveShapePatch({ bowOut: val });
-    });
+    };
+    bowInput?.addEventListener('input', (e) => handleBowNum(e, false));
+    bowInput?.addEventListener('change', (e) => handleBowNum(e, true));
 
     sideSlider?.addEventListener('input', (e) => {
-      const val = clampRange(e.target.value, -1.5, 1.5, 0);
+      const val = clampRange(e.target.value, -3.0, 3.0, 0);
       if (sideInput) sideInput.value = val;
       applyCurveShapePatch({ sideOffset: val });
     });
-    sideInput?.addEventListener('change', (e) => {
-      const val = clampRange(e.target.value, -1.5, 1.5, 0);
-      e.target.value = val;
+    const handleSideNum = (e, isChange) => {
+      const raw = e.target.value.trim();
+      if (raw === '' && !isChange) return;
+      const val = clampRange(raw, -3.0, 3.0, 0);
+      if (isChange) e.target.value = val;
+      if (sideSlider) sideSlider.value = val;
       applyCurveShapePatch({ sideOffset: val });
-    });
+    };
+    sideInput?.addEventListener('input', (e) => handleSideNum(e, false));
+    sideInput?.addEventListener('change', (e) => handleSideNum(e, true));
 
     sagSlider?.addEventListener('input', (e) => {
-      const val = clampRange(e.target.value, -0.8, 1.2, 0.1);
+      const val = clampRange(e.target.value, -1.5, 2.5, 0.1);
       if (sagInput) sagInput.value = val;
       applyCurveShapePatch({ sagDrop: val });
     });
-    sagInput?.addEventListener('change', (e) => {
+    const handleSagNum = (e, isChange) => {
       const raw = e.target.value.trim();
-      const val = raw === '' ? null : clampRange(raw, -0.8, 1.2, 0.1);
+      if (raw === '') {
+        if (isChange) applyCurveShapePatch({ sagDrop: null });
+        return;
+      }
+      const val = clampRange(raw, -1.5, 2.5, 0.1);
+      if (isChange) e.target.value = val;
+      if (sagSlider) sagSlider.value = val;
       applyCurveShapePatch({ sagDrop: val });
-    });
+    };
+    sagInput?.addEventListener('input', (e) => handleSagNum(e, false));
+    sagInput?.addEventListener('change', (e) => handleSagNum(e, true));
 
     document.querySelectorAll('.btn-cable-curve-preset').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -642,10 +677,11 @@ export class ConnectionPanel {
         const sideAttr = btn.getAttribute('data-side');
         const sagAttr = btn.getAttribute('data-sag');
         applyCurveShapePatch({
-          bowOut: bowAttr === 'auto' ? null : clampRange(bowAttr, -0.6, 1.5, 0.22),
-          sideOffset: clampRange(sideAttr, -1.5, 1.5, 0),
-          sagDrop: sagAttr === 'auto' ? null : clampRange(sagAttr, -0.8, 1.2, 0.1)
-        });
+          bowOut: bowAttr === 'auto' ? null : clampRange(bowAttr, -1.5, 3.0, 0.22),
+          sideOffset: clampRange(sideAttr, -3.0, 3.0, 0),
+          sagDrop: sagAttr === 'auto' ? null : clampRange(sagAttr, -1.5, 2.5, 0.1),
+          elevationZ: null
+        }, { route: [] });
         this.renderCableForm(this.cableManager.getConnectionById(cableId));
       });
     });
@@ -972,16 +1008,16 @@ export class ConnectionPanel {
       const bowInput = document.getElementById('prop-cable-bow');
       if (bowInput) {
         const rawBow = bowInput.value.trim();
-        details.bowOut = rawBow === '' ? null : Number(Math.max(-0.6, Math.min(1.5, parseFloat(rawBow) || 0)).toFixed(2));
+        details.bowOut = rawBow === '' ? null : Number(Math.max(-1.5, Math.min(3.0, parseFloat(rawBow) || 0)).toFixed(2));
       }
       const sideInput = document.getElementById('prop-cable-side');
       if (sideInput) {
-        details.sideOffset = Number(Math.max(-1.5, Math.min(1.5, parseFloat(sideInput.value) || 0)).toFixed(2));
+        details.sideOffset = Number(Math.max(-3.0, Math.min(3.0, parseFloat(sideInput.value) || 0)).toFixed(2));
       }
       const sagInput = document.getElementById('prop-cable-sag');
       if (sagInput) {
         const rawSag = sagInput.value.trim();
-        details.sagDrop = rawSag === '' ? null : Number(Math.max(-0.8, Math.min(1.2, parseFloat(rawSag) || 0)).toFixed(2));
+        details.sagDrop = rawSag === '' ? null : Number(Math.max(-1.5, Math.min(2.5, parseFloat(rawSag) || 0)).toFixed(2));
       }
 
       // Collect technical media properties

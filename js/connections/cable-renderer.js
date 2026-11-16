@@ -137,7 +137,7 @@ export class CableRenderer {
     const strokeWidth = isSelected ? catDef.strokeWidth + 2 : catDef.strokeWidth;
     const pathStyle = cable.details?.pathStyle || 'curve';
     const hasWaypoints = Array.isArray(cable.route) && cable.route.length > 0;
-    const lineTension = (pathStyle === 'curve' && hasWaypoints)
+    const lineTension = (pathStyle === 'curve' && (hasWaypoints || flatPoints.length >= 6))
       ? (typeof cable.details?.curveTension === 'number' ? cable.details.curveTension : 0.38)
       : 0;
 
@@ -341,6 +341,29 @@ export class CableRenderer {
         }
       }
       return orthoPoints;
+    }
+
+    if (pathStyle === 'curve' && (!Array.isArray(cable.route) || cable.route.length === 0)) {
+      const sideVal = typeof cable.details?.sideOffset === 'number' && !isNaN(cable.details.sideOffset)
+        ? cable.details.sideOffset
+        : 0;
+      const bowVal = typeof cable.details?.bowOut === 'number' && !isNaN(cable.details.bowOut)
+        ? cable.details.bowOut
+        : 0;
+      const effOffset = sideVal !== 0 ? sideVal : bowVal * 0.5;
+      if (Math.abs(effOffset) > 0.001) {
+        const srcPt = rawNodes[0];
+        const dstPt = rawNodes[rawNodes.length - 1];
+        const dx = dstPt.x - srcPt.x;
+        const dy = dstPt.y - srcPt.y;
+        const rawLen = Math.hypot(dx, dy);
+        const nx = rawLen > 1 ? -dy / rawLen : 1;
+        const ny = rawLen > 1 ? dx / rawLen : 0;
+        const offsetPx = effOffset * 45;
+        const midX = (srcPt.x + dstPt.x) * 0.5 + nx * offsetPx;
+        const midY = (srcPt.y + dstPt.y) * 0.5 + ny * offsetPx;
+        return [srcPt.x, srcPt.y, midX, midY, dstPt.x, dstPt.y];
+      }
     }
 
     const points = [];
