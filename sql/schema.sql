@@ -28,6 +28,9 @@ CREATE TABLE IF NOT EXISTS workspaces (
   owner_username VARCHAR(64) NULL,
   title VARCHAR(160) NOT NULL DEFAULT 'Server Utama',
   project_data LONGTEXT NOT NULL,
+  access_password_hash VARCHAR(255) NULL,
+  access_password_salt VARCHAR(64) NULL,
+  is_public_viewable TINYINT(1) NOT NULL DEFAULT 1,
   updated_by VARCHAR(64) NULL,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (workspace_key),
@@ -37,6 +40,7 @@ CREATE TABLE IF NOT EXISTS workspaces (
 CREATE TABLE IF NOT EXISTS user_sessions (
   token VARCHAR(128) NOT NULL,
   username VARCHAR(64) NOT NULL,
+  main_unlocked TINYINT(1) NOT NULL DEFAULT 0,
   expires_at DATETIME NOT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (token),
@@ -49,3 +53,18 @@ VALUES
   ('admin', 'Admin Utama Jaringan', 'admin', SHA2(CONCAT('netmap_salt_2026', ':', 'admin123'), 256), 'netmap_salt_2026'),
   ('teknisi1', 'Teknisi Lapangan 1', 'teknisi', SHA2(CONCAT('netmap_salt_2026', ':', 'teknisi123'), 256), 'netmap_salt_2026'),
   ('teknisi2', 'Teknisi Lapangan 2', 'teknisi', SHA2(CONCAT('netmap_salt_2026', ':', 'teknisi123'), 256), 'netmap_salt_2026');
+
+-- Default Protected Server Utama Workspace (password: server123, publicly viewable, managed by @admin)
+INSERT IGNORE INTO workspaces (
+  workspace_key, owner_username, title, project_data, access_password_hash, access_password_salt, is_public_viewable, updated_by
+)
+VALUES (
+  'main',
+  'admin',
+  'Server Utama',
+  'null',
+  SHA2(CONCAT('netmap_salt_2026', ':', 'server123'), 256),
+  'netmap_salt_2026',
+  1,
+  'admin'
+);

@@ -14,6 +14,7 @@ const LOCAL_DB_STORAGE_KEY = 'netmap_multi_db_v1';
 const LOCAL_TOKEN_STORAGE_KEY = 'netmap_auth_token_v1';
 const LOCAL_WS_MODE_STORAGE_KEY = 'netmap_workspace_mode_v1';
 const DEFAULT_SEED_SALT = 'netmap_salt_2026';
+const DEFAULT_MAIN_SERVER_PASSWORD = 'server123';
 
 // Standard FIPS 180-4 SHA-256 so offline file:// hashing matches MySQL SHA2() & Node crypto identically
 const SHA256_K = new Uint32Array([
@@ -106,7 +107,15 @@ function defaultOfflineSeedState() {
       }
     ],
     sessions: {},
-    workspaces: {}
+    workspaces: {},
+    mainSecurity: {
+      ownerUsername: 'admin',
+      passwordSalt: DEFAULT_SEED_SALT,
+      passwordHash: sha256Hex(`${DEFAULT_SEED_SALT}:${DEFAULT_MAIN_SERVER_PASSWORD}`),
+      isPublicViewable: true,
+      updatedAt: now,
+      updatedBy: 'admin'
+    }
   };
 }
 
@@ -115,6 +124,9 @@ export class AuthManager {
     this.currentUser = null;
     this.authToken = '';
     this.workspaceMode = 'main'; // 'main' (Server Utama) | 'personal' (Akun Pribadi)
+    this.mainWorkspaceUnlocked = false;
+    this.mainOwnerUsername = 'admin';
+    this.publicPreviewMode = false;
     this.apiAvailable = false;
     this.storageBackend = 'local'; // 'mysql' | 'file' | 'local'
     this.lastUpdatedBy = null;
@@ -165,13 +177,21 @@ export class AuthManager {
   }
 
   readLocalDb() {
+    const ensureDefaults = (db) => {
+      if (!db.mainSecurity || !db.mainSecurity.passwordHash) {
+        db.mainSecurity = defaultOfflineSeedState().mainSecurity;
+      }
+      if (!db.sessions || typeof db.sessions !== 'object') db.sessions = {};
+      if (!db.workspaces || typeof db.workspaces !== 'object') db.workspaces = {};
+      return db;
+    };
     try {
       if (typeof localStorage !== 'undefined') {
         const raw = localStorage.getItem(LOCAL_DB_STORAGE_KEY);
         if (raw) {
           const parsed = JSON.parse(raw);
           if (parsed && Array.isArray(parsed.users)) {
-            return parsed;
+            return ensureDefaults(parsed);
           }
         }
         const seeded = defaultOfflineSeedState();
@@ -182,7 +202,7 @@ export class AuthManager {
     if (!this._memoryStore) {
       this._memoryStore = defaultOfflineSeedState();
     }
-    return this._memoryStore;
+    return ensureDefaults(this._memoryStore);
   }
 
   writeLocalDb(dbState) {
@@ -215,6 +235,33 @@ export class AuthManager {
     return this.currentUser;
   }
 
+  isMainWorkspaceUnlocked() {
+    return Boolean(this.isAuthenticated() && this.mainWorkspaceUnlocked);
+  }
+
+  isMainServerAdmin() {
+    if (!this.isAuthenticated()) return false;
+    const uname = String(this.currentUser?.username || '').toLowerCase();
+    const owner = String(this.mainOwnerUsername || 'admin').toLowerCase();
+    return uname === 'admin' || this.currentUser?.role === 'admin' || uname === owner;
+  }
+
+  isPublicPreviewActive() {
+    return Boolean(!this.isAuthenticated() && this.publicPreviewMode);
+  }
+
+  setPublicPreviewMode(active) {
+    this.publicPreviewMode = Boolean(active) && !this.isAuthenticated();
+    eventBus.emit('auth:changed', this.getAuthStateSnapshot());
+    return this.publicPreviewMode;
+  }
+
+  canWriteActiveWorkspace() {
+    if (!this.isAuthenticated()) return false;
+    if (this.getWorkspaceMode() === 'personal') return true;
+    return this.mainWorkspaceUnlocked === true;
+  }
+
   getWorkspaceMode() {
     return this.workspaceMode === 'personal' ? 'personal' : 'main';
   }
@@ -240,6 +287,12 @@ export class AuthManager {
       return `user_${this.currentUser.username}`;
     }
     return 'main';
+  }
+
+  _verifyLocalMainPassword(db, rawPassword) {
+    const sec = db?.mainSecurity;
+    if (!sec || !sec.passwordHash) return true;
+    return sha256Hex(`${sec.passwordSalt || DEFAULT_SEED_SALT}:${String(rawPassword || '')}`) === sec.passwordHash;
   }
 
   async apiFetch(apiPath, options = {}) {
@@ -278,8 +331,12 @@ export class AuthManager {
             const sess = await this.apiFetch('/api/auth/session');
             if (sess.authenticated && sess.user) {
               this.currentUser = sess.user;
+              this.mainWorkspaceUnlocked = Boolean(sess.mainUnlocked);
+              this.mainOwnerUsername = sess.mainOwnerUsername || 'admin';
+              this.publicPreviewMode = false;
             } else {
               this.currentUser = null;
+              this.mainWorkspaceUnlocked = false;
               this.persistToken('');
             }
           }
@@ -295,8 +352,9 @@ export class AuthManager {
     // Offline file:// or static server fallback
     this.apiAvailable = false;
     this.storageBackend = 'local';
+    const db = this.readLocalDb();
+    this.mainOwnerUsername = db.mainSecurity?.ownerUsername || 'admin';
     if (this.authToken) {
-      const db = this.readLocalDb();
       const sess = db.sessions?.[this.authToken];
       const user = sess ? db.users.find((u) => u.username.toLowerCase() === String(sess.username).toLowerCase()) : null;
       if (user) {
@@ -307,10 +365,15 @@ export class AuthManager {
           role: user.role,
           lastLoginAt: user.lastLoginAt
         };
+        this.mainWorkspaceUnlocked = Boolean(sess?.mainUnlocked);
+        this.publicPreviewMode = false;
       } else {
         this.currentUser = null;
+        this.mainWorkspaceUnlocked = false;
         this.persistToken('');
       }
+    } else {
+      this.mainWorkspaceUnlocked = false;
     }
     eventBus.emit('auth:changed', this.getAuthStateSnapshot());
     return this.getAuthStateSnapshot();
@@ -322,6 +385,11 @@ export class AuthManager {
       user: this.currentUser,
       workspaceMode: this.getWorkspaceMode(),
       workspaceKey: this.getActiveWorkspaceKey(),
+      mainUnlocked: this.isMainWorkspaceUnlocked(),
+      mainOwnerUsername: this.mainOwnerUsername,
+      canManageServerPassword: this.isMainServerAdmin(),
+      canWriteActive: this.canWriteActiveWorkspace(),
+      publicPreviewMode: this.isPublicPreviewActive(),
       storageBackend: this.storageBackend,
       apiAvailable: this.apiAvailable,
       lastUpdatedBy: this.lastUpdatedBy,
@@ -329,9 +397,12 @@ export class AuthManager {
     };
   }
 
-  async login(username, password) {
+  async login(username, password, options = {}) {
     const cleanUser = String(username || '').trim();
     const rawPass = String(password || '');
+    const workspacePassword = typeof options.workspacePassword === 'string' ? options.workspacePassword : '';
+    const requireMainUnlock = Boolean(options.requireMainUnlock);
+
     if (!cleanUser || !rawPass) {
       throw new Error('Username dan password wajib diisi.');
     }
@@ -339,10 +410,18 @@ export class AuthManager {
     if (this.apiAvailable) {
       const res = await this.apiFetch('/api/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ username: cleanUser, password: rawPass })
+        body: JSON.stringify({
+          username: cleanUser,
+          password: rawPass,
+          workspacePassword,
+          requireMainUnlock
+        })
       });
       this.persistToken(res.token);
       this.currentUser = res.user;
+      this.mainWorkspaceUnlocked = Boolean(res.mainUnlocked);
+      this.mainOwnerUsername = res.mainOwnerUsername || 'admin';
+      this.publicPreviewMode = false;
       this.storageBackend = res.storageBackend || this.storageBackend;
       this.startRemoteSyncPolling();
       eventBus.emit('auth:changed', this.getAuthStateSnapshot());
@@ -355,9 +434,24 @@ export class AuthManager {
     if (!userRow || sha256Hex(`${userRow.passwordSalt}:${rawPass}`) !== userRow.passwordHash) {
       throw new Error('Username atau password salah.');
     }
+
+    let mainUnlocked = false;
+    if (workspacePassword) {
+      if (!this._verifyLocalMainPassword(db, workspacePassword)) {
+        throw new Error('Password akses Server Utama salah.');
+      }
+      mainUnlocked = true;
+    } else if (requireMainUnlock) {
+      throw new Error('Masukkan password akses Server Utama untuk menggunakan workspace Server Utama.');
+    }
+
     userRow.lastLoginAt = new Date().toISOString();
     const token = `local-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-    db.sessions[token] = { username: userRow.username, createdAt: userRow.lastLoginAt };
+    db.sessions[token] = {
+      username: userRow.username,
+      mainUnlocked,
+      createdAt: userRow.lastLoginAt
+    };
     this.writeLocalDb(db);
     this.persistToken(token);
     this.currentUser = {
@@ -367,14 +461,18 @@ export class AuthManager {
       role: userRow.role,
       lastLoginAt: userRow.lastLoginAt
     };
+    this.mainWorkspaceUnlocked = mainUnlocked;
+    this.mainOwnerUsername = db.mainSecurity?.ownerUsername || 'admin';
+    this.publicPreviewMode = false;
     eventBus.emit('auth:changed', this.getAuthStateSnapshot());
     return this.currentUser;
   }
 
-  async register({ username, displayName, password, role = 'teknisi' }) {
+  async register({ username, displayName, password, role = 'teknisi', workspacePassword = '', requireMainUnlock = false }) {
     const cleanUser = String(username || '').trim();
     const cleanName = String(displayName || cleanUser).trim() || cleanUser;
     const rawPass = String(password || '');
+    const serverPass = typeof workspacePassword === 'string' ? workspacePassword : '';
 
     if (!/^[a-zA-Z0-9._-]{3,32}$/.test(cleanUser)) {
       throw new Error('Username harus 3-32 karakter (huruf, angka, titik, _ atau -).');
@@ -386,10 +484,20 @@ export class AuthManager {
     if (this.apiAvailable) {
       const res = await this.apiFetch('/api/auth/register', {
         method: 'POST',
-        body: JSON.stringify({ username: cleanUser, displayName: cleanName, password: rawPass, role })
+        body: JSON.stringify({
+          username: cleanUser,
+          displayName: cleanName,
+          password: rawPass,
+          role,
+          workspacePassword: serverPass,
+          requireMainUnlock: Boolean(requireMainUnlock)
+        })
       });
       this.persistToken(res.token);
       this.currentUser = res.user;
+      this.mainWorkspaceUnlocked = Boolean(res.mainUnlocked);
+      this.mainOwnerUsername = res.mainOwnerUsername || 'admin';
+      this.publicPreviewMode = false;
       this.storageBackend = res.storageBackend || this.storageBackend;
       this.startRemoteSyncPolling();
       eventBus.emit('auth:changed', this.getAuthStateSnapshot());
@@ -400,6 +508,22 @@ export class AuthManager {
     if (db.users.some((u) => u.username.toLowerCase() === cleanUser.toLowerCase())) {
       throw new Error(`Username "${cleanUser}" sudah terdaftar.`);
     }
+    if (role === 'admin') {
+      if (!serverPass || !this._verifyLocalMainPassword(db, serverPass)) {
+        throw new Error('Password Server Utama diperlukan untuk mendaftar sebagai Admin Utama.');
+      }
+    }
+
+    let mainUnlocked = false;
+    if (serverPass) {
+      if (!this._verifyLocalMainPassword(db, serverPass)) {
+        throw new Error('Password akses Server Utama salah.');
+      }
+      mainUnlocked = true;
+    } else if (requireMainUnlock) {
+      throw new Error('Masukkan password akses Server Utama untuk menggunakan workspace Server Utama.');
+    }
+
     const salt = `${DEFAULT_SEED_SALT}_${Date.now().toString(36)}`;
     const now = new Date().toISOString();
     const newUser = {
@@ -414,7 +538,11 @@ export class AuthManager {
     };
     db.users.push(newUser);
     const token = `local-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-    db.sessions[token] = { username: newUser.username, createdAt: now };
+    db.sessions[token] = {
+      username: newUser.username,
+      mainUnlocked,
+      createdAt: now
+    };
     this.writeLocalDb(db);
     this.persistToken(token);
     this.currentUser = {
@@ -424,6 +552,9 @@ export class AuthManager {
       role: newUser.role,
       lastLoginAt: now
     };
+    this.mainWorkspaceUnlocked = mainUnlocked;
+    this.mainOwnerUsername = db.mainSecurity?.ownerUsername || 'admin';
+    this.publicPreviewMode = false;
     eventBus.emit('auth:changed', this.getAuthStateSnapshot());
     return this.currentUser;
   }
@@ -441,11 +572,173 @@ export class AuthManager {
       }
     }
     this.currentUser = null;
+    this.mainWorkspaceUnlocked = false;
+    this.publicPreviewMode = false;
     this.lastUpdatedBy = null;
     this.lastSyncedAt = null;
     this.stopRemoteSyncPolling();
     this.persistToken('');
     eventBus.emit('auth:changed', this.getAuthStateSnapshot());
+  }
+
+  async unlockMainWorkspace(password) {
+    if (!this.isAuthenticated()) {
+      throw new Error('Silakan login akun terlebih dahulu untuk membuka akses edit Server Utama.');
+    }
+    const rawServerPass = String(password || '');
+    if (!rawServerPass) {
+      throw new Error('Password akses Server Utama wajib diisi.');
+    }
+
+    if (this.apiAvailable) {
+      const res = await this.apiFetch('/api/workspaces/main/unlock', {
+        method: 'POST',
+        body: JSON.stringify({ password: rawServerPass })
+      });
+      this.mainWorkspaceUnlocked = Boolean(res.mainUnlocked);
+      this.mainOwnerUsername = res.mainOwnerUsername || this.mainOwnerUsername;
+      eventBus.emit('auth:changed', this.getAuthStateSnapshot());
+      return true;
+    }
+
+    const db = this.readLocalDb();
+    if (!this._verifyLocalMainPassword(db, rawServerPass)) {
+      throw new Error('Password akses Server Utama salah.');
+    }
+    if (this.authToken && db.sessions[this.authToken]) {
+      db.sessions[this.authToken].mainUnlocked = true;
+      this.writeLocalDb(db);
+    }
+    this.mainWorkspaceUnlocked = true;
+    this.mainOwnerUsername = db.mainSecurity?.ownerUsername || 'admin';
+    eventBus.emit('auth:changed', this.getAuthStateSnapshot());
+    return true;
+  }
+
+  async lockMainWorkspace() {
+    if (!this.isAuthenticated()) return false;
+    if (this.apiAvailable) {
+      await this.apiFetch('/api/workspaces/main/lock', { method: 'POST' });
+    } else {
+      const db = this.readLocalDb();
+      if (this.authToken && db.sessions[this.authToken]) {
+        db.sessions[this.authToken].mainUnlocked = false;
+        this.writeLocalDb(db);
+      }
+    }
+    this.mainWorkspaceUnlocked = false;
+    eventBus.emit('auth:changed', this.getAuthStateSnapshot());
+    return true;
+  }
+
+  async changeMainWorkspacePassword(newPassword, currentPassword = '') {
+    if (!this.isAuthenticated()) {
+      throw new Error('Silakan login terlebih dahulu.');
+    }
+    if (!this.isMainServerAdmin()) {
+      throw new Error('Hanya Admin Utama atau pembuat server yang boleh mengubah password Server Utama.');
+    }
+    const cleanNew = String(newPassword || '');
+    if (cleanNew.length < 4) {
+      throw new Error('Password server baru minimal 4 karakter.');
+    }
+
+    if (this.apiAvailable) {
+      const res = await this.apiFetch('/api/workspaces/main/password', {
+        method: 'POST',
+        body: JSON.stringify({
+          newPassword: cleanNew,
+          currentPassword: String(currentPassword || '')
+        })
+      });
+      this.mainWorkspaceUnlocked = Boolean(res.mainUnlocked ?? true);
+      this.mainOwnerUsername = res.ownerUsername || this.mainOwnerUsername;
+      eventBus.emit('auth:changed', this.getAuthStateSnapshot());
+      return res;
+    }
+
+    const db = this.readLocalDb();
+    if (typeof currentPassword === 'string' && currentPassword.length > 0) {
+      if (!this._verifyLocalMainPassword(db, currentPassword)) {
+        throw new Error('Password server saat ini salah.');
+      }
+    }
+    const salt = `${DEFAULT_SEED_SALT}_${Date.now().toString(36)}`;
+    const now = new Date().toISOString();
+    const ownerUsername = db.mainSecurity?.ownerUsername || this.currentUser.username || 'admin';
+    db.mainSecurity = {
+      ownerUsername,
+      passwordSalt: salt,
+      passwordHash: sha256Hex(`${salt}:${cleanNew}`),
+      isPublicViewable: true,
+      updatedAt: now,
+      updatedBy: this.currentUser.username
+    };
+    Object.entries(db.sessions || {}).forEach(([tok, sess]) => {
+      if (sess && typeof sess === 'object') {
+        sess.mainUnlocked = tok === this.authToken;
+      }
+    });
+    this.writeLocalDb(db);
+    this.mainWorkspaceUnlocked = true;
+    this.mainOwnerUsername = ownerUsername;
+    eventBus.emit('auth:changed', this.getAuthStateSnapshot());
+    return {
+      ok: true,
+      mainUnlocked: true,
+      ownerUsername,
+      updatedBy: this.currentUser.username,
+      updatedAt: now,
+      storageBackend: 'local'
+    };
+  }
+
+  async loadPublicMainWorkspace() {
+    if (this.apiAvailable) {
+      const res = await this.apiFetch('/api/workspaces/main');
+      this.lastUpdatedBy = res.updatedBy || null;
+      this.lastSyncedAt = res.updatedAt || null;
+      this.mainOwnerUsername = res.ownerUsername || this.mainOwnerUsername;
+      if (typeof res.mainUnlocked === 'boolean') {
+        this.mainWorkspaceUnlocked = res.mainUnlocked;
+      }
+      if (!this.isAuthenticated()) {
+        this.publicPreviewMode = true;
+        eventBus.emit('auth:changed', this.getAuthStateSnapshot());
+      }
+      return res;
+    }
+
+    const db = this.readLocalDb();
+    const ws = db.workspaces?.main || null;
+    this.lastUpdatedBy = ws?.updatedBy || null;
+    this.lastSyncedAt = ws?.updatedAt || null;
+    this.mainOwnerUsername = db.mainSecurity?.ownerUsername || 'admin';
+    if (!this.isAuthenticated()) {
+      this.publicPreviewMode = true;
+      eventBus.emit('auth:changed', this.getAuthStateSnapshot());
+    }
+    return ws
+      ? {
+          ...ws,
+          ownerUsername: this.mainOwnerUsername,
+          isProtected: true,
+          isPublicViewable: true,
+          mainUnlocked: this.isMainWorkspaceUnlocked(),
+          storageBackend: 'local'
+        }
+      : {
+          workspaceKey: 'main',
+          title: 'Server Utama',
+          ownerUsername: this.mainOwnerUsername,
+          projectData: null,
+          updatedBy: null,
+          updatedAt: null,
+          isProtected: true,
+          isPublicViewable: true,
+          mainUnlocked: this.isMainWorkspaceUnlocked(),
+          storageBackend: 'local'
+        };
   }
 
   startRemoteSyncPolling() {
@@ -469,6 +762,10 @@ export class AuthManager {
     const key = this.getActiveWorkspaceKey();
     if (key !== 'main') return false;
     const meta = await this.apiFetch(`/api/workspaces/${encodeURIComponent(key)}?meta=1`);
+    if (typeof meta?.mainUnlocked === 'boolean' && meta.mainUnlocked !== this.mainWorkspaceUnlocked) {
+      this.mainWorkspaceUnlocked = meta.mainUnlocked;
+      eventBus.emit('auth:changed', this.getAuthStateSnapshot());
+    }
     if (meta?.updatedAt && this.lastSyncedAt && meta.updatedAt !== this.lastSyncedAt) {
       eventBus.emit('workspace:remote-updated', {
         workspaceKey: key,
@@ -497,12 +794,21 @@ export class AuthManager {
   }
 
   async loadWorkspaceProject(workspaceKey = this.getActiveWorkspaceKey()) {
+    if (workspaceKey === 'main' && !this.isAuthenticated()) {
+      return this.loadPublicMainWorkspace();
+    }
     if (!this.isAuthenticated() || !workspaceKey) return null;
 
     if (this.apiAvailable) {
       const res = await this.apiFetch(`/api/workspaces/${encodeURIComponent(workspaceKey)}`);
       this.lastUpdatedBy = res.updatedBy || null;
       this.lastSyncedAt = res.updatedAt || null;
+      if (workspaceKey === 'main') {
+        this.mainOwnerUsername = res.ownerUsername || this.mainOwnerUsername;
+        if (typeof res.mainUnlocked === 'boolean') {
+          this.mainWorkspaceUnlocked = res.mainUnlocked;
+        }
+      }
       return res;
     }
 
@@ -510,11 +816,17 @@ export class AuthManager {
     const ws = db.workspaces?.[workspaceKey] || null;
     this.lastUpdatedBy = ws?.updatedBy || null;
     this.lastSyncedAt = ws?.updatedAt || null;
+    if (workspaceKey === 'main') {
+      this.mainOwnerUsername = db.mainSecurity?.ownerUsername || 'admin';
+    }
     return ws ? { ...ws, storageBackend: 'local' } : { workspaceKey, projectData: null, updatedBy: null, updatedAt: null, storageBackend: 'local' };
   }
 
   async saveWorkspaceProject(workspaceKey = this.getActiveWorkspaceKey(), projectData) {
     if (!this.isAuthenticated() || !workspaceKey || !projectData) return null;
+    if (workspaceKey === 'main' && !this.isMainWorkspaceUnlocked()) {
+      throw new Error('Workspace Server Utama terkunci. Masukkan password akses Server Utama terlebih dahulu.');
+    }
 
     let savedMeta;
     if (this.apiAvailable) {
@@ -525,9 +837,10 @@ export class AuthManager {
     } else {
       const db = this.readLocalDb();
       const updatedAt = new Date().toISOString();
+      const mainOwner = db.mainSecurity?.ownerUsername || 'admin';
       db.workspaces[workspaceKey] = {
         workspaceKey,
-        ownerUsername: workspaceKey === 'main' ? null : this.currentUser.username,
+        ownerUsername: workspaceKey === 'main' ? mainOwner : this.currentUser.username,
         title: workspaceKey === 'main' ? 'Server Utama' : (projectData.name || this.currentUser.displayName),
         projectData,
         updatedBy: this.currentUser.username,
@@ -537,6 +850,7 @@ export class AuthManager {
       savedMeta = {
         ok: true,
         workspaceKey,
+        ownerUsername: workspaceKey === 'main' ? mainOwner : this.currentUser.username,
         updatedBy: this.currentUser.username,
         updatedAt,
         storageBackend: 'local'
@@ -558,6 +872,9 @@ export class AuthManager {
 
   async copyWorkspaceProject(fromKey, toKey) {
     if (!this.isAuthenticated() || !fromKey || !toKey) return null;
+    if (toKey === 'main' && !this.isMainWorkspaceUnlocked()) {
+      throw new Error('Workspace Server Utama terkunci. Masukkan password akses Server Utama terlebih dahulu.');
+    }
 
     let res;
     if (this.apiAvailable) {
@@ -576,9 +893,10 @@ export class AuthManager {
         updatedAt: new Date().toISOString()
       };
       const updatedAt = new Date().toISOString();
+      const mainOwner = db.mainSecurity?.ownerUsername || 'admin';
       db.workspaces[toKey] = {
         workspaceKey: toKey,
-        ownerUsername: toKey === 'main' ? null : this.currentUser.username,
+        ownerUsername: toKey === 'main' ? mainOwner : this.currentUser.username,
         title: toKey === 'main' ? 'Server Utama' : `Workspace ${this.currentUser.displayName}`,
         projectData: clonedData,
         updatedBy: this.currentUser.username,

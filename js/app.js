@@ -332,10 +332,58 @@ class NetMapApp {
     // 19. Restore from IndexedDB or seed initial campus data
     await this.loadOrSeedProject();
 
-    // 20. Final icon rendering
+    // 20. Final icon rendering & toolbar overflow guard
     this.renderIcons();
+    this.setupToolbarResponsiveFit();
 
     console.info('[NetMap] Phase 5 Application ready. Complete NetMap MVP operational.');
+  }
+
+  setupToolbarResponsiveFit() {
+    const toolbar = document.getElementById('app-toolbar');
+    if (!toolbar) return;
+
+    this._lastToolbarWidth = 0;
+    const runSync = () => this.syncToolbarLayoutFit();
+
+    window.addEventListener('resize', runSync);
+    if (typeof ResizeObserver !== 'undefined') {
+      this._toolbarResizeObserver = new ResizeObserver(() => {
+        const w = toolbar.clientWidth;
+        if (w !== this._lastToolbarWidth) {
+          this._lastToolbarWidth = w;
+          runSync();
+        }
+      });
+      this._toolbarResizeObserver.observe(toolbar);
+    }
+    if (document.fonts?.ready) {
+      document.fonts.ready.then(runSync).catch(() => {});
+    }
+    requestAnimationFrame(runSync);
+  }
+
+  syncToolbarLayoutFit() {
+    const toolbar = document.getElementById('app-toolbar');
+    if (!toolbar) return;
+
+    const stages = ['tb-compact-brand', 'tb-compact-zoom', 'tb-compact-modes', 'tb-compact-view', 'tb-wrap'];
+    toolbar.classList.remove(...stages);
+
+    const available = toolbar.clientWidth;
+    if (!available) return;
+
+    const fsBtn = document.getElementById('btn-toggle-fullscreen');
+    const isOverflowing = () => {
+      if (toolbar.scrollWidth > available + 1) return true;
+      if (fsBtn && fsBtn.getBoundingClientRect().right > available - 2) return true;
+      return false;
+    };
+
+    for (const cls of stages) {
+      if (!isOverflowing()) break;
+      toolbar.classList.add(cls);
+    }
   }
 
   renderIcons() {
@@ -351,17 +399,28 @@ class NetMapApp {
     const isAuth = this.authManager.isAuthenticated();
     const user = this.authManager.getCurrentUser();
     const wsMode = this.authManager.getWorkspaceMode();
+    const isPublic = !isAuth && this.authManager.isPublicPreviewActive?.();
 
     btn?.classList.toggle('is-authenticated', isAuth);
     if (labelEl) {
-      labelEl.textContent = isAuth ? (user?.displayName || user?.username || 'Teknisi') : 'Mode Tamu';
+      labelEl.textContent = isAuth
+        ? (user?.displayName || user?.username || 'Teknisi')
+        : (isPublic ? 'Lihat Publik' : 'Mode Tamu');
     }
     if (badgeEl) {
       badgeEl.textContent = isAuth
-        ? (wsMode === 'personal' ? 'Akun Saya' : 'Server Utama')
-        : 'Masuk';
+        ? (wsMode === 'personal'
+            ? 'Akun Saya'
+            : (this.authManager.isMainWorkspaceUnlocked?.() ? 'Server Utama' : 'Terkunci'))
+        : (isPublic ? 'Read-Only' : 'Masuk');
     }
-    this.projectStorage?.updateStatusIndicator(isAuth ? (this.projectStorage.hasPendingSave ? 'saving' : 'saved') : 'guest');
+    const status = !isAuth
+      ? (isPublic ? 'public-readonly' : 'guest')
+      : (!this.authManager.canWriteActiveWorkspace?.()
+          ? 'readonly-main'
+          : (this.projectStorage.hasPendingSave ? 'saving' : 'saved'));
+    this.projectStorage?.updateStatusIndicator(status);
+    this.syncToolbarLayoutFit();
   }
 
   /**

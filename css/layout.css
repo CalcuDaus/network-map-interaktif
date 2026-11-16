@@ -886,3 +886,345 @@ body.workspace-fullscreen .hud-3d-exit-fs-btn {
   align-items: center;
   gap: 4px;
 }
+
+/* ==========================================================================
+   Responsive Layout Breakpoints & Overflow Auto-Fit
+   Guarantees top toolbar buttons (especially #btn-toggle-fullscreen),
+   sidebars, 3D HUD, and bottom status bar never clip at 100% / <1520px / <1100px
+   ========================================================================== */
+#app-toolbar {
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+#app-toolbar .toolbar-section {
+  min-width: 0;
+}
+
+#map-viewport {
+  min-width: 0;
+}
+
+#app-status-bar {
+  min-width: 0;
+  box-sizing: border-box;
+  gap: 12px;
+}
+
+/* Progressive dynamic overflow stages applied by syncToolbarLayoutFit() */
+#app-toolbar.tb-compact-brand .brand-text-group {
+  display: none;
+}
+
+#app-toolbar.tb-compact-zoom #btn-fit-screen span,
+#app-toolbar.tb-compact-zoom #btn-reset-view span {
+  display: none;
+}
+
+#app-toolbar.tb-compact-zoom #btn-fit-screen,
+#app-toolbar.tb-compact-zoom #btn-reset-view {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
+
+#app-toolbar.tb-compact-modes .segmented-control:not(.view-switcher) .segmented-item span {
+  display: none;
+}
+
+#app-toolbar.tb-compact-modes .segmented-control:not(.view-switcher) .segmented-item {
+  padding: 4px 8px;
+}
+
+#app-toolbar.tb-compact-view #navbar-auth-ws-badge {
+  display: none;
+}
+
+#app-toolbar.tb-compact-view .view-switcher .segmented-item span {
+  display: none;
+}
+
+#app-toolbar.tb-compact-view .view-switcher .segmented-item {
+  padding: 4px 8px;
+}
+
+#app-toolbar.tb-compact-view .divider-vertical {
+  display: none;
+}
+
+#app-toolbar.tb-wrap {
+  height: auto;
+  min-height: var(--header-height);
+  flex-wrap: wrap;
+  padding: 6px 8px;
+  gap: 6px;
+}
+
+#app-container:has(#app-toolbar.tb-wrap) #workspace {
+  height: auto;
+  min-height: 0;
+}
+
+/* Laptop / 1366px–1520px at 100% browser zoom: keeps all controls + fullscreen visible */
+@media (max-width: 1520px) {
+  #app-toolbar {
+    padding: 0 8px;
+    gap: 6px;
+  }
+
+  #app-toolbar .toolbar-section {
+    gap: 4px;
+  }
+
+  #app-toolbar .toolbar-brand {
+    margin-right: 4px;
+    gap: 6px;
+  }
+
+  #app-toolbar .divider-vertical {
+    margin: 0 2px;
+  }
+
+  #app-toolbar .segmented-item {
+    padding: 4px 7px;
+    gap: 4px;
+  }
+
+  #app-toolbar .btn-icon {
+    width: 30px;
+    height: 30px;
+    padding: 0;
+  }
+
+  #app-toolbar #zoom-percentage {
+    min-width: 44px !important;
+    padding: 1px 5px;
+  }
+
+  #app-toolbar #navbar-auth-label {
+    max-width: 108px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  #app-status-bar .status-group:last-child .status-item:last-child {
+    max-width: 280px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 1380px) {
+  :root {
+    --sidebar-left-width: 260px;
+    --sidebar-right-width: 310px;
+  }
+
+  #app-toolbar .brand-badge {
+    display: none;
+  }
+
+  #app-toolbar .brand-name {
+    font-size: 13px;
+  }
+
+  #app-toolbar .segmented-item {
+    padding: 4px 6px;
+    font-size: 11px;
+  }
+
+  #app-toolbar .btn-secondary.btn-sm {
+    padding: 2px 7px;
+  }
+
+  #app-toolbar .btn-icon {
+    width: 28px;
+    height: 28px;
+  }
+
+  #app-toolbar #zoom-percentage {
+    min-width: 42px !important;
+    padding: 1px 4px;
+  }
+
+  #app-toolbar #navbar-auth-label {
+    max-width: 96px;
+  }
+
+  #app-status-bar {
+    padding: 0 8px;
+    gap: 10px;
+  }
+
+  #app-status-bar .status-group {
+    gap: 10px;
+  }
+
+  #app-status-bar .status-group:last-child .status-item:last-child {
+    display: none;
+  }
+}
+
+@media (max-width: 1260px) {
+  #app-toolbar .brand-text-group {
+    display: none;
+  }
+}
+
+@media (max-width: 1180px) {
+  #app-toolbar #btn-fit-screen span,
+  #app-toolbar #btn-reset-view span {
+    display: none;
+  }
+
+  #app-toolbar #btn-fit-screen,
+  #app-toolbar #btn-reset-view {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+  }
+}
+
+@media (max-width: 1100px) {
+  :root {
+    --sidebar-left-width: 240px;
+    --sidebar-right-width: 280px;
+  }
+
+  #app-toolbar .brand-text-group {
+    display: none;
+  }
+
+  #app-toolbar .segmented-control:not(.view-switcher) .segmented-item span {
+    display: none;
+  }
+
+  #app-toolbar .segmented-control:not(.view-switcher) .segmented-item {
+    padding: 4px 8px;
+  }
+
+  #app-toolbar #btn-fit-screen span,
+  #app-toolbar #btn-reset-view span {
+    display: none;
+  }
+
+  #app-toolbar #btn-fit-screen,
+  #app-toolbar #btn-reset-view {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+  }
+
+  #app-toolbar #btn-navbar-auth {
+    padding: 0 7px;
+    gap: 4px;
+    max-width: 170px;
+  }
+
+  #app-toolbar #navbar-auth-label {
+    max-width: 82px;
+  }
+
+  #app-toolbar #navbar-auth-ws-badge {
+    max-width: 56px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 1px 5px;
+  }
+
+  .sidebar-content {
+    padding: 10px;
+    gap: 12px;
+  }
+
+  #map-viewport .hud-3d-controls {
+    top: 10px;
+    left: 10px;
+    max-width: calc(100% - 20px);
+    gap: 5px;
+    padding: 5px 8px;
+  }
+
+  #map-viewport .hud-3d-hints {
+    right: 10px;
+    bottom: 12px;
+    max-width: calc(100% - 20px);
+    font-size: 10.5px;
+  }
+
+  #app-status-bar .status-group:nth-child(2) {
+    display: none;
+  }
+
+  #app-status-bar .status-group {
+    gap: 8px;
+  }
+
+  #app-status-bar .status-pill {
+    max-width: 175px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 1060px) {
+  #app-toolbar #navbar-auth-ws-badge {
+    display: none;
+  }
+
+  #app-toolbar .view-switcher .segmented-item span {
+    display: none;
+  }
+
+  #app-toolbar .view-switcher .segmented-item {
+    padding: 4px 8px;
+  }
+
+  #app-toolbar .divider-vertical {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  #app-toolbar {
+    height: auto;
+    min-height: var(--header-height);
+    flex-wrap: wrap;
+    padding: 6px 8px;
+    gap: 6px;
+  }
+
+  #workspace {
+    height: auto;
+    min-height: 0;
+  }
+
+  #workspace .sidebar-left,
+  #workspace .sidebar-right {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 40;
+    box-shadow: var(--shadow-lg);
+  }
+
+  #workspace .sidebar-left {
+    left: 0;
+    max-width: calc(100vw - 24px);
+  }
+
+  #workspace .sidebar-right {
+    right: 0;
+    max-width: calc(100vw - 24px);
+  }
+}
+
+@media (max-width: 768px) {
+  #app-status-bar .status-group:first-child .status-item:nth-child(3) {
+    display: none;
+  }
+}

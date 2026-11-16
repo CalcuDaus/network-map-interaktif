@@ -12198,7 +12198,7 @@ ${dev.network?.ip || ""}`,
       if (typeof window === "undefined") return;
       const flushNow = () => {
         if (!this.isAutoSaveEnabled || !this.hasPendingSave) return;
-        if (this.authManager && !this.authManager.isAuthenticated()) return;
+        if (this.authManager && !this.authManager.canWriteActiveWorkspace()) return;
         const projectData = this.serializeProject();
         this.saveLocalBackup(projectData);
         this.saveCurrentProject();
@@ -12234,7 +12234,12 @@ ${dev.network?.ip || ""}`,
         if (!this.isAutoSaveEnabled) return;
         if (this.authManager && !this.authManager.isAuthenticated()) {
           this.hasPendingSave = false;
-          this.updateStatusIndicator("guest");
+          this.updateStatusIndicator(this.authManager.isPublicPreviewActive?.() ? "public-readonly" : "guest");
+          return;
+        }
+        if (this.authManager && !this.authManager.canWriteActiveWorkspace()) {
+          this.hasPendingSave = false;
+          this.updateStatusIndicator("readonly-main");
           return;
         }
         this.hasPendingSave = true;
@@ -12298,18 +12303,49 @@ ${dev.network?.ip || ""}`,
         stateManager.setRooms3d([]);
         stateManager.setObjects3d([]);
         this.hasPendingSave = false;
-        this.updateStatusIndicator(this.authManager && !this.authManager.isAuthenticated() ? "guest" : "saved");
+        const idleStatus = !this.authManager || !this.authManager.isAuthenticated() ? this.authManager?.isPublicPreviewActive?.() ? "public-readonly" : "guest" : this.authManager.canWriteActiveWorkspace() ? "saved" : "readonly-main";
+        this.updateStatusIndicator(idleStatus);
         eventBus.emit("project:loaded", { id: "proj-default", devices: [], connections: [], rooms3d: [], objects3d: [] });
       } finally {
         this.isAutoSaveEnabled = prevAutoSave;
       }
     }
     /**
+     * Load Server Utama in public read-only view (without requiring login or password)
+     */
+    async loadPublicMainWorkspaceProject() {
+      if (!this.authManager) return { loaded: false };
+      try {
+        const ws = await this.authManager.loadPublicMainWorkspace();
+        if (ws && ws.projectData && typeof ws.projectData === "object") {
+          this.deserializeProject(ws.projectData);
+          this.updateStatusIndicator("public-readonly");
+          return {
+            loaded: true,
+            workspaceKey: "main",
+            readOnly: true,
+            updatedBy: ws.updatedBy || null,
+            updatedAt: ws.updatedAt || null
+          };
+        }
+        this.clearCanvasToEmpty("Server Utama (Lihat Publik)");
+        this.updateStatusIndicator("public-readonly");
+        return { loaded: false, workspaceKey: "main", readOnly: true };
+      } catch (err) {
+        console.error("[ProjectStorage] Failed to load public Server Utama:", err);
+        this.updateStatusIndicator("error");
+        return { loaded: false, workspaceKey: "main", readOnly: true };
+      }
+    }
+    /**
      * Load project for the currently authenticated workspace ('main' or 'user_<username>')
-     * @returns {Promise<{ loaded: boolean, workspaceKey?: string, updatedBy?: string|null, updatedAt?: string|null }>}
+     * @returns {Promise<{ loaded: boolean, workspaceKey?: string, readOnly?: boolean, updatedBy?: string|null, updatedAt?: string|null }>}
      */
     async loadActiveWorkspaceProject() {
       if (!this.authManager || !this.authManager.isAuthenticated()) {
+        if (this.authManager?.isPublicPreviewActive?.()) {
+          return this.loadPublicMainWorkspaceProject();
+        }
         this.clearCanvasToEmpty();
         this.updateStatusIndicator("guest");
         return { loaded: false };
@@ -12317,19 +12353,21 @@ ${dev.network?.ip || ""}`,
       const activeKey = this.authManager.getActiveWorkspaceKey();
       try {
         const ws = await this.authManager.loadWorkspaceProject(activeKey);
+        const isWritable = this.authManager.canWriteActiveWorkspace();
         if (ws && ws.projectData && typeof ws.projectData === "object") {
           this.deserializeProject(ws.projectData);
-          this.updateStatusIndicator("saved");
+          this.updateStatusIndicator(isWritable ? "saved" : "readonly-main");
           return {
             loaded: true,
             workspaceKey: activeKey,
+            readOnly: !isWritable,
             updatedBy: ws.updatedBy || null,
             updatedAt: ws.updatedAt || null
           };
         }
         this.clearCanvasToEmpty(activeKey === "main" ? "Server Utama (Template Bersama)" : `Workspace ${this.authManager.getCurrentUser()?.displayName || ""}`);
-        this.updateStatusIndicator("saved");
-        return { loaded: false, workspaceKey: activeKey };
+        this.updateStatusIndicator(isWritable ? "saved" : "readonly-main");
+        return { loaded: false, workspaceKey: activeKey, readOnly: !isWritable };
       } catch (err) {
         console.error("[ProjectStorage] Failed to load active workspace:", err);
         this.updateStatusIndicator("error");
@@ -12337,14 +12375,19 @@ ${dev.network?.ip || ""}`,
       }
     }
     /**
-     * Save current project to authenticated workspace (Server Utama / Personal Account) + IndexedDB mirror
-     * In Guest Mode (not logged in), intentionally refuses persistence so guest work stays volatile.
+     * Save current project to authenticated workspace (Server Utama when unlocked / Personal Account) + IndexedDB mirror
+     * Refuses persistence in Guest Mode or when Server Utama is still password-locked.
      * @returns {Promise<boolean>}
      */
     async saveCurrentProject() {
       if (this.authManager && !this.authManager.isAuthenticated()) {
         this.hasPendingSave = false;
-        this.updateStatusIndicator("guest");
+        this.updateStatusIndicator(this.authManager.isPublicPreviewActive?.() ? "public-readonly" : "guest");
+        return false;
+      }
+      if (this.authManager && !this.authManager.canWriteActiveWorkspace()) {
+        this.hasPendingSave = false;
+        this.updateStatusIndicator("readonly-main");
         return false;
       }
       try {
@@ -12435,7 +12478,8 @@ ${dev.network?.ip || ""}`,
           localStorage.setItem("netmap_custom_templates", JSON.stringify(projectData.customTemplates));
         }
         this.hasPendingSave = false;
-        this.updateStatusIndicator("saved");
+        const initialStatus = this.authManager ? !this.authManager.isAuthenticated() ? this.authManager.isPublicPreviewActive?.() ? "public-readonly" : "guest" : this.authManager.canWriteActiveWorkspace() ? "saved" : "readonly-main" : "saved";
+        this.updateStatusIndicator(initialStatus);
         eventBus.emit("project:loaded", projectData);
       } finally {
         this.isAutoSaveEnabled = prevAutoSave;
@@ -12445,8 +12489,20 @@ ${dev.network?.ip || ""}`,
       const statusPill = document.querySelector("#app-status-bar .status-pill");
       if (!statusPill) return;
       const isAuthed = Boolean(this.authManager?.isAuthenticated?.());
+      if (status === "public-readonly" || !isAuthed && this.authManager?.isPublicPreviewActive?.()) {
+        statusPill.textContent = "\u25CF LIHAT PUBLIK \u2022 SERVER UTAMA (READ-ONLY)";
+        statusPill.style.color = "var(--status-warning)";
+        statusPill.style.background = "rgba(217, 119, 6, 0.14)";
+        return;
+      }
       if (status === "guest" || this.authManager && !isAuthed) {
         statusPill.textContent = "\u25CF MODE TAMU (TIDAK TERSIMPAN \u2014 LOGIN)";
+        statusPill.style.color = "var(--status-warning)";
+        statusPill.style.background = "rgba(217, 119, 6, 0.14)";
+        return;
+      }
+      if (status === "readonly-main" || isAuthed && !this.authManager?.canWriteActiveWorkspace?.()) {
+        statusPill.textContent = "\u25CF LIHAT PUBLIK \u2022 SERVER UTAMA (TERKUNCI \u2014 MASUKKAN PASSWORD)";
         statusPill.style.color = "var(--status-warning)";
         statusPill.style.background = "rgba(217, 119, 6, 0.14)";
         return;
@@ -12480,6 +12536,7 @@ ${dev.network?.ip || ""}`,
   var LOCAL_TOKEN_STORAGE_KEY = "netmap_auth_token_v1";
   var LOCAL_WS_MODE_STORAGE_KEY = "netmap_workspace_mode_v1";
   var DEFAULT_SEED_SALT = "netmap_salt_2026";
+  var DEFAULT_MAIN_SERVER_PASSWORD = "server123";
   var SHA256_K = new Uint32Array([
     1116352408,
     1899447441,
@@ -12640,7 +12697,15 @@ ${dev.network?.ip || ""}`,
         }
       ],
       sessions: {},
-      workspaces: {}
+      workspaces: {},
+      mainSecurity: {
+        ownerUsername: "admin",
+        passwordSalt: DEFAULT_SEED_SALT,
+        passwordHash: sha256Hex(`${DEFAULT_SEED_SALT}:${DEFAULT_MAIN_SERVER_PASSWORD}`),
+        isPublicViewable: true,
+        updatedAt: now,
+        updatedBy: "admin"
+      }
     };
   }
   var AuthManager = class {
@@ -12648,6 +12713,9 @@ ${dev.network?.ip || ""}`,
       this.currentUser = null;
       this.authToken = "";
       this.workspaceMode = "main";
+      this.mainWorkspaceUnlocked = false;
+      this.mainOwnerUsername = "admin";
+      this.publicPreviewMode = false;
       this.apiAvailable = false;
       this.storageBackend = "local";
       this.lastUpdatedBy = null;
@@ -12696,13 +12764,21 @@ ${dev.network?.ip || ""}`,
       }
     }
     readLocalDb() {
+      const ensureDefaults = (db) => {
+        if (!db.mainSecurity || !db.mainSecurity.passwordHash) {
+          db.mainSecurity = defaultOfflineSeedState().mainSecurity;
+        }
+        if (!db.sessions || typeof db.sessions !== "object") db.sessions = {};
+        if (!db.workspaces || typeof db.workspaces !== "object") db.workspaces = {};
+        return db;
+      };
       try {
         if (typeof localStorage !== "undefined") {
           const raw = localStorage.getItem(LOCAL_DB_STORAGE_KEY);
           if (raw) {
             const parsed = JSON.parse(raw);
             if (parsed && Array.isArray(parsed.users)) {
-              return parsed;
+              return ensureDefaults(parsed);
             }
           }
           const seeded = defaultOfflineSeedState();
@@ -12714,7 +12790,7 @@ ${dev.network?.ip || ""}`,
       if (!this._memoryStore) {
         this._memoryStore = defaultOfflineSeedState();
       }
-      return this._memoryStore;
+      return ensureDefaults(this._memoryStore);
     }
     writeLocalDb(dbState) {
       this._memoryStore = dbState;
@@ -12744,6 +12820,28 @@ ${dev.network?.ip || ""}`,
     getCurrentUser() {
       return this.currentUser;
     }
+    isMainWorkspaceUnlocked() {
+      return Boolean(this.isAuthenticated() && this.mainWorkspaceUnlocked);
+    }
+    isMainServerAdmin() {
+      if (!this.isAuthenticated()) return false;
+      const uname = String(this.currentUser?.username || "").toLowerCase();
+      const owner = String(this.mainOwnerUsername || "admin").toLowerCase();
+      return uname === "admin" || this.currentUser?.role === "admin" || uname === owner;
+    }
+    isPublicPreviewActive() {
+      return Boolean(!this.isAuthenticated() && this.publicPreviewMode);
+    }
+    setPublicPreviewMode(active) {
+      this.publicPreviewMode = Boolean(active) && !this.isAuthenticated();
+      eventBus.emit("auth:changed", this.getAuthStateSnapshot());
+      return this.publicPreviewMode;
+    }
+    canWriteActiveWorkspace() {
+      if (!this.isAuthenticated()) return false;
+      if (this.getWorkspaceMode() === "personal") return true;
+      return this.mainWorkspaceUnlocked === true;
+    }
     getWorkspaceMode() {
       return this.workspaceMode === "personal" ? "personal" : "main";
     }
@@ -12768,6 +12866,11 @@ ${dev.network?.ip || ""}`,
         return `user_${this.currentUser.username}`;
       }
       return "main";
+    }
+    _verifyLocalMainPassword(db, rawPassword) {
+      const sec = db?.mainSecurity;
+      if (!sec || !sec.passwordHash) return true;
+      return sha256Hex(`${sec.passwordSalt || DEFAULT_SEED_SALT}:${String(rawPassword || "")}`) === sec.passwordHash;
     }
     async apiFetch(apiPath, options = {}) {
       const headers = {
@@ -12801,8 +12904,12 @@ ${dev.network?.ip || ""}`,
               const sess = await this.apiFetch("/api/auth/session");
               if (sess.authenticated && sess.user) {
                 this.currentUser = sess.user;
+                this.mainWorkspaceUnlocked = Boolean(sess.mainUnlocked);
+                this.mainOwnerUsername = sess.mainOwnerUsername || "admin";
+                this.publicPreviewMode = false;
               } else {
                 this.currentUser = null;
+                this.mainWorkspaceUnlocked = false;
                 this.persistToken("");
               }
             }
@@ -12816,8 +12923,9 @@ ${dev.network?.ip || ""}`,
       }
       this.apiAvailable = false;
       this.storageBackend = "local";
+      const db = this.readLocalDb();
+      this.mainOwnerUsername = db.mainSecurity?.ownerUsername || "admin";
       if (this.authToken) {
-        const db = this.readLocalDb();
         const sess = db.sessions?.[this.authToken];
         const user = sess ? db.users.find((u) => u.username.toLowerCase() === String(sess.username).toLowerCase()) : null;
         if (user) {
@@ -12828,10 +12936,15 @@ ${dev.network?.ip || ""}`,
             role: user.role,
             lastLoginAt: user.lastLoginAt
           };
+          this.mainWorkspaceUnlocked = Boolean(sess?.mainUnlocked);
+          this.publicPreviewMode = false;
         } else {
           this.currentUser = null;
+          this.mainWorkspaceUnlocked = false;
           this.persistToken("");
         }
+      } else {
+        this.mainWorkspaceUnlocked = false;
       }
       eventBus.emit("auth:changed", this.getAuthStateSnapshot());
       return this.getAuthStateSnapshot();
@@ -12842,25 +12955,40 @@ ${dev.network?.ip || ""}`,
         user: this.currentUser,
         workspaceMode: this.getWorkspaceMode(),
         workspaceKey: this.getActiveWorkspaceKey(),
+        mainUnlocked: this.isMainWorkspaceUnlocked(),
+        mainOwnerUsername: this.mainOwnerUsername,
+        canManageServerPassword: this.isMainServerAdmin(),
+        canWriteActive: this.canWriteActiveWorkspace(),
+        publicPreviewMode: this.isPublicPreviewActive(),
         storageBackend: this.storageBackend,
         apiAvailable: this.apiAvailable,
         lastUpdatedBy: this.lastUpdatedBy,
         lastSyncedAt: this.lastSyncedAt
       };
     }
-    async login(username, password) {
+    async login(username, password, options = {}) {
       const cleanUser = String(username || "").trim();
       const rawPass = String(password || "");
+      const workspacePassword = typeof options.workspacePassword === "string" ? options.workspacePassword : "";
+      const requireMainUnlock = Boolean(options.requireMainUnlock);
       if (!cleanUser || !rawPass) {
         throw new Error("Username dan password wajib diisi.");
       }
       if (this.apiAvailable) {
         const res = await this.apiFetch("/api/auth/login", {
           method: "POST",
-          body: JSON.stringify({ username: cleanUser, password: rawPass })
+          body: JSON.stringify({
+            username: cleanUser,
+            password: rawPass,
+            workspacePassword,
+            requireMainUnlock
+          })
         });
         this.persistToken(res.token);
         this.currentUser = res.user;
+        this.mainWorkspaceUnlocked = Boolean(res.mainUnlocked);
+        this.mainOwnerUsername = res.mainOwnerUsername || "admin";
+        this.publicPreviewMode = false;
         this.storageBackend = res.storageBackend || this.storageBackend;
         this.startRemoteSyncPolling();
         eventBus.emit("auth:changed", this.getAuthStateSnapshot());
@@ -12871,9 +12999,22 @@ ${dev.network?.ip || ""}`,
       if (!userRow || sha256Hex(`${userRow.passwordSalt}:${rawPass}`) !== userRow.passwordHash) {
         throw new Error("Username atau password salah.");
       }
+      let mainUnlocked = false;
+      if (workspacePassword) {
+        if (!this._verifyLocalMainPassword(db, workspacePassword)) {
+          throw new Error("Password akses Server Utama salah.");
+        }
+        mainUnlocked = true;
+      } else if (requireMainUnlock) {
+        throw new Error("Masukkan password akses Server Utama untuk menggunakan workspace Server Utama.");
+      }
       userRow.lastLoginAt = (/* @__PURE__ */ new Date()).toISOString();
       const token = `local-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-      db.sessions[token] = { username: userRow.username, createdAt: userRow.lastLoginAt };
+      db.sessions[token] = {
+        username: userRow.username,
+        mainUnlocked,
+        createdAt: userRow.lastLoginAt
+      };
       this.writeLocalDb(db);
       this.persistToken(token);
       this.currentUser = {
@@ -12883,13 +13024,17 @@ ${dev.network?.ip || ""}`,
         role: userRow.role,
         lastLoginAt: userRow.lastLoginAt
       };
+      this.mainWorkspaceUnlocked = mainUnlocked;
+      this.mainOwnerUsername = db.mainSecurity?.ownerUsername || "admin";
+      this.publicPreviewMode = false;
       eventBus.emit("auth:changed", this.getAuthStateSnapshot());
       return this.currentUser;
     }
-    async register({ username, displayName, password, role = "teknisi" }) {
+    async register({ username, displayName, password, role = "teknisi", workspacePassword = "", requireMainUnlock = false }) {
       const cleanUser = String(username || "").trim();
       const cleanName = String(displayName || cleanUser).trim() || cleanUser;
       const rawPass = String(password || "");
+      const serverPass = typeof workspacePassword === "string" ? workspacePassword : "";
       if (!/^[a-zA-Z0-9._-]{3,32}$/.test(cleanUser)) {
         throw new Error("Username harus 3-32 karakter (huruf, angka, titik, _ atau -).");
       }
@@ -12899,10 +13044,20 @@ ${dev.network?.ip || ""}`,
       if (this.apiAvailable) {
         const res = await this.apiFetch("/api/auth/register", {
           method: "POST",
-          body: JSON.stringify({ username: cleanUser, displayName: cleanName, password: rawPass, role })
+          body: JSON.stringify({
+            username: cleanUser,
+            displayName: cleanName,
+            password: rawPass,
+            role,
+            workspacePassword: serverPass,
+            requireMainUnlock: Boolean(requireMainUnlock)
+          })
         });
         this.persistToken(res.token);
         this.currentUser = res.user;
+        this.mainWorkspaceUnlocked = Boolean(res.mainUnlocked);
+        this.mainOwnerUsername = res.mainOwnerUsername || "admin";
+        this.publicPreviewMode = false;
         this.storageBackend = res.storageBackend || this.storageBackend;
         this.startRemoteSyncPolling();
         eventBus.emit("auth:changed", this.getAuthStateSnapshot());
@@ -12911,6 +13066,20 @@ ${dev.network?.ip || ""}`,
       const db = this.readLocalDb();
       if (db.users.some((u) => u.username.toLowerCase() === cleanUser.toLowerCase())) {
         throw new Error(`Username "${cleanUser}" sudah terdaftar.`);
+      }
+      if (role === "admin") {
+        if (!serverPass || !this._verifyLocalMainPassword(db, serverPass)) {
+          throw new Error("Password Server Utama diperlukan untuk mendaftar sebagai Admin Utama.");
+        }
+      }
+      let mainUnlocked = false;
+      if (serverPass) {
+        if (!this._verifyLocalMainPassword(db, serverPass)) {
+          throw new Error("Password akses Server Utama salah.");
+        }
+        mainUnlocked = true;
+      } else if (requireMainUnlock) {
+        throw new Error("Masukkan password akses Server Utama untuk menggunakan workspace Server Utama.");
       }
       const salt = `${DEFAULT_SEED_SALT}_${Date.now().toString(36)}`;
       const now = (/* @__PURE__ */ new Date()).toISOString();
@@ -12926,7 +13095,11 @@ ${dev.network?.ip || ""}`,
       };
       db.users.push(newUser);
       const token = `local-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-      db.sessions[token] = { username: newUser.username, createdAt: now };
+      db.sessions[token] = {
+        username: newUser.username,
+        mainUnlocked,
+        createdAt: now
+      };
       this.writeLocalDb(db);
       this.persistToken(token);
       this.currentUser = {
@@ -12936,6 +13109,9 @@ ${dev.network?.ip || ""}`,
         role: newUser.role,
         lastLoginAt: now
       };
+      this.mainWorkspaceUnlocked = mainUnlocked;
+      this.mainOwnerUsername = db.mainSecurity?.ownerUsername || "admin";
+      this.publicPreviewMode = false;
       eventBus.emit("auth:changed", this.getAuthStateSnapshot());
       return this.currentUser;
     }
@@ -12953,11 +13129,162 @@ ${dev.network?.ip || ""}`,
         }
       }
       this.currentUser = null;
+      this.mainWorkspaceUnlocked = false;
+      this.publicPreviewMode = false;
       this.lastUpdatedBy = null;
       this.lastSyncedAt = null;
       this.stopRemoteSyncPolling();
       this.persistToken("");
       eventBus.emit("auth:changed", this.getAuthStateSnapshot());
+    }
+    async unlockMainWorkspace(password) {
+      if (!this.isAuthenticated()) {
+        throw new Error("Silakan login akun terlebih dahulu untuk membuka akses edit Server Utama.");
+      }
+      const rawServerPass = String(password || "");
+      if (!rawServerPass) {
+        throw new Error("Password akses Server Utama wajib diisi.");
+      }
+      if (this.apiAvailable) {
+        const res = await this.apiFetch("/api/workspaces/main/unlock", {
+          method: "POST",
+          body: JSON.stringify({ password: rawServerPass })
+        });
+        this.mainWorkspaceUnlocked = Boolean(res.mainUnlocked);
+        this.mainOwnerUsername = res.mainOwnerUsername || this.mainOwnerUsername;
+        eventBus.emit("auth:changed", this.getAuthStateSnapshot());
+        return true;
+      }
+      const db = this.readLocalDb();
+      if (!this._verifyLocalMainPassword(db, rawServerPass)) {
+        throw new Error("Password akses Server Utama salah.");
+      }
+      if (this.authToken && db.sessions[this.authToken]) {
+        db.sessions[this.authToken].mainUnlocked = true;
+        this.writeLocalDb(db);
+      }
+      this.mainWorkspaceUnlocked = true;
+      this.mainOwnerUsername = db.mainSecurity?.ownerUsername || "admin";
+      eventBus.emit("auth:changed", this.getAuthStateSnapshot());
+      return true;
+    }
+    async lockMainWorkspace() {
+      if (!this.isAuthenticated()) return false;
+      if (this.apiAvailable) {
+        await this.apiFetch("/api/workspaces/main/lock", { method: "POST" });
+      } else {
+        const db = this.readLocalDb();
+        if (this.authToken && db.sessions[this.authToken]) {
+          db.sessions[this.authToken].mainUnlocked = false;
+          this.writeLocalDb(db);
+        }
+      }
+      this.mainWorkspaceUnlocked = false;
+      eventBus.emit("auth:changed", this.getAuthStateSnapshot());
+      return true;
+    }
+    async changeMainWorkspacePassword(newPassword, currentPassword = "") {
+      if (!this.isAuthenticated()) {
+        throw new Error("Silakan login terlebih dahulu.");
+      }
+      if (!this.isMainServerAdmin()) {
+        throw new Error("Hanya Admin Utama atau pembuat server yang boleh mengubah password Server Utama.");
+      }
+      const cleanNew = String(newPassword || "");
+      if (cleanNew.length < 4) {
+        throw new Error("Password server baru minimal 4 karakter.");
+      }
+      if (this.apiAvailable) {
+        const res = await this.apiFetch("/api/workspaces/main/password", {
+          method: "POST",
+          body: JSON.stringify({
+            newPassword: cleanNew,
+            currentPassword: String(currentPassword || "")
+          })
+        });
+        this.mainWorkspaceUnlocked = Boolean(res.mainUnlocked ?? true);
+        this.mainOwnerUsername = res.ownerUsername || this.mainOwnerUsername;
+        eventBus.emit("auth:changed", this.getAuthStateSnapshot());
+        return res;
+      }
+      const db = this.readLocalDb();
+      if (typeof currentPassword === "string" && currentPassword.length > 0) {
+        if (!this._verifyLocalMainPassword(db, currentPassword)) {
+          throw new Error("Password server saat ini salah.");
+        }
+      }
+      const salt = `${DEFAULT_SEED_SALT}_${Date.now().toString(36)}`;
+      const now = (/* @__PURE__ */ new Date()).toISOString();
+      const ownerUsername = db.mainSecurity?.ownerUsername || this.currentUser.username || "admin";
+      db.mainSecurity = {
+        ownerUsername,
+        passwordSalt: salt,
+        passwordHash: sha256Hex(`${salt}:${cleanNew}`),
+        isPublicViewable: true,
+        updatedAt: now,
+        updatedBy: this.currentUser.username
+      };
+      Object.entries(db.sessions || {}).forEach(([tok, sess]) => {
+        if (sess && typeof sess === "object") {
+          sess.mainUnlocked = tok === this.authToken;
+        }
+      });
+      this.writeLocalDb(db);
+      this.mainWorkspaceUnlocked = true;
+      this.mainOwnerUsername = ownerUsername;
+      eventBus.emit("auth:changed", this.getAuthStateSnapshot());
+      return {
+        ok: true,
+        mainUnlocked: true,
+        ownerUsername,
+        updatedBy: this.currentUser.username,
+        updatedAt: now,
+        storageBackend: "local"
+      };
+    }
+    async loadPublicMainWorkspace() {
+      if (this.apiAvailable) {
+        const res = await this.apiFetch("/api/workspaces/main");
+        this.lastUpdatedBy = res.updatedBy || null;
+        this.lastSyncedAt = res.updatedAt || null;
+        this.mainOwnerUsername = res.ownerUsername || this.mainOwnerUsername;
+        if (typeof res.mainUnlocked === "boolean") {
+          this.mainWorkspaceUnlocked = res.mainUnlocked;
+        }
+        if (!this.isAuthenticated()) {
+          this.publicPreviewMode = true;
+          eventBus.emit("auth:changed", this.getAuthStateSnapshot());
+        }
+        return res;
+      }
+      const db = this.readLocalDb();
+      const ws = db.workspaces?.main || null;
+      this.lastUpdatedBy = ws?.updatedBy || null;
+      this.lastSyncedAt = ws?.updatedAt || null;
+      this.mainOwnerUsername = db.mainSecurity?.ownerUsername || "admin";
+      if (!this.isAuthenticated()) {
+        this.publicPreviewMode = true;
+        eventBus.emit("auth:changed", this.getAuthStateSnapshot());
+      }
+      return ws ? {
+        ...ws,
+        ownerUsername: this.mainOwnerUsername,
+        isProtected: true,
+        isPublicViewable: true,
+        mainUnlocked: this.isMainWorkspaceUnlocked(),
+        storageBackend: "local"
+      } : {
+        workspaceKey: "main",
+        title: "Server Utama",
+        ownerUsername: this.mainOwnerUsername,
+        projectData: null,
+        updatedBy: null,
+        updatedAt: null,
+        isProtected: true,
+        isPublicViewable: true,
+        mainUnlocked: this.isMainWorkspaceUnlocked(),
+        storageBackend: "local"
+      };
     }
     startRemoteSyncPolling() {
       this.stopRemoteSyncPolling();
@@ -12979,6 +13306,10 @@ ${dev.network?.ip || ""}`,
       const key = this.getActiveWorkspaceKey();
       if (key !== "main") return false;
       const meta = await this.apiFetch(`/api/workspaces/${encodeURIComponent(key)}?meta=1`);
+      if (typeof meta?.mainUnlocked === "boolean" && meta.mainUnlocked !== this.mainWorkspaceUnlocked) {
+        this.mainWorkspaceUnlocked = meta.mainUnlocked;
+        eventBus.emit("auth:changed", this.getAuthStateSnapshot());
+      }
       if (meta?.updatedAt && this.lastSyncedAt && meta.updatedAt !== this.lastSyncedAt) {
         eventBus.emit("workspace:remote-updated", {
           workspaceKey: key,
@@ -13005,21 +13336,36 @@ ${dev.network?.ip || ""}`,
       }));
     }
     async loadWorkspaceProject(workspaceKey = this.getActiveWorkspaceKey()) {
+      if (workspaceKey === "main" && !this.isAuthenticated()) {
+        return this.loadPublicMainWorkspace();
+      }
       if (!this.isAuthenticated() || !workspaceKey) return null;
       if (this.apiAvailable) {
         const res = await this.apiFetch(`/api/workspaces/${encodeURIComponent(workspaceKey)}`);
         this.lastUpdatedBy = res.updatedBy || null;
         this.lastSyncedAt = res.updatedAt || null;
+        if (workspaceKey === "main") {
+          this.mainOwnerUsername = res.ownerUsername || this.mainOwnerUsername;
+          if (typeof res.mainUnlocked === "boolean") {
+            this.mainWorkspaceUnlocked = res.mainUnlocked;
+          }
+        }
         return res;
       }
       const db = this.readLocalDb();
       const ws = db.workspaces?.[workspaceKey] || null;
       this.lastUpdatedBy = ws?.updatedBy || null;
       this.lastSyncedAt = ws?.updatedAt || null;
+      if (workspaceKey === "main") {
+        this.mainOwnerUsername = db.mainSecurity?.ownerUsername || "admin";
+      }
       return ws ? { ...ws, storageBackend: "local" } : { workspaceKey, projectData: null, updatedBy: null, updatedAt: null, storageBackend: "local" };
     }
     async saveWorkspaceProject(workspaceKey = this.getActiveWorkspaceKey(), projectData) {
       if (!this.isAuthenticated() || !workspaceKey || !projectData) return null;
+      if (workspaceKey === "main" && !this.isMainWorkspaceUnlocked()) {
+        throw new Error("Workspace Server Utama terkunci. Masukkan password akses Server Utama terlebih dahulu.");
+      }
       let savedMeta;
       if (this.apiAvailable) {
         savedMeta = await this.apiFetch(`/api/workspaces/${encodeURIComponent(workspaceKey)}`, {
@@ -13029,9 +13375,10 @@ ${dev.network?.ip || ""}`,
       } else {
         const db = this.readLocalDb();
         const updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+        const mainOwner = db.mainSecurity?.ownerUsername || "admin";
         db.workspaces[workspaceKey] = {
           workspaceKey,
-          ownerUsername: workspaceKey === "main" ? null : this.currentUser.username,
+          ownerUsername: workspaceKey === "main" ? mainOwner : this.currentUser.username,
           title: workspaceKey === "main" ? "Server Utama" : projectData.name || this.currentUser.displayName,
           projectData,
           updatedBy: this.currentUser.username,
@@ -13041,6 +13388,7 @@ ${dev.network?.ip || ""}`,
         savedMeta = {
           ok: true,
           workspaceKey,
+          ownerUsername: workspaceKey === "main" ? mainOwner : this.currentUser.username,
           updatedBy: this.currentUser.username,
           updatedAt,
           storageBackend: "local"
@@ -13058,6 +13406,9 @@ ${dev.network?.ip || ""}`,
     }
     async copyWorkspaceProject(fromKey, toKey) {
       if (!this.isAuthenticated() || !fromKey || !toKey) return null;
+      if (toKey === "main" && !this.isMainWorkspaceUnlocked()) {
+        throw new Error("Workspace Server Utama terkunci. Masukkan password akses Server Utama terlebih dahulu.");
+      }
       let res;
       if (this.apiAvailable) {
         res = await this.apiFetch("/api/workspaces/clone", {
@@ -13075,9 +13426,10 @@ ${dev.network?.ip || ""}`,
           updatedAt: (/* @__PURE__ */ new Date()).toISOString()
         };
         const updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+        const mainOwner = db.mainSecurity?.ownerUsername || "admin";
         db.workspaces[toKey] = {
           workspaceKey: toKey,
-          ownerUsername: toKey === "main" ? null : this.currentUser.username,
+          ownerUsername: toKey === "main" ? mainOwner : this.currentUser.username,
           title: toKey === "main" ? "Server Utama" : `Workspace ${this.currentUser.displayName}`,
           projectData: clonedData,
           updatedBy: this.currentUser.username,
@@ -14025,11 +14377,14 @@ ${dev.network?.ip || ""}`,
     }
     async handlePostLoginLoad(preserveGuestCanvas = false) {
       const hasGuestWork = preserveGuestCanvas && this.hasGuestCanvasContent();
-      if (hasGuestWork) {
+      if (hasGuestWork && this.authManager.canWriteActiveWorkspace()) {
         await this.projectStorage.saveCurrentProject();
         this.setStatus("Rancangan kanvas saat ini berhasil disimpan ke akun/server.", "success");
       } else {
         await this.projectStorage.loadActiveWorkspaceProject();
+        if (hasGuestWork && !this.authManager.canWriteActiveWorkspace()) {
+          this.setStatus("Server Utama sedang terkunci (Read-Only). Masukkan password server untuk menyimpan kanvas ke Server Utama.", "info");
+        }
       }
       this.historyManager?.initBaseline?.();
     }
@@ -14037,8 +14392,11 @@ ${dev.network?.ip || ""}`,
       const isAuth = this.authManager.isAuthenticated();
       const user = this.authManager.getCurrentUser();
       const backendText = this.formatBackendLabel();
+      const mainOwner = this.authManager.mainOwnerUsername || "admin";
       if (!isAuth) {
         const hasWork = this.hasGuestCanvasContent();
+        const isPublicPreview = this.authManager.isPublicPreviewActive?.();
+        const defaultTargetWs = this.authManager.getWorkspaceMode();
         this.modalEl.innerHTML = `
         <div class="auth-modal-card">
           <div class="auth-modal-header">
@@ -14053,7 +14411,20 @@ ${dev.network?.ip || ""}`,
 
           <div class="auth-modal-body">
             <div class="auth-guest-notice">
-              Saat ini Anda berada di <strong>Mode Tamu</strong>. Anda bebas memakai seluruh fitur peta 2D/3D, namun data tidak tersimpan sebelum login ke akun teknisi atau <strong>Server Utama</strong>.
+              ${isPublicPreview ? `Anda sedang melihat <strong>Server Utama</strong> dalam mode <strong>Lihat Publik (Read-Only)</strong>. Anda tetap perlu login akun dan memasukkan <strong>Password Server Utama</strong> untuk mengedit atau menyimpan perubahan.` : `Saat ini Anda berada di <strong>Mode Tamu</strong>. Anda bebas memakai fitur peta 2D/3D atau melihat <strong>Server Utama</strong> secara publik, namun data tidak tersimpan sebelum login & membuka akses server.`}
+              <div class="auth-public-preview-actions">
+                ${isPublicPreview ? `
+                  <button type="button" id="auth-btn-exit-public-preview" class="btn btn-secondary btn-sm">
+                    <i data-lucide="arrow-left" style="width: 13px; height: 13px;"></i>
+                    <span>Kembali ke Kanvas Kosong</span>
+                  </button>
+                ` : `
+                  <button type="button" id="auth-btn-view-public-main" class="btn btn-secondary btn-sm">
+                    <i data-lucide="eye" style="width: 13px; height: 13px;"></i>
+                    <span>Lihat Publik Server Utama (Read-Only)</span>
+                  </button>
+                `}
+              </div>
             </div>
 
             <div id="auth-modal-status-msg" class="auth-status-banner is-${this.statusTone}" style="display: ${this.statusMessage ? "block" : "none"};">
@@ -14072,20 +14443,33 @@ ${dev.network?.ip || ""}`,
                   <input type="text" id="auth-login-username" placeholder="admin / teknisi1 / teknisi2" autocomplete="username" required>
                 </div>
                 <div class="auth-field">
-                  <label for="auth-login-password">Password</label>
-                  <input type="password" id="auth-login-password" placeholder="Masukkan password..." autocomplete="current-password" required>
+                  <label for="auth-login-password">Password Akun Teknisi</label>
+                  <input type="password" id="auth-login-password" placeholder="Masukkan password akun..." autocomplete="current-password" required>
                 </div>
                 <div class="auth-field">
-                  <label>Masuk ke Workspace Setelah Login</label>
+                  <label for="auth-login-target-ws">Masuk ke Workspace Setelah Login</label>
                   <select id="auth-login-target-ws">
-                    <option value="main" ${this.authManager.getWorkspaceMode() === "main" ? "selected" : ""}>Server Utama (Template Bersama Tim)</option>
-                    <option value="personal" ${this.authManager.getWorkspaceMode() === "personal" ? "selected" : ""}>Workspace Pribadi Akun Ini</option>
+                    <option value="main" ${defaultTargetWs === "main" ? "selected" : ""}>Server Utama (Template Bersama Tim)</option>
+                    <option value="personal" ${defaultTargetWs === "personal" ? "selected" : ""}>Workspace Pribadi Akun Ini</option>
                   </select>
+                </div>
+                <div id="auth-login-server-pass-group" class="auth-security-box" style="display: ${defaultTargetWs === "main" ? "flex" : "none"};">
+                  <div class="auth-field">
+                    <label for="auth-login-server-pass">
+                      <i data-lucide="lock" style="width: 12px; height: 12px; vertical-align: middle;"></i>
+                      Password Akses Server Utama
+                    </label>
+                    <input type="password" id="auth-login-server-pass" placeholder="Masukkan password Server Utama (dikelola @${escapeHtml2(mainOwner)})" autocomplete="off">
+                  </div>
+                  <label class="auth-checkbox-row">
+                    <input type="checkbox" id="auth-login-main-readonly">
+                    <span>Masuk untuk Lihat Publik saja (Read-Only) tanpa password server</span>
+                  </label>
                 </div>
                 ${hasWork ? `
                   <label class="auth-checkbox-row">
                     <input type="checkbox" id="auth-preserve-canvas" checked>
-                    <span>Simpan rancangan kanvas tamu saat ini (${this.deviceManager.getAllDevices().length} perangkat) setelah masuk</span>
+                    <span>Simpan rancangan kanvas saat ini (${this.deviceManager.getAllDevices().length} perangkat) jika workspace dapat ditulis</span>
                   </label>
                 ` : ""}
                 <button type="submit" id="auth-login-submit" class="btn btn-primary btn-sm" style="width: 100%; justify-content: center; height: 34px;">
@@ -14094,11 +14478,12 @@ ${dev.network?.ip || ""}`,
               </form>
 
               <div class="auth-demo-box">
-                <div class="auth-demo-label">Isi Cepat Akun Demo Bawaan:</div>
+                <div class="auth-demo-label">Isi Cepat Akun Demo & Password Server Default (server123):</div>
                 <div class="auth-demo-pills">
-                  <button type="button" class="btn btn-secondary btn-sm" data-demo-user="admin" data-demo-pass="admin123">admin</button>
+                  <button type="button" class="btn btn-secondary btn-sm" data-demo-user="admin" data-demo-pass="admin123" data-demo-server="server123">admin (Pembuat Server)</button>
                   <button type="button" class="btn btn-secondary btn-sm" data-demo-user="teknisi1" data-demo-pass="teknisi123">teknisi1</button>
                   <button type="button" class="btn btn-secondary btn-sm" data-demo-user="teknisi2" data-demo-pass="teknisi123">teknisi2</button>
+                  <button type="button" class="btn btn-secondary btn-sm" data-fill-server-pass="server123">Pass Server: server123</button>
                 </div>
               </div>
             ` : `
@@ -14115,17 +14500,21 @@ ${dev.network?.ip || ""}`,
                   <label for="auth-reg-role">Peran / Jabatan</label>
                   <select id="auth-reg-role">
                     <option value="teknisi" selected>Teknisi Jaringan</option>
-                    <option value="admin">Admin Utama</option>
+                    <option value="admin">Admin Utama (Butuh Password Server)</option>
                   </select>
                 </div>
                 <div class="auth-field">
-                  <label for="auth-reg-password">Password (minimal 4 karakter)</label>
-                  <input type="password" id="auth-reg-password" placeholder="Buat password..." required>
+                  <label for="auth-reg-password">Password Akun (minimal 4 karakter)</label>
+                  <input type="password" id="auth-reg-password" placeholder="Buat password akun..." required>
+                </div>
+                <div class="auth-field">
+                  <label for="auth-reg-server-pass">Password Akses Server Utama (wajib untuk Admin Utama / buka edit server)</label>
+                  <input type="password" id="auth-reg-server-pass" placeholder="Opsional untuk teknisi (kosongkan = Read-Only)" autocomplete="off">
                 </div>
                 ${hasWork ? `
                   <label class="auth-checkbox-row">
                     <input type="checkbox" id="auth-preserve-canvas-reg" checked>
-                    <span>Simpan rancangan kanvas tamu saat ini setelah mendaftar</span>
+                    <span>Simpan rancangan kanvas saat ini setelah mendaftar</span>
                   </label>
                 ` : ""}
                 <button type="submit" id="auth-reg-submit" class="btn btn-primary btn-sm" style="width: 100%; justify-content: center; height: 34px;">
@@ -14138,6 +14527,8 @@ ${dev.network?.ip || ""}`,
       `;
       } else {
         const wsMode = this.authManager.getWorkspaceMode();
+        const isMainUnlocked = this.authManager.isMainWorkspaceUnlocked();
+        const isMainAdmin = this.authManager.isMainServerAdmin();
         const technicians = await this.authManager.listTechnicians().catch(() => []);
         const lastSyncText = this.authManager.lastSyncedAt ? `${new Date(this.authManager.lastSyncedAt).toLocaleString("id-ID")}${this.authManager.lastUpdatedBy ? ` oleh @${this.authManager.lastUpdatedBy}` : ""}` : "Belum ada penyimpanan";
         this.modalEl.innerHTML = `
@@ -14168,13 +14559,52 @@ ${dev.network?.ip || ""}`,
             <div class="auth-section-label">Target Penyimpanan Otomatis Saat Ini</div>
             <div class="auth-workspace-grid">
               <button type="button" class="auth-ws-card ${wsMode === "main" ? "active" : ""}" data-select-ws="main">
-                <div class="auth-ws-title">Server Utama (Main Template)</div>
-                <div class="auth-ws-desc">Template utama bersama. Perubahan tersimpan & dapat diakses seluruh akun teknisi lain.</div>
+                <div class="auth-ws-title-row">
+                  <span class="auth-ws-title">Server Utama (Main Template)</span>
+                  <span class="auth-lock-badge ${isMainUnlocked ? "is-unlocked" : "is-locked"}">
+                    <i data-lucide="${isMainUnlocked ? "unlock" : "lock"}" style="width: 11px; height: 11px;"></i>
+                    <span>${isMainUnlocked ? "Edit Terbuka" : "Lihat Publik"}</span>
+                  </span>
+                </div>
+                <div class="auth-ws-desc">
+                  ${isMainUnlocked ? `Akses edit terbuka. Perubahan tersimpan ke Server Utama (pemilik: @${escapeHtml2(mainOwner)}).` : `Dilindungi password server (oleh @${escapeHtml2(mainOwner)}). Anda tetap bisa melihat publik (Read-Only).`}
+                </div>
               </button>
               <button type="button" class="auth-ws-card ${wsMode === "personal" ? "active" : ""}" data-select-ws="personal">
-                <div class="auth-ws-title">Akun Pribadi (@${escapeHtml2(user.username)})</div>
+                <div class="auth-ws-title-row">
+                  <span class="auth-ws-title">Akun Pribadi (@${escapeHtml2(user.username)})</span>
+                  <span class="auth-lock-badge is-unlocked">
+                    <i data-lucide="user" style="width: 11px; height: 11px;"></i>
+                    <span>Pribadi</span>
+                  </span>
+                </div>
                 <div class="auth-ws-desc">Penyimpanan pribadi khusus akun ini untuk draf atau topologi terpisah.</div>
               </button>
+            </div>
+
+            <div class="auth-security-box">
+              <div class="auth-security-header">
+                <span class="auth-security-title">
+                  <i data-lucide="${isMainUnlocked ? "shield-check" : "lock"}" style="width: 14px; height: 14px;"></i>
+                  <span>Keamanan Akses Workspace Server Utama</span>
+                </span>
+                ${isMainUnlocked ? `
+                  <button type="button" id="auth-btn-lock-server" class="btn btn-secondary btn-sm">Kunci Kembali Akses</button>
+                ` : ""}
+              </div>
+              ${isMainUnlocked ? `
+                <div class="auth-ws-desc">
+                  Akses edit <strong>Server Utama</strong> saat ini sudah terbuka untuk sesi Anda. Setiap perubahan pada tab Server Utama otomatis tersimpan.
+                </div>
+              ` : `
+                <form id="auth-unlock-server-form" class="auth-inline-form">
+                  <input type="password" id="auth-unlock-server-pass" placeholder="Masukkan password akses Server Utama..." required>
+                  <button type="submit" id="auth-btn-unlock-server" class="btn btn-primary btn-sm">Buka Kunci Server</button>
+                </form>
+                <div class="auth-ws-desc">
+                  Server Utama tetap dapat dilihat secara publik, namun Anda wajib memasukkan password akses Server Utama untuk mengedit atau menyimpan perubahan ke server bersama.
+                </div>
+              `}
             </div>
 
             <div class="auth-sync-meta">
@@ -14186,7 +14616,7 @@ ${dev.network?.ip || ""}`,
               <button type="button" id="auth-btn-pull-main" class="btn btn-secondary btn-sm">
                 Muat Ulang dari Server Utama
               </button>
-              <button type="button" id="auth-btn-push-main" class="btn btn-primary btn-sm">
+              <button type="button" id="auth-btn-push-main" class="btn btn-primary btn-sm" ${!isMainUnlocked ? 'title="Masukkan password akses Server Utama terlebih dahulu"' : ""}>
                 Simpan Kanvas Ini ke Server Utama
               </button>
               <button type="button" id="auth-btn-clone-to-personal" class="btn btn-secondary btn-sm">
@@ -14195,6 +14625,38 @@ ${dev.network?.ip || ""}`,
               <button type="button" id="auth-btn-seed-sample" class="btn btn-secondary btn-sm">
                 Muat Contoh Topologi Kampus
               </button>
+            </div>
+
+            <div class="auth-security-box">
+              <div class="auth-security-header">
+                <span class="auth-security-title">
+                  <i data-lucide="key-round" style="width: 14px; height: 14px;"></i>
+                  <span>Pengaturan Password Server Utama</span>
+                </span>
+                <span class="auth-role-pill">Pembuat: @${escapeHtml2(mainOwner)}</span>
+              </div>
+              ${isMainAdmin ? `
+                <form id="auth-change-server-pass-form" class="auth-form" style="gap: 8px;">
+                  <div class="auth-actions-grid">
+                    <div class="auth-field">
+                      <label for="auth-server-new-pass">Password Server Baru (min 4 karakter)</label>
+                      <input type="password" id="auth-server-new-pass" placeholder="Password baru..." required>
+                    </div>
+                    <div class="auth-field">
+                      <label for="auth-server-confirm-pass">Konfirmasi Password Baru</label>
+                      <input type="password" id="auth-server-confirm-pass" placeholder="Ulangi password baru..." required>
+                    </div>
+                  </div>
+                  <div class="auth-inline-form">
+                    <input type="password" id="auth-server-current-pass" placeholder="Password server saat ini (opsional verifikasi)">
+                    <button type="submit" id="auth-btn-change-server-pass" class="btn btn-primary btn-sm">Ubah Password Server Utama</button>
+                  </div>
+                </form>
+              ` : `
+                <div class="auth-ws-desc">
+                  Hanya <strong>Admin Utama / Pembuat Server (@${escapeHtml2(mainOwner)})</strong> yang memiliki hak untuk mengubah password akses Server Utama.
+                </div>
+              `}
             </div>
 
             <div class="auth-section-label">Daftar Teknisi Terdaftar (${technicians.length})</div>
@@ -14227,13 +14689,49 @@ ${dev.network?.ip || ""}`,
           this.render();
         });
       });
+      this.modalEl.querySelector("#auth-btn-view-public-main")?.addEventListener("click", async () => {
+        const res = await this.projectStorage.loadPublicMainWorkspaceProject();
+        this.historyManager?.initBaseline?.();
+        this.statusMessage = res.loaded ? "Server Utama ditampilkan dalam mode Lihat Publik (Read-Only). Login & masukkan password server untuk mengedit." : "Server Utama dibuka dalam mode Lihat Publik (saat ini masih kosong).";
+        this.statusTone = "info";
+        this.render();
+      });
+      this.modalEl.querySelector("#auth-btn-exit-public-preview")?.addEventListener("click", () => {
+        this.authManager.setPublicPreviewMode(false);
+        this.projectStorage.clearCanvasToEmpty("SmartSchool NetMap");
+        this.historyManager?.initBaseline?.();
+        this.statusMessage = "Kembali ke Mode Tamu (kanvas kosong).";
+        this.statusTone = "info";
+        this.render();
+      });
+      const targetSelect = this.modalEl.querySelector("#auth-login-target-ws");
+      const serverPassGroup = this.modalEl.querySelector("#auth-login-server-pass-group");
+      targetSelect?.addEventListener("change", () => {
+        if (serverPassGroup) {
+          serverPassGroup.style.display = targetSelect.value === "main" ? "flex" : "none";
+        }
+      });
       this.modalEl.querySelectorAll("[data-demo-user]").forEach((btn) => {
         btn.addEventListener("click", () => {
           const uInput = this.modalEl.querySelector("#auth-login-username");
           const pInput = this.modalEl.querySelector("#auth-login-password");
+          const sInput = this.modalEl.querySelector("#auth-login-server-pass");
           if (uInput) uInput.value = btn.getAttribute("data-demo-user") || "";
           if (pInput) pInput.value = btn.getAttribute("data-demo-pass") || "";
+          const demoSrv = btn.getAttribute("data-demo-server");
+          if (sInput && demoSrv) sInput.value = demoSrv;
           uInput?.focus();
+        });
+      });
+      this.modalEl.querySelectorAll("[data-fill-server-pass]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const sInput = this.modalEl.querySelector("#auth-login-server-pass");
+          const roCheck = this.modalEl.querySelector("#auth-login-main-readonly");
+          if (sInput) {
+            sInput.value = btn.getAttribute("data-fill-server-pass") || "";
+            sInput.focus();
+          }
+          if (roCheck) roCheck.checked = false;
         });
       });
       this.modalEl.querySelector("#auth-login-form")?.addEventListener("submit", async (e) => {
@@ -14241,10 +14739,15 @@ ${dev.network?.ip || ""}`,
         const username = this.modalEl.querySelector("#auth-login-username")?.value.trim() || "";
         const password = this.modalEl.querySelector("#auth-login-password")?.value || "";
         const targetWs = this.modalEl.querySelector("#auth-login-target-ws")?.value || "main";
+        const serverPass = this.modalEl.querySelector("#auth-login-server-pass")?.value || "";
+        const readOnlyJoin = Boolean(this.modalEl.querySelector("#auth-login-main-readonly")?.checked);
         const preserve = Boolean(this.modalEl.querySelector("#auth-preserve-canvas")?.checked);
         try {
+          await this.authManager.login(username, password, {
+            workspacePassword: serverPass,
+            requireMainUnlock: targetWs === "main" && !readOnlyJoin
+          });
           this.authManager.setWorkspaceMode(targetWs);
-          await this.authManager.login(username, password);
           await this.handlePostLoginLoad(preserve);
           this.render();
         } catch (err) {
@@ -14257,10 +14760,18 @@ ${dev.network?.ip || ""}`,
         const displayName = this.modalEl.querySelector("#auth-reg-display")?.value.trim() || "";
         const role = this.modalEl.querySelector("#auth-reg-role")?.value || "teknisi";
         const password = this.modalEl.querySelector("#auth-reg-password")?.value || "";
+        const serverPass = this.modalEl.querySelector("#auth-reg-server-pass")?.value || "";
         const preserve = Boolean(this.modalEl.querySelector("#auth-preserve-canvas-reg")?.checked);
         try {
+          await this.authManager.register({
+            username,
+            displayName,
+            password,
+            role,
+            workspacePassword: serverPass,
+            requireMainUnlock: false
+          });
           this.authManager.setWorkspaceMode("main");
-          await this.authManager.register({ username, displayName, password, role });
           await this.handlePostLoginLoad(preserve);
           this.render();
         } catch (err) {
@@ -14279,35 +14790,90 @@ ${dev.network?.ip || ""}`,
         btn.addEventListener("click", async () => {
           const mode = btn.getAttribute("data-select-ws");
           if (!mode || mode === this.authManager.getWorkspaceMode()) return;
-          await this.projectStorage.saveCurrentProject();
+          if (this.authManager.canWriteActiveWorkspace()) {
+            await this.projectStorage.saveCurrentProject();
+          }
           this.authManager.setWorkspaceMode(mode);
           await this.projectStorage.loadActiveWorkspaceProject();
           this.historyManager?.initBaseline?.();
-          this.setStatus(
-            mode === "main" ? "Beralih ke Server Utama (Template Bersama)." : `Beralih ke Akun Pribadi (@${this.authManager.getCurrentUser()?.username}).`,
-            "success"
-          );
+          if (mode === "main") {
+            this.setStatus(
+              this.authManager.isMainWorkspaceUnlocked() ? "Beralih ke Server Utama (Akses Edit Terbuka)." : "Beralih ke Server Utama (Lihat Publik / Terkunci). Masukkan password server untuk mengedit.",
+              this.authManager.isMainWorkspaceUnlocked() ? "success" : "info"
+            );
+          } else {
+            this.setStatus(`Beralih ke Akun Pribadi (@${this.authManager.getCurrentUser()?.username}).`, "success");
+          }
           this.render();
         });
+      });
+      this.modalEl.querySelector("#auth-unlock-server-form")?.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const serverPass = this.modalEl.querySelector("#auth-unlock-server-pass")?.value || "";
+        try {
+          await this.authManager.unlockMainWorkspace(serverPass);
+          this.projectStorage.updateStatusIndicator(
+            this.authManager.canWriteActiveWorkspace() ? "saved" : "readonly-main"
+          );
+          this.statusMessage = "Password server valid. Akses edit & simpan ke Server Utama sekarang terbuka!";
+          this.statusTone = "success";
+          this.render();
+        } catch (err) {
+          this.setStatus(err.message || "Password akses Server Utama salah.", "error");
+        }
+      });
+      this.modalEl.querySelector("#auth-btn-lock-server")?.addEventListener("click", async () => {
+        await this.authManager.lockMainWorkspace();
+        this.projectStorage.updateStatusIndicator(
+          this.authManager.canWriteActiveWorkspace() ? "saved" : "readonly-main"
+        );
+        this.statusMessage = "Akses edit Server Utama dikunci kembali (mode Lihat Publik / Read-Only).";
+        this.statusTone = "info";
+        this.render();
+      });
+      this.modalEl.querySelector("#auth-change-server-pass-form")?.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const newPass = this.modalEl.querySelector("#auth-server-new-pass")?.value || "";
+        const confirmPass = this.modalEl.querySelector("#auth-server-confirm-pass")?.value || "";
+        const currentPass = this.modalEl.querySelector("#auth-server-current-pass")?.value || "";
+        if (newPass !== confirmPass) {
+          this.setStatus("Konfirmasi password server baru tidak cocok.", "error");
+          return;
+        }
+        try {
+          await this.authManager.changeMainWorkspacePassword(newPass, currentPass);
+          this.statusMessage = "Password akses Server Utama berhasil diperbarui. Teknisi lain wajib memasukkan password baru saat mengakses Server Utama.";
+          this.statusTone = "success";
+          this.render();
+        } catch (err) {
+          this.setStatus(err.message || "Gagal mengubah password Server Utama.", "error");
+        }
       });
       this.modalEl.querySelector("#auth-btn-pull-main")?.addEventListener("click", async () => {
         this.authManager.setWorkspaceMode("main");
         const res = await this.projectStorage.loadActiveWorkspaceProject();
         this.historyManager?.initBaseline?.();
-        this.setStatus(
-          res.loaded ? "Konfigurasi terbaru dari Server Utama berhasil dimuat." : "Server Utama masih kosong. Tambahkan perangkat lalu simpan.",
-          res.loaded ? "success" : "info"
-        );
+        this.statusMessage = res.loaded ? this.authManager.isMainWorkspaceUnlocked() ? "Konfigurasi terbaru dari Server Utama berhasil dimuat." : "Server Utama dimuat (Read-Only). Masukkan password server untuk mengedit." : "Server Utama masih kosong.";
+        this.statusTone = res.loaded ? this.authManager.isMainWorkspaceUnlocked() ? "success" : "info" : "info";
         this.render();
       });
       this.modalEl.querySelector("#auth-btn-push-main")?.addEventListener("click", async () => {
-        const projectData = this.projectStorage.serializeProject();
-        projectData.workspaceKey = "main";
-        await this.authManager.saveWorkspaceProject("main", projectData);
-        this.authManager.setWorkspaceMode("main");
-        this.projectStorage.updateStatusIndicator("saved");
-        this.setStatus("Kanvas saat ini berhasil dipublikasikan ke Server Utama untuk seluruh teknisi.", "success");
-        this.render();
+        if (!this.authManager.isMainWorkspaceUnlocked()) {
+          this.setStatus("Server Utama masih terkunci. Masukkan Password Akses Server Utama di atas terlebih dahulu.", "error");
+          return;
+        }
+        try {
+          const projectData = this.projectStorage.serializeProject();
+          projectData.workspaceKey = "main";
+          await this.authManager.saveWorkspaceProject("main", projectData);
+          this.authManager.setWorkspaceMode("main");
+          this.projectStorage.updateStatusIndicator("saved");
+          this.statusMessage = "Kanvas saat ini berhasil dipublikasikan ke Server Utama untuk seluruh teknisi.";
+          this.statusTone = "success";
+          this.render();
+        } catch (err) {
+          this.setStatus(err.message || "Gagal menyimpan ke Server Utama.", "error");
+        }
       });
       this.modalEl.querySelector("#auth-btn-clone-to-personal")?.addEventListener("click", async () => {
         const user = this.authManager.getCurrentUser();
@@ -14319,7 +14885,8 @@ ${dev.network?.ip || ""}`,
             this.projectStorage.deserializeProject(res.projectData);
             this.historyManager?.initBaseline?.();
           }
-          this.setStatus("Template Server Utama berhasil disalin ke Akun Pribadi Anda.", "success");
+          this.statusMessage = "Template Server Utama berhasil disalin ke Akun Pribadi Anda.";
+          this.statusTone = "success";
           this.render();
         } catch (err) {
           this.setStatus(err.message || "Gagal menyalin Server Utama.", "error");
@@ -14328,9 +14895,10 @@ ${dev.network?.ip || ""}`,
       this.modalEl.querySelector("#auth-btn-seed-sample")?.addEventListener("click", async () => {
         if (typeof this.onSeedSample === "function") {
           this.onSeedSample();
-          await this.projectStorage.saveCurrentProject();
+          const saved = await this.projectStorage.saveCurrentProject();
           this.historyManager?.initBaseline?.();
-          this.setStatus("Contoh topologi kampus dimuat & disimpan ke workspace aktif.", "success");
+          this.statusMessage = saved ? "Contoh topologi kampus dimuat & disimpan ke workspace aktif." : "Contoh topologi dimuat dalam pratinjau (buka kunci Server Utama atau pilih Akun Pribadi untuk menyimpan).";
+          this.statusTone = saved ? "success" : "info";
           this.render();
         }
       });
@@ -61597,7 +62165,48 @@ void main() {
       this.setupKeyboardShortcuts();
       await this.loadOrSeedProject();
       this.renderIcons();
+      this.setupToolbarResponsiveFit();
       console.info("[NetMap] Phase 5 Application ready. Complete NetMap MVP operational.");
+    }
+    setupToolbarResponsiveFit() {
+      const toolbar = document.getElementById("app-toolbar");
+      if (!toolbar) return;
+      this._lastToolbarWidth = 0;
+      const runSync = () => this.syncToolbarLayoutFit();
+      window.addEventListener("resize", runSync);
+      if (typeof ResizeObserver !== "undefined") {
+        this._toolbarResizeObserver = new ResizeObserver(() => {
+          const w = toolbar.clientWidth;
+          if (w !== this._lastToolbarWidth) {
+            this._lastToolbarWidth = w;
+            runSync();
+          }
+        });
+        this._toolbarResizeObserver.observe(toolbar);
+      }
+      if (document.fonts?.ready) {
+        document.fonts.ready.then(runSync).catch(() => {
+        });
+      }
+      requestAnimationFrame(runSync);
+    }
+    syncToolbarLayoutFit() {
+      const toolbar = document.getElementById("app-toolbar");
+      if (!toolbar) return;
+      const stages = ["tb-compact-brand", "tb-compact-zoom", "tb-compact-modes", "tb-compact-view", "tb-wrap"];
+      toolbar.classList.remove(...stages);
+      const available = toolbar.clientWidth;
+      if (!available) return;
+      const fsBtn = document.getElementById("btn-toggle-fullscreen");
+      const isOverflowing = () => {
+        if (toolbar.scrollWidth > available + 1) return true;
+        if (fsBtn && fsBtn.getBoundingClientRect().right > available - 2) return true;
+        return false;
+      };
+      for (const cls of stages) {
+        if (!isOverflowing()) break;
+        toolbar.classList.add(cls);
+      }
     }
     renderIcons() {
       if (window.lucide && typeof window.lucide.createIcons === "function") {
@@ -61611,14 +62220,17 @@ void main() {
       const isAuth = this.authManager.isAuthenticated();
       const user = this.authManager.getCurrentUser();
       const wsMode = this.authManager.getWorkspaceMode();
+      const isPublic = !isAuth && this.authManager.isPublicPreviewActive?.();
       btn?.classList.toggle("is-authenticated", isAuth);
       if (labelEl) {
-        labelEl.textContent = isAuth ? user?.displayName || user?.username || "Teknisi" : "Mode Tamu";
+        labelEl.textContent = isAuth ? user?.displayName || user?.username || "Teknisi" : isPublic ? "Lihat Publik" : "Mode Tamu";
       }
       if (badgeEl) {
-        badgeEl.textContent = isAuth ? wsMode === "personal" ? "Akun Saya" : "Server Utama" : "Masuk";
+        badgeEl.textContent = isAuth ? wsMode === "personal" ? "Akun Saya" : this.authManager.isMainWorkspaceUnlocked?.() ? "Server Utama" : "Terkunci" : isPublic ? "Read-Only" : "Masuk";
       }
-      this.projectStorage?.updateStatusIndicator(isAuth ? this.projectStorage.hasPendingSave ? "saving" : "saved" : "guest");
+      const status = !isAuth ? isPublic ? "public-readonly" : "guest" : !this.authManager.canWriteActiveWorkspace?.() ? "readonly-main" : this.projectStorage.hasPendingSave ? "saving" : "saved";
+      this.projectStorage?.updateStatusIndicator(status);
+      this.syncToolbarLayoutFit();
     }
     /**
      * Check active session:

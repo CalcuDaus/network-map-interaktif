@@ -18,6 +18,7 @@ const DEFAULT_DB_FILE = path.join(ROOT_DIR, 'data', 'netmap-server-db.json');
 const MAX_BODY_BYTES = 25 * 1024 * 1024;
 const SESSION_TTL_DAYS = 30;
 const DEFAULT_SEED_SALT = 'netmap_salt_2026';
+const DEFAULT_MAIN_SERVER_PASSWORD = 'server123';
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -95,6 +96,24 @@ function buildSeedUsers() {
   ];
 }
 
+function buildDefaultMainSecurity() {
+  return {
+    ownerUsername: 'admin',
+    passwordSalt: DEFAULT_SEED_SALT,
+    passwordHash: hashSha256(DEFAULT_SEED_SALT, DEFAULT_MAIN_SERVER_PASSWORD),
+    isPublicViewable: true,
+    updatedAt: new Date().toISOString(),
+    updatedBy: 'admin'
+  };
+}
+
+function canManageMainServer(user, mainSecurity) {
+  if (!user || !user.username) return false;
+  const uname = String(user.username).toLowerCase();
+  const owner = String(mainSecurity?.ownerUsername || 'admin').toLowerCase();
+  return uname === 'admin' || user.role === 'admin' || uname === owner;
+}
+
 function sanitizeUser(user) {
   if (!user) return null;
   return {
@@ -126,7 +145,8 @@ class JsonFileStore {
       nextUserId: 4,
       users: buildSeedUsers(),
       sessions: {},
-      workspaces: {}
+      workspaces: {},
+      mainSecurity: buildDefaultMainSecurity()
     };
   }
 
@@ -143,7 +163,17 @@ class JsonFileStore {
           nextUserId: parsed.nextUserId || 4,
           users: Array.isArray(parsed.users) && parsed.users.length > 0 ? parsed.users : buildSeedUsers(),
           sessions: parsed.sessions && typeof parsed.sessions === 'object' ? parsed.sessions : {},
-          workspaces: parsed.workspaces && typeof parsed.workspaces === 'object' ? parsed.workspaces : {}
+          workspaces: parsed.workspaces && typeof parsed.workspaces === 'object' ? parsed.workspaces : {},
+          mainSecurity: parsed.mainSecurity && parsed.mainSecurity.passwordHash
+            ? {
+                ownerUsername: parsed.mainSecurity.ownerUsername || 'admin',
+                passwordSalt: parsed.mainSecurity.passwordSalt || DEFAULT_SEED_SALT,
+                passwordHash: parsed.mainSecurity.passwordHash,
+                isPublicViewable: parsed.mainSecurity.isPublicViewable !== false,
+                updatedAt: parsed.mainSecurity.updatedAt || null,
+                updatedBy: parsed.mainSecurity.updatedBy || 'admin'
+              }
+            : buildDefaultMainSecurity()
         };
       } catch (err) {
         console.warn('[NetMapDB] Failed to parse local store JSON, reinitializing:', err.message);
@@ -196,16 +226,21 @@ class JsonFileStore {
     return this.state.users.map(sanitizeUser);
   }
 
-  async createSession(username) {
+  async createSession(username, mainUnlocked = false) {
     const token = crypto.randomBytes(32).toString('hex');
     const now = Date.now();
     const expiresAt = new Date(now + SESSION_TTL_DAYS * 86400 * 1000).toISOString();
-    this.state.sessions[token] = { username, createdAt: new Date(now).toISOString(), expiresAt };
+    this.state.sessions[token] = {
+      username,
+      mainUnlocked: Boolean(mainUnlocked),
+      createdAt: new Date(now).toISOString(),
+      expiresAt
+    };
     this.flush();
     return token;
   }
 
-  async getSessionUser(token) {
+  async getSessionInfo(token) {
     if (!token) return null;
     const sess = this.state.sessions[token];
     if (!sess) return null;
@@ -215,7 +250,24 @@ class JsonFileStore {
       return null;
     }
     const user = await this.findUserByUsername(sess.username);
-    return sanitizeUser(user);
+    if (!user) return null;
+    return {
+      token,
+      user: sanitizeUser(user),
+      mainUnlocked: Boolean(sess.mainUnlocked)
+    };
+  }
+
+  async getSessionUser(token) {
+    const info = await this.getSessionInfo(token);
+    return info?.user || null;
+  }
+
+  async setSessionMainUnlocked(token, unlocked) {
+    if (token && this.state.sessions[token]) {
+      this.state.sessions[token].mainUnlocked = Boolean(unlocked);
+      this.flush();
+    }
   }
 
   async deleteSession(token) {
@@ -225,12 +277,52 @@ class JsonFileStore {
     }
   }
 
+  async getMainWorkspaceSecurity() {
+    const sec = this.state.mainSecurity || buildDefaultMainSecurity();
+    return {
+      ownerUsername: sec.ownerUsername || 'admin',
+      isPublicViewable: sec.isPublicViewable !== false,
+      isProtected: Boolean(sec.passwordHash),
+      updatedAt: sec.updatedAt || null,
+      updatedBy: sec.updatedBy || 'admin'
+    };
+  }
+
+  async verifyMainWorkspacePassword(password) {
+    const sec = this.state.mainSecurity || buildDefaultMainSecurity();
+    if (!sec.passwordHash) return true;
+    return verifyPassword(String(password || ''), sec.passwordSalt || DEFAULT_SEED_SALT, sec.passwordHash);
+  }
+
+  async updateMainWorkspacePassword({ passwordSalt, passwordHash, ownerUsername, updatedBy }) {
+    const existing = this.state.mainSecurity || buildDefaultMainSecurity();
+    const updatedAt = new Date().toISOString();
+    this.state.mainSecurity = {
+      ownerUsername: existing.ownerUsername || ownerUsername || 'admin',
+      passwordSalt,
+      passwordHash,
+      isPublicViewable: existing.isPublicViewable !== false,
+      updatedAt,
+      updatedBy: updatedBy || existing.ownerUsername || 'admin'
+    };
+    if (this.state.workspaces.main) {
+      this.state.workspaces.main.ownerUsername = this.state.mainSecurity.ownerUsername;
+    }
+    // Revoke previously unlocked sessions so other users must enter the new password
+    Object.values(this.state.sessions).forEach((s) => {
+      if (s && typeof s === 'object') s.mainUnlocked = false;
+    });
+    this.flush();
+    return this.getMainWorkspaceSecurity();
+  }
+
   async getWorkspace(workspaceKey) {
     const ws = this.state.workspaces[workspaceKey];
     if (!ws) return null;
+    const mainOwner = this.state.mainSecurity?.ownerUsername || 'admin';
     return {
       workspaceKey,
-      ownerUsername: ws.ownerUsername || null,
+      ownerUsername: workspaceKey === 'main' ? (ws.ownerUsername || mainOwner) : (ws.ownerUsername || null),
       title: ws.title || (workspaceKey === 'main' ? 'Server Utama' : workspaceKey),
       projectData: ws.projectData || null,
       updatedBy: ws.updatedBy || null,
@@ -240,9 +332,13 @@ class JsonFileStore {
 
   async saveWorkspace({ workspaceKey, ownerUsername, title, projectData, updatedBy }) {
     const updatedAt = new Date().toISOString();
+    const existing = this.state.workspaces[workspaceKey];
+    const resolvedOwner = workspaceKey === 'main'
+      ? (existing?.ownerUsername || this.state.mainSecurity?.ownerUsername || ownerUsername || 'admin')
+      : (ownerUsername || existing?.ownerUsername || null);
     this.state.workspaces[workspaceKey] = {
       workspaceKey,
-      ownerUsername: ownerUsername || null,
+      ownerUsername: resolvedOwner,
       title: title || (workspaceKey === 'main' ? 'Server Utama' : workspaceKey),
       projectData,
       updatedBy: updatedBy || null,
@@ -251,6 +347,7 @@ class JsonFileStore {
     this.flush();
     return {
       workspaceKey,
+      ownerUsername: resolvedOwner,
       title: this.state.workspaces[workspaceKey].title,
       updatedBy: updatedBy || null,
       updatedAt
@@ -302,6 +399,9 @@ class MySqlStore {
         owner_username VARCHAR(64) NULL,
         title VARCHAR(160) NOT NULL DEFAULT 'Server Utama',
         project_data LONGTEXT NOT NULL,
+        access_password_hash VARCHAR(255) NULL,
+        access_password_salt VARCHAR(64) NULL,
+        is_public_viewable TINYINT(1) NOT NULL DEFAULT 1,
         updated_by VARCHAR(64) NULL,
         updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY (workspace_key),
@@ -312,12 +412,18 @@ class MySqlStore {
       CREATE TABLE IF NOT EXISTS user_sessions (
         token VARCHAR(128) NOT NULL,
         username VARCHAR(64) NOT NULL,
+        main_unlocked TINYINT(1) NOT NULL DEFAULT 0,
         expires_at DATETIME NOT NULL,
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (token),
         KEY idx_sessions_username (username)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
+
+    await this.ensureColumn('workspaces', 'access_password_hash', 'VARCHAR(255) NULL AFTER project_data');
+    await this.ensureColumn('workspaces', 'access_password_salt', 'VARCHAR(64) NULL AFTER access_password_hash');
+    await this.ensureColumn('workspaces', 'is_public_viewable', 'TINYINT(1) NOT NULL DEFAULT 1 AFTER access_password_salt');
+    await this.ensureColumn('user_sessions', 'main_unlocked', 'TINYINT(1) NOT NULL DEFAULT 0 AFTER username');
 
     const [rows] = await this.pool.query('SELECT COUNT(*) AS cnt FROM users');
     if ((rows[0]?.cnt || 0) === 0) {
@@ -328,7 +434,29 @@ class MySqlStore {
         );
       }
     }
+
+    const defSec = buildDefaultMainSecurity();
+    await this.pool.query(
+      `INSERT IGNORE INTO workspaces (workspace_key, owner_username, title, project_data, access_password_hash, access_password_salt, is_public_viewable, updated_by)
+       VALUES ('main', ?, 'Server Utama', 'null', ?, ?, 1, ?)`,
+      [defSec.ownerUsername, defSec.passwordHash, defSec.passwordSalt, defSec.ownerUsername]
+    );
+    await this.pool.query(
+      `UPDATE workspaces
+       SET owner_username = COALESCE(owner_username, ?),
+           access_password_salt = COALESCE(access_password_salt, ?),
+           access_password_hash = COALESCE(access_password_hash, ?)
+       WHERE workspace_key = 'main'`,
+      [defSec.ownerUsername, defSec.passwordSalt, defSec.passwordHash]
+    );
     return this.backend;
+  }
+
+  async ensureColumn(tableName, colName, colDefSql) {
+    const [cols] = await this.pool.query(`SHOW COLUMNS FROM \`${tableName}\` LIKE ?`, [colName]);
+    if (cols.length === 0) {
+      await this.pool.query(`ALTER TABLE \`${tableName}\` ADD COLUMN \`${colName}\` ${colDefSql}`);
+    }
   }
 
   async findUserByUsername(username) {
@@ -365,32 +493,103 @@ class MySqlStore {
     return rows.map(sanitizeUser);
   }
 
-  async createSession(username) {
+  async createSession(username, mainUnlocked = false) {
     const token = crypto.randomBytes(32).toString('hex');
     await this.pool.query(
-      'INSERT INTO user_sessions (token, username, expires_at) VALUES (?, ?, DATE_ADD(NOW(), INTERVAL ? DAY))',
-      [token, username, SESSION_TTL_DAYS]
+      'INSERT INTO user_sessions (token, username, main_unlocked, expires_at) VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL ? DAY))',
+      [token, username, mainUnlocked ? 1 : 0, SESSION_TTL_DAYS]
     );
     return token;
   }
 
-  async getSessionUser(token) {
+  async getSessionInfo(token) {
     if (!token) return null;
     const [rows] = await this.pool.query(
-      `SELECT u.id, u.username, u.display_name AS displayName, u.role, u.created_at AS createdAt, u.last_login_at AS lastLoginAt
+      `SELECT u.id, u.username, u.display_name AS displayName, u.role, u.created_at AS createdAt, u.last_login_at AS lastLoginAt, s.main_unlocked AS mainUnlocked
        FROM user_sessions s
        JOIN users u ON LOWER(u.username) = LOWER(s.username)
        WHERE s.token = ? AND s.expires_at > NOW()
        LIMIT 1`,
       [token]
     );
-    return rows[0] ? sanitizeUser(rows[0]) : null;
+    if (!rows[0]) return null;
+    return {
+      token,
+      user: sanitizeUser(rows[0]),
+      mainUnlocked: Boolean(rows[0].mainUnlocked)
+    };
+  }
+
+  async getSessionUser(token) {
+    const info = await this.getSessionInfo(token);
+    return info?.user || null;
+  }
+
+  async setSessionMainUnlocked(token, unlocked) {
+    if (token) {
+      await this.pool.query('UPDATE user_sessions SET main_unlocked = ? WHERE token = ?', [unlocked ? 1 : 0, token]);
+    }
   }
 
   async deleteSession(token) {
     if (token) {
       await this.pool.query('DELETE FROM user_sessions WHERE token = ?', [token]);
     }
+  }
+
+  async getMainWorkspaceSecurity() {
+    const [rows] = await this.pool.query(
+      "SELECT owner_username AS ownerUsername, access_password_hash AS passwordHash, access_password_salt AS passwordSalt, is_public_viewable AS isPublicViewable, updated_by AS updatedBy, updated_at AS updatedAt FROM workspaces WHERE workspace_key = 'main' LIMIT 1"
+    );
+    const row = rows[0];
+    if (!row) {
+      return {
+        ownerUsername: 'admin',
+        isPublicViewable: true,
+        isProtected: true,
+        updatedAt: null,
+        updatedBy: 'admin'
+      };
+    }
+    return {
+      ownerUsername: row.ownerUsername || 'admin',
+      isPublicViewable: row.isPublicViewable !== 0,
+      isProtected: Boolean(row.passwordHash),
+      updatedAt: row.updatedAt ? new Date(row.updatedAt).toISOString() : null,
+      updatedBy: row.updatedBy || 'admin'
+    };
+  }
+
+  async verifyMainWorkspacePassword(password) {
+    const [rows] = await this.pool.query(
+      "SELECT access_password_hash AS passwordHash, access_password_salt AS passwordSalt FROM workspaces WHERE workspace_key = 'main' LIMIT 1"
+    );
+    const row = rows[0];
+    if (!row || !row.passwordHash) {
+      const defSec = buildDefaultMainSecurity();
+      return verifyPassword(String(password || ''), defSec.passwordSalt, defSec.passwordHash);
+    }
+    return verifyPassword(String(password || ''), row.passwordSalt || DEFAULT_SEED_SALT, row.passwordHash);
+  }
+
+  async updateMainWorkspacePassword({ passwordSalt, passwordHash, ownerUsername, updatedBy }) {
+    const [existingRows] = await this.pool.query(
+      "SELECT owner_username AS ownerUsername FROM workspaces WHERE workspace_key = 'main' LIMIT 1"
+    );
+    const owner = existingRows[0]?.ownerUsername || ownerUsername || 'admin';
+    await this.pool.query(
+      `INSERT INTO workspaces (workspace_key, owner_username, title, project_data, access_password_hash, access_password_salt, is_public_viewable, updated_by)
+       VALUES ('main', ?, 'Server Utama', 'null', ?, ?, 1, ?)
+       ON DUPLICATE KEY UPDATE
+         owner_username = COALESCE(owner_username, VALUES(owner_username)),
+         access_password_hash = VALUES(access_password_hash),
+         access_password_salt = VALUES(access_password_salt),
+         updated_by = VALUES(updated_by),
+         updated_at = CURRENT_TIMESTAMP`,
+      [owner, passwordHash, passwordSalt, updatedBy || owner]
+    );
+    await this.pool.query('UPDATE user_sessions SET main_unlocked = 0');
+    return this.getMainWorkspaceSecurity();
   }
 
   async getWorkspace(workspaceKey) {
@@ -408,7 +607,7 @@ class MySqlStore {
     }
     return {
       workspaceKey: row.workspaceKey,
-      ownerUsername: row.ownerUsername,
+      ownerUsername: row.ownerUsername || (row.workspaceKey === 'main' ? 'admin' : null),
       title: row.title,
       projectData,
       updatedBy: row.updatedBy,
@@ -419,20 +618,36 @@ class MySqlStore {
   async saveWorkspace({ workspaceKey, ownerUsername, title, projectData, updatedBy }) {
     const payload = typeof projectData === 'string' ? projectData : JSON.stringify(projectData);
     const resolvedTitle = title || (workspaceKey === 'main' ? 'Server Utama' : workspaceKey);
-    await this.pool.query(
-      `INSERT INTO workspaces (workspace_key, owner_username, title, project_data, updated_by)
-       VALUES (?, ?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE
-         owner_username = VALUES(owner_username),
-         title = VALUES(title),
-         project_data = VALUES(project_data),
-         updated_by = VALUES(updated_by),
-         updated_at = CURRENT_TIMESTAMP`,
-      [workspaceKey, ownerUsername || null, resolvedTitle, payload, updatedBy || null]
-    );
+    const defSec = buildDefaultMainSecurity();
+    if (workspaceKey === 'main') {
+      await this.pool.query(
+        `INSERT INTO workspaces (workspace_key, owner_username, title, project_data, access_password_hash, access_password_salt, is_public_viewable, updated_by)
+         VALUES ('main', ?, ?, ?, ?, ?, 1, ?)
+         ON DUPLICATE KEY UPDATE
+           owner_username = COALESCE(owner_username, VALUES(owner_username)),
+           title = VALUES(title),
+           project_data = VALUES(project_data),
+           updated_by = VALUES(updated_by),
+           updated_at = CURRENT_TIMESTAMP`,
+        [ownerUsername || defSec.ownerUsername, resolvedTitle, payload, defSec.passwordHash, defSec.passwordSalt, updatedBy || null]
+      );
+    } else {
+      await this.pool.query(
+        `INSERT INTO workspaces (workspace_key, owner_username, title, project_data, updated_by)
+         VALUES (?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE
+           owner_username = VALUES(owner_username),
+           title = VALUES(title),
+           project_data = VALUES(project_data),
+           updated_by = VALUES(updated_by),
+           updated_at = CURRENT_TIMESTAMP`,
+        [workspaceKey, ownerUsername || null, resolvedTitle, payload, updatedBy || null]
+      );
+    }
     const saved = await this.getWorkspace(workspaceKey);
     return {
       workspaceKey,
+      ownerUsername: saved?.ownerUsername || (workspaceKey === 'main' ? defSec.ownerUsername : ownerUsername || null),
       title: saved?.title || resolvedTitle,
       updatedBy: saved?.updatedBy || updatedBy || null,
       updatedAt: saved?.updatedAt || new Date().toISOString()
@@ -539,10 +754,14 @@ function createNetMapRequestHandler(store, rootDir = ROOT_DIR) {
 
         if (req.method === 'GET' && rawPath === '/api/auth/session') {
           const token = extractBearerToken(req);
-          const user = await store.getSessionUser(token);
+          const sessionInfo = await store.getSessionInfo(token);
+          const mainSec = await store.getMainWorkspaceSecurity();
           sendJson(res, 200, {
-            authenticated: Boolean(user),
-            user,
+            authenticated: Boolean(sessionInfo?.user),
+            user: sessionInfo?.user || null,
+            mainUnlocked: Boolean(sessionInfo?.mainUnlocked),
+            mainOwnerUsername: mainSec?.ownerUsername || 'admin',
+            canManageServerPassword: Boolean(canManageMainServer(sessionInfo?.user, mainSec)),
             storageBackend: store.backend
           });
           return;
@@ -552,16 +771,38 @@ function createNetMapRequestHandler(store, rootDir = ROOT_DIR) {
           const body = await readJsonBody(req);
           const username = String(body.username || '').trim();
           const password = String(body.password || '');
+          const workspacePassword = typeof body.workspacePassword === 'string' ? body.workspacePassword : '';
+          const requireMainUnlock = Boolean(body.requireMainUnlock);
+
           const userRow = await store.findUserByUsername(username);
           if (!userRow || !verifyPassword(password, userRow.passwordSalt, userRow.passwordHash)) {
             sendJson(res, 401, { error: 'Username atau password salah.' });
             return;
           }
+
+          let mainUnlocked = false;
+          if (workspacePassword) {
+            const okServerPass = await store.verifyMainWorkspacePassword(workspacePassword);
+            if (!okServerPass) {
+              sendJson(res, 403, { error: 'Password akses Server Utama salah.' });
+              return;
+            }
+            mainUnlocked = true;
+          } else if (requireMainUnlock) {
+            sendJson(res, 403, { error: 'Masukkan password akses Server Utama untuk menggunakan workspace Server Utama.' });
+            return;
+          }
+
           await store.touchLastLogin(userRow.username);
-          const token = await store.createSession(userRow.username);
+          const token = await store.createSession(userRow.username, mainUnlocked);
+          const user = sanitizeUser({ ...userRow, lastLoginAt: new Date().toISOString() });
+          const mainSec = await store.getMainWorkspaceSecurity();
           sendJson(res, 200, {
             token,
-            user: sanitizeUser({ ...userRow, lastLoginAt: new Date().toISOString() }),
+            user,
+            mainUnlocked,
+            mainOwnerUsername: mainSec?.ownerUsername || 'admin',
+            canManageServerPassword: Boolean(canManageMainServer(user, mainSec)),
             storageBackend: store.backend
           });
           return;
@@ -573,6 +814,8 @@ function createNetMapRequestHandler(store, rootDir = ROOT_DIR) {
           const displayName = String(body.displayName || username).trim() || username;
           const password = String(body.password || '');
           const role = body.role === 'admin' ? 'admin' : 'teknisi';
+          const workspacePassword = typeof body.workspacePassword === 'string' ? body.workspacePassword : '';
+          const requireMainUnlock = Boolean(body.requireMainUnlock);
 
           if (!isValidUsername(username)) {
             sendJson(res, 400, { error: 'Username harus 3-32 karakter (huruf, angka, titik, garis bawah, atau tanda hubung).' });
@@ -588,6 +831,27 @@ function createNetMapRequestHandler(store, rootDir = ROOT_DIR) {
             return;
           }
 
+          if (role === 'admin') {
+            const okAdminPass = workspacePassword ? await store.verifyMainWorkspacePassword(workspacePassword) : false;
+            if (!okAdminPass) {
+              sendJson(res, 403, { error: 'Password Server Utama diperlukan untuk mendaftar sebagai Admin Utama.' });
+              return;
+            }
+          }
+
+          let mainUnlocked = false;
+          if (workspacePassword) {
+            const okServerPass = await store.verifyMainWorkspacePassword(workspacePassword);
+            if (!okServerPass) {
+              sendJson(res, 403, { error: 'Password akses Server Utama salah.' });
+              return;
+            }
+            mainUnlocked = true;
+          } else if (requireMainUnlock) {
+            sendJson(res, 403, { error: 'Masukkan password akses Server Utama untuk menggunakan workspace Server Utama.' });
+            return;
+          }
+
           const { salt, hash } = createScryptHash(password);
           const newUser = await store.createUser({
             username,
@@ -596,10 +860,14 @@ function createNetMapRequestHandler(store, rootDir = ROOT_DIR) {
             passwordSalt: salt,
             passwordHash: hash
           });
-          const token = await store.createSession(newUser.username);
+          const token = await store.createSession(newUser.username, mainUnlocked);
+          const mainSec = await store.getMainWorkspaceSecurity();
           sendJson(res, 201, {
             token,
             user: newUser,
+            mainUnlocked,
+            mainOwnerUsername: mainSec?.ownerUsername || 'admin',
+            canManageServerPassword: Boolean(canManageMainServer(newUser, mainSec)),
             storageBackend: store.backend
           });
           return;
@@ -612,8 +880,37 @@ function createNetMapRequestHandler(store, rootDir = ROOT_DIR) {
           return;
         }
 
+        // Public Read-Only endpoint for Server Utama (anyone can view publicly, writes still require auth + server password)
+        if (req.method === 'GET' && rawPath === '/api/workspaces/main') {
+          const token = extractBearerToken(req);
+          const sessionInfo = await store.getSessionInfo(token);
+          const mainSec = await store.getMainWorkspaceSecurity();
+          if (mainSec.isPublicViewable === false && !sessionInfo?.user) {
+            sendJson(res, 401, { error: 'Server Utama saat ini tidak dibuka untuk publik. Silakan login.' });
+            return;
+          }
+          const ws = await store.getWorkspace('main');
+          const metaOnly = reqUrl.includes('meta=1');
+          sendJson(res, 200, {
+            workspaceKey: 'main',
+            title: ws?.title || 'Server Utama',
+            ownerUsername: ws?.ownerUsername || mainSec?.ownerUsername || 'admin',
+            ...(metaOnly ? {} : { projectData: ws?.projectData || null }),
+            updatedBy: ws?.updatedBy || null,
+            updatedAt: ws?.updatedAt || null,
+            isProtected: Boolean(mainSec?.isProtected),
+            isPublicViewable: mainSec?.isPublicViewable !== false,
+            mainUnlocked: Boolean(sessionInfo?.mainUnlocked),
+            canManageServerPassword: Boolean(canManageMainServer(sessionInfo?.user, mainSec)),
+            storageBackend: store.backend
+          });
+          return;
+        }
+
         // All routes below require an authenticated technician session
-        const sessionUser = await store.getSessionUser(extractBearerToken(req));
+        const token = extractBearerToken(req);
+        const sessionInfo = await store.getSessionInfo(token);
+        const sessionUser = sessionInfo?.user || null;
         if (!sessionUser) {
           sendJson(res, 401, { error: 'Silakan login terlebih dahulu.' });
           return;
@@ -625,6 +922,70 @@ function createNetMapRequestHandler(store, rootDir = ROOT_DIR) {
           return;
         }
 
+        if (req.method === 'POST' && rawPath === '/api/workspaces/main/unlock') {
+          const body = await readJsonBody(req);
+          const serverPassword = String(body.password || '');
+          const valid = await store.verifyMainWorkspacePassword(serverPassword);
+          if (!valid) {
+            sendJson(res, 403, { error: 'Password akses Server Utama salah.' });
+            return;
+          }
+          await store.setSessionMainUnlocked(token, true);
+          const mainSec = await store.getMainWorkspaceSecurity();
+          sendJson(res, 200, {
+            ok: true,
+            mainUnlocked: true,
+            mainOwnerUsername: mainSec?.ownerUsername || 'admin',
+            canManageServerPassword: Boolean(canManageMainServer(sessionUser, mainSec)),
+            storageBackend: store.backend
+          });
+          return;
+        }
+
+        if (req.method === 'POST' && rawPath === '/api/workspaces/main/lock') {
+          await store.setSessionMainUnlocked(token, false);
+          sendJson(res, 200, { ok: true, mainUnlocked: false, storageBackend: store.backend });
+          return;
+        }
+
+        if (req.method === 'POST' && rawPath === '/api/workspaces/main/password') {
+          const mainSec = await store.getMainWorkspaceSecurity();
+          if (!canManageMainServer(sessionUser, mainSec)) {
+            sendJson(res, 403, { error: 'Hanya Admin Utama atau pembuat server yang boleh mengubah password Server Utama.' });
+            return;
+          }
+          const body = await readJsonBody(req);
+          if (typeof body.currentPassword === 'string' && body.currentPassword.length > 0) {
+            const okCurrent = await store.verifyMainWorkspacePassword(body.currentPassword);
+            if (!okCurrent) {
+              sendJson(res, 403, { error: 'Password server saat ini salah.' });
+              return;
+            }
+          }
+          const newPassword = String(body.newPassword || '');
+          if (newPassword.length < 4) {
+            sendJson(res, 400, { error: 'Password server baru minimal 4 karakter.' });
+            return;
+          }
+          const { salt, hash } = createScryptHash(newPassword);
+          const updatedSec = await store.updateMainWorkspacePassword({
+            passwordSalt: salt,
+            passwordHash: hash,
+            ownerUsername: mainSec?.ownerUsername || sessionUser.username,
+            updatedBy: sessionUser.username
+          });
+          await store.setSessionMainUnlocked(token, true);
+          sendJson(res, 200, {
+            ok: true,
+            mainUnlocked: true,
+            ownerUsername: updatedSec.ownerUsername,
+            updatedBy: sessionUser.username,
+            updatedAt: updatedSec.updatedAt,
+            storageBackend: store.backend
+          });
+          return;
+        }
+
         if (req.method === 'POST' && rawPath === '/api/workspaces/clone') {
           const body = await readJsonBody(req);
           const fromKey = String(body.fromKey || '').trim();
@@ -632,6 +993,14 @@ function createNetMapRequestHandler(store, rootDir = ROOT_DIR) {
           if (!isAllowedWorkspaceKey(fromKey, sessionUser.username) || !isAllowedWorkspaceKey(toKey, sessionUser.username)) {
             sendJson(res, 403, { error: 'Akses workspace ditolak.' });
             return;
+          }
+          if (toKey === 'main' && !sessionInfo.mainUnlocked) {
+            const suppliedPass = typeof body.workspacePassword === 'string' ? body.workspacePassword : '';
+            if (!suppliedPass || !(await store.verifyMainWorkspacePassword(suppliedPass))) {
+              sendJson(res, 403, { error: 'Workspace Server Utama terkunci. Masukkan password akses Server Utama terlebih dahulu.' });
+              return;
+            }
+            await store.setSessionMainUnlocked(token, true);
           }
           const srcWs = await store.getWorkspace(fromKey);
           if (!srcWs || !srcWs.projectData) {
@@ -642,9 +1011,10 @@ function createNetMapRequestHandler(store, rootDir = ROOT_DIR) {
             ...srcWs.projectData,
             updatedAt: new Date().toISOString()
           };
+          const mainSec = toKey === 'main' ? await store.getMainWorkspaceSecurity() : null;
           const saved = await store.saveWorkspace({
             workspaceKey: toKey,
-            ownerUsername: toKey === 'main' ? null : sessionUser.username,
+            ownerUsername: toKey === 'main' ? (mainSec?.ownerUsername || 'admin') : sessionUser.username,
             title: toKey === 'main' ? 'Server Utama' : `Workspace ${sessionUser.displayName}`,
             projectData: clonedData,
             updatedBy: sessionUser.username
@@ -673,6 +1043,7 @@ function createNetMapRequestHandler(store, rootDir = ROOT_DIR) {
             sendJson(res, 200, {
               workspaceKey: key,
               title: ws?.title || (key === 'main' ? 'Server Utama' : sessionUser.displayName),
+              ownerUsername: ws?.ownerUsername || (key === 'main' ? 'admin' : sessionUser.username),
               ...(metaOnly ? {} : { projectData: ws?.projectData || null }),
               updatedBy: ws?.updatedBy || null,
               updatedAt: ws?.updatedAt || null,
@@ -683,14 +1054,23 @@ function createNetMapRequestHandler(store, rootDir = ROOT_DIR) {
 
           if (req.method === 'PUT' || req.method === 'POST') {
             const body = await readJsonBody(req);
+            if (key === 'main' && !sessionInfo.mainUnlocked) {
+              const suppliedPass = typeof body.workspacePassword === 'string' ? body.workspacePassword : '';
+              if (!suppliedPass || !(await store.verifyMainWorkspacePassword(suppliedPass))) {
+                sendJson(res, 403, { error: 'Workspace Server Utama terkunci. Masukkan password akses Server Utama terlebih dahulu.' });
+                return;
+              }
+              await store.setSessionMainUnlocked(token, true);
+            }
             const projectData = body.projectData;
             if (!projectData || typeof projectData !== 'object') {
               sendJson(res, 400, { error: 'Data projectData tidak valid.' });
               return;
             }
+            const mainSec = key === 'main' ? await store.getMainWorkspaceSecurity() : null;
             const saved = await store.saveWorkspace({
               workspaceKey: key,
-              ownerUsername: key === 'main' ? null : sessionUser.username,
+              ownerUsername: key === 'main' ? (mainSec?.ownerUsername || 'admin') : sessionUser.username,
               title: key === 'main' ? 'Server Utama' : (projectData.name || sessionUser.displayName),
               projectData,
               updatedBy: sessionUser.username

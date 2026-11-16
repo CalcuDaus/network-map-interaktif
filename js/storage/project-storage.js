@@ -35,7 +35,7 @@ export class ProjectStorage {
     if (typeof window === 'undefined') return;
     const flushNow = () => {
       if (!this.isAutoSaveEnabled || !this.hasPendingSave) return;
-      if (this.authManager && !this.authManager.isAuthenticated()) return;
+      if (this.authManager && !this.authManager.canWriteActiveWorkspace()) return;
       const projectData = this.serializeProject();
       this.saveLocalBackup(projectData);
       this.saveCurrentProject();
@@ -76,7 +76,12 @@ export class ProjectStorage {
       if (!this.isAutoSaveEnabled) return;
       if (this.authManager && !this.authManager.isAuthenticated()) {
         this.hasPendingSave = false;
-        this.updateStatusIndicator('guest');
+        this.updateStatusIndicator(this.authManager.isPublicPreviewActive?.() ? 'public-readonly' : 'guest');
+        return;
+      }
+      if (this.authManager && !this.authManager.canWriteActiveWorkspace()) {
+        this.hasPendingSave = false;
+        this.updateStatusIndicator('readonly-main');
         return;
       }
       this.hasPendingSave = true;
@@ -149,7 +154,10 @@ export class ProjectStorage {
       stateManager.setObjects3d([]);
 
       this.hasPendingSave = false;
-      this.updateStatusIndicator(this.authManager && !this.authManager.isAuthenticated() ? 'guest' : 'saved');
+      const idleStatus = !this.authManager || !this.authManager.isAuthenticated()
+        ? (this.authManager?.isPublicPreviewActive?.() ? 'public-readonly' : 'guest')
+        : (this.authManager.canWriteActiveWorkspace() ? 'saved' : 'readonly-main');
+      this.updateStatusIndicator(idleStatus);
       eventBus.emit('project:loaded', { id: 'proj-default', devices: [], connections: [], rooms3d: [], objects3d: [] });
     } finally {
       this.isAutoSaveEnabled = prevAutoSave;
@@ -157,11 +165,42 @@ export class ProjectStorage {
   }
 
   /**
+   * Load Server Utama in public read-only view (without requiring login or password)
+   */
+  async loadPublicMainWorkspaceProject() {
+    if (!this.authManager) return { loaded: false };
+    try {
+      const ws = await this.authManager.loadPublicMainWorkspace();
+      if (ws && ws.projectData && typeof ws.projectData === 'object') {
+        this.deserializeProject(ws.projectData);
+        this.updateStatusIndicator('public-readonly');
+        return {
+          loaded: true,
+          workspaceKey: 'main',
+          readOnly: true,
+          updatedBy: ws.updatedBy || null,
+          updatedAt: ws.updatedAt || null
+        };
+      }
+      this.clearCanvasToEmpty('Server Utama (Lihat Publik)');
+      this.updateStatusIndicator('public-readonly');
+      return { loaded: false, workspaceKey: 'main', readOnly: true };
+    } catch (err) {
+      console.error('[ProjectStorage] Failed to load public Server Utama:', err);
+      this.updateStatusIndicator('error');
+      return { loaded: false, workspaceKey: 'main', readOnly: true };
+    }
+  }
+
+  /**
    * Load project for the currently authenticated workspace ('main' or 'user_<username>')
-   * @returns {Promise<{ loaded: boolean, workspaceKey?: string, updatedBy?: string|null, updatedAt?: string|null }>}
+   * @returns {Promise<{ loaded: boolean, workspaceKey?: string, readOnly?: boolean, updatedBy?: string|null, updatedAt?: string|null }>}
    */
   async loadActiveWorkspaceProject() {
     if (!this.authManager || !this.authManager.isAuthenticated()) {
+      if (this.authManager?.isPublicPreviewActive?.()) {
+        return this.loadPublicMainWorkspaceProject();
+      }
       this.clearCanvasToEmpty();
       this.updateStatusIndicator('guest');
       return { loaded: false };
@@ -170,19 +209,21 @@ export class ProjectStorage {
     const activeKey = this.authManager.getActiveWorkspaceKey();
     try {
       const ws = await this.authManager.loadWorkspaceProject(activeKey);
+      const isWritable = this.authManager.canWriteActiveWorkspace();
       if (ws && ws.projectData && typeof ws.projectData === 'object') {
         this.deserializeProject(ws.projectData);
-        this.updateStatusIndicator('saved');
+        this.updateStatusIndicator(isWritable ? 'saved' : 'readonly-main');
         return {
           loaded: true,
           workspaceKey: activeKey,
+          readOnly: !isWritable,
           updatedBy: ws.updatedBy || null,
           updatedAt: ws.updatedAt || null
         };
       }
       this.clearCanvasToEmpty(activeKey === 'main' ? 'Server Utama (Template Bersama)' : `Workspace ${this.authManager.getCurrentUser()?.displayName || ''}`);
-      this.updateStatusIndicator('saved');
-      return { loaded: false, workspaceKey: activeKey };
+      this.updateStatusIndicator(isWritable ? 'saved' : 'readonly-main');
+      return { loaded: false, workspaceKey: activeKey, readOnly: !isWritable };
     } catch (err) {
       console.error('[ProjectStorage] Failed to load active workspace:', err);
       this.updateStatusIndicator('error');
@@ -191,14 +232,19 @@ export class ProjectStorage {
   }
 
   /**
-   * Save current project to authenticated workspace (Server Utama / Personal Account) + IndexedDB mirror
-   * In Guest Mode (not logged in), intentionally refuses persistence so guest work stays volatile.
+   * Save current project to authenticated workspace (Server Utama when unlocked / Personal Account) + IndexedDB mirror
+   * Refuses persistence in Guest Mode or when Server Utama is still password-locked.
    * @returns {Promise<boolean>}
    */
   async saveCurrentProject() {
     if (this.authManager && !this.authManager.isAuthenticated()) {
       this.hasPendingSave = false;
-      this.updateStatusIndicator('guest');
+      this.updateStatusIndicator(this.authManager.isPublicPreviewActive?.() ? 'public-readonly' : 'guest');
+      return false;
+    }
+    if (this.authManager && !this.authManager.canWriteActiveWorkspace()) {
+      this.hasPendingSave = false;
+      this.updateStatusIndicator('readonly-main');
       return false;
     }
 
@@ -314,7 +360,12 @@ export class ProjectStorage {
       }
 
       this.hasPendingSave = false;
-      this.updateStatusIndicator('saved');
+      const initialStatus = this.authManager
+        ? (!this.authManager.isAuthenticated()
+            ? (this.authManager.isPublicPreviewActive?.() ? 'public-readonly' : 'guest')
+            : (this.authManager.canWriteActiveWorkspace() ? 'saved' : 'readonly-main'))
+        : 'saved';
+      this.updateStatusIndicator(initialStatus);
       eventBus.emit('project:loaded', projectData);
     } finally {
       this.isAutoSaveEnabled = prevAutoSave;
@@ -326,8 +377,22 @@ export class ProjectStorage {
     if (!statusPill) return;
 
     const isAuthed = Boolean(this.authManager?.isAuthenticated?.());
+    if (status === 'public-readonly' || (!isAuthed && this.authManager?.isPublicPreviewActive?.())) {
+      statusPill.textContent = '● LIHAT PUBLIK • SERVER UTAMA (READ-ONLY)';
+      statusPill.style.color = 'var(--status-warning)';
+      statusPill.style.background = 'rgba(217, 119, 6, 0.14)';
+      return;
+    }
+
     if (status === 'guest' || (this.authManager && !isAuthed)) {
       statusPill.textContent = '● MODE TAMU (TIDAK TERSIMPAN — LOGIN)';
+      statusPill.style.color = 'var(--status-warning)';
+      statusPill.style.background = 'rgba(217, 119, 6, 0.14)';
+      return;
+    }
+
+    if (status === 'readonly-main' || (isAuthed && !this.authManager?.canWriteActiveWorkspace?.())) {
+      statusPill.textContent = '● LIHAT PUBLIK • SERVER UTAMA (TERKUNCI — MASUKKAN PASSWORD)';
       statusPill.style.color = 'var(--status-warning)';
       statusPill.style.background = 'rgba(217, 119, 6, 0.14)';
       return;
