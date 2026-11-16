@@ -12180,10 +12180,12 @@ ${dev.network?.ip || ""}`,
      * @param {Object} options
      * @param {import('../devices/device-manager.js').DeviceManager} options.deviceManager
      * @param {import('../connections/cable-manager.js').CableManager} options.cableManager
+     * @param {import('./auth-manager.js').AuthManager} [options.authManager]
      */
-    constructor({ deviceManager, cableManager }) {
+    constructor({ deviceManager, cableManager, authManager: authManager2 = null }) {
       this.deviceManager = deviceManager;
       this.cableManager = cableManager;
+      this.authManager = authManager2;
       this.isAutoSaveEnabled = true;
       this.hasPendingSave = false;
       this.debouncedSave = debounce(() => {
@@ -12196,6 +12198,7 @@ ${dev.network?.ip || ""}`,
       if (typeof window === "undefined") return;
       const flushNow = () => {
         if (!this.isAutoSaveEnabled || !this.hasPendingSave) return;
+        if (this.authManager && !this.authManager.isAuthenticated()) return;
         const projectData = this.serializeProject();
         this.saveLocalBackup(projectData);
         this.saveCurrentProject();
@@ -12229,6 +12232,11 @@ ${dev.network?.ip || ""}`,
     initMutationListeners() {
       const handleMutation = () => {
         if (!this.isAutoSaveEnabled) return;
+        if (this.authManager && !this.authManager.isAuthenticated()) {
+          this.hasPendingSave = false;
+          this.updateStatusIndicator("guest");
+          return;
+        }
         this.hasPendingSave = true;
         this.updateStatusIndicator("saving");
         this.debouncedSave();
@@ -12272,21 +12280,96 @@ ${dev.network?.ip || ""}`,
       };
     }
     /**
-     * Save current project to IndexedDB
+     * Clear active canvas (devices, cables, 3D rooms/objects) without mutating stored server data
+     */
+    clearCanvasToEmpty(projectName = "SmartSchool NetMap") {
+      const prevAutoSave = this.isAutoSaveEnabled;
+      this.isAutoSaveEnabled = false;
+      try {
+        this.deviceManager?.deselectDevice?.();
+        this.cableManager?.deselectConnection?.();
+        stateManager.deselectObject3d?.();
+        const currentDevs = this.deviceManager.getAllDevices();
+        currentDevs.forEach((d) => this.deviceManager.deleteDevice(d.id));
+        const remainingCables = this.cableManager.getAllConnections();
+        remainingCables.forEach((c) => this.cableManager.deleteConnection(c.id));
+        stateManager.getState().project.id = "proj-default";
+        stateManager.getState().project.name = projectName;
+        stateManager.setRooms3d([]);
+        stateManager.setObjects3d([]);
+        this.hasPendingSave = false;
+        this.updateStatusIndicator(this.authManager && !this.authManager.isAuthenticated() ? "guest" : "saved");
+        eventBus.emit("project:loaded", { id: "proj-default", devices: [], connections: [], rooms3d: [], objects3d: [] });
+      } finally {
+        this.isAutoSaveEnabled = prevAutoSave;
+      }
+    }
+    /**
+     * Load project for the currently authenticated workspace ('main' or 'user_<username>')
+     * @returns {Promise<{ loaded: boolean, workspaceKey?: string, updatedBy?: string|null, updatedAt?: string|null }>}
+     */
+    async loadActiveWorkspaceProject() {
+      if (!this.authManager || !this.authManager.isAuthenticated()) {
+        this.clearCanvasToEmpty();
+        this.updateStatusIndicator("guest");
+        return { loaded: false };
+      }
+      const activeKey = this.authManager.getActiveWorkspaceKey();
+      try {
+        const ws = await this.authManager.loadWorkspaceProject(activeKey);
+        if (ws && ws.projectData && typeof ws.projectData === "object") {
+          this.deserializeProject(ws.projectData);
+          this.updateStatusIndicator("saved");
+          return {
+            loaded: true,
+            workspaceKey: activeKey,
+            updatedBy: ws.updatedBy || null,
+            updatedAt: ws.updatedAt || null
+          };
+        }
+        this.clearCanvasToEmpty(activeKey === "main" ? "Server Utama (Template Bersama)" : `Workspace ${this.authManager.getCurrentUser()?.displayName || ""}`);
+        this.updateStatusIndicator("saved");
+        return { loaded: false, workspaceKey: activeKey };
+      } catch (err) {
+        console.error("[ProjectStorage] Failed to load active workspace:", err);
+        this.updateStatusIndicator("error");
+        return { loaded: false, workspaceKey: activeKey };
+      }
+    }
+    /**
+     * Save current project to authenticated workspace (Server Utama / Personal Account) + IndexedDB mirror
+     * In Guest Mode (not logged in), intentionally refuses persistence so guest work stays volatile.
      * @returns {Promise<boolean>}
      */
     async saveCurrentProject() {
+      if (this.authManager && !this.authManager.isAuthenticated()) {
+        this.hasPendingSave = false;
+        this.updateStatusIndicator("guest");
+        return false;
+      }
       try {
         this.updateStatusIndicator("saving");
         const projectData = this.serializeProject();
-        this.saveLocalBackup(projectData);
-        await database.saveProject(projectData);
+        const activeKey = this.authManager?.getActiveWorkspaceKey?.() || null;
+        if (this.authManager && activeKey) {
+          projectData.workspaceKey = activeKey;
+          await this.authManager.saveWorkspaceProject(activeKey, projectData);
+          try {
+            if (typeof indexedDB !== "undefined") {
+              await database.saveProject({ ...projectData, id: `netmap_ws_${activeKey}` });
+            }
+          } catch {
+          }
+        } else {
+          this.saveLocalBackup(projectData);
+          await database.saveProject(projectData);
+        }
         this.hasPendingSave = false;
         this.updateStatusIndicator("saved");
-        eventBus.emit("project:saved", { id: projectData.id });
+        eventBus.emit("project:saved", { id: projectData.id, workspaceKey: activeKey });
         return true;
       } catch (err) {
-        console.error("[ProjectStorage] Failed to save project to IndexedDB:", err);
+        console.error("[ProjectStorage] Failed to save project:", err);
         this.updateStatusIndicator("error");
         return false;
       }
@@ -12361,21 +12444,669 @@ ${dev.network?.ip || ""}`,
     updateStatusIndicator(status) {
       const statusPill = document.querySelector("#app-status-bar .status-pill");
       if (!statusPill) return;
+      const isAuthed = Boolean(this.authManager?.isAuthenticated?.());
+      if (status === "guest" || this.authManager && !isAuthed) {
+        statusPill.textContent = "\u25CF MODE TAMU (TIDAK TERSIMPAN \u2014 LOGIN)";
+        statusPill.style.color = "var(--status-warning)";
+        statusPill.style.background = "rgba(217, 119, 6, 0.14)";
+        return;
+      }
       if (status === "saving") {
-        statusPill.innerHTML = "\u27F3 MENYIMPAN...";
+        statusPill.textContent = "\u25CF MENYIMPAN KE SERVER...";
         statusPill.style.color = "var(--accent-sky)";
         statusPill.style.background = "rgba(56, 189, 248, 0.15)";
       } else if (status === "saved") {
-        statusPill.innerHTML = "\u25CF TERSIMPAN (OFFLINE)";
+        if (this.authManager) {
+          const wsMode = this.authManager.getWorkspaceMode();
+          const user = this.authManager.getCurrentUser();
+          const backendLabel = this.authManager.storageBackend === "mysql" ? "MySQL" : this.authManager.storageBackend === "file" ? "Server" : "Lokal";
+          const wsLabel = wsMode === "personal" ? `AKUN: ${user?.username || "Teknisi"}` : "SERVER UTAMA";
+          statusPill.textContent = `\u25CF TERSIMPAN \u2022 ${wsLabel} (${backendLabel})`;
+        } else {
+          statusPill.textContent = "\u25CF TERSIMPAN (OFFLINE)";
+        }
         statusPill.style.color = "var(--status-online)";
         statusPill.style.background = "rgba(34, 197, 94, 0.15)";
       } else if (status === "error") {
-        statusPill.innerHTML = "\u26A0 GAGAL SIMPAN";
+        statusPill.textContent = "! GAGAL SIMPAN";
         statusPill.style.color = "var(--status-offline)";
         statusPill.style.background = "rgba(239, 68, 68, 0.15)";
       }
     }
   };
+
+  // js/storage/auth-manager.js
+  var LOCAL_DB_STORAGE_KEY = "netmap_multi_db_v1";
+  var LOCAL_TOKEN_STORAGE_KEY = "netmap_auth_token_v1";
+  var LOCAL_WS_MODE_STORAGE_KEY = "netmap_workspace_mode_v1";
+  var DEFAULT_SEED_SALT = "netmap_salt_2026";
+  var SHA256_K = new Uint32Array([
+    1116352408,
+    1899447441,
+    3049323471,
+    3921009573,
+    961987163,
+    1508970993,
+    2453635748,
+    2870763221,
+    3624381080,
+    310598401,
+    607225278,
+    1426881987,
+    1925078388,
+    2162078206,
+    2614888103,
+    3248222580,
+    3835390401,
+    4022224774,
+    264347078,
+    604807628,
+    770255983,
+    1249150122,
+    1555081692,
+    1996064986,
+    2554220882,
+    2821834349,
+    2952996808,
+    3210313671,
+    3336571891,
+    3584528711,
+    113926993,
+    338241895,
+    666307205,
+    773529912,
+    1294757372,
+    1396182291,
+    1695183700,
+    1986661051,
+    2177026350,
+    2456956037,
+    2730485921,
+    2820302411,
+    3259730800,
+    3345764771,
+    3516065817,
+    3600352804,
+    4094571909,
+    275423344,
+    430227734,
+    506948616,
+    659060556,
+    883997877,
+    958139571,
+    1322822218,
+    1537002063,
+    1747873779,
+    1955562222,
+    2024104815,
+    2227730452,
+    2361852424,
+    2428436474,
+    2756734187,
+    3204031479,
+    3329325298
+  ]);
+  function sha256Hex(message) {
+    const bytes = new TextEncoder().encode(String(message));
+    const bitLen = bytes.length * 8;
+    const paddedLen = Math.ceil((bytes.length + 9) / 64) * 64;
+    const buf = new Uint8Array(paddedLen);
+    buf.set(bytes);
+    buf[bytes.length] = 128;
+    const view = new DataView(buf.buffer);
+    view.setUint32(paddedLen - 8, Math.floor(bitLen / 4294967296), false);
+    view.setUint32(paddedLen - 4, bitLen >>> 0, false);
+    const H = new Uint32Array([
+      1779033703,
+      3144134277,
+      1013904242,
+      2773480762,
+      1359893119,
+      2600822924,
+      528734635,
+      1541459225
+    ]);
+    const W = new Uint32Array(64);
+    const rotr = (n, x) => x >>> n | x << 32 - n;
+    for (let offset = 0; offset < paddedLen; offset += 64) {
+      for (let i = 0; i < 16; i++) W[i] = view.getUint32(offset + i * 4, false);
+      for (let i = 16; i < 64; i++) {
+        const s0 = rotr(7, W[i - 15]) ^ rotr(18, W[i - 15]) ^ W[i - 15] >>> 3;
+        const s1 = rotr(17, W[i - 2]) ^ rotr(19, W[i - 2]) ^ W[i - 2] >>> 10;
+        W[i] = W[i - 16] + s0 + W[i - 7] + s1 >>> 0;
+      }
+      let [a, b, c, d, e, f, g, h] = H;
+      for (let i = 0; i < 64; i++) {
+        const S1 = rotr(6, e) ^ rotr(11, e) ^ rotr(25, e);
+        const ch = e & f ^ ~e & g;
+        const temp1 = h + S1 + ch + SHA256_K[i] + W[i] >>> 0;
+        const S0 = rotr(2, a) ^ rotr(13, a) ^ rotr(22, a);
+        const maj = a & b ^ a & c ^ b & c;
+        const temp2 = S0 + maj >>> 0;
+        h = g;
+        g = f;
+        f = e;
+        e = d + temp1 >>> 0;
+        d = c;
+        c = b;
+        b = a;
+        a = temp1 + temp2 >>> 0;
+      }
+      H[0] = H[0] + a >>> 0;
+      H[1] = H[1] + b >>> 0;
+      H[2] = H[2] + c >>> 0;
+      H[3] = H[3] + d >>> 0;
+      H[4] = H[4] + e >>> 0;
+      H[5] = H[5] + f >>> 0;
+      H[6] = H[6] + g >>> 0;
+      H[7] = H[7] + h >>> 0;
+    }
+    return Array.from(H).map((v) => v.toString(16).padStart(8, "0")).join("");
+  }
+  function defaultOfflineSeedState() {
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    return {
+      nextUserId: 4,
+      users: [
+        {
+          id: 1,
+          username: "admin",
+          displayName: "Admin Utama Jaringan",
+          role: "admin",
+          passwordSalt: DEFAULT_SEED_SALT,
+          passwordHash: sha256Hex(`${DEFAULT_SEED_SALT}:admin123`),
+          createdAt: now,
+          lastLoginAt: null
+        },
+        {
+          id: 2,
+          username: "teknisi1",
+          displayName: "Teknisi Lapangan 1",
+          role: "teknisi",
+          passwordSalt: DEFAULT_SEED_SALT,
+          passwordHash: sha256Hex(`${DEFAULT_SEED_SALT}:teknisi123`),
+          createdAt: now,
+          lastLoginAt: null
+        },
+        {
+          id: 3,
+          username: "teknisi2",
+          displayName: "Teknisi Lapangan 2",
+          role: "teknisi",
+          passwordSalt: DEFAULT_SEED_SALT,
+          passwordHash: sha256Hex(`${DEFAULT_SEED_SALT}:teknisi123`),
+          createdAt: now,
+          lastLoginAt: null
+        }
+      ],
+      sessions: {},
+      workspaces: {}
+    };
+  }
+  var AuthManager = class {
+    constructor() {
+      this.currentUser = null;
+      this.authToken = "";
+      this.workspaceMode = "main";
+      this.apiAvailable = false;
+      this.storageBackend = "local";
+      this.lastUpdatedBy = null;
+      this.lastSyncedAt = null;
+      this._channel = null;
+      this._pollTimer = null;
+      this._memoryStore = null;
+      this.restoreLocalMeta();
+      this.initSyncChannel();
+    }
+    restoreLocalMeta() {
+      try {
+        if (typeof localStorage !== "undefined") {
+          this.authToken = localStorage.getItem(LOCAL_TOKEN_STORAGE_KEY) || "";
+          const savedMode = localStorage.getItem(LOCAL_WS_MODE_STORAGE_KEY);
+          if (savedMode === "personal" || savedMode === "main") {
+            this.workspaceMode = savedMode;
+          }
+        }
+      } catch {
+      }
+    }
+    initSyncChannel() {
+      if (typeof BroadcastChannel !== "undefined") {
+        try {
+          this._channel = new BroadcastChannel("netmap_multiplayer_sync");
+          if (typeof this._channel.unref === "function") {
+            this._channel.unref();
+          }
+          this._channel.onmessage = (evt) => {
+            const msg = evt?.data;
+            if (!msg || !this.isAuthenticated()) return;
+            if (msg.type === "workspace-updated" && msg.workspaceKey === this.getActiveWorkspaceKey()) {
+              if (msg.updatedAt && msg.updatedAt !== this.lastSyncedAt) {
+                this.lastUpdatedBy = msg.updatedBy || this.lastUpdatedBy;
+                eventBus.emit("workspace:remote-updated", {
+                  workspaceKey: msg.workspaceKey,
+                  updatedBy: msg.updatedBy,
+                  updatedAt: msg.updatedAt
+                });
+              }
+            }
+          };
+        } catch {
+        }
+      }
+    }
+    readLocalDb() {
+      try {
+        if (typeof localStorage !== "undefined") {
+          const raw = localStorage.getItem(LOCAL_DB_STORAGE_KEY);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && Array.isArray(parsed.users)) {
+              return parsed;
+            }
+          }
+          const seeded = defaultOfflineSeedState();
+          localStorage.setItem(LOCAL_DB_STORAGE_KEY, JSON.stringify(seeded));
+          return seeded;
+        }
+      } catch {
+      }
+      if (!this._memoryStore) {
+        this._memoryStore = defaultOfflineSeedState();
+      }
+      return this._memoryStore;
+    }
+    writeLocalDb(dbState) {
+      this._memoryStore = dbState;
+      try {
+        if (typeof localStorage !== "undefined") {
+          localStorage.setItem(LOCAL_DB_STORAGE_KEY, JSON.stringify(dbState));
+        }
+      } catch {
+      }
+    }
+    persistToken(token) {
+      this.authToken = token || "";
+      try {
+        if (typeof localStorage !== "undefined") {
+          if (this.authToken) {
+            localStorage.setItem(LOCAL_TOKEN_STORAGE_KEY, this.authToken);
+          } else {
+            localStorage.removeItem(LOCAL_TOKEN_STORAGE_KEY);
+          }
+        }
+      } catch {
+      }
+    }
+    isAuthenticated() {
+      return Boolean(this.currentUser && this.currentUser.username);
+    }
+    getCurrentUser() {
+      return this.currentUser;
+    }
+    getWorkspaceMode() {
+      return this.workspaceMode === "personal" ? "personal" : "main";
+    }
+    setWorkspaceMode(mode) {
+      const next = mode === "personal" ? "personal" : "main";
+      this.workspaceMode = next;
+      try {
+        if (typeof localStorage !== "undefined") {
+          localStorage.setItem(LOCAL_WS_MODE_STORAGE_KEY, next);
+        }
+      } catch {
+      }
+      eventBus.emit("auth:workspace-mode-changed", {
+        workspaceMode: next,
+        workspaceKey: this.getActiveWorkspaceKey()
+      });
+      return next;
+    }
+    getActiveWorkspaceKey() {
+      if (!this.isAuthenticated()) return null;
+      if (this.workspaceMode === "personal") {
+        return `user_${this.currentUser.username}`;
+      }
+      return "main";
+    }
+    async apiFetch(apiPath, options = {}) {
+      const headers = {
+        "Content-Type": "application/json",
+        ...options.headers || {}
+      };
+      if (this.authToken) {
+        headers.Authorization = `Bearer ${this.authToken}`;
+      }
+      const resp = await fetch(apiPath, {
+        ...options,
+        headers
+      });
+      const payload = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        const err = new Error(payload.error || `HTTP ${resp.status}`);
+        err.status = resp.status;
+        throw err;
+      }
+      return payload;
+    }
+    async initSession() {
+      const isHttpOrigin = typeof window !== "undefined" && (window.location?.protocol === "http:" || window.location?.protocol === "https:") && typeof fetch === "function";
+      if (isHttpOrigin) {
+        try {
+          const health = await this.apiFetch("/api/health");
+          if (health && health.ok) {
+            this.apiAvailable = true;
+            this.storageBackend = health.storageBackend || "file";
+            if (this.authToken) {
+              const sess = await this.apiFetch("/api/auth/session");
+              if (sess.authenticated && sess.user) {
+                this.currentUser = sess.user;
+              } else {
+                this.currentUser = null;
+                this.persistToken("");
+              }
+            }
+            eventBus.emit("auth:changed", this.getAuthStateSnapshot());
+            if (this.isAuthenticated()) this.startRemoteSyncPolling();
+            return this.getAuthStateSnapshot();
+          }
+        } catch {
+          this.apiAvailable = false;
+        }
+      }
+      this.apiAvailable = false;
+      this.storageBackend = "local";
+      if (this.authToken) {
+        const db = this.readLocalDb();
+        const sess = db.sessions?.[this.authToken];
+        const user = sess ? db.users.find((u) => u.username.toLowerCase() === String(sess.username).toLowerCase()) : null;
+        if (user) {
+          this.currentUser = {
+            id: user.id,
+            username: user.username,
+            displayName: user.displayName,
+            role: user.role,
+            lastLoginAt: user.lastLoginAt
+          };
+        } else {
+          this.currentUser = null;
+          this.persistToken("");
+        }
+      }
+      eventBus.emit("auth:changed", this.getAuthStateSnapshot());
+      return this.getAuthStateSnapshot();
+    }
+    getAuthStateSnapshot() {
+      return {
+        authenticated: this.isAuthenticated(),
+        user: this.currentUser,
+        workspaceMode: this.getWorkspaceMode(),
+        workspaceKey: this.getActiveWorkspaceKey(),
+        storageBackend: this.storageBackend,
+        apiAvailable: this.apiAvailable,
+        lastUpdatedBy: this.lastUpdatedBy,
+        lastSyncedAt: this.lastSyncedAt
+      };
+    }
+    async login(username, password) {
+      const cleanUser = String(username || "").trim();
+      const rawPass = String(password || "");
+      if (!cleanUser || !rawPass) {
+        throw new Error("Username dan password wajib diisi.");
+      }
+      if (this.apiAvailable) {
+        const res = await this.apiFetch("/api/auth/login", {
+          method: "POST",
+          body: JSON.stringify({ username: cleanUser, password: rawPass })
+        });
+        this.persistToken(res.token);
+        this.currentUser = res.user;
+        this.storageBackend = res.storageBackend || this.storageBackend;
+        this.startRemoteSyncPolling();
+        eventBus.emit("auth:changed", this.getAuthStateSnapshot());
+        return res.user;
+      }
+      const db = this.readLocalDb();
+      const userRow = db.users.find((u) => u.username.toLowerCase() === cleanUser.toLowerCase());
+      if (!userRow || sha256Hex(`${userRow.passwordSalt}:${rawPass}`) !== userRow.passwordHash) {
+        throw new Error("Username atau password salah.");
+      }
+      userRow.lastLoginAt = (/* @__PURE__ */ new Date()).toISOString();
+      const token = `local-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+      db.sessions[token] = { username: userRow.username, createdAt: userRow.lastLoginAt };
+      this.writeLocalDb(db);
+      this.persistToken(token);
+      this.currentUser = {
+        id: userRow.id,
+        username: userRow.username,
+        displayName: userRow.displayName,
+        role: userRow.role,
+        lastLoginAt: userRow.lastLoginAt
+      };
+      eventBus.emit("auth:changed", this.getAuthStateSnapshot());
+      return this.currentUser;
+    }
+    async register({ username, displayName, password, role = "teknisi" }) {
+      const cleanUser = String(username || "").trim();
+      const cleanName = String(displayName || cleanUser).trim() || cleanUser;
+      const rawPass = String(password || "");
+      if (!/^[a-zA-Z0-9._-]{3,32}$/.test(cleanUser)) {
+        throw new Error("Username harus 3-32 karakter (huruf, angka, titik, _ atau -).");
+      }
+      if (rawPass.length < 4) {
+        throw new Error("Password minimal 4 karakter.");
+      }
+      if (this.apiAvailable) {
+        const res = await this.apiFetch("/api/auth/register", {
+          method: "POST",
+          body: JSON.stringify({ username: cleanUser, displayName: cleanName, password: rawPass, role })
+        });
+        this.persistToken(res.token);
+        this.currentUser = res.user;
+        this.storageBackend = res.storageBackend || this.storageBackend;
+        this.startRemoteSyncPolling();
+        eventBus.emit("auth:changed", this.getAuthStateSnapshot());
+        return res.user;
+      }
+      const db = this.readLocalDb();
+      if (db.users.some((u) => u.username.toLowerCase() === cleanUser.toLowerCase())) {
+        throw new Error(`Username "${cleanUser}" sudah terdaftar.`);
+      }
+      const salt = `${DEFAULT_SEED_SALT}_${Date.now().toString(36)}`;
+      const now = (/* @__PURE__ */ new Date()).toISOString();
+      const newUser = {
+        id: db.nextUserId++,
+        username: cleanUser,
+        displayName: cleanName,
+        role: role === "admin" ? "admin" : "teknisi",
+        passwordSalt: salt,
+        passwordHash: sha256Hex(`${salt}:${rawPass}`),
+        createdAt: now,
+        lastLoginAt: now
+      };
+      db.users.push(newUser);
+      const token = `local-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+      db.sessions[token] = { username: newUser.username, createdAt: now };
+      this.writeLocalDb(db);
+      this.persistToken(token);
+      this.currentUser = {
+        id: newUser.id,
+        username: newUser.username,
+        displayName: newUser.displayName,
+        role: newUser.role,
+        lastLoginAt: now
+      };
+      eventBus.emit("auth:changed", this.getAuthStateSnapshot());
+      return this.currentUser;
+    }
+    async logout() {
+      if (this.apiAvailable && this.authToken) {
+        try {
+          await this.apiFetch("/api/auth/logout", { method: "POST" });
+        } catch {
+        }
+      } else if (this.authToken) {
+        const db = this.readLocalDb();
+        if (db.sessions?.[this.authToken]) {
+          delete db.sessions[this.authToken];
+          this.writeLocalDb(db);
+        }
+      }
+      this.currentUser = null;
+      this.lastUpdatedBy = null;
+      this.lastSyncedAt = null;
+      this.stopRemoteSyncPolling();
+      this.persistToken("");
+      eventBus.emit("auth:changed", this.getAuthStateSnapshot());
+    }
+    startRemoteSyncPolling() {
+      this.stopRemoteSyncPolling();
+      if (!this.apiAvailable || !this.isAuthenticated() || typeof setInterval === "undefined") return;
+      this._pollTimer = setInterval(() => {
+        if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+        this.checkRemoteWorkspaceUpdate().catch(() => {
+        });
+      }, 12e3);
+    }
+    stopRemoteSyncPolling() {
+      if (this._pollTimer) {
+        clearInterval(this._pollTimer);
+        this._pollTimer = null;
+      }
+    }
+    async checkRemoteWorkspaceUpdate() {
+      if (!this.apiAvailable || !this.isAuthenticated()) return false;
+      const key = this.getActiveWorkspaceKey();
+      if (key !== "main") return false;
+      const meta = await this.apiFetch(`/api/workspaces/${encodeURIComponent(key)}?meta=1`);
+      if (meta?.updatedAt && this.lastSyncedAt && meta.updatedAt !== this.lastSyncedAt) {
+        eventBus.emit("workspace:remote-updated", {
+          workspaceKey: key,
+          updatedBy: meta.updatedBy,
+          updatedAt: meta.updatedAt
+        });
+        return true;
+      }
+      return false;
+    }
+    async listTechnicians() {
+      if (!this.isAuthenticated()) return [];
+      if (this.apiAvailable) {
+        const res = await this.apiFetch("/api/users");
+        return Array.isArray(res.users) ? res.users : [];
+      }
+      const db = this.readLocalDb();
+      return db.users.map((u) => ({
+        id: u.id,
+        username: u.username,
+        displayName: u.displayName,
+        role: u.role,
+        lastLoginAt: u.lastLoginAt
+      }));
+    }
+    async loadWorkspaceProject(workspaceKey = this.getActiveWorkspaceKey()) {
+      if (!this.isAuthenticated() || !workspaceKey) return null;
+      if (this.apiAvailable) {
+        const res = await this.apiFetch(`/api/workspaces/${encodeURIComponent(workspaceKey)}`);
+        this.lastUpdatedBy = res.updatedBy || null;
+        this.lastSyncedAt = res.updatedAt || null;
+        return res;
+      }
+      const db = this.readLocalDb();
+      const ws = db.workspaces?.[workspaceKey] || null;
+      this.lastUpdatedBy = ws?.updatedBy || null;
+      this.lastSyncedAt = ws?.updatedAt || null;
+      return ws ? { ...ws, storageBackend: "local" } : { workspaceKey, projectData: null, updatedBy: null, updatedAt: null, storageBackend: "local" };
+    }
+    async saveWorkspaceProject(workspaceKey = this.getActiveWorkspaceKey(), projectData) {
+      if (!this.isAuthenticated() || !workspaceKey || !projectData) return null;
+      let savedMeta;
+      if (this.apiAvailable) {
+        savedMeta = await this.apiFetch(`/api/workspaces/${encodeURIComponent(workspaceKey)}`, {
+          method: "PUT",
+          body: JSON.stringify({ projectData })
+        });
+      } else {
+        const db = this.readLocalDb();
+        const updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+        db.workspaces[workspaceKey] = {
+          workspaceKey,
+          ownerUsername: workspaceKey === "main" ? null : this.currentUser.username,
+          title: workspaceKey === "main" ? "Server Utama" : projectData.name || this.currentUser.displayName,
+          projectData,
+          updatedBy: this.currentUser.username,
+          updatedAt
+        };
+        this.writeLocalDb(db);
+        savedMeta = {
+          ok: true,
+          workspaceKey,
+          updatedBy: this.currentUser.username,
+          updatedAt,
+          storageBackend: "local"
+        };
+      }
+      this.lastUpdatedBy = savedMeta.updatedBy || this.currentUser.username;
+      this.lastSyncedAt = savedMeta.updatedAt || (/* @__PURE__ */ new Date()).toISOString();
+      this._channel?.postMessage({
+        type: "workspace-updated",
+        workspaceKey,
+        updatedBy: this.lastUpdatedBy,
+        updatedAt: this.lastSyncedAt
+      });
+      return savedMeta;
+    }
+    async copyWorkspaceProject(fromKey, toKey) {
+      if (!this.isAuthenticated() || !fromKey || !toKey) return null;
+      let res;
+      if (this.apiAvailable) {
+        res = await this.apiFetch("/api/workspaces/clone", {
+          method: "POST",
+          body: JSON.stringify({ fromKey, toKey })
+        });
+      } else {
+        const db = this.readLocalDb();
+        const src = db.workspaces?.[fromKey];
+        if (!src || !src.projectData) {
+          throw new Error(`Workspace sumber "${fromKey}" masih kosong.`);
+        }
+        const clonedData = {
+          ...JSON.parse(JSON.stringify(src.projectData)),
+          updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+        };
+        const updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+        db.workspaces[toKey] = {
+          workspaceKey: toKey,
+          ownerUsername: toKey === "main" ? null : this.currentUser.username,
+          title: toKey === "main" ? "Server Utama" : `Workspace ${this.currentUser.displayName}`,
+          projectData: clonedData,
+          updatedBy: this.currentUser.username,
+          updatedAt
+        };
+        this.writeLocalDb(db);
+        res = {
+          ok: true,
+          workspaceKey: toKey,
+          projectData: clonedData,
+          updatedBy: this.currentUser.username,
+          updatedAt,
+          storageBackend: "local"
+        };
+      }
+      if (toKey === this.getActiveWorkspaceKey()) {
+        this.lastUpdatedBy = res.updatedBy;
+        this.lastSyncedAt = res.updatedAt;
+      }
+      this._channel?.postMessage({
+        type: "workspace-updated",
+        workspaceKey: toKey,
+        updatedBy: res.updatedBy,
+        updatedAt: res.updatedAt
+      });
+      return res;
+    }
+  };
+  var authManager = new AuthManager();
 
   // js/storage/json-importer-exporter.js
   var JsonImporterExporter = class _JsonImporterExporter {
@@ -13160,8 +13891,12 @@ ${dev.network?.ip || ""}`,
         }
       });
       document.getElementById("btn-force-save")?.addEventListener("click", async () => {
-        await this.projectStorage.saveCurrentProject();
-        alert("Proyek berhasil disimpan ke IndexedDB!");
+        const ok = await this.projectStorage.saveCurrentProject();
+        if (ok) {
+          alert("Proyek berhasil disimpan!");
+        } else {
+          alert("Anda sedang dalam Mode Tamu. Silakan masuk ke akun teknisi (klik tombol Mode Tamu di kanan atas) untuk menyimpan konfigurasi.");
+        }
       });
       document.getElementById("btn-reset-demo")?.addEventListener("click", async () => {
         if (confirm("Muat ulang 8 perangkat & 7 kabel sampel kampus default? Perubahan yang belum diekspor akan hilang.")) {
@@ -13201,6 +13936,404 @@ ${dev.network?.ip || ""}`,
     }
     hide() {
       this.modalEl.style.display = "none";
+    }
+  };
+
+  // js/ui/auth-modal.js
+  function escapeHtml2(str) {
+    return String(str ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+  var AuthModal = class {
+    /**
+     * @param {Object} options
+     * @param {import('../storage/auth-manager.js').AuthManager} options.authManager
+     * @param {import('../storage/project-storage.js').ProjectStorage} options.projectStorage
+     * @param {import('../devices/device-manager.js').DeviceManager} options.deviceManager
+     * @param {import('../connections/cable-manager.js').CableManager} options.cableManager
+     * @param {import('../core/history-manager.js').HistoryManager} [options.historyManager]
+     * @param {Function} [options.onSeedSample]
+     */
+    constructor({ authManager: authManager2, projectStorage, deviceManager, cableManager, historyManager = null, onSeedSample = null }) {
+      this.authManager = authManager2;
+      this.projectStorage = projectStorage;
+      this.deviceManager = deviceManager;
+      this.cableManager = cableManager;
+      this.historyManager = historyManager;
+      this.onSeedSample = onSeedSample;
+      this.activeGuestTab = "login";
+      this.statusMessage = "";
+      this.statusTone = "info";
+      this.modalEl = null;
+      this.createModalDOM();
+      this.bindGlobalEvents();
+    }
+    createModalDOM() {
+      this.modalEl = document.createElement("div");
+      this.modalEl.id = "auth-account-modal";
+      this.modalEl.className = "auth-modal-backdrop";
+      this.modalEl.style.display = "none";
+      document.body.appendChild(this.modalEl);
+      this.modalEl.addEventListener("click", (e) => {
+        if (e.target === this.modalEl) {
+          this.hide();
+        }
+      });
+    }
+    bindGlobalEvents() {
+      window.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && this.isOpen()) {
+          this.hide();
+        }
+      });
+      eventBus.on("auth:changed", () => {
+        if (this.isOpen()) {
+          this.render();
+        }
+      });
+    }
+    isOpen() {
+      return Boolean(this.modalEl && this.modalEl.style.display === "flex");
+    }
+    show(initialTab = "login") {
+      this.activeGuestTab = initialTab === "register" ? "register" : "login";
+      this.statusMessage = "";
+      this.modalEl.style.display = "flex";
+      this.render();
+    }
+    hide() {
+      if (this.modalEl) {
+        this.modalEl.style.display = "none";
+      }
+    }
+    setStatus(message, tone = "info") {
+      this.statusMessage = message;
+      this.statusTone = tone;
+      const statusBox = this.modalEl.querySelector("#auth-modal-status-msg");
+      if (statusBox) {
+        statusBox.textContent = message;
+        statusBox.className = `auth-status-banner is-${tone}`;
+        statusBox.style.display = message ? "block" : "none";
+      }
+    }
+    hasGuestCanvasContent() {
+      return (this.deviceManager?.getAllDevices?.()?.length || 0) > 0 || (this.cableManager?.getAllConnections?.()?.length || 0) > 0;
+    }
+    formatBackendLabel() {
+      if (this.authManager.storageBackend === "mysql") return "MySQL Database Server";
+      if (this.authManager.storageBackend === "file") return "Node.js Server Storage";
+      return "Browser Lokal Offline";
+    }
+    async handlePostLoginLoad(preserveGuestCanvas = false) {
+      const hasGuestWork = preserveGuestCanvas && this.hasGuestCanvasContent();
+      if (hasGuestWork) {
+        await this.projectStorage.saveCurrentProject();
+        this.setStatus("Rancangan kanvas saat ini berhasil disimpan ke akun/server.", "success");
+      } else {
+        await this.projectStorage.loadActiveWorkspaceProject();
+      }
+      this.historyManager?.initBaseline?.();
+    }
+    async render() {
+      const isAuth = this.authManager.isAuthenticated();
+      const user = this.authManager.getCurrentUser();
+      const backendText = this.formatBackendLabel();
+      if (!isAuth) {
+        const hasWork = this.hasGuestCanvasContent();
+        this.modalEl.innerHTML = `
+        <div class="auth-modal-card">
+          <div class="auth-modal-header">
+            <div class="auth-modal-title-wrap">
+              <span class="auth-modal-title">Akun Teknisi & Server Utama</span>
+              <span class="auth-backend-pill">${escapeHtml2(backendText)}</span>
+            </div>
+            <button type="button" id="auth-btn-close" class="btn btn-icon btn-sm" title="Tutup">
+              <i data-lucide="x" style="width: 17px; height: 17px;"></i>
+            </button>
+          </div>
+
+          <div class="auth-modal-body">
+            <div class="auth-guest-notice">
+              Saat ini Anda berada di <strong>Mode Tamu</strong>. Anda bebas memakai seluruh fitur peta 2D/3D, namun data tidak tersimpan sebelum login ke akun teknisi atau <strong>Server Utama</strong>.
+            </div>
+
+            <div id="auth-modal-status-msg" class="auth-status-banner is-${this.statusTone}" style="display: ${this.statusMessage ? "block" : "none"};">
+              ${escapeHtml2(this.statusMessage)}
+            </div>
+
+            <div class="auth-tab-bar">
+              <button type="button" class="auth-tab-btn ${this.activeGuestTab === "login" ? "active" : ""}" data-auth-tab="login">Masuk Akun</button>
+              <button type="button" class="auth-tab-btn ${this.activeGuestTab === "register" ? "active" : ""}" data-auth-tab="register">Daftar Teknisi Baru</button>
+            </div>
+
+            ${this.activeGuestTab === "login" ? `
+              <form id="auth-login-form" class="auth-form">
+                <div class="auth-field">
+                  <label for="auth-login-username">Username Teknisi</label>
+                  <input type="text" id="auth-login-username" placeholder="admin / teknisi1 / teknisi2" autocomplete="username" required>
+                </div>
+                <div class="auth-field">
+                  <label for="auth-login-password">Password</label>
+                  <input type="password" id="auth-login-password" placeholder="Masukkan password..." autocomplete="current-password" required>
+                </div>
+                <div class="auth-field">
+                  <label>Masuk ke Workspace Setelah Login</label>
+                  <select id="auth-login-target-ws">
+                    <option value="main" ${this.authManager.getWorkspaceMode() === "main" ? "selected" : ""}>Server Utama (Template Bersama Tim)</option>
+                    <option value="personal" ${this.authManager.getWorkspaceMode() === "personal" ? "selected" : ""}>Workspace Pribadi Akun Ini</option>
+                  </select>
+                </div>
+                ${hasWork ? `
+                  <label class="auth-checkbox-row">
+                    <input type="checkbox" id="auth-preserve-canvas" checked>
+                    <span>Simpan rancangan kanvas tamu saat ini (${this.deviceManager.getAllDevices().length} perangkat) setelah masuk</span>
+                  </label>
+                ` : ""}
+                <button type="submit" id="auth-login-submit" class="btn btn-primary btn-sm" style="width: 100%; justify-content: center; height: 34px;">
+                  Masuk & Hubungkan Data
+                </button>
+              </form>
+
+              <div class="auth-demo-box">
+                <div class="auth-demo-label">Isi Cepat Akun Demo Bawaan:</div>
+                <div class="auth-demo-pills">
+                  <button type="button" class="btn btn-secondary btn-sm" data-demo-user="admin" data-demo-pass="admin123">admin</button>
+                  <button type="button" class="btn btn-secondary btn-sm" data-demo-user="teknisi1" data-demo-pass="teknisi123">teknisi1</button>
+                  <button type="button" class="btn btn-secondary btn-sm" data-demo-user="teknisi2" data-demo-pass="teknisi123">teknisi2</button>
+                </div>
+              </div>
+            ` : `
+              <form id="auth-register-form" class="auth-form">
+                <div class="auth-field">
+                  <label for="auth-reg-username">Username (tanpa spasi)</label>
+                  <input type="text" id="auth-reg-username" placeholder="cth: teknisi3" required>
+                </div>
+                <div class="auth-field">
+                  <label for="auth-reg-display">Nama Lengkap Teknisi</label>
+                  <input type="text" id="auth-reg-display" placeholder="cth: Budi Santoso (NOC)" required>
+                </div>
+                <div class="auth-field">
+                  <label for="auth-reg-role">Peran / Jabatan</label>
+                  <select id="auth-reg-role">
+                    <option value="teknisi" selected>Teknisi Jaringan</option>
+                    <option value="admin">Admin Utama</option>
+                  </select>
+                </div>
+                <div class="auth-field">
+                  <label for="auth-reg-password">Password (minimal 4 karakter)</label>
+                  <input type="password" id="auth-reg-password" placeholder="Buat password..." required>
+                </div>
+                ${hasWork ? `
+                  <label class="auth-checkbox-row">
+                    <input type="checkbox" id="auth-preserve-canvas-reg" checked>
+                    <span>Simpan rancangan kanvas tamu saat ini setelah mendaftar</span>
+                  </label>
+                ` : ""}
+                <button type="submit" id="auth-reg-submit" class="btn btn-primary btn-sm" style="width: 100%; justify-content: center; height: 34px;">
+                  Daftar Akun & Masuk
+                </button>
+              </form>
+            `}
+          </div>
+        </div>
+      `;
+      } else {
+        const wsMode = this.authManager.getWorkspaceMode();
+        const technicians = await this.authManager.listTechnicians().catch(() => []);
+        const lastSyncText = this.authManager.lastSyncedAt ? `${new Date(this.authManager.lastSyncedAt).toLocaleString("id-ID")}${this.authManager.lastUpdatedBy ? ` oleh @${this.authManager.lastUpdatedBy}` : ""}` : "Belum ada penyimpanan";
+        this.modalEl.innerHTML = `
+        <div class="auth-modal-card auth-modal-card-wide">
+          <div class="auth-modal-header">
+            <div class="auth-modal-title-wrap">
+              <span class="auth-modal-title">Workspace Teknisi & Server Utama</span>
+              <span class="auth-backend-pill">${escapeHtml2(backendText)}</span>
+            </div>
+            <button type="button" id="auth-btn-close" class="btn btn-icon btn-sm" title="Tutup">
+              <i data-lucide="x" style="width: 17px; height: 17px;"></i>
+            </button>
+          </div>
+
+          <div class="auth-modal-body">
+            <div class="auth-profile-banner">
+              <div>
+                <div class="auth-profile-name">${escapeHtml2(user.displayName || user.username)}</div>
+                <div class="auth-profile-meta">@${escapeHtml2(user.username)} \u2022 Role: ${escapeHtml2(user.role || "teknisi")}</div>
+              </div>
+              <button type="button" id="auth-btn-logout" class="btn btn-sm auth-logout-btn">Keluar Akun (Mode Tamu)</button>
+            </div>
+
+            <div id="auth-modal-status-msg" class="auth-status-banner is-${this.statusTone}" style="display: ${this.statusMessage ? "block" : "none"};">
+              ${escapeHtml2(this.statusMessage)}
+            </div>
+
+            <div class="auth-section-label">Target Penyimpanan Otomatis Saat Ini</div>
+            <div class="auth-workspace-grid">
+              <button type="button" class="auth-ws-card ${wsMode === "main" ? "active" : ""}" data-select-ws="main">
+                <div class="auth-ws-title">Server Utama (Main Template)</div>
+                <div class="auth-ws-desc">Template utama bersama. Perubahan tersimpan & dapat diakses seluruh akun teknisi lain.</div>
+              </button>
+              <button type="button" class="auth-ws-card ${wsMode === "personal" ? "active" : ""}" data-select-ws="personal">
+                <div class="auth-ws-title">Akun Pribadi (@${escapeHtml2(user.username)})</div>
+                <div class="auth-ws-desc">Penyimpanan pribadi khusus akun ini untuk draf atau topologi terpisah.</div>
+              </button>
+            </div>
+
+            <div class="auth-sync-meta">
+              Sinkronisasi terakhir: <strong>${escapeHtml2(lastSyncText)}</strong>
+            </div>
+
+            <div class="auth-section-label">Sinkronisasi Template & Kolaborasi Tim</div>
+            <div class="auth-actions-grid">
+              <button type="button" id="auth-btn-pull-main" class="btn btn-secondary btn-sm">
+                Muat Ulang dari Server Utama
+              </button>
+              <button type="button" id="auth-btn-push-main" class="btn btn-primary btn-sm">
+                Simpan Kanvas Ini ke Server Utama
+              </button>
+              <button type="button" id="auth-btn-clone-to-personal" class="btn btn-secondary btn-sm">
+                Salin Server Utama ke Akun Saya
+              </button>
+              <button type="button" id="auth-btn-seed-sample" class="btn btn-secondary btn-sm">
+                Muat Contoh Topologi Kampus
+              </button>
+            </div>
+
+            <div class="auth-section-label">Daftar Teknisi Terdaftar (${technicians.length})</div>
+            <div class="auth-users-list">
+              ${technicians.map((t) => `
+                <div class="auth-user-row ${t.username === user.username ? "is-self" : ""}">
+                  <div>
+                    <strong>${escapeHtml2(t.displayName || t.username)}</strong>
+                    <span class="auth-user-handle">@${escapeHtml2(t.username)}</span>
+                  </div>
+                  <span class="auth-role-pill">${escapeHtml2(t.role || "teknisi")}</span>
+                </div>
+              `).join("")}
+            </div>
+          </div>
+        </div>
+      `;
+      }
+      this.bindRenderedEvents();
+      if (window.lucide?.createIcons) {
+        window.lucide.createIcons({ nodes: [this.modalEl] });
+      }
+    }
+    bindRenderedEvents() {
+      this.modalEl.querySelector("#auth-btn-close")?.addEventListener("click", () => this.hide());
+      this.modalEl.querySelectorAll("[data-auth-tab]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          this.activeGuestTab = btn.getAttribute("data-auth-tab") || "login";
+          this.statusMessage = "";
+          this.render();
+        });
+      });
+      this.modalEl.querySelectorAll("[data-demo-user]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const uInput = this.modalEl.querySelector("#auth-login-username");
+          const pInput = this.modalEl.querySelector("#auth-login-password");
+          if (uInput) uInput.value = btn.getAttribute("data-demo-user") || "";
+          if (pInput) pInput.value = btn.getAttribute("data-demo-pass") || "";
+          uInput?.focus();
+        });
+      });
+      this.modalEl.querySelector("#auth-login-form")?.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const username = this.modalEl.querySelector("#auth-login-username")?.value.trim() || "";
+        const password = this.modalEl.querySelector("#auth-login-password")?.value || "";
+        const targetWs = this.modalEl.querySelector("#auth-login-target-ws")?.value || "main";
+        const preserve = Boolean(this.modalEl.querySelector("#auth-preserve-canvas")?.checked);
+        try {
+          this.authManager.setWorkspaceMode(targetWs);
+          await this.authManager.login(username, password);
+          await this.handlePostLoginLoad(preserve);
+          this.render();
+        } catch (err) {
+          this.setStatus(err.message || "Gagal login.", "error");
+        }
+      });
+      this.modalEl.querySelector("#auth-register-form")?.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const username = this.modalEl.querySelector("#auth-reg-username")?.value.trim() || "";
+        const displayName = this.modalEl.querySelector("#auth-reg-display")?.value.trim() || "";
+        const role = this.modalEl.querySelector("#auth-reg-role")?.value || "teknisi";
+        const password = this.modalEl.querySelector("#auth-reg-password")?.value || "";
+        const preserve = Boolean(this.modalEl.querySelector("#auth-preserve-canvas-reg")?.checked);
+        try {
+          this.authManager.setWorkspaceMode("main");
+          await this.authManager.register({ username, displayName, password, role });
+          await this.handlePostLoginLoad(preserve);
+          this.render();
+        } catch (err) {
+          this.setStatus(err.message || "Gagal mendaftar.", "error");
+        }
+      });
+      this.modalEl.querySelector("#auth-btn-logout")?.addEventListener("click", async () => {
+        await this.authManager.logout();
+        this.projectStorage.clearCanvasToEmpty("SmartSchool NetMap");
+        this.historyManager?.initBaseline?.();
+        this.statusMessage = "Anda telah keluar. Kanvas kembali ke Mode Tamu (kosong).";
+        this.statusTone = "info";
+        this.render();
+      });
+      this.modalEl.querySelectorAll("[data-select-ws]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const mode = btn.getAttribute("data-select-ws");
+          if (!mode || mode === this.authManager.getWorkspaceMode()) return;
+          await this.projectStorage.saveCurrentProject();
+          this.authManager.setWorkspaceMode(mode);
+          await this.projectStorage.loadActiveWorkspaceProject();
+          this.historyManager?.initBaseline?.();
+          this.setStatus(
+            mode === "main" ? "Beralih ke Server Utama (Template Bersama)." : `Beralih ke Akun Pribadi (@${this.authManager.getCurrentUser()?.username}).`,
+            "success"
+          );
+          this.render();
+        });
+      });
+      this.modalEl.querySelector("#auth-btn-pull-main")?.addEventListener("click", async () => {
+        this.authManager.setWorkspaceMode("main");
+        const res = await this.projectStorage.loadActiveWorkspaceProject();
+        this.historyManager?.initBaseline?.();
+        this.setStatus(
+          res.loaded ? "Konfigurasi terbaru dari Server Utama berhasil dimuat." : "Server Utama masih kosong. Tambahkan perangkat lalu simpan.",
+          res.loaded ? "success" : "info"
+        );
+        this.render();
+      });
+      this.modalEl.querySelector("#auth-btn-push-main")?.addEventListener("click", async () => {
+        const projectData = this.projectStorage.serializeProject();
+        projectData.workspaceKey = "main";
+        await this.authManager.saveWorkspaceProject("main", projectData);
+        this.authManager.setWorkspaceMode("main");
+        this.projectStorage.updateStatusIndicator("saved");
+        this.setStatus("Kanvas saat ini berhasil dipublikasikan ke Server Utama untuk seluruh teknisi.", "success");
+        this.render();
+      });
+      this.modalEl.querySelector("#auth-btn-clone-to-personal")?.addEventListener("click", async () => {
+        const user = this.authManager.getCurrentUser();
+        if (!user) return;
+        try {
+          const res = await this.authManager.copyWorkspaceProject("main", `user_${user.username}`);
+          this.authManager.setWorkspaceMode("personal");
+          if (res?.projectData) {
+            this.projectStorage.deserializeProject(res.projectData);
+            this.historyManager?.initBaseline?.();
+          }
+          this.setStatus("Template Server Utama berhasil disalin ke Akun Pribadi Anda.", "success");
+          this.render();
+        } catch (err) {
+          this.setStatus(err.message || "Gagal menyalin Server Utama.", "error");
+        }
+      });
+      this.modalEl.querySelector("#auth-btn-seed-sample")?.addEventListener("click", async () => {
+        if (typeof this.onSeedSample === "function") {
+          this.onSeedSample();
+          await this.projectStorage.saveCurrentProject();
+          this.historyManager?.initBaseline?.();
+          this.setStatus("Contoh topologi kampus dimuat & disimpan ke workspace aktif.", "success");
+          this.render();
+        }
+      });
     }
   };
 
@@ -13564,7 +14697,7 @@ ${dev.network?.ip || ""}`,
       const statusLabel = statusDef.name || statusDef.label || "Unknown";
       let iconHtml = "";
       if (device.customImage) {
-        iconHtml = `<img src="${device.customImage}" alt="${escapeHtml2(device.name)}" />`;
+        iconHtml = `<img src="${device.customImage}" alt="${escapeHtml3(device.name)}" />`;
       } else {
         const iconKey = device.icon || device.customIcon || getDefaultIconForType(device.type);
         iconHtml = getDeviceIconSvg(iconKey, { color: "#2a7c13", size: 20 });
@@ -13670,7 +14803,7 @@ ${dev.network?.ip || ""}`,
       this.renderMenu({
         iconHtml,
         title: device.name,
-        subtitle: `<span class="context-menu-status-dot" style="background-color: ${statusColor};"></span> ${escapeHtml2(statusLabel)} \u2022 ${escapeHtml2(ipText)} \u2022 ${escapeHtml2(devDef.name)}`,
+        subtitle: `<span class="context-menu-status-dot" style="background-color: ${statusColor};"></span> ${escapeHtml3(statusLabel)} \u2022 ${escapeHtml3(ipText)} \u2022 ${escapeHtml3(devDef.name)}`,
         actionBarHtml,
         onDetailClick: () => {
           this.hide();
@@ -13913,7 +15046,7 @@ ${dev.network?.ip || ""}`,
       <div class="context-menu-header">
         <div class="context-menu-header-icon">${iconHtml}</div>
         <div class="context-menu-header-info">
-          <div class="context-menu-header-title" title="${escapeHtml2(title)}">${escapeHtml2(title)}</div>
+          <div class="context-menu-header-title" title="${escapeHtml3(title)}">${escapeHtml3(title)}</div>
           <div class="context-menu-header-sub">${subtitle}</div>
         </div>
       </div>
@@ -13930,7 +15063,7 @@ ${dev.network?.ip || ""}`,
         html += `
         <div class="context-menu-item${dangerClass}" data-index="${index}" role="menuitem" tabindex="0">
           <i data-lucide="${item.icon}"></i>
-          <span class="context-menu-item-label">${escapeHtml2(item.label)}</span>
+          <span class="context-menu-item-label">${escapeHtml3(item.label)}</span>
           ${shortcutBadge}
         </div>
       `;
@@ -14133,7 +15266,7 @@ Tip: Tindakan ini dapat dibatalkan sewaktu-waktu dengan menekan Ctrl + Z (Undo).
       }, 2400);
     }
   };
-  function escapeHtml2(str) {
+  function escapeHtml3(str) {
     if (!str) return "";
     return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
   }
@@ -60261,6 +61394,8 @@ void main() {
       this.device3DModelModal = null;
       this.deviceDetailModal = null;
       this.projectStorage = null;
+      this.authManager = authManager;
+      this.authModal = null;
       this.exportModal = null;
       this.projectModal = null;
       this.historyManager = null;
@@ -60296,7 +61431,8 @@ void main() {
       });
       this.projectStorage = new ProjectStorage({
         deviceManager: this.deviceManager,
-        cableManager: this.cableManager
+        cableManager: this.cableManager,
+        authManager: this.authManager
       });
       this.cableDrawingTool = new CableDrawingTool({
         deviceManager: this.deviceManager,
@@ -60415,8 +61551,29 @@ void main() {
         cableManager: this.cableManager,
         viewportNavigator: this.viewportNavigator
       });
+      this.authModal = new AuthModal({
+        authManager: this.authManager,
+        projectStorage: this.projectStorage,
+        deviceManager: this.deviceManager,
+        cableManager: this.cableManager,
+        historyManager: this.historyManager,
+        onSeedSample: () => this.seedSampleTopology()
+      });
       this.setup3DControls();
       window.__netmapApp = this;
+      document.getElementById("btn-navbar-auth")?.addEventListener("click", () => {
+        this.authModal?.show("login");
+      });
+      eventBus.on("auth:changed", () => this.updateAuthNavbarUI());
+      eventBus.on("auth:workspace-mode-changed", () => this.updateAuthNavbarUI());
+      eventBus.on("workspace:remote-updated", async ({ updatedBy }) => {
+        if (this.authManager.getWorkspaceMode() === "main" && !this.projectStorage.hasPendingSave) {
+          await this.projectStorage.loadActiveWorkspaceProject();
+          this.historyManager?.initBaseline?.();
+          this.updateAuthNavbarUI();
+          console.info(`[NetMap] Server Utama diperbarui oleh @${updatedBy || "teknisi"}.`);
+        }
+      });
       document.getElementById("btn-open-topology")?.addEventListener("click", () => {
         this.topologyModal.show();
       });
@@ -60447,23 +61604,47 @@ void main() {
         window.lucide.createIcons();
       }
     }
+    updateAuthNavbarUI() {
+      const btn = document.getElementById("btn-navbar-auth");
+      const labelEl = document.getElementById("navbar-auth-label");
+      const badgeEl = document.getElementById("navbar-auth-ws-badge");
+      const isAuth = this.authManager.isAuthenticated();
+      const user = this.authManager.getCurrentUser();
+      const wsMode = this.authManager.getWorkspaceMode();
+      btn?.classList.toggle("is-authenticated", isAuth);
+      if (labelEl) {
+        labelEl.textContent = isAuth ? user?.displayName || user?.username || "Teknisi" : "Mode Tamu";
+      }
+      if (badgeEl) {
+        badgeEl.textContent = isAuth ? wsMode === "personal" ? "Akun Saya" : "Server Utama" : "Masuk";
+      }
+      this.projectStorage?.updateStatusIndicator(isAuth ? this.projectStorage.hasPendingSave ? "saving" : "saved" : "guest");
+    }
     /**
-     * Check IndexedDB for existing project data; if none exists, seed default campus data
+     * Check active session:
+     * - Guest (not logged in): bebas memakai app tanpa data tersimpan (kanvas kosong)
+     * - Logged in: muat workspace aktif (Server Utama atau Akun Pribadi)
      */
     async loadOrSeedProject() {
       try {
-        const loaded = await this.projectStorage.loadProject("proj-default");
-        if (loaded) {
-          console.info("[NetMap] Project successfully restored from IndexedDB.");
+        await this.authManager.initSession();
+        this.updateAuthNavbarUI();
+        if (!this.authManager.isAuthenticated()) {
+          console.info("[NetMap] Mode Tamu aktif: kanvas dimulai kosong tanpa data tersimpan.");
+          this.projectStorage.clearCanvasToEmpty("SmartSchool NetMap");
         } else {
-          console.info("[NetMap] No saved project in IndexedDB. Seeding initial campus topology...");
-          this.seedSampleTopology();
-          await this.projectStorage.saveCurrentProject();
+          const res = await this.projectStorage.loadActiveWorkspaceProject();
+          if (res.loaded) {
+            console.info(`[NetMap] Workspace "${res.workspaceKey}" berhasil dimuat.`);
+          } else {
+            console.info(`[NetMap] Workspace "${res.workspaceKey || "main"}" masih kosong siap dikerjakan.`);
+          }
         }
       } catch (err) {
-        console.warn("[NetMap] Error reading IndexedDB, using fallback seed:", err);
-        this.seedSampleTopology();
+        console.warn("[NetMap] Gagal memuat session/workspace awal, mulai kanvas kosong:", err);
+        this.projectStorage.clearCanvasToEmpty("SmartSchool NetMap");
       }
+      this.updateAuthNavbarUI();
       this.historyManager?.initBaseline();
     }
     /**
@@ -60799,7 +61980,7 @@ void main() {
             return;
           }
         }
-        if (this.deviceDetailModal?.isOpen()) {
+        if (this.deviceDetailModal?.isOpen() || this.authModal?.isOpen()) {
           return;
         }
         if (stateManager.getViewMode() === "3d") {

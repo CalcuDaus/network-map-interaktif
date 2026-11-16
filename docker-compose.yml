@@ -1,21 +1,61 @@
 services:
+  netmap-mysql:
+    image: mysql:8.0
+    container_name: netmap-mysql
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=netmap_root_pass
+      - MYSQL_DATABASE=netmap_db
+      - MYSQL_USER=netmap
+      - MYSQL_PASSWORD=netmap_pass
+      - TZ=Asia/Jakarta
+    ports:
+      - "3307:3306"
+    volumes:
+      - netmap_mysql_data:/var/lib/mysql
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    networks:
+      - netmap_network
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u$$MYSQL_USER -p$$MYSQL_PASSWORD || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   netmap:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.node
     image: netmap:latest
     pull_policy: build
     container_name: netmap-app
     restart: unless-stopped
+    depends_on:
+      netmap-mysql:
+        condition: service_healthy
     ports:
-      - "3020:80"
+      - "3020:3000"
+    volumes:
+      - netmap_server_data:/app/data
     networks:
       - netmap_network
     environment:
       - TZ=Asia/Jakarta
+      - PORT=3000
+      - NODE_ENV=production
+      - MYSQL_HOST=netmap-mysql
+      - MYSQL_PORT=3306
+      - MYSQL_USER=netmap
+      - MYSQL_PASSWORD=netmap_pass
+      - MYSQL_DATABASE=netmap_db
+
+volumes:
+  netmap_mysql_data:
+  netmap_server_data:
 
 networks:
   netmap_network:
     driver: bridge
+
 
 

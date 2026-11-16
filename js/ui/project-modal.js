@@ -126,8 +126,12 @@ export class ProjectModal {
 
     // Force Save
     document.getElementById('btn-force-save')?.addEventListener('click', async () => {
-      await this.projectStorage.saveCurrentProject();
-      alert('Proyek berhasil disimpan ke IndexedDB!');
+      const ok = await this.projectStorage.saveCurrentProject();
+      if (ok) {
+        alert('Proyek berhasil disimpan!');
+      } else {
+        alert('Anda sedang dalam Mode Tamu. Silakan masuk ke akun teknisi (klik tombol Mode Tamu di kanan atas) untuk menyimpan konfigurasi.');
+      }
     });
 
     // Reset Demo Data

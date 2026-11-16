@@ -9,9 +9,14 @@ LABEL description="Interactive Network Map Application (Node.js runtime)"
 
 WORKDIR /app
 
+# Salin manifest dependencies dan pasang driver MySQL (mysql2)
+COPY package*.json ./
+RUN npm install --omit=dev --no-audit --no-fund || true
+
 # Salin seluruh file proyek yang dibutuhkan
 COPY index.html ./
 COPY server.js ./
+COPY sql/ ./sql/
 COPY css/ ./css/
 COPY js/ ./js/
 COPY assets/ ./assets/

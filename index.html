@@ -17,7 +17,7 @@
   <!-- Core Stylesheets -->
   <link rel="stylesheet" href="css/main.css?v=20261113-3d-sketchup">
   <link rel="stylesheet" href="css/layout.css?v=20261115-search">
-  <link rel="stylesheet" href="css/components.css?v=20261115-simplecm">
+  <link rel="stylesheet" href="css/components.css?v=20261116-multiuser">
   <link rel="stylesheet" href="css/map.css?v=20261116-fpp">
 
   <!-- Vendor Libraries (Offline-First with CDN fallback) -->
@@ -174,8 +174,16 @@
         </div>
       </div>
 
-      <!-- Right: Search Icon Dropdown, Zoom Controls & Panel Toggles -->
+      <!-- Right: Multi-Technician Account, Search Icon Dropdown, Zoom Controls & Panel Toggles -->
       <div class="toolbar-section">
+        <!-- Multi-Technician Account & Server Utama Button -->
+        <button id="btn-navbar-auth" class="btn btn-secondary btn-sm navbar-auth-btn"
+          title="Akun Teknisi & Server Utama (Multi-User)">
+          <i data-lucide="user-check" style="width: 14px; height: 14px;"></i>
+          <span id="navbar-auth-label">Mode Tamu</span>
+          <span id="navbar-auth-ws-badge" class="navbar-auth-ws-badge">Masuk</span>
+        </button>
+
         <!-- Compact Search Icon + Dropdown Input -->
         <div id="navbar-search-wrapper" class="navbar-dropdown">
           <button id="btn-toggle-search" class="btn btn-icon" title="Cari Perangkat / IP / VLAN" aria-expanded="false"
@@ -455,12 +463,14 @@
             <span>Label</span>
           </button>
 
-          <button id="btn-3d-avatar" class="hud-3d-btn" title="Mode Teknisi 3D ala Simulator (G) — Jalan-jalan dengan karakter di denah (WASD + Spasi Lompat)">
+          <button id="btn-3d-avatar" class="hud-3d-btn"
+            title="Mode Teknisi 3D ala Simulator (G) — Jalan-jalan dengan karakter di denah (WASD + Spasi Lompat)">
             <i data-lucide="user" style="width: 13px; height: 13px;"></i>
             <span>Mode Teknisi</span>
           </button>
 
-          <button id="btn-3d-fpp" class="hud-3d-btn" title="Mode FPP / Orang Pertama (V) — Sudut pandang mata teknisi langsung">
+          <button id="btn-3d-fpp" class="hud-3d-btn"
+            title="Mode FPP / Orang Pertama (V) — Sudut pandang mata teknisi langsung">
             <i data-lucide="eye" style="width: 13px; height: 13px;"></i>
             <span>Mode FPP</span>
           </button>
@@ -594,8 +604,8 @@
       <!-- Left: Status & Engine info -->
       <div class="status-group">
         <div class="status-item">
-          <span class="status-pill" style="color: var(--status-online); background: rgba(42, 124, 19, 0.12);">
-            ● TERSIMPAN (OFFLINE)
+          <span class="status-pill" style="color: var(--status-warning); background: rgba(217, 119, 6, 0.14);">
+            ● MODE TAMU (BELUM LOGIN)
           </span>
         </div>
         <div class="status-item">
@@ -641,7 +651,7 @@
   </div>
 
   <!-- Application Bootstrap (Bundled for file:// and http:// compatibility) -->
-  <script src="js/bundle.js?v=20261116-fpp"></script>
+  <script src="js/bundle.js?v=20261116-multiuser"></script>
 </body>
 
 </html>

@@ -23,8 +23,10 @@ import { TopologyModal } from './topology/topology-modal.js';
 import { IpVlanModal } from './ui/ip-vlan-modal.js';
 import { LayerControls } from './ui/layer-controls.js';
 import { ProjectStorage } from './storage/project-storage.js';
+import { authManager } from './storage/auth-manager.js';
 import { ExportModal } from './ui/export-modal.js';
 import { ProjectModal } from './ui/project-modal.js';
+import { AuthModal } from './ui/auth-modal.js';
 import { HistoryManager } from './core/history-manager.js';
 import { ContextMenu } from './ui/context-menu.js';
 import { CustomDeviceModal } from './ui/custom-device-modal.js';
@@ -64,6 +66,8 @@ class NetMapApp {
     this.device3DModelModal = null;
     this.deviceDetailModal = null;
     this.projectStorage = null;
+    this.authManager = authManager;
+    this.authModal = null;
     this.exportModal = null;
     this.projectModal = null;
     this.historyManager = null;
@@ -113,10 +117,11 @@ class NetMapApp {
       naturalHeight: this.mapEngine.mapDimensions.height
     });
 
-    // 8. Initialize Project Storage (IndexedDB & Auto-Save)
+    // 8. Initialize Project Storage (Multi-User Server/Account + IndexedDB backup)
     this.projectStorage = new ProjectStorage({
       deviceManager: this.deviceManager,
-      cableManager: this.cableManager
+      cableManager: this.cableManager,
+      authManager: this.authManager
     });
 
     // 9. Initialize Cable Drawing Tool
@@ -264,12 +269,33 @@ class NetMapApp {
       cableManager: this.cableManager,
       viewportNavigator: this.viewportNavigator
     });
+    this.authModal = new AuthModal({
+      authManager: this.authManager,
+      projectStorage: this.projectStorage,
+      deviceManager: this.deviceManager,
+      cableManager: this.cableManager,
+      historyManager: this.historyManager,
+      onSeedSample: () => this.seedSampleTopology()
+    });
     this.setup3DControls();
 
     // Global reference for modal coordination
     window.__netmapApp = this;
 
     // 15. Bind Modal & Action Trigger Buttons
+    document.getElementById('btn-navbar-auth')?.addEventListener('click', () => {
+      this.authModal?.show('login');
+    });
+    eventBus.on('auth:changed', () => this.updateAuthNavbarUI());
+    eventBus.on('auth:workspace-mode-changed', () => this.updateAuthNavbarUI());
+    eventBus.on('workspace:remote-updated', async ({ updatedBy }) => {
+      if (this.authManager.getWorkspaceMode() === 'main' && !this.projectStorage.hasPendingSave) {
+        await this.projectStorage.loadActiveWorkspaceProject();
+        this.historyManager?.initBaseline?.();
+        this.updateAuthNavbarUI();
+        console.info(`[NetMap] Server Utama diperbarui oleh @${updatedBy || 'teknisi'}.`);
+      }
+    });
     document.getElementById('btn-open-topology')?.addEventListener('click', () => {
       this.topologyModal.show();
     });
@@ -318,24 +344,53 @@ class NetMapApp {
     }
   }
 
+  updateAuthNavbarUI() {
+    const btn = document.getElementById('btn-navbar-auth');
+    const labelEl = document.getElementById('navbar-auth-label');
+    const badgeEl = document.getElementById('navbar-auth-ws-badge');
+    const isAuth = this.authManager.isAuthenticated();
+    const user = this.authManager.getCurrentUser();
+    const wsMode = this.authManager.getWorkspaceMode();
+
+    btn?.classList.toggle('is-authenticated', isAuth);
+    if (labelEl) {
+      labelEl.textContent = isAuth ? (user?.displayName || user?.username || 'Teknisi') : 'Mode Tamu';
+    }
+    if (badgeEl) {
+      badgeEl.textContent = isAuth
+        ? (wsMode === 'personal' ? 'Akun Saya' : 'Server Utama')
+        : 'Masuk';
+    }
+    this.projectStorage?.updateStatusIndicator(isAuth ? (this.projectStorage.hasPendingSave ? 'saving' : 'saved') : 'guest');
+  }
+
   /**
-   * Check IndexedDB for existing project data; if none exists, seed default campus data
+   * Check active session:
+   * - Guest (not logged in): bebas memakai app tanpa data tersimpan (kanvas kosong)
+   * - Logged in: muat workspace aktif (Server Utama atau Akun Pribadi)
    */
   async loadOrSeedProject() {
     try {
-      const loaded = await this.projectStorage.loadProject('proj-default');
-      if (loaded) {
-        console.info('[NetMap] Project successfully restored from IndexedDB.');
+      await this.authManager.initSession();
+      this.updateAuthNavbarUI();
+
+      if (!this.authManager.isAuthenticated()) {
+        console.info('[NetMap] Mode Tamu aktif: kanvas dimulai kosong tanpa data tersimpan.');
+        this.projectStorage.clearCanvasToEmpty('SmartSchool NetMap');
       } else {
-        console.info('[NetMap] No saved project in IndexedDB. Seeding initial campus topology...');
-        this.seedSampleTopology();
-        await this.projectStorage.saveCurrentProject();
+        const res = await this.projectStorage.loadActiveWorkspaceProject();
+        if (res.loaded) {
+          console.info(`[NetMap] Workspace "${res.workspaceKey}" berhasil dimuat.`);
+        } else {
+          console.info(`[NetMap] Workspace "${res.workspaceKey || 'main'}" masih kosong siap dikerjakan.`);
+        }
       }
     } catch (err) {
-      console.warn('[NetMap] Error reading IndexedDB, using fallback seed:', err);
-      this.seedSampleTopology();
+      console.warn('[NetMap] Gagal memuat session/workspace awal, mulai kanvas kosong:', err);
+      this.projectStorage.clearCanvasToEmpty('SmartSchool NetMap');
     }
 
+    this.updateAuthNavbarUI();
     // Initialize baseline snapshot for undo / redo history stack
     this.historyManager?.initBaseline();
   }
@@ -738,8 +793,8 @@ class NetMapApp {
         }
       }
 
-      // Don't trigger map shortcuts while DeviceDetailModal is open
-      if (this.deviceDetailModal?.isOpen()) {
+      // Don't trigger map shortcuts while DeviceDetailModal or AuthModal is open
+      if (this.deviceDetailModal?.isOpen() || this.authModal?.isOpen()) {
         return;
       }
 

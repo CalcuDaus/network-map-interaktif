@@ -13,14 +13,16 @@ export class ProjectStorage {
    * @param {Object} options
    * @param {import('../devices/device-manager.js').DeviceManager} options.deviceManager
    * @param {import('../connections/cable-manager.js').CableManager} options.cableManager
+   * @param {import('./auth-manager.js').AuthManager} [options.authManager]
    */
-  constructor({ deviceManager, cableManager }) {
+  constructor({ deviceManager, cableManager, authManager = null }) {
     this.deviceManager = deviceManager;
     this.cableManager = cableManager;
+    this.authManager = authManager;
     this.isAutoSaveEnabled = true;
     this.hasPendingSave = false;
 
-    // Fast debounced auto-save (300ms) so edits persist quickly to IndexedDB
+    // Fast debounced auto-save (300ms) so edits persist quickly to Server / Account
     this.debouncedSave = debounce(() => {
       this.saveCurrentProject();
     }, 300);
@@ -33,9 +35,9 @@ export class ProjectStorage {
     if (typeof window === 'undefined') return;
     const flushNow = () => {
       if (!this.isAutoSaveEnabled || !this.hasPendingSave) return;
+      if (this.authManager && !this.authManager.isAuthenticated()) return;
       const projectData = this.serializeProject();
       this.saveLocalBackup(projectData);
-      // Best-effort async IndexedDB write
       this.saveCurrentProject();
     };
 
@@ -72,6 +74,11 @@ export class ProjectStorage {
   initMutationListeners() {
     const handleMutation = () => {
       if (!this.isAutoSaveEnabled) return;
+      if (this.authManager && !this.authManager.isAuthenticated()) {
+        this.hasPendingSave = false;
+        this.updateStatusIndicator('guest');
+        return;
+      }
       this.hasPendingSave = true;
       this.updateStatusIndicator('saving');
       this.debouncedSave();
@@ -121,21 +128,104 @@ export class ProjectStorage {
   }
 
   /**
-   * Save current project to IndexedDB
+   * Clear active canvas (devices, cables, 3D rooms/objects) without mutating stored server data
+   */
+  clearCanvasToEmpty(projectName = 'SmartSchool NetMap') {
+    const prevAutoSave = this.isAutoSaveEnabled;
+    this.isAutoSaveEnabled = false;
+    try {
+      this.deviceManager?.deselectDevice?.();
+      this.cableManager?.deselectConnection?.();
+      stateManager.deselectObject3d?.();
+
+      const currentDevs = this.deviceManager.getAllDevices();
+      currentDevs.forEach((d) => this.deviceManager.deleteDevice(d.id));
+      const remainingCables = this.cableManager.getAllConnections();
+      remainingCables.forEach((c) => this.cableManager.deleteConnection(c.id));
+
+      stateManager.getState().project.id = 'proj-default';
+      stateManager.getState().project.name = projectName;
+      stateManager.setRooms3d([]);
+      stateManager.setObjects3d([]);
+
+      this.hasPendingSave = false;
+      this.updateStatusIndicator(this.authManager && !this.authManager.isAuthenticated() ? 'guest' : 'saved');
+      eventBus.emit('project:loaded', { id: 'proj-default', devices: [], connections: [], rooms3d: [], objects3d: [] });
+    } finally {
+      this.isAutoSaveEnabled = prevAutoSave;
+    }
+  }
+
+  /**
+   * Load project for the currently authenticated workspace ('main' or 'user_<username>')
+   * @returns {Promise<{ loaded: boolean, workspaceKey?: string, updatedBy?: string|null, updatedAt?: string|null }>}
+   */
+  async loadActiveWorkspaceProject() {
+    if (!this.authManager || !this.authManager.isAuthenticated()) {
+      this.clearCanvasToEmpty();
+      this.updateStatusIndicator('guest');
+      return { loaded: false };
+    }
+
+    const activeKey = this.authManager.getActiveWorkspaceKey();
+    try {
+      const ws = await this.authManager.loadWorkspaceProject(activeKey);
+      if (ws && ws.projectData && typeof ws.projectData === 'object') {
+        this.deserializeProject(ws.projectData);
+        this.updateStatusIndicator('saved');
+        return {
+          loaded: true,
+          workspaceKey: activeKey,
+          updatedBy: ws.updatedBy || null,
+          updatedAt: ws.updatedAt || null
+        };
+      }
+      this.clearCanvasToEmpty(activeKey === 'main' ? 'Server Utama (Template Bersama)' : `Workspace ${this.authManager.getCurrentUser()?.displayName || ''}`);
+      this.updateStatusIndicator('saved');
+      return { loaded: false, workspaceKey: activeKey };
+    } catch (err) {
+      console.error('[ProjectStorage] Failed to load active workspace:', err);
+      this.updateStatusIndicator('error');
+      return { loaded: false, workspaceKey: activeKey };
+    }
+  }
+
+  /**
+   * Save current project to authenticated workspace (Server Utama / Personal Account) + IndexedDB mirror
+   * In Guest Mode (not logged in), intentionally refuses persistence so guest work stays volatile.
    * @returns {Promise<boolean>}
    */
   async saveCurrentProject() {
+    if (this.authManager && !this.authManager.isAuthenticated()) {
+      this.hasPendingSave = false;
+      this.updateStatusIndicator('guest');
+      return false;
+    }
+
     try {
       this.updateStatusIndicator('saving');
       const projectData = this.serializeProject();
-      this.saveLocalBackup(projectData);
-      await database.saveProject(projectData);
+      const activeKey = this.authManager?.getActiveWorkspaceKey?.() || null;
+
+      if (this.authManager && activeKey) {
+        projectData.workspaceKey = activeKey;
+        await this.authManager.saveWorkspaceProject(activeKey, projectData);
+        try {
+          if (typeof indexedDB !== 'undefined') {
+            await database.saveProject({ ...projectData, id: `netmap_ws_${activeKey}` });
+          }
+        } catch { /* IndexedDB mirror is best-effort */ }
+      } else {
+        this.saveLocalBackup(projectData);
+        await database.saveProject(projectData);
+      }
+
       this.hasPendingSave = false;
       this.updateStatusIndicator('saved');
-      eventBus.emit('project:saved', { id: projectData.id });
+      eventBus.emit('project:saved', { id: projectData.id, workspaceKey: activeKey });
       return true;
     } catch (err) {
-      console.error('[ProjectStorage] Failed to save project to IndexedDB:', err);
+      console.error('[ProjectStorage] Failed to save project:', err);
       this.updateStatusIndicator('error');
       return false;
     }
@@ -235,16 +325,36 @@ export class ProjectStorage {
     const statusPill = document.querySelector('#app-status-bar .status-pill');
     if (!statusPill) return;
 
+    const isAuthed = Boolean(this.authManager?.isAuthenticated?.());
+    if (status === 'guest' || (this.authManager && !isAuthed)) {
+      statusPill.textContent = '● MODE TAMU (TIDAK TERSIMPAN — LOGIN)';
+      statusPill.style.color = 'var(--status-warning)';
+      statusPill.style.background = 'rgba(217, 119, 6, 0.14)';
+      return;
+    }
+
     if (status === 'saving') {
-      statusPill.innerHTML = '⟳ MENYIMPAN...';
+      statusPill.textContent = '● MENYIMPAN KE SERVER...';
       statusPill.style.color = 'var(--accent-sky)';
       statusPill.style.background = 'rgba(56, 189, 248, 0.15)';
     } else if (status === 'saved') {
-      statusPill.innerHTML = '● TERSIMPAN (OFFLINE)';
+      if (this.authManager) {
+        const wsMode = this.authManager.getWorkspaceMode();
+        const user = this.authManager.getCurrentUser();
+        const backendLabel = this.authManager.storageBackend === 'mysql'
+          ? 'MySQL'
+          : (this.authManager.storageBackend === 'file' ? 'Server' : 'Lokal');
+        const wsLabel = wsMode === 'personal'
+          ? `AKUN: ${user?.username || 'Teknisi'}`
+          : 'SERVER UTAMA';
+        statusPill.textContent = `● TERSIMPAN • ${wsLabel} (${backendLabel})`;
+      } else {
+        statusPill.textContent = '● TERSIMPAN (OFFLINE)';
+      }
       statusPill.style.color = 'var(--status-online)';
       statusPill.style.background = 'rgba(34, 197, 94, 0.15)';
     } else if (status === 'error') {
-      statusPill.innerHTML = '⚠ GAGAL SIMPAN';
+      statusPill.textContent = '! GAGAL SIMPAN';
       statusPill.style.color = 'var(--status-offline)';
       statusPill.style.background = 'rgba(239, 68, 68, 0.15)';
     }
