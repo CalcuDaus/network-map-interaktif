@@ -18,9 +18,15 @@ prd.md
 # Documentation
 docs/
 
-# Test & Batch Scripts
+# Test, Data, & Env Secrets
 test*
+tmp_*
 *.bat
+data/
+.env
+.env.*
+!.env.example
+netmap-campus-network-infrastructure-*.json
 
 # Node & Package Manager
 node_modules/

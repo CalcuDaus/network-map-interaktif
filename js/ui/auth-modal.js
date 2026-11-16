@@ -35,6 +35,7 @@ export class AuthModal {
     this.onSeedSample = onSeedSample;
 
     this.activeGuestTab = 'login'; // 'login' | 'register'
+    this.loginTargetWs = authManager?.getWorkspaceMode?.() || 'main';
     this.statusMessage = '';
     this.statusTone = 'info'; // 'info' | 'success' | 'error'
     this.modalEl = null;
@@ -77,6 +78,7 @@ export class AuthModal {
 
   show(initialTab = 'login') {
     this.activeGuestTab = initialTab === 'register' ? 'register' : 'login';
+    this.loginTargetWs = this.authManager?.getWorkspaceMode?.() || 'main';
     this.statusMessage = '';
     this.modalEl.style.display = 'flex';
     this.render();
@@ -127,158 +129,177 @@ export class AuthModal {
   async render() {
     const isAuth = this.authManager.isAuthenticated();
     const user = this.authManager.getCurrentUser();
-    const backendText = this.formatBackendLabel();
     const mainOwner = this.authManager.mainOwnerUsername || 'admin';
 
     if (!isAuth) {
       const hasWork = this.hasGuestCanvasContent();
       const isPublicPreview = this.authManager.isPublicPreviewActive?.();
-      const defaultTargetWs = this.authManager.getWorkspaceMode();
+      const targetWs = this.loginTargetWs === 'personal' ? 'personal' : 'main';
+
       this.modalEl.innerHTML = `
-        <div class="auth-modal-card">
-          <div class="auth-modal-header">
-            <div class="auth-modal-title-wrap">
-              <span class="auth-modal-title">Akun Teknisi & Server Utama</span>
-              <span class="auth-backend-pill">${escapeHtml(backendText)}</span>
-            </div>
-            <button type="button" id="auth-btn-close" class="btn btn-icon btn-sm" title="Tutup">
-              <i data-lucide="x" style="width: 17px; height: 17px;"></i>
-            </button>
+        <div class="auth-modal-card auth-glass-card">
+          <button type="button" id="auth-btn-close" class="auth-glass-close" title="Tutup">
+            <i data-lucide="x" style="width: 16px; height: 16px;"></i>
+          </button>
+
+          <div class="auth-brand-circle">
+            <i data-lucide="network" style="width: 22px; height: 22px;"></i>
           </div>
 
-          <div class="auth-modal-body">
-            <div class="auth-guest-notice">
-              ${isPublicPreview
-                ? `Anda sedang melihat <strong>Server Utama</strong> dalam mode <strong>Lihat Publik (Read-Only)</strong>. Anda tetap perlu login akun dan memasukkan <strong>Password Server Utama</strong> untuk mengedit atau menyimpan perubahan.`
-                : `Saat ini Anda berada di <strong>Mode Tamu</strong>. Anda bebas memakai fitur peta 2D/3D atau melihat <strong>Server Utama</strong> secara publik, namun data tidak tersimpan sebelum login & membuka akses server.`
-              }
-              <div class="auth-public-preview-actions">
+          <h2 class="auth-glass-title">${this.activeGuestTab === 'login' ? 'Selamat datang' : 'Buat akun'}</h2>
+          <p class="auth-glass-subtitle">
+            ${this.activeGuestTab === 'login'
+              ? 'Masuk ke workspace SmartSchool NetMap.'
+              : 'Daftar akun teknisi atau admin server.'}
+          </p>
+
+          <div id="auth-modal-status-msg" class="auth-status-banner is-${this.statusTone}" style="display: ${this.statusMessage ? 'block' : 'none'};">
+            ${escapeHtml(this.statusMessage)}
+          </div>
+
+          ${this.activeGuestTab === 'login' ? `
+            <div class="auth-quick-pills" role="group" aria-label="Pilih Akses">
+              <button type="button" id="auth-btn-view-public-main" class="auth-pill-btn ${isPublicPreview ? 'active' : ''}" title="Lihat Server Utama tanpa login (Read-Only)">
+                <i data-lucide="eye" style="width: 15px; height: 15px;"></i>
+                <span>Publik</span>
+              </button>
+              <button type="button" class="auth-pill-btn ${targetWs === 'main' ? 'active' : ''}" data-login-ws="main" title="Masuk ke Server Utama Tim">
+                <i data-lucide="server" style="width: 15px; height: 15px;"></i>
+                <span>Server</span>
+              </button>
+              <button type="button" class="auth-pill-btn ${targetWs === 'personal' ? 'active' : ''}" data-login-ws="personal" title="Masuk ke Workspace Pribadi">
+                <i data-lucide="user" style="width: 15px; height: 15px;"></i>
+                <span>Pribadi</span>
+              </button>
+            </div>
+
+            <div class="auth-or-divider"><span>ATAU</span></div>
+
+            <form id="auth-login-form" class="auth-glass-form">
+              <div class="auth-glass-field">
+                <label for="auth-login-username">Username</label>
+                <input type="text" id="auth-login-username" placeholder="Masukkan username..." autocomplete="username" required>
+              </div>
+
+              <div class="auth-glass-field">
+                <label for="auth-login-password">Password</label>
+                <div class="auth-pass-wrap">
+                  <input type="password" id="auth-login-password" placeholder="Masukkan password..." autocomplete="current-password" required>
+                  <button type="button" class="auth-pass-toggle" data-toggle-pass="auth-login-password" title="Tampilkan / Sembunyikan">
+                    <i data-lucide="eye" style="width: 15px; height: 15px;"></i>
+                  </button>
+                </div>
+              </div>
+
+              <div id="auth-login-server-pass-group" class="auth-glass-field" style="display: ${targetWs === 'main' ? 'flex' : 'none'};">
+                <label for="auth-login-server-pass">Password Server Utama</label>
+                <div class="auth-pass-wrap">
+                  <input type="password" id="auth-login-server-pass" placeholder="Masukkan password server..." autocomplete="off">
+                  <button type="button" class="auth-pass-toggle" data-toggle-pass="auth-login-server-pass" title="Tampilkan / Sembunyikan">
+                    <i data-lucide="eye" style="width: 15px; height: 15px;"></i>
+                  </button>
+                </div>
+              </div>
+
+              <div class="auth-meta-row">
+                <label id="auth-login-main-readonly-wrap" class="auth-check-inline" style="display: ${targetWs === 'main' ? 'inline-flex' : 'none'};">
+                  <input type="checkbox" id="auth-login-main-readonly">
+                  <span>Lihat saja (Read-Only)</span>
+                </label>
                 ${isPublicPreview ? `
-                  <button type="button" id="auth-btn-exit-public-preview" class="btn btn-secondary btn-sm">
-                    <i data-lucide="arrow-left" style="width: 13px; height: 13px;"></i>
-                    <span>Kembali ke Kanvas Kosong</span>
-                  </button>
+                  <button type="button" id="auth-btn-exit-public-preview" class="auth-subtle-link">Keluar Publik</button>
                 ` : `
-                  <button type="button" id="auth-btn-view-public-main" class="btn btn-secondary btn-sm">
-                    <i data-lucide="eye" style="width: 13px; height: 13px;"></i>
-                    <span>Lihat Publik Server Utama (Read-Only)</span>
-                  </button>
+                  <button type="button" id="auth-btn-guest-close" class="auth-subtle-link">Mode Tamu</button>
                 `}
               </div>
-            </div>
 
-            <div id="auth-modal-status-msg" class="auth-status-banner is-${this.statusTone}" style="display: ${this.statusMessage ? 'block' : 'none'};">
-              ${escapeHtml(this.statusMessage)}
-            </div>
+              ${hasWork ? `
+                <label class="auth-check-inline">
+                  <input type="checkbox" id="auth-preserve-canvas" checked>
+                  <span>Simpan kanvas saat ini (${this.deviceManager.getAllDevices().length} dev)</span>
+                </label>
+              ` : ''}
 
-            <div class="auth-tab-bar">
-              <button type="button" class="auth-tab-btn ${this.activeGuestTab === 'login' ? 'active' : ''}" data-auth-tab="login">Masuk Akun</button>
-              <button type="button" class="auth-tab-btn ${this.activeGuestTab === 'register' ? 'active' : ''}" data-auth-tab="register">Daftar Teknisi Baru</button>
-            </div>
+              <button type="submit" id="auth-login-submit" class="auth-submit-btn">Masuk</button>
+            </form>
 
-            ${this.activeGuestTab === 'login' ? `
-              <form id="auth-login-form" class="auth-form">
-                <div class="auth-field">
-                  <label for="auth-login-username">Username Teknisi</label>
-                  <input type="text" id="auth-login-username" placeholder="admin / teknisi1 / teknisi2" autocomplete="username" required>
+            <div class="auth-glass-footer">
+              <span>Belum punya akun?</span>
+              <button type="button" class="auth-link-btn" data-auth-tab="register">Daftar</button>
+            </div>
+          ` : `
+            <form id="auth-register-form" class="auth-glass-form">
+              <div class="auth-glass-field">
+                <label for="auth-reg-username">Username</label>
+                <input type="text" id="auth-reg-username" placeholder="cth: teknisi3" autocomplete="username" required>
+              </div>
+
+              <div class="auth-two-col">
+                <div class="auth-glass-field">
+                  <label for="auth-reg-display">Nama Lengkap</label>
+                  <input type="text" id="auth-reg-display" placeholder="Nama teknisi" required>
                 </div>
-                <div class="auth-field">
-                  <label for="auth-login-password">Password Akun Teknisi</label>
-                  <input type="password" id="auth-login-password" placeholder="Masukkan password akun..." autocomplete="current-password" required>
-                </div>
-                <div class="auth-field">
-                  <label for="auth-login-target-ws">Masuk ke Workspace Setelah Login</label>
-                  <select id="auth-login-target-ws">
-                    <option value="main" ${defaultTargetWs === 'main' ? 'selected' : ''}>Server Utama (Template Bersama Tim)</option>
-                    <option value="personal" ${defaultTargetWs === 'personal' ? 'selected' : ''}>Workspace Pribadi Akun Ini</option>
+                <div class="auth-glass-field">
+                  <label for="auth-reg-role">Peran</label>
+                  <select id="auth-reg-role">
+                    <option value="teknisi" selected>Teknisi</option>
+                    <option value="admin">Admin</option>
                   </select>
-                </div>
-                <div id="auth-login-server-pass-group" class="auth-security-box" style="display: ${defaultTargetWs === 'main' ? 'flex' : 'none'};">
-                  <div class="auth-field">
-                    <label for="auth-login-server-pass">
-                      <i data-lucide="lock" style="width: 12px; height: 12px; vertical-align: middle;"></i>
-                      Password Akses Server Utama
-                    </label>
-                    <input type="password" id="auth-login-server-pass" placeholder="Masukkan password Server Utama (dikelola @${escapeHtml(mainOwner)})" autocomplete="off">
-                  </div>
-                  <label class="auth-checkbox-row">
-                    <input type="checkbox" id="auth-login-main-readonly">
-                    <span>Masuk untuk Lihat Publik saja (Read-Only) tanpa password server</span>
-                  </label>
-                </div>
-                ${hasWork ? `
-                  <label class="auth-checkbox-row">
-                    <input type="checkbox" id="auth-preserve-canvas" checked>
-                    <span>Simpan rancangan kanvas saat ini (${this.deviceManager.getAllDevices().length} perangkat) jika workspace dapat ditulis</span>
-                  </label>
-                ` : ''}
-                <button type="submit" id="auth-login-submit" class="btn btn-primary btn-sm" style="width: 100%; justify-content: center; height: 34px;">
-                  Masuk & Hubungkan Data
-                </button>
-              </form>
-
-              <div class="auth-demo-box">
-                <div class="auth-demo-label">Isi Cepat Akun Demo & Password Server Default (server123):</div>
-                <div class="auth-demo-pills">
-                  <button type="button" class="btn btn-secondary btn-sm" data-demo-user="admin" data-demo-pass="admin123" data-demo-server="server123">admin (Pembuat Server)</button>
-                  <button type="button" class="btn btn-secondary btn-sm" data-demo-user="teknisi1" data-demo-pass="teknisi123">teknisi1</button>
-                  <button type="button" class="btn btn-secondary btn-sm" data-demo-user="teknisi2" data-demo-pass="teknisi123">teknisi2</button>
-                  <button type="button" class="btn btn-secondary btn-sm" data-fill-server-pass="server123">Pass Server: server123</button>
                 </div>
               </div>
-            ` : `
-              <form id="auth-register-form" class="auth-form">
-                <div class="auth-field">
-                  <label for="auth-reg-username">Username (tanpa spasi)</label>
-                  <input type="text" id="auth-reg-username" placeholder="cth: teknisi3" required>
+
+              <div class="auth-glass-field">
+                <label for="auth-reg-password">Password Akun</label>
+                <div class="auth-pass-wrap">
+                  <input type="password" id="auth-reg-password" placeholder="Min. 4 karakter" autocomplete="new-password" required>
+                  <button type="button" class="auth-pass-toggle" data-toggle-pass="auth-reg-password" title="Tampilkan / Sembunyikan">
+                    <i data-lucide="eye" style="width: 15px; height: 15px;"></i>
+                  </button>
                 </div>
-                <div class="auth-field">
-                  <label for="auth-reg-display">Nama Lengkap Teknisi</label>
-                  <input type="text" id="auth-reg-display" placeholder="cth: Budi Santoso (NOC)" required>
+              </div>
+
+              <div class="auth-glass-field">
+                <label for="auth-reg-server-pass">Password Server Utama</label>
+                <div class="auth-pass-wrap">
+                  <input type="password" id="auth-reg-server-pass" placeholder="Wajib untuk Admin / edit server" autocomplete="off">
+                  <button type="button" class="auth-pass-toggle" data-toggle-pass="auth-reg-server-pass" title="Tampilkan / Sembunyikan">
+                    <i data-lucide="eye" style="width: 15px; height: 15px;"></i>
+                  </button>
                 </div>
-                <div class="auth-field">
-                  <label for="auth-reg-role">Peran / Jabatan</label>
-                  <select id="auth-reg-role">
-                    <option value="teknisi" selected>Teknisi Jaringan</option>
-                    <option value="admin">Admin Utama (Butuh Password Server)</option>
-                  </select>
-                </div>
-                <div class="auth-field">
-                  <label for="auth-reg-password">Password Akun (minimal 4 karakter)</label>
-                  <input type="password" id="auth-reg-password" placeholder="Buat password akun..." required>
-                </div>
-                <div class="auth-field">
-                  <label for="auth-reg-server-pass">Password Akses Server Utama (wajib untuk Admin Utama / buka edit server)</label>
-                  <input type="password" id="auth-reg-server-pass" placeholder="Opsional untuk teknisi (kosongkan = Read-Only)" autocomplete="off">
-                </div>
-                ${hasWork ? `
-                  <label class="auth-checkbox-row">
-                    <input type="checkbox" id="auth-preserve-canvas-reg" checked>
-                    <span>Simpan rancangan kanvas saat ini setelah mendaftar</span>
-                  </label>
-                ` : ''}
-                <button type="submit" id="auth-reg-submit" class="btn btn-primary btn-sm" style="width: 100%; justify-content: center; height: 34px;">
-                  Daftar Akun & Masuk
-                </button>
-              </form>
-            `}
-          </div>
+              </div>
+
+              ${hasWork ? `
+                <label class="auth-check-inline">
+                  <input type="checkbox" id="auth-preserve-canvas-reg" checked>
+                  <span>Simpan kanvas saat ini</span>
+                </label>
+              ` : ''}
+
+              <button type="submit" id="auth-reg-submit" class="auth-submit-btn">Daftar</button>
+            </form>
+
+            <div class="auth-glass-footer">
+              <span>Sudah punya akun?</span>
+              <button type="button" class="auth-link-btn" data-auth-tab="login">Masuk</button>
+            </div>
+          `}
         </div>
       `;
     } else {
       const wsMode = this.authManager.getWorkspaceMode();
       const isMainUnlocked = this.authManager.isMainWorkspaceUnlocked();
       const isMainAdmin = this.authManager.isMainServerAdmin();
+      const backendText = this.formatBackendLabel();
       const technicians = await this.authManager.listTechnicians().catch(() => []);
       const lastSyncText = this.authManager.lastSyncedAt
-        ? `${new Date(this.authManager.lastSyncedAt).toLocaleString('id-ID')}${this.authManager.lastUpdatedBy ? ` oleh @${this.authManager.lastUpdatedBy}` : ''}`
-        : 'Belum ada penyimpanan';
+        ? `${new Date(this.authManager.lastSyncedAt).toLocaleString('id-ID')}${this.authManager.lastUpdatedBy ? ` (@${this.authManager.lastUpdatedBy})` : ''}`
+        : '-';
 
       this.modalEl.innerHTML = `
-        <div class="auth-modal-card auth-modal-card-wide">
+        <div class="auth-modal-card auth-glass-card auth-modal-card-wide">
           <div class="auth-modal-header">
             <div class="auth-modal-title-wrap">
-              <span class="auth-modal-title">Workspace Teknisi & Server Utama</span>
+              <span class="auth-modal-title">Workspace & Akun</span>
               <span class="auth-backend-pill">${escapeHtml(backendText)}</span>
             </div>
             <button type="button" id="auth-btn-close" class="btn btn-icon btn-sm" title="Tutup">
@@ -290,41 +311,35 @@ export class AuthModal {
             <div class="auth-profile-banner">
               <div>
                 <div class="auth-profile-name">${escapeHtml(user.displayName || user.username)}</div>
-                <div class="auth-profile-meta">@${escapeHtml(user.username)} • Role: ${escapeHtml(user.role || 'teknisi')}</div>
+                <div class="auth-profile-meta">@${escapeHtml(user.username)} • ${escapeHtml(user.role || 'teknisi')} • Sync: ${escapeHtml(lastSyncText)}</div>
               </div>
-              <button type="button" id="auth-btn-logout" class="btn btn-sm auth-logout-btn">Keluar Akun (Mode Tamu)</button>
+              <button type="button" id="auth-btn-logout" class="btn btn-sm auth-logout-btn">Keluar</button>
             </div>
 
             <div id="auth-modal-status-msg" class="auth-status-banner is-${this.statusTone}" style="display: ${this.statusMessage ? 'block' : 'none'};">
               ${escapeHtml(this.statusMessage)}
             </div>
 
-            <div class="auth-section-label">Target Penyimpanan Otomatis Saat Ini</div>
             <div class="auth-workspace-grid">
               <button type="button" class="auth-ws-card ${wsMode === 'main' ? 'active' : ''}" data-select-ws="main">
                 <div class="auth-ws-title-row">
-                  <span class="auth-ws-title">Server Utama (Main Template)</span>
+                  <span class="auth-ws-title">Server Utama</span>
                   <span class="auth-lock-badge ${isMainUnlocked ? 'is-unlocked' : 'is-locked'}">
                     <i data-lucide="${isMainUnlocked ? 'unlock' : 'lock'}" style="width: 11px; height: 11px;"></i>
-                    <span>${isMainUnlocked ? 'Edit Terbuka' : 'Lihat Publik'}</span>
+                    <span>${isMainUnlocked ? 'Edit' : 'Read-Only'}</span>
                   </span>
                 </div>
-                <div class="auth-ws-desc">
-                  ${isMainUnlocked
-                    ? `Akses edit terbuka. Perubahan tersimpan ke Server Utama (pemilik: @${escapeHtml(mainOwner)}).`
-                    : `Dilindungi password server (oleh @${escapeHtml(mainOwner)}). Anda tetap bisa melihat publik (Read-Only).`
-                  }
-                </div>
+                <div class="auth-ws-desc">Template bersama (@${escapeHtml(mainOwner)})</div>
               </button>
               <button type="button" class="auth-ws-card ${wsMode === 'personal' ? 'active' : ''}" data-select-ws="personal">
                 <div class="auth-ws-title-row">
-                  <span class="auth-ws-title">Akun Pribadi (@${escapeHtml(user.username)})</span>
+                  <span class="auth-ws-title">Pribadi</span>
                   <span class="auth-lock-badge is-unlocked">
                     <i data-lucide="user" style="width: 11px; height: 11px;"></i>
-                    <span>Pribadi</span>
+                    <span>@${escapeHtml(user.username)}</span>
                   </span>
                 </div>
-                <div class="auth-ws-desc">Penyimpanan pribadi khusus akun ini untuk draf atau topologi terpisah.</div>
+                <div class="auth-ws-desc">Workspace privat akun ini</div>
               </button>
             </div>
 
@@ -332,80 +347,56 @@ export class AuthModal {
               <div class="auth-security-header">
                 <span class="auth-security-title">
                   <i data-lucide="${isMainUnlocked ? 'shield-check' : 'lock'}" style="width: 14px; height: 14px;"></i>
-                  <span>Keamanan Akses Workspace Server Utama</span>
+                  <span>Akses Server Utama</span>
                 </span>
                 ${isMainUnlocked ? `
-                  <button type="button" id="auth-btn-lock-server" class="btn btn-secondary btn-sm">Kunci Kembali Akses</button>
+                  <button type="button" id="auth-btn-lock-server" class="btn btn-secondary btn-sm">Kunci Server</button>
                 ` : ''}
               </div>
-              ${isMainUnlocked ? `
-                <div class="auth-ws-desc">
-                  Akses edit <strong>Server Utama</strong> saat ini sudah terbuka untuk sesi Anda. Setiap perubahan pada tab Server Utama otomatis tersimpan.
-                </div>
-              ` : `
+              ${isMainUnlocked ? '' : `
                 <form id="auth-unlock-server-form" class="auth-inline-form">
-                  <input type="password" id="auth-unlock-server-pass" placeholder="Masukkan password akses Server Utama..." required>
-                  <button type="submit" id="auth-btn-unlock-server" class="btn btn-primary btn-sm">Buka Kunci Server</button>
+                  <input type="password" id="auth-unlock-server-pass" placeholder="Password akses Server Utama..." required>
+                  <button type="submit" id="auth-btn-unlock-server" class="btn btn-primary btn-sm">Buka Kunci</button>
                 </form>
-                <div class="auth-ws-desc">
-                  Server Utama tetap dapat dilihat secara publik, namun Anda wajib memasukkan password akses Server Utama untuk mengedit atau menyimpan perubahan ke server bersama.
-                </div>
               `}
             </div>
 
-            <div class="auth-sync-meta">
-              Sinkronisasi terakhir: <strong>${escapeHtml(lastSyncText)}</strong>
-            </div>
-
-            <div class="auth-section-label">Sinkronisasi Template & Kolaborasi Tim</div>
             <div class="auth-actions-grid">
-              <button type="button" id="auth-btn-pull-main" class="btn btn-secondary btn-sm">
-                Muat Ulang dari Server Utama
-              </button>
-              <button type="button" id="auth-btn-push-main" class="btn btn-primary btn-sm" ${!isMainUnlocked ? 'title="Masukkan password akses Server Utama terlebih dahulu"' : ''}>
-                Simpan Kanvas Ini ke Server Utama
-              </button>
-              <button type="button" id="auth-btn-clone-to-personal" class="btn btn-secondary btn-sm">
-                Salin Server Utama ke Akun Saya
-              </button>
-              <button type="button" id="auth-btn-seed-sample" class="btn btn-secondary btn-sm">
-                Muat Contoh Topologi Kampus
-              </button>
+              <button type="button" id="auth-btn-pull-main" class="btn btn-secondary btn-sm">Muat Server Utama</button>
+              <button type="button" id="auth-btn-push-main" class="btn btn-primary btn-sm">Simpan ke Server Utama</button>
+              <button type="button" id="auth-btn-clone-to-personal" class="btn btn-secondary btn-sm">Salin ke Pribadi</button>
+              <button type="button" id="auth-btn-seed-sample" class="btn btn-secondary btn-sm">Contoh Kampus</button>
             </div>
 
             <div class="auth-security-box">
               <div class="auth-security-header">
                 <span class="auth-security-title">
                   <i data-lucide="key-round" style="width: 14px; height: 14px;"></i>
-                  <span>Pengaturan Password Server Utama</span>
+                  <span>Password Server Utama</span>
                 </span>
-                <span class="auth-role-pill">Pembuat: @${escapeHtml(mainOwner)}</span>
+                <span class="auth-role-pill">Admin: @${escapeHtml(mainOwner)}</span>
               </div>
               ${isMainAdmin ? `
                 <form id="auth-change-server-pass-form" class="auth-form" style="gap: 8px;">
                   <div class="auth-actions-grid">
                     <div class="auth-field">
-                      <label for="auth-server-new-pass">Password Server Baru (min 4 karakter)</label>
-                      <input type="password" id="auth-server-new-pass" placeholder="Password baru..." required>
+                      <input type="password" id="auth-server-new-pass" placeholder="Password server baru..." required>
                     </div>
                     <div class="auth-field">
-                      <label for="auth-server-confirm-pass">Konfirmasi Password Baru</label>
-                      <input type="password" id="auth-server-confirm-pass" placeholder="Ulangi password baru..." required>
+                      <input type="password" id="auth-server-confirm-pass" placeholder="Konfirmasi password..." required>
                     </div>
                   </div>
                   <div class="auth-inline-form">
-                    <input type="password" id="auth-server-current-pass" placeholder="Password server saat ini (opsional verifikasi)">
-                    <button type="submit" id="auth-btn-change-server-pass" class="btn btn-primary btn-sm">Ubah Password Server Utama</button>
+                    <input type="password" id="auth-server-current-pass" placeholder="Password lama (opsional)">
+                    <button type="submit" id="auth-btn-change-server-pass" class="btn btn-primary btn-sm">Ubah Password</button>
                   </div>
                 </form>
               ` : `
-                <div class="auth-ws-desc">
-                  Hanya <strong>Admin Utama / Pembuat Server (@${escapeHtml(mainOwner)})</strong> yang memiliki hak untuk mengubah password akses Server Utama.
-                </div>
+                <div class="auth-ws-desc">Hanya @${escapeHtml(mainOwner)} / Admin yang dapat mengubah password server.</div>
               `}
             </div>
 
-            <div class="auth-section-label">Daftar Teknisi Terdaftar (${technicians.length})</div>
+            <div class="auth-section-label">Teknisi Terdaftar (${technicians.length})</div>
             <div class="auth-users-list">
               ${technicians.map((t) => `
                 <div class="auth-user-row ${t.username === user.username ? 'is-self' : ''}">
@@ -430,6 +421,7 @@ export class AuthModal {
 
   bindRenderedEvents() {
     this.modalEl.querySelector('#auth-btn-close')?.addEventListener('click', () => this.hide());
+    this.modalEl.querySelector('#auth-btn-guest-close')?.addEventListener('click', () => this.hide());
 
     this.modalEl.querySelectorAll('[data-auth-tab]').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -439,65 +431,73 @@ export class AuthModal {
       });
     });
 
+    this.modalEl.querySelectorAll('[data-toggle-pass]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const targetId = btn.getAttribute('data-toggle-pass');
+        const input = targetId ? this.modalEl.querySelector(`#${targetId}`) : null;
+        if (!input) return;
+        const nextType = input.type === 'password' ? 'text' : 'password';
+        input.type = nextType;
+        btn.innerHTML = `<i data-lucide="${nextType === 'password' ? 'eye' : 'eye-off'}" style="width: 15px; height: 15px;"></i>`;
+        if (window.lucide?.createIcons) {
+          window.lucide.createIcons({ nodes: [btn] });
+        }
+      });
+    });
+
     this.modalEl.querySelector('#auth-btn-view-public-main')?.addEventListener('click', async () => {
-      const res = await this.projectStorage.loadPublicMainWorkspaceProject();
+      await this.projectStorage.loadPublicMainWorkspaceProject();
       this.historyManager?.initBaseline?.();
-      this.statusMessage = res.loaded
-        ? 'Server Utama ditampilkan dalam mode Lihat Publik (Read-Only). Login & masukkan password server untuk mengedit.'
-        : 'Server Utama dibuka dalam mode Lihat Publik (saat ini masih kosong).';
-      this.statusTone = 'info';
-      this.render();
+      this.hide();
     });
 
     this.modalEl.querySelector('#auth-btn-exit-public-preview')?.addEventListener('click', () => {
       this.authManager.setPublicPreviewMode(false);
       this.projectStorage.clearCanvasToEmpty('SmartSchool NetMap');
       this.historyManager?.initBaseline?.();
-      this.statusMessage = 'Kembali ke Mode Tamu (kanvas kosong).';
-      this.statusTone = 'info';
+      this.statusMessage = '';
       this.render();
     });
 
-    const targetSelect = this.modalEl.querySelector('#auth-login-target-ws');
     const serverPassGroup = this.modalEl.querySelector('#auth-login-server-pass-group');
-    targetSelect?.addEventListener('change', () => {
-      if (serverPassGroup) {
-        serverPassGroup.style.display = targetSelect.value === 'main' ? 'flex' : 'none';
-      }
-    });
+    const readonlyWrap = this.modalEl.querySelector('#auth-login-main-readonly-wrap');
+    const serverPassInput = this.modalEl.querySelector('#auth-login-server-pass');
+    const readonlyCheck = this.modalEl.querySelector('#auth-login-main-readonly');
 
-    this.modalEl.querySelectorAll('[data-demo-user]').forEach((btn) => {
+    this.modalEl.querySelectorAll('[data-login-ws]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        const uInput = this.modalEl.querySelector('#auth-login-username');
-        const pInput = this.modalEl.querySelector('#auth-login-password');
-        const sInput = this.modalEl.querySelector('#auth-login-server-pass');
-        if (uInput) uInput.value = btn.getAttribute('data-demo-user') || '';
-        if (pInput) pInput.value = btn.getAttribute('data-demo-pass') || '';
-        const demoSrv = btn.getAttribute('data-demo-server');
-        if (sInput && demoSrv) sInput.value = demoSrv;
-        uInput?.focus();
-      });
-    });
-
-    this.modalEl.querySelectorAll('[data-fill-server-pass]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const sInput = this.modalEl.querySelector('#auth-login-server-pass');
-        const roCheck = this.modalEl.querySelector('#auth-login-main-readonly');
-        if (sInput) {
-          sInput.value = btn.getAttribute('data-fill-server-pass') || '';
-          sInput.focus();
+        const ws = btn.getAttribute('data-login-ws') === 'personal' ? 'personal' : 'main';
+        this.loginTargetWs = ws;
+        this.modalEl.querySelectorAll('[data-login-ws]').forEach((b) => {
+          b.classList.toggle('active', b.getAttribute('data-login-ws') === ws);
+        });
+        if (serverPassGroup) {
+          serverPassGroup.style.display = ws === 'main' ? 'flex' : 'none';
         }
-        if (roCheck) roCheck.checked = false;
+        if (readonlyWrap) {
+          readonlyWrap.style.display = ws === 'main' ? 'inline-flex' : 'none';
+        }
       });
+    });
+
+    readonlyCheck?.addEventListener('change', () => {
+      if (serverPassInput) {
+        serverPassInput.disabled = readonlyCheck.checked;
+        if (readonlyCheck.checked) {
+          serverPassInput.value = '';
+        } else {
+          serverPassInput.focus();
+        }
+      }
     });
 
     this.modalEl.querySelector('#auth-login-form')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const username = this.modalEl.querySelector('#auth-login-username')?.value.trim() || '';
       const password = this.modalEl.querySelector('#auth-login-password')?.value || '';
-      const targetWs = this.modalEl.querySelector('#auth-login-target-ws')?.value || 'main';
-      const serverPass = this.modalEl.querySelector('#auth-login-server-pass')?.value || '';
-      const readOnlyJoin = Boolean(this.modalEl.querySelector('#auth-login-main-readonly')?.checked);
+      const targetWs = this.loginTargetWs === 'personal' ? 'personal' : 'main';
+      const serverPass = serverPassInput?.value || '';
+      const readOnlyJoin = Boolean(readonlyCheck?.checked);
       const preserve = Boolean(this.modalEl.querySelector('#auth-preserve-canvas')?.checked);
 
       try {

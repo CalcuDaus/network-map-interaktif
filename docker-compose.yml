@@ -3,24 +3,32 @@ services:
     image: mysql:8.0
     container_name: netmap-mysql
     restart: unless-stopped
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     environment:
-      - MYSQL_ROOT_PASSWORD=netmap_root_pass
-      - MYSQL_DATABASE=netmap_db
-      - MYSQL_USER=netmap
-      - MYSQL_PASSWORD=netmap_pass
-      - TZ=Asia/Jakarta
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-netmap_root_pass}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-netmap_db}
+      - MYSQL_USER=${MYSQL_USER:-netmap}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-netmap_pass}
+      - TZ=${TZ:-Asia/Jakarta}
     ports:
-      - "3307:3306"
+      # Default bind ke localhost agar database MySQL aman & tidak terekspos ke internet publik
+      - "${MYSQL_BIND_IP:-127.0.0.1}:${MYSQL_EXTERNAL_PORT:-3307}:3306"
     volumes:
       - netmap_mysql_data:/var/lib/mysql
       - ./sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
     networks:
       - netmap_network
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u$$MYSQL_USER -p$$MYSQL_PASSWORD || exit 1"]
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$$MYSQL_USER -p$$MYSQL_PASSWORD || exit 1"]
       interval: 10s
       timeout: 5s
+      start_period: 30s
       retries: 10
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   netmap:
     build:
@@ -34,20 +42,34 @@ services:
       netmap-mysql:
         condition: service_healthy
     ports:
-      - "3020:3000"
+      # Saat sudah memakai aaPanel Nginx Reverse Proxy + SSL, set APP_BIND_IP=127.0.0.1 di .env
+      - "${APP_BIND_IP:-0.0.0.0}:${APP_PORT:-3020}:3000"
     volumes:
       - netmap_server_data:/app/data
     networks:
       - netmap_network
     environment:
-      - TZ=Asia/Jakarta
+      - TZ=${TZ:-Asia/Jakarta}
+      - HOST=0.0.0.0
       - PORT=3000
       - NODE_ENV=production
       - MYSQL_HOST=netmap-mysql
       - MYSQL_PORT=3306
-      - MYSQL_USER=netmap
-      - MYSQL_PASSWORD=netmap_pass
-      - MYSQL_DATABASE=netmap_db
+      - MYSQL_USER=${MYSQL_USER:-netmap}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-netmap_pass}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-netmap_db}
+      - MYSQL_CONNECT_RETRIES=12
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   netmap_mysql_data:

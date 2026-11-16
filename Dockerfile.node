@@ -1,19 +1,22 @@
 # ========================================================
-# NetMap - Alternative Node.js Dockerfile
-# Menjalankan server.js bawaan dengan Node.js Alpine
+# NetMap - Production Dockerfile (Node.js 20 Alpine)
+# Menjalankan server.js + MySQL2 & Asset Frontend Lengkap
 # ========================================================
 FROM node:20-alpine
 
 LABEL maintainer="NetMap Development Team"
-LABEL description="Interactive Network Map Application (Node.js runtime)"
+LABEL description="Interactive Network Map Application (Node.js + MySQL runtime)"
 
 WORKDIR /app
 
-# Salin manifest dependencies dan pasang driver MySQL (mysql2)
+# Salin manifest dependencies dan pasang production dependencies (termasuk mysql2)
 COPY package*.json ./
-RUN npm install --omit=dev --no-audit --no-fund || true
+RUN npm ci --omit=dev --no-audit --no-fund \
+  && npm cache clean --force \
+  && node -e "require('mysql2/promise')" \
+  && mkdir -p /app/data
 
-# Salin seluruh file proyek yang dibutuhkan
+# Salin seluruh file proyek yang dibutuhkan di production
 COPY index.html ./
 COPY server.js ./
 COPY sql/ ./sql/
@@ -24,8 +27,13 @@ COPY assets/ ./assets/
 # Port server.js bawaan adalah 3000
 EXPOSE 3000
 
+ENV HOST=0.0.0.0
 ENV PORT=3000
 ENV NODE_ENV=production
+
+# Healthcheck otomatis untuk monitoring status kontainer di aaPanel Docker
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 3000) + '/api/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
 
 # Jalankan server
 CMD ["node", "server.js"]

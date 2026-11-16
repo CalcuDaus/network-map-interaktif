@@ -8,12 +8,12 @@
     "build": "esbuild js/app.js --bundle --outfile=js/bundle.js --format=iife",
     "build:watch": "esbuild js/app.js --bundle --outfile=js/bundle.js --format=iife --watch"
   },
+  "dependencies": {
+    "mysql2": "^3.24.6"
+  },
   "devDependencies": {
     "esbuild": "^0.25.0",
     "three": "^0.187.0"
-  },
-  "optionalDependencies": {
-    "mysql2": "^3.11.0"
   },
   "keywords": [
     "network-map",

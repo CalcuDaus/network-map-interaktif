@@ -13,6 +13,7 @@ const crypto = require('crypto');
 const { exec } = require('child_process');
 
 const PORT = Number(process.env.PORT) || 3000;
+const HOST = process.env.HOST || '0.0.0.0';
 const ROOT_DIR = __dirname;
 const DEFAULT_DB_FILE = path.join(ROOT_DIR, 'data', 'netmap-server-db.json');
 const MAX_BODY_BYTES = 25 * 1024 * 1024;
@@ -653,9 +654,21 @@ class MySqlStore {
       updatedAt: saved?.updatedAt || new Date().toISOString()
     };
   }
+
+  async close() {
+    if (this.pool) {
+      await this.pool.end();
+      this.pool = null;
+    }
+  }
 }
 
-async function createStorageAdapter({ dbFilePath = DEFAULT_DB_FILE, mysqlConfig = null } = {}) {
+async function createStorageAdapter({
+  dbFilePath = DEFAULT_DB_FILE,
+  mysqlConfig = null,
+  mysqlRetries = Number(process.env.MYSQL_CONNECT_RETRIES) || 1,
+  mysqlRetryDelayMs = Number(process.env.MYSQL_RETRY_DELAY_MS) || 2000
+} = {}) {
   const cfg = mysqlConfig || (process.env.MYSQL_HOST ? {
     host: process.env.MYSQL_HOST,
     port: process.env.MYSQL_PORT || 3306,
@@ -665,14 +678,23 @@ async function createStorageAdapter({ dbFilePath = DEFAULT_DB_FILE, mysqlConfig 
   } : null);
 
   if (cfg && cfg.host) {
-    try {
-      const mysqlStore = new MySqlStore(cfg);
-      await mysqlStore.init();
-      console.log(`[NetMapDB] Terhubung ke MySQL (${cfg.host}:${cfg.port}/${cfg.database}).`);
-      return mysqlStore;
-    } catch (err) {
-      console.warn(`[NetMapDB] MySQL tidak dapat diakses (${err.message}). Beralih ke penyimpanan file lokal.`);
+    const maxAttempts = Math.max(1, Number(mysqlRetries) || (process.env.NODE_ENV === 'production' ? 10 : 1));
+    let lastErr = null;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const mysqlStore = new MySqlStore(cfg);
+        await mysqlStore.init();
+        console.log(`[NetMapDB] Terhubung ke MySQL (${cfg.host}:${cfg.port}/${cfg.database}).`);
+        return mysqlStore;
+      } catch (err) {
+        lastErr = err;
+        if (attempt < maxAttempts) {
+          console.warn(`[NetMapDB] Menunggu MySQL siap (${attempt}/${maxAttempts}): ${err.message}`);
+          await new Promise((r) => setTimeout(r, mysqlRetryDelayMs));
+        }
+      }
     }
+    console.warn(`[NetMapDB] MySQL tidak dapat diakses (${lastErr?.message || 'unknown'}). Beralih ke penyimpanan file lokal.`);
   }
 
   const fileStore = new JsonFileStore(dbFilePath);
@@ -1111,8 +1133,16 @@ function createNetMapRequestHandler(store, rootDir = ROOT_DIR) {
 
       const ext = path.extname(filePath).toLowerCase();
       const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+      const cacheControl = ext === '.html'
+        ? 'no-store, no-cache, must-revalidate'
+        : ((ext === '.css' || ext === '.js')
+            ? 'no-cache, must-revalidate'
+            : 'public, max-age=604800');
       res.writeHead(200, {
         'Content-Type': contentType,
+        'Cache-Control': cacheControl,
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'SAMEORIGIN',
         'Access-Control-Allow-Origin': '*'
       });
       fs.createReadStream(filePath).pipe(res);
@@ -1121,12 +1151,14 @@ function createNetMapRequestHandler(store, rootDir = ROOT_DIR) {
 }
 
 async function startServer() {
-  const store = await createStorageAdapter();
+  const store = await createStorageAdapter({
+    mysqlRetries: Number(process.env.MYSQL_CONNECT_RETRIES) || (process.env.NODE_ENV === 'production' ? 12 : 1)
+  });
   const server = http.createServer(createNetMapRequestHandler(store, ROOT_DIR));
-  server.listen(PORT, () => {
+  server.listen(PORT, HOST, () => {
     const url = `http://localhost:${PORT}`;
     console.log(`\n======================================================`);
-    console.log(`  SmartSchool NetMap Server Berjalan di: ${url}`);
+    console.log(`  SmartSchool NetMap Server Berjalan di: ${url} (bind ${HOST}:${PORT})`);
     console.log(`  Database Mode: ${store.backend === 'mysql' ? 'MySQL 8' : 'Local Server File DB'}`);
     console.log(`  Tekan Ctrl + C untuk menghentikan server.`);
     console.log(`======================================================\n`);
@@ -1140,6 +1172,20 @@ async function startServer() {
       });
     }
   });
+
+  const shutdown = (signal) => {
+    console.log(`\n[NetMapServer] Menerima ${signal}, menutup server dengan aman...`);
+    server.close(async () => {
+      try {
+        await store.close?.();
+      } catch { /* ignore */ }
+      process.exit(0);
+    });
+    setTimeout(() => process.exit(0), 5000).unref();
+  };
+  process.once('SIGTERM', () => shutdown('SIGTERM'));
+  process.once('SIGINT', () => shutdown('SIGINT'));
+
   return { server, store };
 }
 
