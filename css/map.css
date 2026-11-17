@@ -722,7 +722,7 @@
   left: 50%;
   bottom: 58px;
   transform: translateX(-50%);
-  width: min(1100px, calc(100% - 32px));
+  width: min(1180px, calc(100% - 32px));
   z-index: 36;
   display: flex;
   flex-wrap: wrap;

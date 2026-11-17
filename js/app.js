@@ -954,6 +954,20 @@ class NetMapApp {
           this.map3DEngine.dropCarriedObjectsFromAvatar({ dropAll: Boolean(e.shiftKey) });
           return;
         }
+        if ((e.key === ',' || e.key === '<') && this.map3DEngine?.avatarMode && !e.ctrlKey && !e.metaKey) {
+          e.preventDefault();
+          this.map3DEngine.setAvatarMouseSensitivity(
+            Math.round((this.map3DEngine.getAvatarMouseSensitivity() - 0.1) * 100) / 100
+          );
+          return;
+        }
+        if ((e.key === '.' || e.key === '>') && this.map3DEngine?.avatarMode && !e.ctrlKey && !e.metaKey) {
+          e.preventDefault();
+          this.map3DEngine.setAvatarMouseSensitivity(
+            Math.round((this.map3DEngine.getAvatarMouseSensitivity() + 0.1) * 100) / 100
+          );
+          return;
+        }
         if (e.key === '0') {
           e.preventDefault();
           this.map3DEngine?.zoomExtents();

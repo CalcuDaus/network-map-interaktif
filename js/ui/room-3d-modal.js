@@ -187,10 +187,20 @@ export class Room3DModal {
           <!-- Right: Built-in 3D Building Presets & Existing Rooms List -->
           <div style="display: flex; flex-direction: column; gap: 10px;">
             <div style="background: var(--bg-primary, #fff8cf); border: 1px solid var(--border-color, #e5cca0); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px;">
-              <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--accent-blue, #2a7c13);">Gedung Sekolah 3D Bawaan (.GLB)</span>
-              <div id="r3d-building-presets" style="display: grid; grid-template-columns: 1fr; gap: 5px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+                <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--accent-blue, #2a7c13);">Gedung &amp; Ruangan 3D (.GLB)</span>
+                <span style="font-size: 10px; font-weight: 600; color: var(--text-muted);">${BUILTIN_ROOM_BUILDING_PRESETS.length} Model</span>
+              </div>
+              <div style="display: flex; gap: 4px; align-items: center;">
+                <input type="text" id="r3d-preset-search" placeholder="Cari gedung / ruangan..."
+                       style="flex: 1; background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 5px; padding: 4px 7px; font-size: 11px; color: var(--text-primary);">
+                <button type="button" class="btn btn-primary btn-sm r3d-bldg-filter" data-filter="all" style="font-size: 10px; padding: 3px 6px;">Semua</button>
+                <button type="button" class="btn btn-secondary btn-sm r3d-bldg-filter" data-filter="cutaway" style="font-size: 10px; padding: 3px 6px;">Cutaway</button>
+                <button type="button" class="btn btn-secondary btn-sm r3d-bldg-filter" data-filter="full" style="font-size: 10px; padding: 3px 6px;">Atap Utuh</button>
+              </div>
+              <div id="r3d-building-presets" style="display: grid; grid-template-columns: 1fr; gap: 5px; max-height: 230px; overflow-y: auto; padding-right: 2px;">
                 ${BUILTIN_ROOM_BUILDING_PRESETS.map((b) => `
-                  <div style="background: var(--bg-secondary, #fbe6c2); border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 8px; display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+                  <div class="r3d-bldg-card" data-bldg-name="${b.name.toLowerCase()}" data-bldg-type="${b.isCutaway ? 'cutaway' : 'full'}" style="background: var(--bg-secondary, #fbe6c2); border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 8px; display: flex; align-items: center; justify-content: space-between; gap: 6px;">
                     <div style="min-width: 0;">
                       <div style="font-size: 11.5px; font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${b.name}</div>
                       <div style="font-size: 10px; color: var(--text-muted);">${b.subtitle}</div>
@@ -311,6 +321,27 @@ export class Room3DModal {
       this.uploadedRoomGlbUrl = '';
       if (glbUrlInput) glbUrlInput.value = '';
       clearGlbBtn.style.display = 'none';
+    });
+
+    let activeFilter = 'all';
+    const searchInput = this.modalEl.querySelector('#r3d-preset-search');
+    const applyPresetFilter = () => {
+      const q = String(searchInput?.value || '').trim().toLowerCase();
+      this.modalEl.querySelectorAll('.r3d-bldg-card').forEach((card) => {
+        const nameMatch = !q || String(card.getAttribute('data-bldg-name') || '').includes(q);
+        const typeMatch = activeFilter === 'all' || card.getAttribute('data-bldg-type') === activeFilter;
+        card.style.display = (nameMatch && typeMatch) ? 'flex' : 'none';
+      });
+    };
+    searchInput?.addEventListener('input', applyPresetFilter);
+    this.modalEl.querySelectorAll('.r3d-bldg-filter').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        activeFilter = btn.getAttribute('data-filter') || 'all';
+        this.modalEl.querySelectorAll('.r3d-bldg-filter').forEach((b) => {
+          b.className = `btn btn-sm r3d-bldg-filter ${b === btn ? 'btn-primary' : 'btn-secondary'}`;
+        });
+        applyPresetFilter();
+      });
     });
 
     this.modalEl.querySelectorAll('.btn-r3d-bldg-place').forEach((btn) => {

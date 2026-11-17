@@ -40,11 +40,37 @@ import {
 const AVATAR_SCALE_STORAGE_KEY = 'netmap_avatar_scale_v1';
 const BASE_AVATAR_COLLIDER = { radius: 0.48, height: 1.88, stepHeight: 0.38 };
 
+const AVATAR_MOUSE_SENS_STORAGE_KEY = 'netmap_avatar_mouse_sens_v1';
+export const AVATAR_MOUSE_SENS_MIN = 0.15;
+export const AVATAR_MOUSE_SENS_MAX = 2.5;
+export const AVATAR_MOUSE_SENS_DEFAULT = 1.0;
+export const AVATAR_MOUSE_SENS_STEP = 0.05;
+const AVATAR_MOUSE_SENS_BASE_RAD_PER_PX = 0.0016;
+
+/**
+ * Clamp Mode Teknisi mouse sensitivity multiplier to a smooth comfortable range.
+ * @param {*} rawSens
+ * @returns {number}
+ */
+export function clampAvatarMouseSensitivity(rawSens) {
+  const n = Number(rawSens);
+  if (!Number.isFinite(n) || n <= 0) return AVATAR_MOUSE_SENS_DEFAULT;
+  const clamped = Math.min(AVATAR_MOUSE_SENS_MAX, Math.max(AVATAR_MOUSE_SENS_MIN, n));
+  return Math.round(clamped * 100) / 100;
+}
+
 function resolveEngineAvatarScale(ctx) {
   if (ctx && typeof ctx.getAvatarScale === 'function') {
     return ctx.getAvatarScale();
   }
   return clampAvatarScale(ctx?.avatarScale);
+}
+
+function resolveEngineMouseSensitivity(ctx) {
+  if (ctx && typeof ctx.getAvatarMouseSensitivity === 'function') {
+    return ctx.getAvatarMouseSensitivity();
+  }
+  return clampAvatarMouseSensitivity(ctx?.avatarMouseSensitivity);
 }
 
 function buildScaledAvatarCollider(scale = AVATAR_SCALE_DEFAULT, base = BASE_AVATAR_COLLIDER) {
@@ -159,6 +185,7 @@ export class Map3DEngine {
     this._lastPeersHudKey = '';
     this._baseAvatarCollider = { radius: 0.48, height: 1.88, stepHeight: 0.38 };
     this.avatarScale = this._loadSavedAvatarScale();
+    this.avatarMouseSensitivity = this._loadSavedAvatarMouseSensitivity();
     this.avatarCollider = this._computeAvatarCollider(this.avatarScale);
     this.deviceColliders = [];
     this.avatarState = {
@@ -359,7 +386,7 @@ export class Map3DEngine {
       const dy = e.clientY - this.lookPrevPointer.y;
       this.lookPrevPointer = { x: e.clientX, y: e.clientY };
 
-      const sensitivity = 0.0042;
+      const sensitivity = 0.0022 * resolveEngineMouseSensitivity(this);
       this.lookYaw -= dx * sensitivity;
       this.lookPitch = Math.max(-Math.PI * 0.46, Math.min(Math.PI * 0.46, this.lookPitch + dy * sensitivity));
 
@@ -3291,7 +3318,8 @@ export class Map3DEngine {
       if (!node || node.visible === false) return;
       if (node.userData?.gizmoType || node.userData?.isSelectionRing || node.userData?.isCarriedByAvatar) return;
       if (node.isMesh) {
-        if (!/atap|plafon|kanopi|lisplang|roof|ceiling/i.test(String(node.name || ''))) {
+        const meshName = String(node.name || '');
+        if (!/atap|plafon|kanopi|lisplang|roof|ceiling/i.test(meshName) || /tangga|stair/i.test(meshName)) {
           meshTargets.push(node);
         }
         return;
@@ -4002,17 +4030,94 @@ export class Map3DEngine {
     };
   }
 
-  _syncAvatarScaleHudControl() {
+  _loadSavedAvatarMouseSensitivity() {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const raw = localStorage.getItem(AVATAR_MOUSE_SENS_STORAGE_KEY);
+        if (raw !== null && raw !== '') {
+          return clampAvatarMouseSensitivity(raw);
+        }
+      }
+    } catch { /* ignore storage restrictions */ }
+    return AVATAR_MOUSE_SENS_DEFAULT;
+  }
+
+  getAvatarMouseSensitivity() {
+    return clampAvatarMouseSensitivity(this.avatarMouseSensitivity);
+  }
+
+  getAvatarMouseSensitivityBounds() {
+    return {
+      min: AVATAR_MOUSE_SENS_MIN,
+      max: AVATAR_MOUSE_SENS_MAX,
+      defaultSensitivity: AVATAR_MOUSE_SENS_DEFAULT,
+      step: AVATAR_MOUSE_SENS_STEP,
+      baseRadPerPx: AVATAR_MOUSE_SENS_BASE_RAD_PER_PX
+    };
+  }
+
+  _syncAvatarHudSliderControl({ rangeId, valueId, downId, upId, val, min, max }) {
     if (typeof document === 'undefined') return;
-    const curScale = this.getAvatarScale();
-    const rangeEl = document.getElementById('range-avatar-scale');
-    if (rangeEl) rangeEl.value = curScale.toFixed(2);
-    const valEl = document.getElementById('avatar-scale-value');
-    if (valEl) valEl.textContent = `${curScale.toFixed(2)}x`;
-    const downBtn = document.getElementById('btn-avatar-scale-down');
-    if (downBtn) downBtn.disabled = curScale <= AVATAR_SCALE_MIN + 1e-4;
-    const upBtn = document.getElementById('btn-avatar-scale-up');
-    if (upBtn) upBtn.disabled = curScale >= AVATAR_SCALE_MAX - 1e-4;
+    const rangeEl = document.getElementById(rangeId);
+    if (rangeEl) rangeEl.value = val.toFixed(2);
+    const valEl = document.getElementById(valueId);
+    if (valEl) valEl.textContent = `${val.toFixed(2)}x`;
+    const downBtn = document.getElementById(downId);
+    if (downBtn) downBtn.disabled = val <= min + 1e-4;
+    const upBtn = document.getElementById(upId);
+    if (upBtn) upBtn.disabled = val >= max - 1e-4;
+  }
+
+  _syncAvatarScaleHudControl() {
+    this._syncAvatarHudSliderControl({
+      rangeId: 'range-avatar-scale',
+      valueId: 'avatar-scale-value',
+      downId: 'btn-avatar-scale-down',
+      upId: 'btn-avatar-scale-up',
+      val: this.getAvatarScale(),
+      min: AVATAR_SCALE_MIN,
+      max: AVATAR_SCALE_MAX
+    });
+  }
+
+  _syncAvatarMouseSensitivityHudControl() {
+    this._syncAvatarHudSliderControl({
+      rangeId: 'range-avatar-sens',
+      valueId: 'avatar-sens-value',
+      downId: 'btn-avatar-sens-down',
+      upId: 'btn-avatar-sens-up',
+      val: this.getAvatarMouseSensitivity(),
+      min: AVATAR_MOUSE_SENS_MIN,
+      max: AVATAR_MOUSE_SENS_MAX
+    });
+  }
+
+  /**
+   * Adjust Mode Teknisi mouse-look sensitivity multiplier cleanly with localStorage persistence.
+   * @param {number} sensitivity
+   * @param {{ persist?: boolean, silent?: boolean }} [options]
+   * @returns {number} Clamped sensitivity multiplier
+   */
+  setAvatarMouseSensitivity(sensitivity, { persist = true, silent = false } = {}) {
+    const nextSens = clampAvatarMouseSensitivity(sensitivity);
+    this.avatarMouseSensitivity = nextSens;
+
+    if (persist) {
+      try {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem(AVATAR_MOUSE_SENS_STORAGE_KEY, String(nextSens));
+        }
+      } catch { /* ignore storage restrictions */ }
+    }
+
+    this._syncAvatarMouseSensitivityHudControl();
+
+    if (!silent) {
+      this.showStatusHint?.(
+        `Sensitivitas mouse Mode Teknisi: ${nextSens.toFixed(2)}x (${AVATAR_MOUSE_SENS_MIN}x - ${AVATAR_MOUSE_SENS_MAX}x).`
+      );
+    }
+    return nextSens;
   }
 
   /**
@@ -4138,7 +4243,8 @@ export class Map3DEngine {
   applyAvatarMouseLookDelta(dx, dy) {
     if (!this.avatarMode || this.simulatorFocusedDeviceId) return;
     if (!Number.isFinite(dx) || !Number.isFinite(dy)) return;
-    const sensitivity = 0.0032;
+    const sensMult = resolveEngineMouseSensitivity(this);
+    const sensitivity = AVATAR_MOUSE_SENS_BASE_RAD_PER_PX * sensMult;
     const minPitch = this.avatarPerspective === 'fpp' ? -1.35 : -0.15;
     const maxPitch = this.avatarPerspective === 'fpp' ? 1.35 : 1.18;
     this.avatarState.camYaw = (Number(this.avatarState.camYaw) || 0) - dx * sensitivity;
@@ -6093,6 +6199,7 @@ export class Map3DEngine {
     const optionsHtml = allDevs.map((d) => `<option value="${this.escapeHudHtml(d.id)}">${this.escapeHudHtml(d.name)}${d.network?.ip ? ` (${this.escapeHudHtml(d.network.ip)})` : ''}</option>`).join('');
     const isFpp = this.avatarPerspective === 'fpp';
     const curScale = resolveEngineAvatarScale(this);
+    const curSens = resolveEngineMouseSensitivity(this);
 
     hudEl.innerHTML = `
       <div class="avatar-bar-status">
@@ -6101,7 +6208,7 @@ export class Map3DEngine {
           <span>${isFpp ? 'Mode Teknisi (FPP)' : 'Mode Teknisi (TPP)'}</span>
           <span id="avatar-online-peers-slot" class="sim-inspector-badge">Rekan: 0 online</span>
         </span>
-        <span class="avatar-bar-controls-hint"><strong>WASD</strong> Jalan • <strong>Spasi</strong> Lompat • <strong>E</strong> Angkat • <strong>Q</strong> Taruh / Tempel Dinding • <strong>[ / ]</strong> Putar • <strong>V</strong> View</span>
+        <span class="avatar-bar-controls-hint"><strong>WASD</strong> Jalan • <strong>Spasi</strong> Lompat • <strong>E</strong> Angkat • <strong>Q</strong> Taruh / Tempel Dinding • <strong>[ / ]</strong> Putar • <strong>, / .</strong> Mouse • <strong>V</strong> View</span>
       </div>
       <div class="avatar-bar-nearest" id="avatar-nearest-slot">
         <span>Terdekat: --</span>
@@ -6117,6 +6224,13 @@ export class Map3DEngine {
           <input type="range" id="range-avatar-scale" class="avatar-scale-range" min="${AVATAR_SCALE_MIN}" max="${AVATAR_SCALE_MAX}" step="${AVATAR_SCALE_STEP}" value="${curScale.toFixed(2)}" aria-label="Skala Karakter Teknisi">
           <button type="button" id="btn-avatar-scale-up" class="avatar-scale-step-btn" title="Perbesar karakter (${AVATAR_SCALE_MAX}x maks)" ${curScale >= AVATAR_SCALE_MAX - 1e-4 ? 'disabled' : ''}>+</button>
           <span id="avatar-scale-value" class="avatar-scale-value">${curScale.toFixed(2)}x</span>
+        </div>
+        <div class="avatar-scale-control avatar-sens-control" title="Sensitivitas mouse Mode Teknisi (${AVATAR_MOUSE_SENS_MIN}x - ${AVATAR_MOUSE_SENS_MAX}x • Pintasan: , / .)">
+          <span class="avatar-scale-label">Mouse</span>
+          <button type="button" id="btn-avatar-sens-down" class="avatar-scale-step-btn" title="Pelankan mouse (,)" ${curSens <= AVATAR_MOUSE_SENS_MIN + 1e-4 ? 'disabled' : ''}>-</button>
+          <input type="range" id="range-avatar-sens" class="avatar-scale-range" min="${AVATAR_MOUSE_SENS_MIN}" max="${AVATAR_MOUSE_SENS_MAX}" step="${AVATAR_MOUSE_SENS_STEP}" value="${curSens.toFixed(2)}" aria-label="Sensitivitas Mouse Mode Teknisi">
+          <button type="button" id="btn-avatar-sens-up" class="avatar-scale-step-btn" title="Cepatkan mouse (.)" ${curSens >= AVATAR_MOUSE_SENS_MAX - 1e-4 ? 'disabled' : ''}>+</button>
+          <span id="avatar-sens-value" class="avatar-scale-value">${curSens.toFixed(2)}x</span>
         </div>
         <select id="select-avatar-teleport" class="avatar-teleport-select" title="Teleport karakter ke depan perangkat">
           <option value="">Teleport ke Perangkat...</option>
@@ -6165,6 +6279,28 @@ export class Map3DEngine {
     hudEl.querySelector('#btn-avatar-scale-up')?.addEventListener('click', (ev) => {
       ev.stopPropagation();
       this.setAvatarScale(Math.round((this.getAvatarScale() + AVATAR_SCALE_STEP) * 100) / 100);
+    });
+
+    const sensRange = hudEl.querySelector('#range-avatar-sens');
+    if (sensRange) {
+      sensRange.addEventListener('input', (ev) => {
+        ev.stopPropagation();
+        this.setAvatarMouseSensitivity(ev.target.value, { silent: true });
+      });
+      sensRange.addEventListener('change', (ev) => {
+        ev.stopPropagation();
+        this.setAvatarMouseSensitivity(ev.target.value, { silent: false });
+      });
+    }
+
+    hudEl.querySelector('#btn-avatar-sens-down')?.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      this.setAvatarMouseSensitivity(Math.round((this.getAvatarMouseSensitivity() - AVATAR_MOUSE_SENS_STEP) * 100) / 100);
+    });
+
+    hudEl.querySelector('#btn-avatar-sens-up')?.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      this.setAvatarMouseSensitivity(Math.round((this.getAvatarMouseSensitivity() + AVATAR_MOUSE_SENS_STEP) * 100) / 100);
     });
 
     const teleportSel = hudEl.querySelector('#select-avatar-teleport');

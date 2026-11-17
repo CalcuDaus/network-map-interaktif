@@ -151,12 +151,16 @@ export class Object3DModal {
           </button>
 
           <div style="border-top: 1px dashed var(--border-color); padding-top: 7px; margin-top: 2px; display: flex; flex-direction: column; gap: 5px;">
-            <div style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--accent-blue, #2a7c13);">
-              Pasang Gedung Sekolah 3D (.GLB)
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+              <div style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--accent-blue, #2a7c13);">
+                Pasang Gedung Sekolah 3D (${BUILTIN_ROOM_BUILDING_PRESETS.length} Model .GLB)
+              </div>
             </div>
-            <div id="o3d-building-preset-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px;">
+            <input type="text" id="o3d-bldg-search" placeholder="Cari gedung 3D..."
+                   style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color); border-radius: 5px; padding: 3px 6px; font-size: 10.5px; color: var(--text-primary);">
+            <div id="o3d-building-preset-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px; max-height: 175px; overflow-y: auto; padding-right: 2px;">
               ${BUILTIN_ROOM_BUILDING_PRESETS.map((b) => `
-                <button type="button" class="btn btn-secondary btn-sm o3d-bldg-btn" data-bldg-id="${b.id}"
+                <button type="button" class="btn btn-secondary btn-sm o3d-bldg-btn" data-bldg-id="${b.id}" data-bldg-name="${b.name.toLowerCase()}"
                         style="justify-content: flex-start; gap: 5px; padding: 5px 6px; font-size: 10px; text-align: left; line-height: 1.25;" title="${b.subtitle}">
                   <i data-lucide="building-2" style="width: 12px; height: 12px; flex-shrink: 0;"></i>
                   <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${b.name}</span>
@@ -349,7 +353,15 @@ export class Object3DModal {
       this.addObjectFromDraftNow();
     });
 
-    // Built-in 3D School Buildings (.GLB) quick insert buttons
+    // Built-in 3D School Buildings (.GLB) quick search + insert buttons
+    this.panelEl.querySelector('#o3d-bldg-search')?.addEventListener('input', (ev) => {
+      const q = String(ev.target.value || '').trim().toLowerCase();
+      this.panelEl.querySelectorAll('.o3d-bldg-btn').forEach((btn) => {
+        const match = !q || String(btn.getAttribute('data-bldg-name') || '').includes(q);
+        btn.style.display = match ? 'inline-flex' : 'none';
+      });
+    });
+
     this.panelEl.querySelectorAll('.o3d-bldg-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
         const bId = btn.getAttribute('data-bldg-id');
