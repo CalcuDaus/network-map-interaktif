@@ -268,23 +268,27 @@ export class HistoryManager {
 
   updateUI() {
     if (typeof document === 'undefined') return;
-    const btnUndo = document.getElementById('btn-undo');
-    const btnRedo = document.getElementById('btn-redo');
+    const undoEnabled = this.canUndo();
+    const redoEnabled = this.canRedo();
+    const prevAction = undoEnabled && this.undoStack.length > 1 ? this.undoStack[this.undoStack.length - 1].actionName : '';
+    const nextAction = redoEnabled ? this.redoStack[this.redoStack.length - 1].actionName : '';
 
-    if (btnUndo) {
-      btnUndo.disabled = !this.canUndo();
-      btnUndo.style.opacity = this.canUndo() ? '1' : '0.4';
-      btnUndo.style.pointerEvents = this.canUndo() ? 'auto' : 'none';
-      const prevAction = this.undoStack.length > 1 ? this.undoStack[this.undoStack.length - 1].actionName : '';
-      btnUndo.title = this.canUndo() ? `Undo: ${prevAction} (Ctrl+Z)` : 'Undo (Ctrl+Z)';
+    for (const id of ['btn-undo', 'btn-mob-undo']) {
+      const btn = document.getElementById(id);
+      if (!btn) continue;
+      btn.disabled = !undoEnabled;
+      btn.style.opacity = undoEnabled ? '1' : '0.4';
+      btn.style.pointerEvents = undoEnabled ? 'auto' : 'none';
+      btn.title = undoEnabled ? `Undo: ${prevAction} (Ctrl+Z)` : 'Undo (Ctrl+Z)';
     }
 
-    if (btnRedo) {
-      btnRedo.disabled = !this.canRedo();
-      btnRedo.style.opacity = this.canRedo() ? '1' : '0.4';
-      btnRedo.style.pointerEvents = this.canRedo() ? 'auto' : 'none';
-      const nextAction = this.redoStack.length > 0 ? this.redoStack[this.redoStack.length - 1].actionName : '';
-      btnRedo.title = this.canRedo() ? `Redo: ${nextAction} (Ctrl+Y)` : 'Redo (Ctrl+Y)';
+    for (const id of ['btn-redo', 'btn-mob-redo']) {
+      const btn = document.getElementById(id);
+      if (!btn) continue;
+      btn.disabled = !redoEnabled;
+      btn.style.opacity = redoEnabled ? '1' : '0.4';
+      btn.style.pointerEvents = redoEnabled ? 'auto' : 'none';
+      btn.title = redoEnabled ? `Redo: ${nextAction} (Ctrl+Y)` : 'Redo (Ctrl+Y)';
     }
   }
 

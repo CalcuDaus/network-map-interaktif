@@ -7,7 +7,7 @@
 import { eventBus } from '../core/event-bus.js';
 import { stateManager } from '../core/state-manager.js';
 import { coordinateSystem } from './coordinate-system.js';
-import { clamp } from '../utils/helpers.js';
+import { clamp, bindTouchLongPress } from '../utils/helpers.js';
 
 export class MapInteractions {
   /**
@@ -243,6 +243,9 @@ export class MapInteractions {
       }
       window.removeEventListener('mousemove', handleWindowMarqueeMove);
       window.removeEventListener('mouseup', handleWindowMarqueeUp);
+      window.removeEventListener('touchmove', handleWindowMarqueeMove);
+      window.removeEventListener('touchend', handleWindowMarqueeUp);
+      window.removeEventListener('touchcancel', handleWindowMarqueeUp);
     };
 
     const getStageImagePoint = () => {
@@ -393,6 +396,105 @@ export class MapInteractions {
 
       window.addEventListener('mousemove', handleWindowMarqueeMove);
       window.addEventListener('mouseup', handleWindowMarqueeUp);
+      window.addEventListener('touchmove', handleWindowMarqueeMove, { passive: true });
+      window.addEventListener('touchend', handleWindowMarqueeUp);
+      window.addEventListener('touchcancel', handleWindowMarqueeUp);
+    });
+
+    // --- 4b. Multi-Touch Two-Finger Pinch Zoom & Pan on Konva Stage ---
+    let pinchState = null;
+    const stageContent = this.stage.getContent?.() || this.container;
+    const getTouchDistanceAndCenter = (t1, t2) => {
+      const rect = this.container.getBoundingClientRect();
+      const dx = t2.clientX - t1.clientX;
+      const dy = t2.clientY - t1.clientY;
+      return {
+        dist: Math.hypot(dx, dy) || 1,
+        cx: ((t1.clientX + t2.clientX) * 0.5) - rect.left,
+        cy: ((t1.clientY + t2.clientY) * 0.5) - rect.top
+      };
+    };
+
+    stageContent?.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        cleanupMarquee();
+        const { dist, cx, cy } = getTouchDistanceAndCenter(e.touches[0], e.touches[1]);
+        const oldScale = this.stage.scaleX() || 1;
+        pinchState = {
+          lastDist: dist,
+          lastCx: cx,
+          lastCy: cy,
+          restoreDraggable: this.stage.draggable()
+        };
+        if (pinchState.restoreDraggable) {
+          this.stage.draggable(false);
+        }
+        this.suspendHitTesting('pinch');
+        this._suppressNextEmptyClickUntil = Date.now() + 350;
+      }
+    }, { passive: false });
+
+    stageContent?.addEventListener('touchmove', (e) => {
+      if (!pinchState || e.touches.length !== 2) return;
+      e.preventDefault();
+      const { dist, cx, cy } = getTouchDistanceAndCenter(e.touches[0], e.touches[1]);
+      const oldScale = this.stage.scaleX() || 1;
+      const { minScale, maxScale } = stateManager.getState().viewport;
+      const scaleMul = dist / Math.max(1, pinchState.lastDist);
+      const newScale = clamp(oldScale * scaleMul, minScale, maxScale);
+
+      const pointTo = {
+        x: (pinchState.lastCx - this.stage.x()) / oldScale,
+        y: (pinchState.lastCy - this.stage.y()) / oldScale
+      };
+      const newPos = {
+        x: cx - pointTo.x * newScale,
+        y: cy - pointTo.y * newScale
+      };
+
+      this.stage.scale({ x: newScale, y: newScale });
+      this.stage.position(newPos);
+      this.stage.batchDraw();
+
+      pinchState.lastDist = dist;
+      pinchState.lastCx = cx;
+      pinchState.lastCy = cy;
+      this.scheduleUiSync(true, true);
+    }, { passive: false });
+
+    const endPinch = (e) => {
+      if (!pinchState) return;
+      if (e.touches && e.touches.length >= 2) return;
+      const restore = pinchState.restoreDraggable;
+      pinchState = null;
+      this.resumeHitTesting('pinch');
+      if (restore) {
+        this.stage.draggable(stateManager.getMode() === 'navigate' && !this.isSpacePressed);
+      }
+      const pos = this.stage.position();
+      stateManager.setViewport(this.stage.scaleX(), pos.x, pos.y);
+      this.updatePointerTracking();
+    };
+    stageContent?.addEventListener('touchend', endPinch, { passive: true });
+    stageContent?.addEventListener('touchcancel', endPinch, { passive: true });
+
+    // --- 4c. Touch Long-Press on Empty Stage -> Desktop Context Menu Parity ---
+    bindTouchLongPress(this.stage, ({ clientX, clientY, konvaEvent }) => {
+      if (pinchState || this.isDragging || stateManager.getViewMode?.() === '3d') return;
+      const tgt = konvaEvent?.target;
+      const isBg = !tgt || tgt === this.stage || tgt.hasName?.('bg-layer') || tgt.hasName?.('background');
+      if (!isBg) return;
+      const rect = this.container.getBoundingClientRect();
+      const pointer = { x: clientX - rect.left, y: clientY - rect.top };
+      const norm = coordinateSystem.screenToNormalized(pointer, this.stage);
+      this._suppressNextEmptyClickUntil = Date.now() + 450;
+      eventBus.emit('contextmenu:canvas', {
+        screenX: clientX,
+        screenY: clientY,
+        normX: norm.x,
+        normY: norm.y
+      });
     });
 
     // --- 5. Stage Click / Tap (Empty canvas click or placement) ---

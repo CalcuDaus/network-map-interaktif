@@ -76,3 +76,108 @@ export function formatZoomPercentage(scale) {
 export function generateId(prefix = 'id') {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
 }
+
+/**
+ * Detect mobile / tablet touch environment without false-positiving desktop touch laptops.
+ * @returns {boolean}
+ */
+export function isMobileTouchDevice() {
+  if (typeof window === 'undefined') return false;
+  const coarse = Boolean(window.matchMedia?.('(pointer: coarse)')?.matches);
+  const hasTouch = 'ontouchstart' in window || (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0);
+  const minSide = Math.min(window.innerWidth || 0, window.innerHeight || 0);
+  return coarse || (hasTouch && minSide > 0 && minSide <= 950);
+}
+
+/**
+ * Attach stationary long-press detection for touch context menu parity on DOM or Konva nodes.
+ * @param {Object} target - DOM element or Konva node supporting on/off or addEventListener
+ * @param {Function} onLongPress - ({ clientX, clientY, target, evt }) => void
+ * @param {{ durationMs?: number, moveThreshold?: number }} [options]
+ * @returns {Function} cleanup function
+ */
+export function bindTouchLongPress(target, onLongPress, { durationMs = 520, moveThreshold = 10 } = {}) {
+  if (!target || typeof onLongPress !== 'function') return () => {};
+  let timer = null;
+  let startX = 0;
+  let startY = 0;
+  let lastEvt = null;
+
+  const cancel = () => {
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    lastEvt = null;
+  };
+
+  const getCoords = (evt) => {
+    const touch = evt?.touches?.[0] || evt?.changedTouches?.[0];
+    if (touch) return { x: touch.clientX, y: touch.clientY };
+    return { x: Number(evt?.clientX) || 0, y: Number(evt?.clientY) || 0 };
+  };
+
+  const onStart = (e) => {
+    const domEvt = e?.evt || e;
+    if (domEvt?.touches && domEvt.touches.length > 1) {
+      cancel();
+      return;
+    }
+    const pt = getCoords(domEvt);
+    startX = pt.x;
+    startY = pt.y;
+    lastEvt = domEvt;
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = null;
+      if (e && typeof e === 'object' && 'cancelBubble' in e) {
+        e.cancelBubble = true;
+      }
+      onLongPress({
+        clientX: startX,
+        clientY: startY,
+        konvaEvent: e?.evt ? e : null,
+        evt: lastEvt
+      });
+    }, durationMs);
+  };
+
+  const onMove = (e) => {
+    if (!timer) return;
+    const domEvt = e?.evt || e;
+    if (domEvt?.touches && domEvt.touches.length > 1) {
+      cancel();
+      return;
+    }
+    const pt = getCoords(domEvt);
+    if (Math.hypot(pt.x - startX, pt.y - startY) > moveThreshold) {
+      cancel();
+    }
+  };
+
+  if (typeof target.on === 'function' && typeof target.off === 'function') {
+    target.on('touchstart.netmaplp', onStart);
+    target.on('touchmove.netmaplp', onMove);
+    target.on('touchend.netmaplp touchcancel.netmaplp dragstart.netmaplp', cancel);
+    return () => {
+      cancel();
+      target.off('.netmaplp');
+    };
+  }
+
+  if (typeof target.addEventListener === 'function') {
+    target.addEventListener('touchstart', onStart, { passive: true });
+    target.addEventListener('touchmove', onMove, { passive: true });
+    target.addEventListener('touchend', cancel, { passive: true });
+    target.addEventListener('touchcancel', cancel, { passive: true });
+    return () => {
+      cancel();
+      target.removeEventListener('touchstart', onStart);
+      target.removeEventListener('touchmove', onMove);
+      target.removeEventListener('touchend', cancel);
+      target.removeEventListener('touchcancel', cancel);
+    };
+  }
+
+  return cancel;
+}

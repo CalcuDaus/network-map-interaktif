@@ -3,7 +3,11 @@
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="screen-orientation" content="landscape">
   <title>SmartSchool NetMap — Interactive Network Infrastructure Mapper</title>
   <meta name="description" content="Visual interactive network infrastructure mapping and documentation system">
 
@@ -16,9 +20,9 @@
 
   <!-- Core Stylesheets -->
   <link rel="stylesheet" href="css/main.css?v=20261113-3d-sketchup">
-  <link rel="stylesheet" href="css/layout.css?v=20261116-zoomfix">
-  <link rel="stylesheet" href="css/components.css?v=20261116-loginglass">
-  <link rel="stylesheet" href="css/map.css?v=20261117-avatarscale">
+  <link rel="stylesheet" href="css/layout.css?v=20261117-mobile">
+  <link rel="stylesheet" href="css/components.css?v=20261117-mobile">
+  <link rel="stylesheet" href="css/map.css?v=20261117-mobile">
 
   <!-- Vendor Libraries (Offline-First with CDN fallback) -->
   <script src="assets/vendor/konva.min.js"></script>
@@ -345,7 +349,66 @@
 
       <!-- Main Map Viewport (Konva Canvas) -->
       <main id="map-viewport">
-        <!-- Floating Exit Fullscreen Button (Visible only in Workspace Fullscreen) -->
+        <!-- Mobile Fullscreen Quick-Dock (Only shown in Mobile/Touch Fullscreen so every desktop tool stays 1-tap away) -->
+        <div id="mobile-fs-dock" class="mobile-fs-dock" aria-label="Kontrol Cepat Mobile">
+          <button type="button" id="btn-mob-left-drawer" class="mob-dock-btn" title="Library Perangkat">
+            <i data-lucide="panel-left" style="width: 14px; height: 14px;"></i>
+            <span>Alat</span>
+          </button>
+          <button type="button" id="btn-mob-right-drawer" class="mob-dock-btn" title="Properti &amp; Layers">
+            <i data-lucide="sliders" style="width: 14px; height: 14px;"></i>
+            <span>Properti</span>
+          </button>
+          <div class="mob-dock-seg" role="group" aria-label="Tampilan 2D 3D">
+            <button type="button" id="btn-mob-view-2d" class="mob-dock-seg-btn active" data-mob-view="2d">2D</button>
+            <button type="button" id="btn-mob-view-3d" class="mob-dock-seg-btn" data-mob-view="3d">3D</button>
+          </div>
+          <div class="mob-dock-seg" role="group" aria-label="Mode Kanvas">
+            <button type="button" class="mob-dock-seg-btn active" data-mob-mode="navigate" title="Geser Peta">
+              <i data-lucide="move" style="width: 13px; height: 13px;"></i>
+            </button>
+            <button type="button" class="mob-dock-seg-btn" data-mob-mode="select" title="Pilih / Box">
+              <i data-lucide="mouse-pointer" style="width: 13px; height: 13px;"></i>
+            </button>
+            <button type="button" class="mob-dock-seg-btn" data-mob-mode="add-device" title="Tambah Perangkat">
+              <i data-lucide="plus-circle" style="width: 13px; height: 13px;"></i>
+            </button>
+            <button type="button" class="mob-dock-seg-btn" data-mob-mode="draw-cable" title="Tarik Kabel">
+              <i data-lucide="git-commit" style="width: 13px; height: 13px;"></i>
+            </button>
+          </div>
+          <button type="button" id="btn-mob-undo" class="mob-dock-btn mob-dock-icon" title="Undo" disabled>
+            <i data-lucide="undo-2" style="width: 14px; height: 14px;"></i>
+          </button>
+          <button type="button" id="btn-mob-redo" class="mob-dock-btn mob-dock-icon" title="Redo" disabled>
+            <i data-lucide="redo-2" style="width: 14px; height: 14px;"></i>
+          </button>
+          <button type="button" id="btn-mob-delete" class="mob-dock-btn mob-dock-icon" title="Hapus Objek Terpilih">
+            <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i>
+          </button>
+          <button type="button" id="btn-mob-rotate-sel" class="mob-dock-btn mob-dock-icon" title="Putar Objek 3D Terpilih (+15°)">
+            <i data-lucide="rotate-cw" style="width: 14px; height: 14px;"></i>
+          </button>
+          <button type="button" id="btn-mob-search" class="mob-dock-btn mob-dock-icon" title="Cari Perangkat / IP">
+            <i data-lucide="search" style="width: 14px; height: 14px;"></i>
+          </button>
+          <button type="button" id="btn-mob-auth" class="mob-dock-btn" title="Akun &amp; Server Utama">
+            <i data-lucide="user-check" style="width: 13px; height: 13px;"></i>
+            <span id="mob-auth-label">Masuk</span>
+          </button>
+          <button type="button" id="btn-mob-menu" class="mob-dock-btn" title="Menu Topologi / IP / Ekspor / Proyek">
+            <i data-lucide="layout-grid" style="width: 13px; height: 13px;"></i>
+            <span>Menu</span>
+          </button>
+          <button type="button" id="btn-mob-fs-native" class="mob-dock-btn mob-dock-icon" title="Fullscreen &amp; Landscape">
+            <i data-lucide="maximize" style="width: 13px; height: 13px;"></i>
+          </button>
+          <button type="button" id="btn-mob-toggle-toolbar" class="mob-dock-btn mob-dock-icon" title="Tampilkan Toolbar Lengkap">
+            <i data-lucide="minimize-2" style="width: 13px; height: 13px;"></i>
+          </button>
+        </div>
+
+        <!-- Floating Exit Fullscreen Button (Visible only in Workspace Fullscreen on Desktop) -->
         <button id="btn-exit-workspace-fullscreen" class="workspace-exit-fs-btn"
           title="Keluar dari Fullscreen Workspace (Esc)">
           <i data-lucide="minimize-2" style="width: 14px; height: 14px;"></i>
@@ -506,6 +569,73 @@
         <!-- Mode Teknisi Roblox Avatar Radar & Control Bar (Bottom Center in 3D Mode) -->
         <div id="hud-3d-avatar-bar" class="hud-3d-avatar-bar hidden" style="display: none;"></div>
 
+        <!-- Roblox-Mobile Virtual Joystick + Action Controls (Mode Teknisi Touch HUD) -->
+        <div id="mobile-roblox-controls" class="mobile-roblox-controls hidden" style="display: none;" aria-label="Kontrol Karakter Roblox Mobile">
+          <!-- Left Thumb: Floating Analog Joystick (Drag >78% auto-sprint) -->
+          <div id="mob-joystick-zone" class="mob-joystick-zone">
+            <div id="mob-joystick-base" class="mob-joystick-base">
+              <div id="mob-joystick-knob" class="mob-joystick-knob"></div>
+              <span id="mob-joystick-sprint-badge" class="mob-joystick-sprint-badge">LARI</span>
+            </div>
+          </div>
+
+          <!-- Right Thumb: Roblox Action Buttons + Camera Perspective & Rotate Carry -->
+          <div id="mob-roblox-actions" class="mob-roblox-actions">
+            <div id="mob-carry-rot-group" class="mob-carry-rot-group hidden">
+              <button type="button" id="btn-mob-rot-left" class="mob-action-pill" title="Putar Benda Kiri (-15 deg)">
+                <i data-lucide="rotate-ccw" style="width: 14px; height: 14px;"></i>
+                <span>-15°</span>
+              </button>
+              <button type="button" id="btn-mob-rot-right" class="mob-action-pill" title="Putar Benda Kanan (+15 deg)">
+                <i data-lucide="rotate-cw" style="width: 14px; height: 14px;"></i>
+                <span>+15°</span>
+              </button>
+              <button type="button" id="btn-mob-drop-all" class="mob-action-pill is-warn" title="Taruh Semua Benda">
+                <span>Semua</span>
+              </button>
+            </div>
+            <div class="mob-action-row">
+              <button type="button" id="btn-mob-persp" class="mob-action-btn is-persp" title="Ganti TPP / FPP">
+                <i data-lucide="eye" style="width: 16px; height: 16px;"></i>
+                <span>TPP</span>
+              </button>
+              <button type="button" id="btn-mob-inspect" class="mob-action-btn is-inspect" title="Inspeksi Port Terdekat">
+                <i data-lucide="scan-search" style="width: 16px; height: 16px;"></i>
+                <span>Port</span>
+              </button>
+              <button type="button" id="btn-mob-pickup" class="mob-action-btn is-carry" title="Angkat Objek/Perangkat Terdekat">
+                <i data-lucide="hand" style="width: 16px; height: 16px;"></i>
+                <span>Angkat</span>
+              </button>
+              <button type="button" id="btn-mob-drop" class="mob-action-btn is-drop hidden" title="Taruh / Tempel ke Dinding 3D">
+                <i data-lucide="arrow-down-to-line" style="width: 16px; height: 16px;"></i>
+                <span>Taruh</span>
+              </button>
+              <button type="button" id="btn-mob-jump" class="mob-jump-btn" title="Lompat">
+                <i data-lucide="arrow-up" style="width: 24px; height: 24px;"></i>
+                <span>LOMPAT</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Mobile Portrait Orientation Guidance Banner (Encourages Landscape Fullscreen) -->
+        <div id="mobile-landscape-prompt" class="mobile-landscape-prompt hidden" style="display: none;">
+          <div class="mobile-landscape-card">
+            <i data-lucide="smartphone" style="width: 34px; height: 34px; color: var(--accent-blue); transform: rotate(90deg);"></i>
+            <div class="mobile-landscape-title">Mode Landscape &amp; Fullscreen Disarankan</div>
+            <div class="mobile-landscape-desc">Putar layar HP Anda ke posisi mendatar (landscape) agar kontrol joystick, peta 3D, dan panel alat seluas versi desktop.</div>
+            <div class="mobile-landscape-btns">
+              <button type="button" id="btn-mob-enter-landscape-fs" class="btn btn-primary btn-sm" style="font-weight: 700;">
+                Aktifkan Landscape Fullscreen
+              </button>
+              <button type="button" id="btn-mob-dismiss-landscape" class="btn btn-secondary btn-sm">
+                Lanjut Saja
+              </button>
+            </div>
+          </div>
+        </div>
+
         <!-- Simulator Device & Port Inspector Dock (Bottom Center in 3D Mode) -->
         <div id="hud-3d-sim-inspector" class="hud-3d-sim-inspector hidden" style="display: none;"></div>
 
@@ -651,7 +781,7 @@
   </div>
 
   <!-- Application Bootstrap (Bundled for file:// and http:// compatibility) -->
-  <script src="js/bundle.js?v=20261117-mousesens"></script>
+  <script src="js/bundle.js?v=20261117-mobile"></script>
 </body>
 
 </html>

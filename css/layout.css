@@ -9,6 +9,7 @@
   flex-direction: column;
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 
@@ -314,11 +315,38 @@ body.workspace-fullscreen #app-status-bar {
 
 body.workspace-fullscreen #workspace {
   height: 100vh !important;
+  height: 100dvh !important;
 }
 
 body.workspace-fullscreen #map-viewport {
   width: 100vw !important;
   height: 100vh !important;
+  height: 100dvh !important;
+}
+
+body.workspace-fullscreen.is-mobile-touch .workspace-exit-fs-btn {
+  display: none !important;
+}
+
+/* On mobile touch fullscreen, sidebars still slide open cleanly as drawers above the map */
+body.workspace-fullscreen.is-mobile-touch .sidebar-left:not(.collapsed),
+body.workspace-fullscreen.is-mobile-touch .sidebar-right:not(.collapsed) {
+  display: flex !important;
+  position: fixed !important;
+  top: 44px;
+  bottom: 0;
+  width: min(320px, 84vw) !important;
+  min-width: min(260px, 78vw) !important;
+  z-index: 95;
+  box-shadow: var(--shadow-lg);
+}
+
+body.workspace-fullscreen.is-mobile-touch .sidebar-left:not(.collapsed) {
+  left: 0;
+}
+
+body.workspace-fullscreen.is-mobile-touch .sidebar-right:not(.collapsed) {
+  right: 0;
 }
 
 body.workspace-fullscreen .workspace-exit-fs-btn {
@@ -1226,5 +1254,45 @@ body.workspace-fullscreen .hud-3d-exit-fs-btn {
 @media (max-width: 768px) {
   #app-status-bar .status-group:first-child .status-item:nth-child(3) {
     display: none;
+  }
+}
+
+/* Mobile / Landscape Touch Overrides */
+body.is-mobile-touch {
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body.is-mobile-touch.workspace-fullscreen #hud-3d-controls {
+  top: 48px !important;
+  left: 8px !important;
+  max-width: calc(100vw - 16px) !important;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  padding: 4px 7px;
+  gap: 5px;
+}
+
+body.is-mobile-touch.workspace-fullscreen #hud-3d-controls::-webkit-scrollbar {
+  display: none;
+}
+
+body.is-mobile-touch #hud-3d-controls.is-minimized {
+  top: 48px !important;
+}
+
+body.is-mobile-touch #hud-3d-hints {
+  display: none !important;
+}
+
+@media (max-height: 500px) and (pointer: coarse) {
+  body.is-mobile-touch:not(.workspace-fullscreen) #app-status-bar {
+    display: none;
+  }
+
+  body.is-mobile-touch:not(.workspace-fullscreen) #workspace {
+    height: calc(100dvh - var(--header-height));
   }
 }

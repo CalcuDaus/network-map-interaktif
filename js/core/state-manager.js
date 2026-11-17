@@ -284,12 +284,16 @@ class StateManager {
    * Toggle sidebar collapse state
    * @param {'left'|'right'} side 
    */
-  toggleSidebar(side) {
+  toggleSidebar(side, forceOpen = undefined) {
     if (side === 'left') {
-      this.state.ui.leftSidebarOpen = !this.state.ui.leftSidebarOpen;
+      const next = typeof forceOpen === 'boolean' ? forceOpen : !this.state.ui.leftSidebarOpen;
+      if (next === this.state.ui.leftSidebarOpen) return;
+      this.state.ui.leftSidebarOpen = next;
       eventBus.emit('ui:sidebar-toggled', { side: 'left', open: this.state.ui.leftSidebarOpen });
     } else if (side === 'right') {
-      this.state.ui.rightSidebarOpen = !this.state.ui.rightSidebarOpen;
+      const next = typeof forceOpen === 'boolean' ? forceOpen : !this.state.ui.rightSidebarOpen;
+      if (next === this.state.ui.rightSidebarOpen) return;
+      this.state.ui.rightSidebarOpen = next;
       eventBus.emit('ui:sidebar-toggled', { side: 'right', open: this.state.ui.rightSidebarOpen });
     }
   }

@@ -2370,3 +2370,31 @@ textarea:focus {
 .auth-inline-form input:focus {
   border-color: var(--accent-blue);
 }
+
+/* Mobile Landscape Modal & Context Menu Safeguards */
+.netmap-context-menu {
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
+}
+
+@media (max-height: 540px), (max-width: 920px) and (pointer: coarse) {
+  .ddm-backdrop {
+    padding: 8px;
+  }
+
+  .ddm-dialog {
+    height: calc(100dvh - 16px);
+    max-width: calc(100vw - 16px);
+  }
+
+  .ddm-header {
+    padding: 8px 12px;
+  }
+
+  #room-3d-modal > div,
+  #object-3d-modal > div {
+    max-height: calc(100dvh - 14px) !important;
+    max-width: calc(100vw - 16px) !important;
+    overflow-y: auto !important;
+  }
+}

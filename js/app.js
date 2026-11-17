@@ -38,6 +38,7 @@ import { Object3DModal } from './ui/object-3d-modal.js';
 import { Device3DModelModal } from './ui/device-3d-modal.js';
 import { PortPickerModal } from './ui/port-picker-modal.js';
 import { DeviceDetailModal } from './ui/device-detail-modal.js';
+import { isMobileTouchDevice } from './utils/helpers.js';
 
 class NetMapApp {
   constructor() {
@@ -332,9 +333,10 @@ class NetMapApp {
     // 19. Restore from IndexedDB or seed initial campus data
     await this.loadOrSeedProject();
 
-    // 20. Final icon rendering & toolbar overflow guard
+    // 20. Final icon rendering, toolbar overflow guard & Mobile Landscape/Fullscreen UX
     this.renderIcons();
     this.setupToolbarResponsiveFit();
+    this.setupMobileExperience();
 
     console.info('[NetMap] Phase 5 Application ready. Complete NetMap MVP operational.');
   }
@@ -407,6 +409,13 @@ class NetMapApp {
         ? (user?.displayName || user?.username || 'Teknisi')
         : (isPublic ? 'Lihat Publik' : 'Mode Tamu');
     }
+    const mobAuthLabel = document.getElementById('mob-auth-label');
+    if (mobAuthLabel) {
+      mobAuthLabel.textContent = isAuth
+        ? (user?.username || 'Teknisi')
+        : (isPublic ? 'Publik' : 'Masuk');
+    }
+    document.getElementById('btn-mob-auth')?.classList.toggle('active', isAuth);
     if (badgeEl) {
       badgeEl.textContent = isAuth
         ? (wsMode === 'personal'
@@ -499,8 +508,8 @@ class NetMapApp {
       }
     });
 
-    // Handle Click-to-Place in Add Device mode
-    eventBus.on('canvas:place-device', ({ normalizedX, normalizedY, customDeviceData }) => {
+    // Handle Click-to-Place in Add Device mode (supports both 2D stage and 3D floor/building placement)
+    eventBus.on('canvas:place-device', ({ normalizedX, normalizedY, customDeviceData, elevationMeters }) => {
       const currentMode = stateManager.getMode();
       if (currentMode === 'add-device') {
         const customTmpl = customDeviceData || this.devicePalette?.activeCustomTemplateToPlace;
@@ -520,6 +529,10 @@ class NetMapApp {
             type: typeToPlace,
             position: { x: normalizedX, y: normalizedY }
           };
+        }
+
+        if (typeof elevationMeters === 'number' && Number.isFinite(elevationMeters)) {
+          deviceData.spatial3d = { ...(deviceData.spatial3d || {}), elevationMeters };
         }
 
         const newDevice = this.deviceManager.addDevice(deviceData);
@@ -1073,42 +1086,8 @@ class NetMapApp {
           break;
         case 'Delete':
         case 'Backspace': {
-          const selectedIds = this.deviceManager?.getSelectedDeviceIds?.() || [];
-          if (selectedIds.length > 1) {
+          if (this.deleteCurrentSelection()) {
             e.preventDefault();
-            if (confirm(`Hapus ${selectedIds.length} perangkat terpilih beserta seluruh kabelnya?`)) {
-              this.deviceManager.deleteSelectedDevices();
-            }
-          } else if (this.deviceManager?.selectedDeviceId) {
-            e.preventDefault();
-            const curDev = this.deviceManager.getDeviceById(this.deviceManager.selectedDeviceId);
-            if (curDev && confirm(`Hapus perangkat "${curDev.name}" beserta seluruh kabelnya?`)) {
-              this.deviceManager.deleteDevice(curDev.id);
-            }
-          } else if (this.cableManager?.selectedCableId) {
-            e.preventDefault();
-            const curCab = this.cableManager.getConnectionById(this.cableManager.selectedCableId);
-            if (curCab && confirm(`Hapus jalur kabel "${curCab.name}"?`)) {
-              this.cableManager.deleteConnection(curCab.id);
-            }
-          } else {
-            const selObj3dId = stateManager.getSelectedObject3dId?.();
-            if (selObj3dId) {
-              e.preventDefault();
-              const curObj3d = stateManager.getObject3dById?.(selObj3dId);
-              if (curObj3d && confirm(`Hapus objek 3D "${curObj3d.name || selObj3dId}"?`)) {
-                stateManager.deleteObject3d(selObj3dId);
-              }
-            } else {
-              const selRoom3dId = stateManager.getSelectedRoom3dId?.();
-              if (selRoom3dId) {
-                e.preventDefault();
-                const curRoom3d = stateManager.getRoom3dById?.(selRoom3dId);
-                if (curRoom3d && confirm(`Hapus ruangan 3D "${curRoom3d.name || selRoom3dId}"?`)) {
-                  stateManager.deleteRoom3d?.(selRoom3dId);
-                }
-              }
-            }
           }
           break;
         }
@@ -1119,6 +1098,312 @@ class NetMapApp {
           break;
       }
     });
+  }
+
+  deleteCurrentSelection() {
+    const selectedIds = this.deviceManager?.getSelectedDeviceIds?.() || [];
+    if (selectedIds.length > 1) {
+      if (confirm(`Hapus ${selectedIds.length} perangkat terpilih beserta seluruh kabelnya?`)) {
+        this.deviceManager.deleteSelectedDevices();
+      }
+      return true;
+    }
+    if (this.deviceManager?.selectedDeviceId) {
+      const curDev = this.deviceManager.getDeviceById(this.deviceManager.selectedDeviceId);
+      if (curDev && confirm(`Hapus perangkat "${curDev.name}" beserta seluruh kabelnya?`)) {
+        this.deviceManager.deleteDevice(curDev.id);
+      }
+      return true;
+    }
+    if (this.cableManager?.selectedCableId) {
+      const curCab = this.cableManager.getConnectionById(this.cableManager.selectedCableId);
+      if (curCab && confirm(`Hapus jalur kabel "${curCab.name}"?`)) {
+        this.cableManager.deleteConnection(curCab.id);
+      }
+      return true;
+    }
+    const selObj3dId = stateManager.getSelectedObject3dId?.();
+    if (selObj3dId) {
+      const curObj3d = stateManager.getObject3dById?.(selObj3dId);
+      if (curObj3d && confirm(`Hapus objek 3D "${curObj3d.name || selObj3dId}"?`)) {
+        stateManager.deleteObject3d(selObj3dId);
+      }
+      return true;
+    }
+    const selRoom3dId = stateManager.getSelectedRoom3dId?.();
+    if (selRoom3dId) {
+      const curRoom3d = stateManager.getRoom3dById?.(selRoom3dId);
+      if (curRoom3d && confirm(`Hapus ruangan 3D "${curRoom3d.name || selRoom3dId}"?`)) {
+        stateManager.deleteRoom3d?.(selRoom3dId);
+      }
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Configure mobile touch UX: auto landscape+fullscreen default, portrait guidance prompt,
+   * drawer behavior, and compact mobile quick-dock mirroring all desktop capabilities.
+   */
+  setupMobileExperience() {
+    if (typeof document === 'undefined' || typeof window === 'undefined') return;
+    this._landscapePromptDismissed = false;
+    this._mobilePopoversInitialized = false;
+
+    const applyMobileEnvironment = (initialBoot = false) => {
+      const isMobile = isMobileTouchDevice();
+      document.body.classList.toggle('is-mobile-touch', isMobile);
+      if (!isMobile) {
+        const promptEl = document.getElementById('mobile-landscape-prompt');
+        if (promptEl) {
+          promptEl.classList.add('hidden');
+          promptEl.style.display = 'none';
+        }
+        return;
+      }
+
+      if (initialBoot && !this._mobileBootApplied) {
+        this._mobileBootApplied = true;
+        // Default sidebars collapsed & workspace full screen on mobile for wide Roblox-like canvas
+        stateManager.toggleSidebar('left', false);
+        stateManager.toggleSidebar('right', false);
+        this.toolbar?.setWorkspaceFullscreen?.(true, { requestNative: false });
+        try {
+          const lockRes = screen?.orientation?.lock?.('landscape');
+          if (lockRes && typeof lockRes.catch === 'function') lockRes.catch(() => {});
+        } catch { /* ignore orientation API restrictions before user gesture */ }
+
+        // First user tap upgrades softly to OS fullscreen + landscape lock unless user exited it
+        const upgradeFullscreenOnFirstTap = () => {
+          document.removeEventListener('pointerdown', upgradeFullscreenOnFirstTap, true);
+          if (document.body.classList.contains('workspace-fullscreen') && !document.fullscreenElement && !this._mobileExitedFullscreen) {
+            this.toolbar?.requestNativeFullscreenAndLandscape?.();
+          }
+        };
+        document.addEventListener('pointerdown', upgradeFullscreenOnFirstTap, { capture: true, passive: true });
+      }
+
+      const promptEl = document.getElementById('mobile-landscape-prompt');
+      if (promptEl) {
+        const isPortraitPhone = (window.innerHeight > window.innerWidth) && Math.min(window.innerWidth, window.innerHeight) <= 760;
+        const showPrompt = Boolean(isPortraitPhone && !this._landscapePromptDismissed);
+        promptEl.classList.toggle('hidden', !showPrompt);
+        promptEl.style.display = showPrompt ? 'flex' : 'none';
+      }
+    };
+
+    const bindMobileDock = () => {
+      const dock = document.getElementById('mobile-fs-dock');
+      if (!dock || this._mobileDockBound) return;
+      this._mobileDockBound = true;
+
+      const closeOverlays = () => {
+        document.getElementById('mobile-quick-popover')?.remove();
+      };
+
+      document.getElementById('btn-mob-left-drawer')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeOverlays();
+        stateManager.toggleSidebar('right', false);
+        stateManager.toggleSidebar('left');
+      });
+
+      document.getElementById('btn-mob-right-drawer')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeOverlays();
+        stateManager.toggleSidebar('left', false);
+        stateManager.toggleSidebar('right');
+      });
+
+      document.querySelectorAll('[data-mob-view]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          closeOverlays();
+          const v = btn.getAttribute('data-mob-view');
+          if (v) stateManager.setViewMode(v);
+        });
+      });
+
+      document.querySelectorAll('[data-mob-mode]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          closeOverlays();
+          const m = btn.getAttribute('data-mob-mode');
+          if (m) stateManager.setMode(m);
+        });
+      });
+
+      document.getElementById('btn-mob-undo')?.addEventListener('click', () => this.historyManager?.undo());
+      document.getElementById('btn-mob-redo')?.addEventListener('click', () => this.historyManager?.redo());
+      document.getElementById('btn-mob-delete')?.addEventListener('click', () => {
+        if (!this.deleteCurrentSelection()) {
+          this.map3DEngine?.showStatusHint?.('Pilih perangkat, kabel, objek 3D, atau ruangan terlebih dahulu.');
+        }
+      });
+      document.getElementById('btn-mob-rotate-sel')?.addEventListener('click', () => {
+        if (stateManager.getViewMode() === '3d') {
+          if (!this.map3DEngine?.rotateSelectedIn3D({ dY: 15 })) {
+            this.map3DEngine?.showStatusHint?.('Pilih perangkat, objek 3D, atau ruangan 3D untuk memutar.');
+          }
+        }
+      });
+
+      document.getElementById('btn-mob-auth')?.addEventListener('click', () => {
+        closeOverlays();
+        this.authModal?.show('login');
+      });
+
+      document.getElementById('btn-mob-fs-native')?.addEventListener('click', () => {
+        this._mobileExitedFullscreen = false;
+        this.toolbar?.setWorkspaceFullscreen?.(true, { requestNative: true, lockLandscape: true });
+      });
+
+      document.getElementById('btn-mob-toggle-toolbar')?.addEventListener('click', () => {
+        closeOverlays();
+        this._mobileExitedFullscreen = true;
+        this.toolbar?.setWorkspaceFullscreen?.(false);
+      });
+
+      document.getElementById('btn-mob-enter-landscape-fs')?.addEventListener('click', () => {
+        this._landscapePromptDismissed = true;
+        document.getElementById('mobile-landscape-prompt')?.classList.add('hidden');
+        const p = document.getElementById('mobile-landscape-prompt');
+        if (p) p.style.display = 'none';
+        this.toolbar?.setWorkspaceFullscreen?.(true, { requestNative: true, lockLandscape: true });
+      });
+
+      document.getElementById('btn-mob-dismiss-landscape')?.addEventListener('click', () => {
+        this._landscapePromptDismissed = true;
+        const p = document.getElementById('mobile-landscape-prompt');
+        if (p) {
+          p.classList.add('hidden');
+          p.style.display = 'none';
+        }
+      });
+
+      document.getElementById('btn-mob-search')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const existing = document.getElementById('mobile-quick-popover');
+        if (existing?.getAttribute('data-kind') === 'search') {
+          existing.remove();
+          return;
+        }
+        closeOverlays();
+        const pop = document.createElement('div');
+        pop.id = 'mobile-quick-popover';
+        pop.setAttribute('data-kind', 'search');
+        pop.style.cssText = 'position:absolute;top:48px;left:50%;transform:translateX(-50%);width:min(360px,calc(100vw - 24px));background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:10px;padding:8px;box-shadow:var(--shadow-lg);z-index:96;display:flex;flex-direction:column;gap:6px;';
+        pop.innerHTML = `
+          <input type="text" id="mob-search-inp" placeholder="Cari perangkat, IP, VLAN..." autocomplete="off"
+                 style="width:100%;padding:6px 10px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-primary);color:var(--text-primary);font-size:12px;">
+          <div id="mob-search-res" style="max-height:170px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;"></div>
+        `;
+        document.getElementById('map-viewport')?.appendChild(pop);
+        const inp = pop.querySelector('#mob-search-inp');
+        const resBox = pop.querySelector('#mob-search-res');
+        const renderHits = (q) => {
+          const hits = this.searchEngine?.searchDevices?.(q, { browseWhenEmpty: true, limit: 8 }) || [];
+          resBox.innerHTML = hits.length === 0
+            ? '<div style="font-size:11px;color:var(--text-muted);padding:4px;">Tidak ada hasil</div>'
+            : hits.map((d) => `<button type="button" class="btn btn-secondary btn-sm mob-search-hit" data-id="${d.id}" style="justify-content:space-between;font-size:11px;padding:5px 8px;"><span>${d.name}</span><span style="opacity:0.7;font-family:var(--font-mono);">${d.network?.ip || d.type}</span></button>`).join('');
+          resBox.querySelectorAll('.mob-search-hit').forEach((b) => {
+            b.addEventListener('click', () => {
+              const id = b.getAttribute('data-id');
+              const dev = this.deviceManager?.getDeviceById(id);
+              if (dev) {
+                this.deviceManager.selectDevice(id);
+                if (stateManager.getViewMode() === '3d') {
+                  this.map3DEngine?.focusOnDevice(id);
+                } else {
+                  this.viewportNavigator?.focusOnDevice(dev);
+                }
+              }
+              pop.remove();
+            });
+          });
+        };
+        inp.addEventListener('input', () => renderHits(inp.value));
+        renderHits('');
+        setTimeout(() => inp.focus(), 20);
+      });
+
+      document.getElementById('btn-mob-menu')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const existing = document.getElementById('mobile-quick-popover');
+        if (existing?.getAttribute('data-kind') === 'menu') {
+          existing.remove();
+          return;
+        }
+        closeOverlays();
+        const pop = document.createElement('div');
+        pop.id = 'mobile-quick-popover';
+        pop.setAttribute('data-kind', 'menu');
+        pop.style.cssText = 'position:absolute;top:48px;right:10px;width:min(260px,calc(100vw - 20px));max-height:calc(100dvh - 64px);overflow-y:auto;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:10px;padding:6px;box-shadow:var(--shadow-lg);z-index:96;display:grid;grid-template-columns:1fr;gap:4px;';
+        const actions = [
+          { id: 'mob-act-teknisi', label: 'Mode Teknisi (Roblox Mobile)', fn: () => { if (stateManager.getViewMode() !== '3d') stateManager.setViewMode('3d'); setTimeout(() => this.map3DEngine?.setAvatarMode(true, { perspective: 'tpp' }), 40); } },
+          { id: 'mob-act-fpp', label: 'Mode FPP (Kamera Orang Pertama)', fn: () => { if (stateManager.getViewMode() !== '3d') stateManager.setViewMode('3d'); setTimeout(() => this.map3DEngine?.setAvatarMode(true, { perspective: 'fpp' }), 40); } },
+          { id: 'mob-act-rooms3d', label: 'Ruangan & Gedung 3D (.GLB)', fn: () => this.room3DModal?.show() },
+          { id: 'mob-act-obj3d', label: 'Studio Objek 3D', fn: () => this.object3DModal?.show() },
+          { id: 'mob-act-dev3d', label: 'Model 3D Perangkat', fn: () => this.device3DModelModal?.show() },
+          { id: 'mob-act-topo', label: 'Diagram Topologi', fn: () => this.topologyModal?.show() },
+          { id: 'mob-act-ip', label: 'Tabel IP & VLAN', fn: () => this.ipVlanModal?.show() },
+          { id: 'mob-act-proj', label: 'Kelola Proyek', fn: () => this.projectModal?.show() },
+          { id: 'mob-act-export', label: 'Ekspor (JSON / PNG / PDF)', fn: () => this.exportModal?.show() },
+          { id: 'mob-act-scale', label: 'Kalibrasi Skala Peta', fn: () => this.mapScaleModal?.show() },
+          { id: 'mob-act-fit', label: 'Pas-kan Peta ke Layar (Fit)', fn: () => { if (stateManager.getViewMode() === '3d') this.map3DEngine?.zoomExtents(); else this.mapEngine?.interactions?.fitToScreen(24); } },
+          { id: 'mob-act-theme', label: 'Ganti Tema (Terang / Gelap)', fn: () => this.toolbar?.toggleTheme() }
+        ];
+        pop.innerHTML = actions.map((a) => `<button type="button" class="navbar-dropdown-item" id="${a.id}" style="font-size:11.5px;padding:7px 9px;">${a.label}</button>`).join('');
+        document.getElementById('map-viewport')?.appendChild(pop);
+        actions.forEach((a) => {
+          pop.querySelector(`#${a.id}`)?.addEventListener('click', () => {
+            pop.remove();
+            a.fn();
+          });
+        });
+      });
+
+      document.getElementById('map-viewport')?.addEventListener('pointerdown', (ev) => {
+        if (!document.body.classList.contains('is-mobile-touch')) return;
+        const target = ev.target;
+        if (!target.closest?.('#mobile-quick-popover') && !target.closest?.('#mobile-fs-dock')) {
+          closeOverlays();
+        }
+        if (!target.closest?.('.sidebar') && !target.closest?.('#btn-mob-left-drawer') && !target.closest?.('#btn-mob-right-drawer')) {
+          if (stateManager.getState().ui.leftSidebarOpen) stateManager.toggleSidebar('left', false);
+          if (stateManager.getState().ui.rightSidebarOpen) stateManager.toggleSidebar('right', false);
+        }
+      });
+
+      const syncDockButtons = () => {
+        const curView = stateManager.getViewMode();
+        const curMode = stateManager.getMode();
+        document.querySelectorAll('[data-mob-view]').forEach((b) => {
+          b.classList.toggle('active', b.getAttribute('data-mob-view') === curView);
+        });
+        document.querySelectorAll('[data-mob-mode]').forEach((b) => {
+          b.classList.toggle('active', b.getAttribute('data-mob-mode') === curMode);
+        });
+        const rotBtn = document.getElementById('btn-mob-rotate-sel');
+        if (rotBtn) rotBtn.style.display = curView === '3d' ? 'inline-flex' : 'none';
+      };
+
+      eventBus.on('viewmode:changed', syncDockButtons);
+      eventBus.on('mode:changed', syncDockButtons);
+      eventBus.on('ui:sidebar-toggled', ({ side, open }) => {
+        if (side === 'left') document.getElementById('btn-mob-left-drawer')?.classList.toggle('active', Boolean(open));
+        if (side === 'right') document.getElementById('btn-mob-right-drawer')?.classList.toggle('active', Boolean(open));
+      });
+      syncDockButtons();
+    };
+
+    bindMobileDock();
+    applyMobileEnvironment(true);
+
+    const onViewportChange = () => {
+      applyMobileEnvironment(false);
+      this.map3DEngine?.syncMobileRobloxControlsVisibility?.();
+    };
+    window.addEventListener('resize', onViewportChange);
+    window.addEventListener('orientationchange', () => setTimeout(onViewportChange, 120));
   }
 
   /**

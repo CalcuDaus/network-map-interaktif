@@ -6,7 +6,7 @@
 import { DEVICE_CATEGORIES, DEVICE_STATUSES, getDeviceDefByType } from './device-library.js';
 import { getDeviceIconImage, loadDeviceCustomImage, getDefaultIconForType } from './device-icon-factory.js';
 import { WirelessCoverageRenderer } from './wireless-coverage.js';
-import { clamp } from '../utils/helpers.js';
+import { clamp, bindTouchLongPress } from '../utils/helpers.js';
 
 export class DeviceRenderer {
   /**
@@ -242,13 +242,21 @@ export class DeviceRenderer {
       }
     });
 
-    // Right-Click Context Menu
+    // Right-Click Context Menu (Desktop Mouse + Mobile Long-Press Parity)
     group.on('contextmenu', (e) => {
       e.evt.preventDefault();
       e.cancelBubble = true;
       const currentDev = group.getAttr('deviceData') || device;
       if (this.onContextMenu) {
         this.onContextMenu(currentDev, e.evt.clientX, e.evt.clientY);
+      }
+    });
+
+    bindTouchLongPress(group, ({ clientX, clientY }) => {
+      group._lastDragEndTime = Date.now();
+      const currentDev = group.getAttr('deviceData') || device;
+      if (this.onContextMenu) {
+        this.onContextMenu(currentDev, clientX, clientY);
       }
     });
 

@@ -25,7 +25,7 @@ import {
   animateRobloxAvatarRig,
   createFppHandsViewmodelGroup
 } from './map-3d-models.js';
-import { clamp, generateId } from '../utils/helpers.js';
+import { clamp, generateId, isMobileTouchDevice } from '../utils/helpers.js';
 import { CAMPUS_MAP_DATA_URL } from './campus-map-data.js';
 import {
   authManager,
@@ -214,6 +214,21 @@ export class Map3DEngine {
     this._lastAvatarHudNearestId = null;
     this._lastAvatarHudDistKey = '';
     this._lastAvatarHudCarryKey = '';
+    this.mobileJoystickState = {
+      active: false,
+      pointerId: null,
+      originX: 0,
+      originY: 0,
+      xRatio: 0,
+      yRatio: 0,
+      sprint: false
+    };
+    this.mobileJumpHeld = false;
+    this._touchActiveInSession = false;
+    this._avatarTouchPointers = new Map();
+    this._avatarTouchPinchDist = 0;
+    this._mobileLongPressTimer = null;
+    this._mobileLongPressOrigin = null;
 
     this.bindGlobalListeners();
   }
@@ -298,20 +313,69 @@ export class Map3DEngine {
       }
     }, { capture: true });
 
+    const cancelLongPress = () => {
+      if (this._mobileLongPressTimer) {
+        clearTimeout(this._mobileLongPressTimer);
+        this._mobileLongPressTimer = null;
+      }
+      this._mobileLongPressOrigin = null;
+    };
+
     dom.addEventListener('pointerdown', (e) => {
       if (!this.isActive) return;
       this.cameraAnim = null; // User manual input cancels glide
       this.pointerDownScreen = { x: e.clientX, y: e.clientY };
       this.container.classList.add('is-dragging');
 
-      if (stateManager.getMode() !== 'draw-cable' && e.button === 0) {
+      const isTouch = e.pointerType === 'touch';
+      if (isTouch) {
+        this._touchActiveInSession = true;
+      }
+
+      if (this.avatarMode && !this.simulatorFocusedDeviceId && isTouch) {
+        this._avatarTouchPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (this._avatarTouchPointers.size === 2) {
+          cancelLongPress();
+          const pts = Array.from(this._avatarTouchPointers.values());
+          this._avatarTouchPinchDist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y) || 0;
+          return;
+        }
+        if (this._avatarTouchPointers.size === 1) {
+          this.syncMobileRobloxControlsVisibility();
+          this._mobileLongPressOrigin = { x: e.clientX, y: e.clientY };
+          clearTimeout(this._mobileLongPressTimer);
+          this._mobileLongPressTimer = setTimeout(() => {
+            this._mobileLongPressTimer = null;
+            this._suppressNextClick = true;
+            this.handleCanvasRightClick({ clientX: e.clientX, clientY: e.clientY });
+          }, 520);
+        }
+        return;
+      }
+
+      if (isTouch && !this.cableDragState && !this.object3dDragState && !this.boxSelectState && !this.dragMoveState && !this.dragRotateState && this.navTool !== 'draw3d') {
+        this._mobileLongPressOrigin = { x: e.clientX, y: e.clientY };
+        clearTimeout(this._mobileLongPressTimer);
+        this._mobileLongPressTimer = setTimeout(() => {
+          this._mobileLongPressTimer = null;
+          this._suppressNextClick = true;
+          this.container.classList.remove('is-dragging');
+          this.handleCanvasRightClick({ clientX: e.clientX, clientY: e.clientY });
+        }, 520);
+      } else {
+        cancelLongPress();
+      }
+
+      if (stateManager.getMode() !== 'draw-cable' && (e.button === 0 || isTouch)) {
         const cableHandleHit = this.checkCableHandleHitAtEvent(e);
         if (cableHandleHit) {
+          cancelLongPress();
           this.startCableHandleDrag(e, dom, cableHandleHit);
           return;
         }
         const gizmoHit = this.checkGizmoHitAtEvent(e);
         if (gizmoHit) {
+          cancelLongPress();
           this.startObject3dGizmoDrag(e, dom, gizmoHit);
         } else if (this.navTool === 'box' || e.ctrlKey || e.metaKey) {
           this.startBoxSelect(e, dom);
@@ -335,6 +399,11 @@ export class Map3DEngine {
 
     dom.addEventListener('pointermove', (e) => {
       if (!this.isActive) return;
+      if (this._mobileLongPressOrigin && e.pointerType === 'touch') {
+        if (Math.hypot(e.clientX - this._mobileLongPressOrigin.x, e.clientY - this._mobileLongPressOrigin.y) > 10) {
+          cancelLongPress();
+        }
+      }
       if (this.cableDragState) {
         this.updateCableHandleDrag(e);
         return;
@@ -356,6 +425,40 @@ export class Map3DEngine {
         return;
       }
       if (this.avatarMode && !this.simulatorFocusedDeviceId) {
+        if (e.pointerType === 'touch') {
+          const prevTouch = this._avatarTouchPointers.get(e.pointerId);
+          this._avatarTouchPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+          if (this._avatarTouchPointers.size >= 2) {
+            const pts = Array.from(this._avatarTouchPointers.values());
+            const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y) || 0;
+            if (this._avatarTouchPinchDist > 0 && dist > 0) {
+              const pinchDelta = this._avatarTouchPinchDist - dist;
+              if (this.avatarPerspective === 'fpp' && pinchDelta > 16) {
+                this.avatarState.camDist = 2.6;
+                this.setAvatarPerspective('tpp');
+              } else if (this.avatarPerspective === 'tpp' && Math.abs(pinchDelta) > 1.5) {
+                const nextDist = (this.avatarState.camDist || 5.8) + pinchDelta * 0.032;
+                if (nextDist <= 1.7) {
+                  this.avatarState.camDist = 2.0;
+                  this.setAvatarPerspective('fpp');
+                } else {
+                  this.avatarState.camDist = clamp(nextDist, 2.0, 22.0);
+                  this.syncAvatarCameraFromAngles();
+                }
+              }
+            }
+            this._avatarTouchPinchDist = dist;
+            return;
+          }
+          if (prevTouch) {
+            const dx = e.clientX - prevTouch.x;
+            const dy = e.clientY - prevTouch.y;
+            if (dx !== 0 || dy !== 0) {
+              this.applyAvatarMouseLookDelta(dx, dy);
+            }
+          }
+          return;
+        }
         const isLocked = typeof document !== 'undefined' && document.pointerLockElement === dom;
         if (isLocked) {
           this.avatarState._lastMouseClient = null;
@@ -400,6 +503,13 @@ export class Map3DEngine {
     });
 
     const endDrag = (e) => {
+      cancelLongPress();
+      if (e?.pointerType === 'touch') {
+        this._avatarTouchPointers?.delete(e.pointerId);
+        if ((this._avatarTouchPointers?.size || 0) < 2) {
+          this._avatarTouchPinchDist = 0;
+        }
+      }
       this.container.classList.remove('is-dragging');
       if (this._temporarilyDisabledControlsForBox) {
         this._temporarilyDisabledControlsForBox = false;
@@ -536,6 +646,7 @@ export class Map3DEngine {
     this.releaseAvatarPointerLock();
     this.syncAvatarCrosshair();
     this.syncAvatarControlsUI();
+    this.syncMobileRobloxControlsVisibility?.();
     this.configureControlsForAvatarMode(false);
     if (typeof document !== 'undefined') {
       const avatarHudEl = document.getElementById('hud-3d-avatar-bar');
@@ -1953,6 +2064,33 @@ export class Map3DEngine {
       }
     }
 
+    // 1c. In Add Device mode, clicking or tapping 3D floor / room places device directly on 3D map
+    if (stateManager.getMode() === 'add-device') {
+      const envHits = this.raycaster.intersectObjects(
+        [...this.roomsGroup.children, ...this.groundGroup.children],
+        true
+      );
+      let hitPoint = envHits.length > 0 ? envHits[0].point.clone() : null;
+      if (!hitPoint) {
+        const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+        const intersectPt = new THREE.Vector3();
+        if (this.raycaster.ray.intersectPlane(floorPlane, intersectPt)) {
+          hitPoint = intersectPt;
+        }
+      }
+      if (hitPoint) {
+        const { normX, normY } = this.worldToNorm(hitPoint.x, hitPoint.z);
+        const elev = hitPoint.y > 0.12 && hitPoint.y < 12 ? Number(hitPoint.y.toFixed(2)) : undefined;
+        eventBus.emit('canvas:place-device', {
+          normalizedX: clamp(normX, 0.01, 0.99),
+          normalizedY: clamp(normY, 0.01, 0.99),
+          elevationMeters: elev,
+          isInside: true
+        });
+        return;
+      }
+    }
+
     // 2. Check Custom 3D Builder Object selection (Tiang, Rak Server, Balok, dll)
     if (stateManager.getMode() !== 'draw-cable') {
       const objHit = this.findObject3dHit(this.raycaster);
@@ -2011,8 +2149,8 @@ export class Map3DEngine {
       stateManager.deselectRoom3d?.();
       if (this.simulatorFocusedDeviceId) {
         this.exitSimulatorFocus({ restoreCamera: false });
-      } else if (this.avatarMode) {
-        // Clicking empty canvas while in Mode Teknisi re-locks mouse for 360-deg infinite look
+      } else if (this.avatarMode && e.pointerType !== 'touch') {
+        // Clicking empty canvas while in Mode Teknisi re-locks desktop mouse for 360-deg infinite look
         this.tryLockAvatarPointer();
       }
     }
@@ -2186,6 +2324,10 @@ export class Map3DEngine {
       this.container.classList.add(`tool-${this.navTool}`);
     }
     if (!this.controls) return;
+    this.controls.touches = {
+      ONE: THREE.TOUCH.ROTATE,
+      TWO: THREE.TOUCH.DOLLY_PAN
+    };
 
     if (this.navTool === 'draw3d') {
       this.controls.mouseButtons = {
@@ -2221,12 +2363,20 @@ export class Map3DEngine {
         MIDDLE: THREE.MOUSE.ROTATE,
         RIGHT: THREE.MOUSE.PAN
       };
+      this.controls.touches = {
+        ONE: THREE.TOUCH.PAN,
+        TWO: THREE.TOUCH.DOLLY_PAN
+      };
       this.controls.maxPolarAngle = Math.PI * 0.495;
     } else if (this.navTool === 'zoom') {
       this.controls.mouseButtons = {
         LEFT: THREE.MOUSE.DOLLY,
         MIDDLE: THREE.MOUSE.ROTATE,
         RIGHT: THREE.MOUSE.PAN
+      };
+      this.controls.touches = {
+        ONE: THREE.TOUCH.DOLLY_ROTATE,
+        TWO: THREE.TOUCH.DOLLY_PAN
       };
       this.controls.maxPolarAngle = Math.PI * 0.495;
     } else if (this.navTool === 'look') {
@@ -3886,6 +4036,7 @@ export class Map3DEngine {
   }
 
   tryLockAvatarPointer() {
+    if (this._touchActiveInSession || isMobileTouchDevice()) return;
     if (typeof document === 'undefined' || !this.renderer?.domElement) return;
     if (document.pointerLockElement === this.renderer.domElement) return;
     try {
@@ -4274,6 +4425,10 @@ export class Map3DEngine {
 
     if (!next) {
       this.avatarState.isCarrying = false;
+      this.mobileJumpHeld = false;
+      this.resetMobileJoystick?.();
+      this._avatarTouchPointers?.clear?.();
+      this._avatarTouchPinchDist = 0;
       if (this.avatarGroup) {
         this.avatarGroup.visible = false;
       }
@@ -4283,6 +4438,7 @@ export class Map3DEngine {
       this.releaseAvatarPointerLock();
       this.syncAvatarCrosshair();
       this.syncAvatarControlsUI();
+      this.syncMobileRobloxControlsVisibility?.();
       this.configureControlsForAvatarMode(false);
       if (typeof document !== 'undefined') {
         const hudEl = document.getElementById('hud-3d-avatar-bar');
@@ -4384,6 +4540,8 @@ export class Map3DEngine {
     this.syncAvatarCrosshair();
     this.findNearestDeviceToAvatar();
     this.renderAvatarHudBar();
+    this.bindMobileRobloxControls?.();
+    this.syncMobileRobloxControlsVisibility?.();
     this.tryLockAvatarPointer();
     this.publishLocalPresence?.(true);
     this.showStatusHint(
@@ -5079,6 +5237,143 @@ export class Map3DEngine {
     return toDrop.length;
   }
 
+  resetMobileJoystick() {
+    if (this.mobileJoystickState) {
+      this.mobileJoystickState.active = false;
+      this.mobileJoystickState.pointerId = null;
+      this.mobileJoystickState.xRatio = 0;
+      this.mobileJoystickState.yRatio = 0;
+      this.mobileJoystickState.sprint = false;
+    }
+    if (typeof document !== 'undefined') {
+      const knob = document.getElementById('mob-joystick-knob');
+      const base = document.getElementById('mob-joystick-base');
+      if (knob) knob.style.transform = 'translate3d(0, 0, 0)';
+      base?.classList?.remove('is-sprinting');
+    }
+  }
+
+  syncMobileRobloxControlsVisibility() {
+    if (typeof document === 'undefined') return;
+    const el = document.getElementById('mobile-roblox-controls');
+    if (!el) return;
+    const isTouchCapable = isMobileTouchDevice()
+      || this._touchActiveInSession
+      || Boolean(document.body?.classList?.contains('is-mobile-touch'))
+      || Boolean(this.forceMobileHud);
+    const show = Boolean(this.isActive && this.avatarMode && !this.simulatorFocusedDeviceId && isTouchCapable);
+    el.classList.toggle('hidden', !show);
+    el.style.display = show ? 'block' : 'none';
+    if (!show) {
+      this.mobileJumpHeld = false;
+      this.resetMobileJoystick();
+    } else {
+      this.bindMobileRobloxControls();
+      const perspBtn = document.getElementById('btn-mob-persp');
+      const perspSpan = perspBtn?.querySelector('span');
+      if (perspSpan) perspSpan.textContent = this.avatarPerspective === 'fpp' ? 'FPP' : 'TPP';
+      perspBtn?.classList?.toggle('active', this.avatarPerspective === 'fpp');
+    }
+  }
+
+  bindMobileRobloxControls() {
+    if (this._mobileRobloxControlsBound || typeof document === 'undefined') return;
+    const root = document.getElementById('mobile-roblox-controls');
+    if (!root) return;
+    this._mobileRobloxControlsBound = true;
+
+    const zone = document.getElementById('mob-joystick-zone');
+    const base = document.getElementById('mob-joystick-base');
+    const knob = document.getElementById('mob-joystick-knob');
+    const maxR = 42;
+
+    if (zone && base && knob) {
+      const updateStickFromEvent = (ev) => {
+        const dx = ev.clientX - this.mobileJoystickState.originX;
+        const dy = ev.clientY - this.mobileJoystickState.originY;
+        const dist = Math.hypot(dx, dy);
+        const clamped = dist > maxR ? maxR : dist;
+        const ang = dist > 0.001 ? Math.atan2(dy, dx) : 0;
+        const cx = Math.cos(ang) * clamped;
+        const cy = Math.sin(ang) * clamped;
+        knob.style.transform = `translate3d(${cx.toFixed(1)}px, ${cy.toFixed(1)}px, 0)`;
+        const xRatio = cx / maxR;
+        const yRatio = cy / maxR;
+        const mag = Math.hypot(xRatio, yRatio);
+        const sprint = mag >= 0.78;
+        this.mobileJoystickState.xRatio = xRatio;
+        this.mobileJoystickState.yRatio = yRatio;
+        this.mobileJoystickState.sprint = sprint;
+        base.classList.toggle('is-sprinting', sprint);
+      };
+
+      zone.addEventListener('pointerdown', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        this._touchActiveInSession = true;
+        const rect = base.getBoundingClientRect();
+        this.mobileJoystickState.active = true;
+        this.mobileJoystickState.pointerId = ev.pointerId;
+        this.mobileJoystickState.originX = rect.left + rect.width * 0.5;
+        this.mobileJoystickState.originY = rect.top + rect.height * 0.5;
+        zone.setPointerCapture?.(ev.pointerId);
+        updateStickFromEvent(ev);
+      });
+
+      zone.addEventListener('pointermove', (ev) => {
+        if (!this.mobileJoystickState.active || ev.pointerId !== this.mobileJoystickState.pointerId) return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        updateStickFromEvent(ev);
+      });
+
+      const releaseStick = (ev) => {
+        if (this.mobileJoystickState.pointerId !== null && ev.pointerId !== this.mobileJoystickState.pointerId) return;
+        zone.releasePointerCapture?.(ev.pointerId);
+        this.resetMobileJoystick();
+      };
+      zone.addEventListener('pointerup', releaseStick);
+      zone.addEventListener('pointercancel', releaseStick);
+    }
+
+    const jumpBtn = document.getElementById('btn-mob-jump');
+    if (jumpBtn) {
+      jumpBtn.addEventListener('pointerdown', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        this.mobileJumpHeld = true;
+      });
+      const releaseJump = (ev) => {
+        ev.stopPropagation();
+        this.mobileJumpHeld = false;
+      };
+      jumpBtn.addEventListener('pointerup', releaseJump);
+      jumpBtn.addEventListener('pointercancel', releaseJump);
+      jumpBtn.addEventListener('pointerleave', releaseJump);
+    }
+
+    const bindTap = (id, fn) => {
+      const btn = document.getElementById(id);
+      if (!btn) return;
+      btn.addEventListener('pointerdown', (ev) => ev.stopPropagation());
+      btn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        fn(ev);
+      });
+    };
+
+    bindTap('btn-mob-persp', () => {
+      this.toggleAvatarPerspective();
+      this.syncMobileRobloxControlsVisibility();
+    });
+    bindTap('btn-mob-inspect', () => this.inspectNearestDeviceFromAvatar());
+    bindTap('btn-mob-pickup', () => this.pickupNearestObjectFromAvatar());
+    bindTap('btn-mob-drop', () => this.dropCarriedObjectsFromAvatar({ dropAll: false }));
+    bindTap('btn-mob-drop-all', () => this.dropCarriedObjectsFromAvatar({ dropAll: true }));
+    bindTap('btn-mob-rot-left', () => this.rotateSelectedIn3D({ dY: -15 }));
+    bindTap('btn-mob-rot-right', () => this.rotateSelectedIn3D({ dY: 15 }));
+  }
+
   updateAvatarController(dt = 0.016) {
     if (!this.avatarMode) return;
 
@@ -5088,9 +5383,28 @@ export class Map3DEngine {
     if (this.keysPressed.has('s') || this.keysPressed.has('arrowdown')) forward -= 1;
     if (this.keysPressed.has('d') || this.keysPressed.has('arrowright')) right += 1;
     if (this.keysPressed.has('a') || this.keysPressed.has('arrowleft')) right -= 1;
-    const jumpPressed = this.keysPressed.has('space');
-    const hasMoveInput = forward !== 0 || right !== 0;
-    const isRunning = this.keysPressed.has('shift');
+
+    let joyForward = 0;
+    let joyRight = 0;
+    let joySprint = false;
+    let joyStrength = 1;
+    if (this.mobileJoystickState?.active) {
+      const jr = Number(this.mobileJoystickState.xRatio) || 0;
+      const jy = Number(this.mobileJoystickState.yRatio) || 0;
+      const mag = Math.hypot(jr, jy);
+      if (mag > 0.12) {
+        joyRight = jr;
+        joyForward = -jy;
+        joySprint = Boolean(this.mobileJoystickState.sprint);
+        joyStrength = joySprint ? 1 : Math.min(1, Math.max(0.35, mag));
+      }
+    }
+    forward += joyForward;
+    right += joyRight;
+
+    const jumpPressed = this.keysPressed.has('space') || Boolean(this.mobileJumpHeld);
+    const hasMoveInput = Math.abs(forward) > 0.05 || Math.abs(right) > 0.05;
+    const isRunning = this.keysPressed.has('shift') || joySprint;
 
     // Walking or jumping out of Simulator Port Focus immediately resumes third-person tracking
     if ((hasMoveInput || jumpPressed) && this.simulatorFocusedDeviceId) {
@@ -5152,7 +5466,7 @@ export class Map3DEngine {
         .addScaledVector(rightDir, right);
       if (moveDir.lengthSq() > 0.0001) {
         moveDir.normalize();
-        const speed = isRunning ? 11.5 : 6.2;
+        const speed = (isRunning ? 11.5 : 6.2) * (joyForward !== 0 || joyRight !== 0 ? joyStrength : 1);
         const { worldW, worldD } = this.getWorldDimensions();
         const maxX = worldW * 0.55;
         const maxZ = worldD * 0.55;
@@ -6381,6 +6695,39 @@ export class Map3DEngine {
       }
     }
 
+    const mobPick = document.getElementById('btn-mob-pickup');
+    const mobDrop = document.getElementById('btn-mob-drop');
+    const mobDropAll = document.getElementById('btn-mob-drop-all');
+    const mobRotGroup = document.getElementById('mob-carry-rot-group');
+    const mobInspect = document.getElementById('btn-mob-inspect');
+    const mobPersp = document.getElementById('btn-mob-persp');
+    if (mobPick) {
+      mobPick.disabled = !nearestPick || carriedCount >= (this.maxCarriedObjects || 8);
+      const sp = mobPick.querySelector('span');
+      if (sp) sp.textContent = carriedCount > 0 ? `+Angkat` : `Angkat`;
+    }
+    if (mobDrop) {
+      mobDrop.classList.toggle('hidden', carriedCount === 0);
+      const sp = mobDrop.querySelector('span');
+      if (sp) sp.textContent = wallReadyHit ? 'Tempel' : (carriedCount > 1 ? `Taruh (${carriedCount})` : 'Taruh');
+    }
+    if (mobDropAll) {
+      mobDropAll.style.display = carriedCount > 1 ? 'inline-flex' : 'none';
+    }
+    if (mobRotGroup) {
+      mobRotGroup.classList.toggle('hidden', carriedCount === 0);
+    }
+    if (mobInspect) {
+      const canInspect = Boolean(nearestId && dist <= 6.5);
+      mobInspect.classList.toggle('is-ready', canInspect);
+      mobInspect.disabled = !nearestId;
+    }
+    if (mobPersp) {
+      const sp = mobPersp.querySelector('span');
+      if (sp) sp.textContent = this.avatarPerspective === 'fpp' ? 'FPP' : 'TPP';
+      mobPersp.classList.toggle('active', this.avatarPerspective === 'fpp');
+    }
+
     if (
       this._lastAvatarHudNearestId === nearestId
       && this._lastAvatarHudDistKey === distText
@@ -6661,6 +7008,7 @@ export class Map3DEngine {
     this.syncAvatarCrosshair?.();
     this.syncAvatarMeshVisibilityForPerspective?.();
     this.syncAvatarControlsUI?.();
+    this.syncMobileRobloxControlsVisibility?.();
     this.configureControlsForAvatarMode?.(false);
     this.animateCameraTo(pose.endPos, pose.target, duration);
     if (typeof document !== 'undefined') {
@@ -6695,6 +7043,7 @@ export class Map3DEngine {
     if (this.avatarMode && this.isActive) {
       this.renderAvatarHudBar?.();
     }
+    this.syncMobileRobloxControlsVisibility?.();
   }
 
   startCableFromDevicePort(deviceId, portName = '') {

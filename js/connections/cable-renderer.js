@@ -4,7 +4,7 @@
  */
 
 import { getCableDefByCategory, CABLE_STATUSES, getMediaTypeByCableCategory } from './cable-library.js';
-import { clamp } from '../utils/helpers.js';
+import { clamp, bindTouchLongPress } from '../utils/helpers.js';
 
 export class CableRenderer {
   /**
@@ -170,7 +170,7 @@ export class CableRenderer {
         }
       });
 
-      // Right-Click Context Menu
+      // Right-Click Context Menu (Desktop Mouse + Mobile Long-Press Parity)
       line.on('contextmenu', (e) => {
         e.evt.preventDefault();
         e.cancelBubble = true;
@@ -182,6 +182,18 @@ export class CableRenderer {
         } : null;
         if (this.onContextMenu) {
           this.onContextMenu(cur, e.evt.clientX, e.evt.clientY, hitCoord, null);
+        }
+      });
+
+      bindTouchLongPress(line, ({ clientX, clientY }) => {
+        const cur = line.getAttr('cableData') || cable;
+        const pos = this.connectionLayer.getRelativePointerPosition?.();
+        const hitCoord = pos ? {
+          x: clamp(pos.x / this.naturalWidth, 0.01, 0.99),
+          y: clamp(pos.y / this.naturalHeight, 0.01, 0.99)
+        } : null;
+        if (this.onContextMenu) {
+          this.onContextMenu(cur, clientX, clientY, hitCoord, null);
         }
       });
 

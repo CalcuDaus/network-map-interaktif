@@ -320,12 +320,16 @@
      * Toggle sidebar collapse state
      * @param {'left'|'right'} side 
      */
-    toggleSidebar(side) {
+    toggleSidebar(side, forceOpen = void 0) {
       if (side === "left") {
-        this.state.ui.leftSidebarOpen = !this.state.ui.leftSidebarOpen;
+        const next = typeof forceOpen === "boolean" ? forceOpen : !this.state.ui.leftSidebarOpen;
+        if (next === this.state.ui.leftSidebarOpen) return;
+        this.state.ui.leftSidebarOpen = next;
         eventBus.emit("ui:sidebar-toggled", { side: "left", open: this.state.ui.leftSidebarOpen });
       } else if (side === "right") {
-        this.state.ui.rightSidebarOpen = !this.state.ui.rightSidebarOpen;
+        const next = typeof forceOpen === "boolean" ? forceOpen : !this.state.ui.rightSidebarOpen;
+        if (next === this.state.ui.rightSidebarOpen) return;
+        this.state.ui.rightSidebarOpen = next;
         eventBus.emit("ui:sidebar-toggled", { side: "right", open: this.state.ui.rightSidebarOpen });
       }
     }
@@ -367,6 +371,92 @@
   }
   function generateId(prefix = "id") {
     return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
+  }
+  function isMobileTouchDevice() {
+    if (typeof window === "undefined") return false;
+    const coarse = Boolean(window.matchMedia?.("(pointer: coarse)")?.matches);
+    const hasTouch = "ontouchstart" in window || typeof navigator !== "undefined" && navigator.maxTouchPoints > 0;
+    const minSide = Math.min(window.innerWidth || 0, window.innerHeight || 0);
+    return coarse || hasTouch && minSide > 0 && minSide <= 950;
+  }
+  function bindTouchLongPress(target, onLongPress, { durationMs = 520, moveThreshold = 10 } = {}) {
+    if (!target || typeof onLongPress !== "function") return () => {
+    };
+    let timer = null;
+    let startX = 0;
+    let startY = 0;
+    let lastEvt = null;
+    const cancel = () => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      lastEvt = null;
+    };
+    const getCoords = (evt) => {
+      const touch = evt?.touches?.[0] || evt?.changedTouches?.[0];
+      if (touch) return { x: touch.clientX, y: touch.clientY };
+      return { x: Number(evt?.clientX) || 0, y: Number(evt?.clientY) || 0 };
+    };
+    const onStart = (e) => {
+      const domEvt = e?.evt || e;
+      if (domEvt?.touches && domEvt.touches.length > 1) {
+        cancel();
+        return;
+      }
+      const pt = getCoords(domEvt);
+      startX = pt.x;
+      startY = pt.y;
+      lastEvt = domEvt;
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        timer = null;
+        if (e && typeof e === "object" && "cancelBubble" in e) {
+          e.cancelBubble = true;
+        }
+        onLongPress({
+          clientX: startX,
+          clientY: startY,
+          konvaEvent: e?.evt ? e : null,
+          evt: lastEvt
+        });
+      }, durationMs);
+    };
+    const onMove = (e) => {
+      if (!timer) return;
+      const domEvt = e?.evt || e;
+      if (domEvt?.touches && domEvt.touches.length > 1) {
+        cancel();
+        return;
+      }
+      const pt = getCoords(domEvt);
+      if (Math.hypot(pt.x - startX, pt.y - startY) > moveThreshold) {
+        cancel();
+      }
+    };
+    if (typeof target.on === "function" && typeof target.off === "function") {
+      target.on("touchstart.netmaplp", onStart);
+      target.on("touchmove.netmaplp", onMove);
+      target.on("touchend.netmaplp touchcancel.netmaplp dragstart.netmaplp", cancel);
+      return () => {
+        cancel();
+        target.off(".netmaplp");
+      };
+    }
+    if (typeof target.addEventListener === "function") {
+      target.addEventListener("touchstart", onStart, { passive: true });
+      target.addEventListener("touchmove", onMove, { passive: true });
+      target.addEventListener("touchend", cancel, { passive: true });
+      target.addEventListener("touchcancel", cancel, { passive: true });
+      return () => {
+        cancel();
+        target.removeEventListener("touchstart", onStart);
+        target.removeEventListener("touchmove", onMove);
+        target.removeEventListener("touchend", cancel);
+        target.removeEventListener("touchcancel", cancel);
+      };
+    }
+    return cancel;
   }
 
   // js/map/coordinate-system.js
@@ -792,6 +882,9 @@
         }
         window.removeEventListener("mousemove", handleWindowMarqueeMove);
         window.removeEventListener("mouseup", handleWindowMarqueeUp);
+        window.removeEventListener("touchmove", handleWindowMarqueeMove);
+        window.removeEventListener("touchend", handleWindowMarqueeUp);
+        window.removeEventListener("touchcancel", handleWindowMarqueeUp);
       };
       const getStageImagePoint = () => {
         const pointer = this.stage.getPointerPosition();
@@ -921,6 +1014,95 @@
         };
         window.addEventListener("mousemove", handleWindowMarqueeMove);
         window.addEventListener("mouseup", handleWindowMarqueeUp);
+        window.addEventListener("touchmove", handleWindowMarqueeMove, { passive: true });
+        window.addEventListener("touchend", handleWindowMarqueeUp);
+        window.addEventListener("touchcancel", handleWindowMarqueeUp);
+      });
+      let pinchState = null;
+      const stageContent = this.stage.getContent?.() || this.container;
+      const getTouchDistanceAndCenter = (t1, t2) => {
+        const rect = this.container.getBoundingClientRect();
+        const dx = t2.clientX - t1.clientX;
+        const dy = t2.clientY - t1.clientY;
+        return {
+          dist: Math.hypot(dx, dy) || 1,
+          cx: (t1.clientX + t2.clientX) * 0.5 - rect.left,
+          cy: (t1.clientY + t2.clientY) * 0.5 - rect.top
+        };
+      };
+      stageContent?.addEventListener("touchstart", (e) => {
+        if (e.touches.length === 2) {
+          e.preventDefault();
+          cleanupMarquee();
+          const { dist, cx, cy } = getTouchDistanceAndCenter(e.touches[0], e.touches[1]);
+          const oldScale = this.stage.scaleX() || 1;
+          pinchState = {
+            lastDist: dist,
+            lastCx: cx,
+            lastCy: cy,
+            restoreDraggable: this.stage.draggable()
+          };
+          if (pinchState.restoreDraggable) {
+            this.stage.draggable(false);
+          }
+          this.suspendHitTesting("pinch");
+          this._suppressNextEmptyClickUntil = Date.now() + 350;
+        }
+      }, { passive: false });
+      stageContent?.addEventListener("touchmove", (e) => {
+        if (!pinchState || e.touches.length !== 2) return;
+        e.preventDefault();
+        const { dist, cx, cy } = getTouchDistanceAndCenter(e.touches[0], e.touches[1]);
+        const oldScale = this.stage.scaleX() || 1;
+        const { minScale, maxScale } = stateManager.getState().viewport;
+        const scaleMul = dist / Math.max(1, pinchState.lastDist);
+        const newScale = clamp2(oldScale * scaleMul, minScale, maxScale);
+        const pointTo = {
+          x: (pinchState.lastCx - this.stage.x()) / oldScale,
+          y: (pinchState.lastCy - this.stage.y()) / oldScale
+        };
+        const newPos = {
+          x: cx - pointTo.x * newScale,
+          y: cy - pointTo.y * newScale
+        };
+        this.stage.scale({ x: newScale, y: newScale });
+        this.stage.position(newPos);
+        this.stage.batchDraw();
+        pinchState.lastDist = dist;
+        pinchState.lastCx = cx;
+        pinchState.lastCy = cy;
+        this.scheduleUiSync(true, true);
+      }, { passive: false });
+      const endPinch = (e) => {
+        if (!pinchState) return;
+        if (e.touches && e.touches.length >= 2) return;
+        const restore = pinchState.restoreDraggable;
+        pinchState = null;
+        this.resumeHitTesting("pinch");
+        if (restore) {
+          this.stage.draggable(stateManager.getMode() === "navigate" && !this.isSpacePressed);
+        }
+        const pos = this.stage.position();
+        stateManager.setViewport(this.stage.scaleX(), pos.x, pos.y);
+        this.updatePointerTracking();
+      };
+      stageContent?.addEventListener("touchend", endPinch, { passive: true });
+      stageContent?.addEventListener("touchcancel", endPinch, { passive: true });
+      bindTouchLongPress(this.stage, ({ clientX, clientY, konvaEvent }) => {
+        if (pinchState || this.isDragging || stateManager.getViewMode?.() === "3d") return;
+        const tgt = konvaEvent?.target;
+        const isBg = !tgt || tgt === this.stage || tgt.hasName?.("bg-layer") || tgt.hasName?.("background");
+        if (!isBg) return;
+        const rect = this.container.getBoundingClientRect();
+        const pointer = { x: clientX - rect.left, y: clientY - rect.top };
+        const norm = coordinateSystem.screenToNormalized(pointer, this.stage);
+        this._suppressNextEmptyClickUntil = Date.now() + 450;
+        eventBus.emit("contextmenu:canvas", {
+          screenX: clientX,
+          screenY: clientY,
+          normX: norm.x,
+          normY: norm.y
+        });
       });
       this.stage.on("click tap", (e) => {
         if (this.isSpacePressed || Date.now() < this._suppressNextEmptyClickUntil) {
@@ -3135,14 +3317,40 @@
       const isActive = document.body.classList.contains("workspace-fullscreen");
       this.setWorkspaceFullscreen(!isActive);
     }
-    setWorkspaceFullscreen(enabled) {
+    requestNativeFullscreenAndLandscape() {
+      const tryLockOrientation = () => {
+        try {
+          const res = screen?.orientation?.lock?.("landscape");
+          if (res && typeof res.catch === "function") res.catch(() => {
+          });
+        } catch {
+        }
+      };
+      if (!document.fullscreenElement && document.documentElement?.requestFullscreen) {
+        try {
+          document.documentElement.requestFullscreen().then(tryLockOrientation).catch(tryLockOrientation);
+          return;
+        } catch {
+        }
+      }
+      tryLockOrientation();
+    }
+    setWorkspaceFullscreen(enabled, { requestNative = true, lockLandscape = false } = {}) {
       this.syncWorkspaceFullscreenUI(enabled);
       if (enabled) {
-        if (!document.fullscreenElement && document.documentElement?.requestFullscreen) {
-          document.documentElement.requestFullscreen().catch(() => {
-          });
+        if (requestNative) {
+          if (lockLandscape) {
+            this.requestNativeFullscreenAndLandscape();
+          } else if (!document.fullscreenElement && document.documentElement?.requestFullscreen) {
+            document.documentElement.requestFullscreen().catch(() => {
+            });
+          }
         }
       } else if (document.fullscreenElement && document.exitFullscreen) {
+        try {
+          screen?.orientation?.unlock?.();
+        } catch {
+        }
         document.exitFullscreen().catch(() => {
         });
       }
@@ -6115,6 +6323,13 @@
           this.onContextMenu(currentDev, e.evt.clientX, e.evt.clientY);
         }
       });
+      bindTouchLongPress(group, ({ clientX, clientY }) => {
+        group._lastDragEndTime = Date.now();
+        const currentDev = group.getAttr("deviceData") || device;
+        if (this.onContextMenu) {
+          this.onContextMenu(currentDev, clientX, clientY);
+        }
+      });
       group.on("mouseenter", () => {
         if (group.getStage()?.isDragging()) return;
         document.body.style.cursor = "pointer";
@@ -7282,6 +7497,9 @@ ${device.network.ip}`;
             this.container.querySelectorAll(".palette-item").forEach((el) => el.classList.remove("active-placement"));
             itemEl.classList.add("active-placement");
             eventBus.emit("palette:selected-to-place", { type });
+          }
+          if (typeof document !== "undefined" && document.body?.classList?.contains("is-mobile-touch") || isMobileTouchDevice()) {
+            stateManager.toggleSidebar("left", false);
           }
         });
       });
@@ -9674,6 +9892,17 @@ ${device.network.ip}`;
           } : null;
           if (this.onContextMenu) {
             this.onContextMenu(cur, e.evt.clientX, e.evt.clientY, hitCoord, null);
+          }
+        });
+        bindTouchLongPress(line, ({ clientX, clientY }) => {
+          const cur = line.getAttr("cableData") || cable;
+          const pos = this.connectionLayer.getRelativePointerPosition?.();
+          const hitCoord = pos ? {
+            x: clamp2(pos.x / this.naturalWidth, 0.01, 0.99),
+            y: clamp2(pos.y / this.naturalHeight, 0.01, 0.99)
+          } : null;
+          if (this.onContextMenu) {
+            this.onContextMenu(cur, clientX, clientY, hitCoord, null);
           }
         });
         line.on("mouseenter", () => {
@@ -15821,21 +16050,25 @@ ${dev.network?.ip || ""}`,
     }
     updateUI() {
       if (typeof document === "undefined") return;
-      const btnUndo = document.getElementById("btn-undo");
-      const btnRedo = document.getElementById("btn-redo");
-      if (btnUndo) {
-        btnUndo.disabled = !this.canUndo();
-        btnUndo.style.opacity = this.canUndo() ? "1" : "0.4";
-        btnUndo.style.pointerEvents = this.canUndo() ? "auto" : "none";
-        const prevAction = this.undoStack.length > 1 ? this.undoStack[this.undoStack.length - 1].actionName : "";
-        btnUndo.title = this.canUndo() ? `Undo: ${prevAction} (Ctrl+Z)` : "Undo (Ctrl+Z)";
+      const undoEnabled = this.canUndo();
+      const redoEnabled = this.canRedo();
+      const prevAction = undoEnabled && this.undoStack.length > 1 ? this.undoStack[this.undoStack.length - 1].actionName : "";
+      const nextAction = redoEnabled ? this.redoStack[this.redoStack.length - 1].actionName : "";
+      for (const id of ["btn-undo", "btn-mob-undo"]) {
+        const btn = document.getElementById(id);
+        if (!btn) continue;
+        btn.disabled = !undoEnabled;
+        btn.style.opacity = undoEnabled ? "1" : "0.4";
+        btn.style.pointerEvents = undoEnabled ? "auto" : "none";
+        btn.title = undoEnabled ? `Undo: ${prevAction} (Ctrl+Z)` : "Undo (Ctrl+Z)";
       }
-      if (btnRedo) {
-        btnRedo.disabled = !this.canRedo();
-        btnRedo.style.opacity = this.canRedo() ? "1" : "0.4";
-        btnRedo.style.pointerEvents = this.canRedo() ? "auto" : "none";
-        const nextAction = this.redoStack.length > 0 ? this.redoStack[this.redoStack.length - 1].actionName : "";
-        btnRedo.title = this.canRedo() ? `Redo: ${nextAction} (Ctrl+Y)` : "Redo (Ctrl+Y)";
+      for (const id of ["btn-redo", "btn-mob-redo"]) {
+        const btn = document.getElementById(id);
+        if (!btn) continue;
+        btn.disabled = !redoEnabled;
+        btn.style.opacity = redoEnabled ? "1" : "0.4";
+        btn.style.pointerEvents = redoEnabled ? "auto" : "none";
+        btn.title = redoEnabled ? `Redo: ${nextAction} (Ctrl+Y)` : "Redo (Ctrl+Y)";
       }
     }
     showToast(message) {
@@ -67789,6 +68022,21 @@ void main() {
       this._lastAvatarHudNearestId = null;
       this._lastAvatarHudDistKey = "";
       this._lastAvatarHudCarryKey = "";
+      this.mobileJoystickState = {
+        active: false,
+        pointerId: null,
+        originX: 0,
+        originY: 0,
+        xRatio: 0,
+        yRatio: 0,
+        sprint: false
+      };
+      this.mobileJumpHeld = false;
+      this._touchActiveInSession = false;
+      this._avatarTouchPointers = /* @__PURE__ */ new Map();
+      this._avatarTouchPinchDist = 0;
+      this._mobileLongPressTimer = null;
+      this._mobileLongPressOrigin = null;
       this.bindGlobalListeners();
     }
     init() {
@@ -67849,19 +68097,64 @@ void main() {
           }
         }
       }, { capture: true });
+      const cancelLongPress = () => {
+        if (this._mobileLongPressTimer) {
+          clearTimeout(this._mobileLongPressTimer);
+          this._mobileLongPressTimer = null;
+        }
+        this._mobileLongPressOrigin = null;
+      };
       dom.addEventListener("pointerdown", (e) => {
         if (!this.isActive) return;
         this.cameraAnim = null;
         this.pointerDownScreen = { x: e.clientX, y: e.clientY };
         this.container.classList.add("is-dragging");
-        if (stateManager.getMode() !== "draw-cable" && e.button === 0) {
+        const isTouch = e.pointerType === "touch";
+        if (isTouch) {
+          this._touchActiveInSession = true;
+        }
+        if (this.avatarMode && !this.simulatorFocusedDeviceId && isTouch) {
+          this._avatarTouchPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+          if (this._avatarTouchPointers.size === 2) {
+            cancelLongPress();
+            const pts = Array.from(this._avatarTouchPointers.values());
+            this._avatarTouchPinchDist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y) || 0;
+            return;
+          }
+          if (this._avatarTouchPointers.size === 1) {
+            this.syncMobileRobloxControlsVisibility();
+            this._mobileLongPressOrigin = { x: e.clientX, y: e.clientY };
+            clearTimeout(this._mobileLongPressTimer);
+            this._mobileLongPressTimer = setTimeout(() => {
+              this._mobileLongPressTimer = null;
+              this._suppressNextClick = true;
+              this.handleCanvasRightClick({ clientX: e.clientX, clientY: e.clientY });
+            }, 520);
+          }
+          return;
+        }
+        if (isTouch && !this.cableDragState && !this.object3dDragState && !this.boxSelectState && !this.dragMoveState && !this.dragRotateState && this.navTool !== "draw3d") {
+          this._mobileLongPressOrigin = { x: e.clientX, y: e.clientY };
+          clearTimeout(this._mobileLongPressTimer);
+          this._mobileLongPressTimer = setTimeout(() => {
+            this._mobileLongPressTimer = null;
+            this._suppressNextClick = true;
+            this.container.classList.remove("is-dragging");
+            this.handleCanvasRightClick({ clientX: e.clientX, clientY: e.clientY });
+          }, 520);
+        } else {
+          cancelLongPress();
+        }
+        if (stateManager.getMode() !== "draw-cable" && (e.button === 0 || isTouch)) {
           const cableHandleHit = this.checkCableHandleHitAtEvent(e);
           if (cableHandleHit) {
+            cancelLongPress();
             this.startCableHandleDrag(e, dom, cableHandleHit);
             return;
           }
           const gizmoHit = this.checkGizmoHitAtEvent(e);
           if (gizmoHit) {
+            cancelLongPress();
             this.startObject3dGizmoDrag(e, dom, gizmoHit);
           } else if (this.navTool === "box" || e.ctrlKey || e.metaKey) {
             this.startBoxSelect(e, dom);
@@ -67884,6 +68177,11 @@ void main() {
       });
       dom.addEventListener("pointermove", (e) => {
         if (!this.isActive) return;
+        if (this._mobileLongPressOrigin && e.pointerType === "touch") {
+          if (Math.hypot(e.clientX - this._mobileLongPressOrigin.x, e.clientY - this._mobileLongPressOrigin.y) > 10) {
+            cancelLongPress();
+          }
+        }
         if (this.cableDragState) {
           this.updateCableHandleDrag(e);
           return;
@@ -67905,6 +68203,40 @@ void main() {
           return;
         }
         if (this.avatarMode && !this.simulatorFocusedDeviceId) {
+          if (e.pointerType === "touch") {
+            const prevTouch = this._avatarTouchPointers.get(e.pointerId);
+            this._avatarTouchPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+            if (this._avatarTouchPointers.size >= 2) {
+              const pts = Array.from(this._avatarTouchPointers.values());
+              const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y) || 0;
+              if (this._avatarTouchPinchDist > 0 && dist > 0) {
+                const pinchDelta = this._avatarTouchPinchDist - dist;
+                if (this.avatarPerspective === "fpp" && pinchDelta > 16) {
+                  this.avatarState.camDist = 2.6;
+                  this.setAvatarPerspective("tpp");
+                } else if (this.avatarPerspective === "tpp" && Math.abs(pinchDelta) > 1.5) {
+                  const nextDist = (this.avatarState.camDist || 5.8) + pinchDelta * 0.032;
+                  if (nextDist <= 1.7) {
+                    this.avatarState.camDist = 2;
+                    this.setAvatarPerspective("fpp");
+                  } else {
+                    this.avatarState.camDist = clamp2(nextDist, 2, 22);
+                    this.syncAvatarCameraFromAngles();
+                  }
+                }
+              }
+              this._avatarTouchPinchDist = dist;
+              return;
+            }
+            if (prevTouch) {
+              const dx2 = e.clientX - prevTouch.x;
+              const dy2 = e.clientY - prevTouch.y;
+              if (dx2 !== 0 || dy2 !== 0) {
+                this.applyAvatarMouseLookDelta(dx2, dy2);
+              }
+            }
+            return;
+          }
           const isLocked = typeof document !== "undefined" && document.pointerLockElement === dom;
           if (isLocked) {
             this.avatarState._lastMouseClient = null;
@@ -67946,6 +68278,13 @@ void main() {
         this.controls.target.copy(this.camera.position).addScaledVector(newDir, lookDist);
       });
       const endDrag = (e) => {
+        cancelLongPress();
+        if (e?.pointerType === "touch") {
+          this._avatarTouchPointers?.delete(e.pointerId);
+          if ((this._avatarTouchPointers?.size || 0) < 2) {
+            this._avatarTouchPinchDist = 0;
+          }
+        }
         this.container.classList.remove("is-dragging");
         if (this._temporarilyDisabledControlsForBox) {
           this._temporarilyDisabledControlsForBox = false;
@@ -68070,6 +68409,7 @@ void main() {
       this.releaseAvatarPointerLock();
       this.syncAvatarCrosshair();
       this.syncAvatarControlsUI();
+      this.syncMobileRobloxControlsVisibility?.();
       this.configureControlsForAvatarMode(false);
       if (typeof document !== "undefined") {
         const avatarHudEl = document.getElementById("hud-3d-avatar-bar");
@@ -69297,6 +69637,31 @@ void main() {
           return;
         }
       }
+      if (stateManager.getMode() === "add-device") {
+        const envHits = this.raycaster.intersectObjects(
+          [...this.roomsGroup.children, ...this.groundGroup.children],
+          true
+        );
+        let hitPoint = envHits.length > 0 ? envHits[0].point.clone() : null;
+        if (!hitPoint) {
+          const floorPlane = new Plane(new Vector3(0, 1, 0), 0);
+          const intersectPt = new Vector3();
+          if (this.raycaster.ray.intersectPlane(floorPlane, intersectPt)) {
+            hitPoint = intersectPt;
+          }
+        }
+        if (hitPoint) {
+          const { normX, normY } = this.worldToNorm(hitPoint.x, hitPoint.z);
+          const elev = hitPoint.y > 0.12 && hitPoint.y < 12 ? Number(hitPoint.y.toFixed(2)) : void 0;
+          eventBus.emit("canvas:place-device", {
+            normalizedX: clamp2(normX, 0.01, 0.99),
+            normalizedY: clamp2(normY, 0.01, 0.99),
+            elevationMeters: elev,
+            isInside: true
+          });
+          return;
+        }
+      }
       if (stateManager.getMode() !== "draw-cable") {
         const objHit = this.findObject3dHit(this.raycaster);
         if (objHit?.object3dId) {
@@ -69348,7 +69713,7 @@ void main() {
         stateManager.deselectRoom3d?.();
         if (this.simulatorFocusedDeviceId) {
           this.exitSimulatorFocus({ restoreCamera: false });
-        } else if (this.avatarMode) {
+        } else if (this.avatarMode && e.pointerType !== "touch") {
           this.tryLockAvatarPointer();
         }
       }
@@ -69490,6 +69855,10 @@ void main() {
         this.container.classList.add(`tool-${this.navTool}`);
       }
       if (!this.controls) return;
+      this.controls.touches = {
+        ONE: TOUCH.ROTATE,
+        TWO: TOUCH.DOLLY_PAN
+      };
       if (this.navTool === "draw3d") {
         this.controls.mouseButtons = {
           LEFT: -1,
@@ -69528,12 +69897,20 @@ void main() {
           MIDDLE: MOUSE.ROTATE,
           RIGHT: MOUSE.PAN
         };
+        this.controls.touches = {
+          ONE: TOUCH.PAN,
+          TWO: TOUCH.DOLLY_PAN
+        };
         this.controls.maxPolarAngle = Math.PI * 0.495;
       } else if (this.navTool === "zoom") {
         this.controls.mouseButtons = {
           LEFT: MOUSE.DOLLY,
           MIDDLE: MOUSE.ROTATE,
           RIGHT: MOUSE.PAN
+        };
+        this.controls.touches = {
+          ONE: TOUCH.DOLLY_ROTATE,
+          TWO: TOUCH.DOLLY_PAN
         };
         this.controls.maxPolarAngle = Math.PI * 0.495;
       } else if (this.navTool === "look") {
@@ -71023,6 +71400,7 @@ void main() {
       this.controls.target.add(moveVec);
     }
     tryLockAvatarPointer() {
+      if (this._touchActiveInSession || isMobileTouchDevice()) return;
       if (typeof document === "undefined" || !this.renderer?.domElement) return;
       if (document.pointerLockElement === this.renderer.domElement) return;
       try {
@@ -71374,6 +71752,10 @@ void main() {
       }
       if (!next) {
         this.avatarState.isCarrying = false;
+        this.mobileJumpHeld = false;
+        this.resetMobileJoystick?.();
+        this._avatarTouchPointers?.clear?.();
+        this._avatarTouchPinchDist = 0;
         if (this.avatarGroup) {
           this.avatarGroup.visible = false;
         }
@@ -71383,6 +71765,7 @@ void main() {
         this.releaseAvatarPointerLock();
         this.syncAvatarCrosshair();
         this.syncAvatarControlsUI();
+        this.syncMobileRobloxControlsVisibility?.();
         this.configureControlsForAvatarMode(false);
         if (typeof document !== "undefined") {
           const hudEl = document.getElementById("hud-3d-avatar-bar");
@@ -71466,6 +71849,8 @@ void main() {
       this.syncAvatarCrosshair();
       this.findNearestDeviceToAvatar();
       this.renderAvatarHudBar();
+      this.bindMobileRobloxControls?.();
+      this.syncMobileRobloxControlsVisibility?.();
       this.tryLockAvatarPointer();
       this.publishLocalPresence?.(true);
       this.showStatusHint(
@@ -72055,6 +72440,129 @@ void main() {
       }
       return toDrop.length;
     }
+    resetMobileJoystick() {
+      if (this.mobileJoystickState) {
+        this.mobileJoystickState.active = false;
+        this.mobileJoystickState.pointerId = null;
+        this.mobileJoystickState.xRatio = 0;
+        this.mobileJoystickState.yRatio = 0;
+        this.mobileJoystickState.sprint = false;
+      }
+      if (typeof document !== "undefined") {
+        const knob = document.getElementById("mob-joystick-knob");
+        const base = document.getElementById("mob-joystick-base");
+        if (knob) knob.style.transform = "translate3d(0, 0, 0)";
+        base?.classList?.remove("is-sprinting");
+      }
+    }
+    syncMobileRobloxControlsVisibility() {
+      if (typeof document === "undefined") return;
+      const el = document.getElementById("mobile-roblox-controls");
+      if (!el) return;
+      const isTouchCapable = isMobileTouchDevice() || this._touchActiveInSession || Boolean(document.body?.classList?.contains("is-mobile-touch")) || Boolean(this.forceMobileHud);
+      const show = Boolean(this.isActive && this.avatarMode && !this.simulatorFocusedDeviceId && isTouchCapable);
+      el.classList.toggle("hidden", !show);
+      el.style.display = show ? "block" : "none";
+      if (!show) {
+        this.mobileJumpHeld = false;
+        this.resetMobileJoystick();
+      } else {
+        this.bindMobileRobloxControls();
+        const perspBtn = document.getElementById("btn-mob-persp");
+        const perspSpan = perspBtn?.querySelector("span");
+        if (perspSpan) perspSpan.textContent = this.avatarPerspective === "fpp" ? "FPP" : "TPP";
+        perspBtn?.classList?.toggle("active", this.avatarPerspective === "fpp");
+      }
+    }
+    bindMobileRobloxControls() {
+      if (this._mobileRobloxControlsBound || typeof document === "undefined") return;
+      const root = document.getElementById("mobile-roblox-controls");
+      if (!root) return;
+      this._mobileRobloxControlsBound = true;
+      const zone = document.getElementById("mob-joystick-zone");
+      const base = document.getElementById("mob-joystick-base");
+      const knob = document.getElementById("mob-joystick-knob");
+      const maxR = 42;
+      if (zone && base && knob) {
+        const updateStickFromEvent = (ev) => {
+          const dx = ev.clientX - this.mobileJoystickState.originX;
+          const dy = ev.clientY - this.mobileJoystickState.originY;
+          const dist = Math.hypot(dx, dy);
+          const clamped = dist > maxR ? maxR : dist;
+          const ang = dist > 1e-3 ? Math.atan2(dy, dx) : 0;
+          const cx = Math.cos(ang) * clamped;
+          const cy = Math.sin(ang) * clamped;
+          knob.style.transform = `translate3d(${cx.toFixed(1)}px, ${cy.toFixed(1)}px, 0)`;
+          const xRatio = cx / maxR;
+          const yRatio = cy / maxR;
+          const mag = Math.hypot(xRatio, yRatio);
+          const sprint = mag >= 0.78;
+          this.mobileJoystickState.xRatio = xRatio;
+          this.mobileJoystickState.yRatio = yRatio;
+          this.mobileJoystickState.sprint = sprint;
+          base.classList.toggle("is-sprinting", sprint);
+        };
+        zone.addEventListener("pointerdown", (ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+          this._touchActiveInSession = true;
+          const rect = base.getBoundingClientRect();
+          this.mobileJoystickState.active = true;
+          this.mobileJoystickState.pointerId = ev.pointerId;
+          this.mobileJoystickState.originX = rect.left + rect.width * 0.5;
+          this.mobileJoystickState.originY = rect.top + rect.height * 0.5;
+          zone.setPointerCapture?.(ev.pointerId);
+          updateStickFromEvent(ev);
+        });
+        zone.addEventListener("pointermove", (ev) => {
+          if (!this.mobileJoystickState.active || ev.pointerId !== this.mobileJoystickState.pointerId) return;
+          ev.preventDefault();
+          ev.stopPropagation();
+          updateStickFromEvent(ev);
+        });
+        const releaseStick = (ev) => {
+          if (this.mobileJoystickState.pointerId !== null && ev.pointerId !== this.mobileJoystickState.pointerId) return;
+          zone.releasePointerCapture?.(ev.pointerId);
+          this.resetMobileJoystick();
+        };
+        zone.addEventListener("pointerup", releaseStick);
+        zone.addEventListener("pointercancel", releaseStick);
+      }
+      const jumpBtn = document.getElementById("btn-mob-jump");
+      if (jumpBtn) {
+        jumpBtn.addEventListener("pointerdown", (ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+          this.mobileJumpHeld = true;
+        });
+        const releaseJump = (ev) => {
+          ev.stopPropagation();
+          this.mobileJumpHeld = false;
+        };
+        jumpBtn.addEventListener("pointerup", releaseJump);
+        jumpBtn.addEventListener("pointercancel", releaseJump);
+        jumpBtn.addEventListener("pointerleave", releaseJump);
+      }
+      const bindTap = (id, fn) => {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+        btn.addEventListener("pointerdown", (ev) => ev.stopPropagation());
+        btn.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          fn(ev);
+        });
+      };
+      bindTap("btn-mob-persp", () => {
+        this.toggleAvatarPerspective();
+        this.syncMobileRobloxControlsVisibility();
+      });
+      bindTap("btn-mob-inspect", () => this.inspectNearestDeviceFromAvatar());
+      bindTap("btn-mob-pickup", () => this.pickupNearestObjectFromAvatar());
+      bindTap("btn-mob-drop", () => this.dropCarriedObjectsFromAvatar({ dropAll: false }));
+      bindTap("btn-mob-drop-all", () => this.dropCarriedObjectsFromAvatar({ dropAll: true }));
+      bindTap("btn-mob-rot-left", () => this.rotateSelectedIn3D({ dY: -15 }));
+      bindTap("btn-mob-rot-right", () => this.rotateSelectedIn3D({ dY: 15 }));
+    }
     updateAvatarController(dt = 0.016) {
       if (!this.avatarMode) return;
       let forward = 0;
@@ -72063,9 +72571,26 @@ void main() {
       if (this.keysPressed.has("s") || this.keysPressed.has("arrowdown")) forward -= 1;
       if (this.keysPressed.has("d") || this.keysPressed.has("arrowright")) right += 1;
       if (this.keysPressed.has("a") || this.keysPressed.has("arrowleft")) right -= 1;
-      const jumpPressed = this.keysPressed.has("space");
-      const hasMoveInput = forward !== 0 || right !== 0;
-      const isRunning = this.keysPressed.has("shift");
+      let joyForward = 0;
+      let joyRight = 0;
+      let joySprint = false;
+      let joyStrength = 1;
+      if (this.mobileJoystickState?.active) {
+        const jr = Number(this.mobileJoystickState.xRatio) || 0;
+        const jy = Number(this.mobileJoystickState.yRatio) || 0;
+        const mag = Math.hypot(jr, jy);
+        if (mag > 0.12) {
+          joyRight = jr;
+          joyForward = -jy;
+          joySprint = Boolean(this.mobileJoystickState.sprint);
+          joyStrength = joySprint ? 1 : Math.min(1, Math.max(0.35, mag));
+        }
+      }
+      forward += joyForward;
+      right += joyRight;
+      const jumpPressed = this.keysPressed.has("space") || Boolean(this.mobileJumpHeld);
+      const hasMoveInput = Math.abs(forward) > 0.05 || Math.abs(right) > 0.05;
+      const isRunning = this.keysPressed.has("shift") || joySprint;
       if ((hasMoveInput || jumpPressed) && this.simulatorFocusedDeviceId) {
         this.exitSimulatorFocus({ restoreCamera: false });
         this.syncAvatarCameraFromAngles();
@@ -72113,7 +72638,7 @@ void main() {
         const moveDir = new Vector3().addScaledVector(viewDir, forward).addScaledVector(rightDir, right);
         if (moveDir.lengthSq() > 1e-4) {
           moveDir.normalize();
-          const speed = isRunning ? 11.5 : 6.2;
+          const speed = (isRunning ? 11.5 : 6.2) * (joyForward !== 0 || joyRight !== 0 ? joyStrength : 1);
           const { worldW, worldD } = this.getWorldDimensions();
           const maxX = worldW * 0.55;
           const maxZ = worldD * 0.55;
@@ -73202,6 +73727,38 @@ void main() {
           btnDrop.textContent = carriedCount > 1 ? `Taruh (${carriedCount}) (Q)` : `Taruh (Q)`;
         }
       }
+      const mobPick = document.getElementById("btn-mob-pickup");
+      const mobDrop = document.getElementById("btn-mob-drop");
+      const mobDropAll = document.getElementById("btn-mob-drop-all");
+      const mobRotGroup = document.getElementById("mob-carry-rot-group");
+      const mobInspect = document.getElementById("btn-mob-inspect");
+      const mobPersp = document.getElementById("btn-mob-persp");
+      if (mobPick) {
+        mobPick.disabled = !nearestPick || carriedCount >= (this.maxCarriedObjects || 8);
+        const sp = mobPick.querySelector("span");
+        if (sp) sp.textContent = carriedCount > 0 ? `+Angkat` : `Angkat`;
+      }
+      if (mobDrop) {
+        mobDrop.classList.toggle("hidden", carriedCount === 0);
+        const sp = mobDrop.querySelector("span");
+        if (sp) sp.textContent = wallReadyHit ? "Tempel" : carriedCount > 1 ? `Taruh (${carriedCount})` : "Taruh";
+      }
+      if (mobDropAll) {
+        mobDropAll.style.display = carriedCount > 1 ? "inline-flex" : "none";
+      }
+      if (mobRotGroup) {
+        mobRotGroup.classList.toggle("hidden", carriedCount === 0);
+      }
+      if (mobInspect) {
+        const canInspect = Boolean(nearestId && dist <= 6.5);
+        mobInspect.classList.toggle("is-ready", canInspect);
+        mobInspect.disabled = !nearestId;
+      }
+      if (mobPersp) {
+        const sp = mobPersp.querySelector("span");
+        if (sp) sp.textContent = this.avatarPerspective === "fpp" ? "FPP" : "TPP";
+        mobPersp.classList.toggle("active", this.avatarPerspective === "fpp");
+      }
       if (this._lastAvatarHudNearestId === nearestId && this._lastAvatarHudDistKey === distText && this._lastAvatarHudCarryKey === carryKey) {
         return;
       }
@@ -73422,6 +73979,7 @@ void main() {
       this.syncAvatarCrosshair?.();
       this.syncAvatarMeshVisibilityForPerspective?.();
       this.syncAvatarControlsUI?.();
+      this.syncMobileRobloxControlsVisibility?.();
       this.configureControlsForAvatarMode?.(false);
       this.animateCameraTo(pose.endPos, pose.target, duration);
       if (typeof document !== "undefined") {
@@ -73454,6 +74012,7 @@ void main() {
       if (this.avatarMode && this.isActive) {
         this.renderAvatarHudBar?.();
       }
+      this.syncMobileRobloxControlsVisibility?.();
     }
     startCableFromDevicePort(deviceId, portName = "") {
       if (!deviceId) return;
@@ -77579,6 +78138,7 @@ void main() {
       await this.loadOrSeedProject();
       this.renderIcons();
       this.setupToolbarResponsiveFit();
+      this.setupMobileExperience();
       console.info("[NetMap] Phase 5 Application ready. Complete NetMap MVP operational.");
     }
     setupToolbarResponsiveFit() {
@@ -77638,6 +78198,11 @@ void main() {
       if (labelEl) {
         labelEl.textContent = isAuth ? user?.displayName || user?.username || "Teknisi" : isPublic ? "Lihat Publik" : "Mode Tamu";
       }
+      const mobAuthLabel = document.getElementById("mob-auth-label");
+      if (mobAuthLabel) {
+        mobAuthLabel.textContent = isAuth ? user?.username || "Teknisi" : isPublic ? "Publik" : "Masuk";
+      }
+      document.getElementById("btn-mob-auth")?.classList.toggle("active", isAuth);
       if (badgeEl) {
         badgeEl.textContent = isAuth ? wsMode === "personal" ? "Akun Saya" : this.authManager.isMainWorkspaceUnlocked?.() ? "Server Utama" : "Terkunci" : isPublic ? "Read-Only" : "Masuk";
       }
@@ -77705,7 +78270,7 @@ void main() {
           console.error("[NetMap] Failed to handle drop on canvas:", err);
         }
       });
-      eventBus.on("canvas:place-device", ({ normalizedX, normalizedY, customDeviceData }) => {
+      eventBus.on("canvas:place-device", ({ normalizedX, normalizedY, customDeviceData, elevationMeters }) => {
         const currentMode = stateManager.getMode();
         if (currentMode === "add-device") {
           const customTmpl = customDeviceData || this.devicePalette?.activeCustomTemplateToPlace;
@@ -77724,6 +78289,9 @@ void main() {
               type: typeToPlace,
               position: { x: normalizedX, y: normalizedY }
             };
+          }
+          if (typeof elevationMeters === "number" && Number.isFinite(elevationMeters)) {
+            deviceData.spatial3d = { ...deviceData.spatial3d || {}, elevationMeters };
           }
           const newDevice = this.deviceManager.addDevice(deviceData);
           this.deviceManager.selectDevice(newDevice.id);
@@ -78221,42 +78789,8 @@ void main() {
             break;
           case "Delete":
           case "Backspace": {
-            const selectedIds = this.deviceManager?.getSelectedDeviceIds?.() || [];
-            if (selectedIds.length > 1) {
+            if (this.deleteCurrentSelection()) {
               e.preventDefault();
-              if (confirm(`Hapus ${selectedIds.length} perangkat terpilih beserta seluruh kabelnya?`)) {
-                this.deviceManager.deleteSelectedDevices();
-              }
-            } else if (this.deviceManager?.selectedDeviceId) {
-              e.preventDefault();
-              const curDev = this.deviceManager.getDeviceById(this.deviceManager.selectedDeviceId);
-              if (curDev && confirm(`Hapus perangkat "${curDev.name}" beserta seluruh kabelnya?`)) {
-                this.deviceManager.deleteDevice(curDev.id);
-              }
-            } else if (this.cableManager?.selectedCableId) {
-              e.preventDefault();
-              const curCab = this.cableManager.getConnectionById(this.cableManager.selectedCableId);
-              if (curCab && confirm(`Hapus jalur kabel "${curCab.name}"?`)) {
-                this.cableManager.deleteConnection(curCab.id);
-              }
-            } else {
-              const selObj3dId = stateManager.getSelectedObject3dId?.();
-              if (selObj3dId) {
-                e.preventDefault();
-                const curObj3d = stateManager.getObject3dById?.(selObj3dId);
-                if (curObj3d && confirm(`Hapus objek 3D "${curObj3d.name || selObj3dId}"?`)) {
-                  stateManager.deleteObject3d(selObj3dId);
-                }
-              } else {
-                const selRoom3dId = stateManager.getSelectedRoom3dId?.();
-                if (selRoom3dId) {
-                  e.preventDefault();
-                  const curRoom3d = stateManager.getRoom3dById?.(selRoom3dId);
-                  if (curRoom3d && confirm(`Hapus ruangan 3D "${curRoom3d.name || selRoom3dId}"?`)) {
-                    stateManager.deleteRoom3d?.(selRoom3dId);
-                  }
-                }
-              }
             }
             break;
           }
@@ -78267,6 +78801,294 @@ void main() {
             break;
         }
       });
+    }
+    deleteCurrentSelection() {
+      const selectedIds = this.deviceManager?.getSelectedDeviceIds?.() || [];
+      if (selectedIds.length > 1) {
+        if (confirm(`Hapus ${selectedIds.length} perangkat terpilih beserta seluruh kabelnya?`)) {
+          this.deviceManager.deleteSelectedDevices();
+        }
+        return true;
+      }
+      if (this.deviceManager?.selectedDeviceId) {
+        const curDev = this.deviceManager.getDeviceById(this.deviceManager.selectedDeviceId);
+        if (curDev && confirm(`Hapus perangkat "${curDev.name}" beserta seluruh kabelnya?`)) {
+          this.deviceManager.deleteDevice(curDev.id);
+        }
+        return true;
+      }
+      if (this.cableManager?.selectedCableId) {
+        const curCab = this.cableManager.getConnectionById(this.cableManager.selectedCableId);
+        if (curCab && confirm(`Hapus jalur kabel "${curCab.name}"?`)) {
+          this.cableManager.deleteConnection(curCab.id);
+        }
+        return true;
+      }
+      const selObj3dId = stateManager.getSelectedObject3dId?.();
+      if (selObj3dId) {
+        const curObj3d = stateManager.getObject3dById?.(selObj3dId);
+        if (curObj3d && confirm(`Hapus objek 3D "${curObj3d.name || selObj3dId}"?`)) {
+          stateManager.deleteObject3d(selObj3dId);
+        }
+        return true;
+      }
+      const selRoom3dId = stateManager.getSelectedRoom3dId?.();
+      if (selRoom3dId) {
+        const curRoom3d = stateManager.getRoom3dById?.(selRoom3dId);
+        if (curRoom3d && confirm(`Hapus ruangan 3D "${curRoom3d.name || selRoom3dId}"?`)) {
+          stateManager.deleteRoom3d?.(selRoom3dId);
+        }
+        return true;
+      }
+      return false;
+    }
+    /**
+     * Configure mobile touch UX: auto landscape+fullscreen default, portrait guidance prompt,
+     * drawer behavior, and compact mobile quick-dock mirroring all desktop capabilities.
+     */
+    setupMobileExperience() {
+      if (typeof document === "undefined" || typeof window === "undefined") return;
+      this._landscapePromptDismissed = false;
+      this._mobilePopoversInitialized = false;
+      const applyMobileEnvironment = (initialBoot = false) => {
+        const isMobile = isMobileTouchDevice();
+        document.body.classList.toggle("is-mobile-touch", isMobile);
+        if (!isMobile) {
+          const promptEl2 = document.getElementById("mobile-landscape-prompt");
+          if (promptEl2) {
+            promptEl2.classList.add("hidden");
+            promptEl2.style.display = "none";
+          }
+          return;
+        }
+        if (initialBoot && !this._mobileBootApplied) {
+          this._mobileBootApplied = true;
+          stateManager.toggleSidebar("left", false);
+          stateManager.toggleSidebar("right", false);
+          this.toolbar?.setWorkspaceFullscreen?.(true, { requestNative: false });
+          try {
+            const lockRes = screen?.orientation?.lock?.("landscape");
+            if (lockRes && typeof lockRes.catch === "function") lockRes.catch(() => {
+            });
+          } catch {
+          }
+          const upgradeFullscreenOnFirstTap = () => {
+            document.removeEventListener("pointerdown", upgradeFullscreenOnFirstTap, true);
+            if (document.body.classList.contains("workspace-fullscreen") && !document.fullscreenElement && !this._mobileExitedFullscreen) {
+              this.toolbar?.requestNativeFullscreenAndLandscape?.();
+            }
+          };
+          document.addEventListener("pointerdown", upgradeFullscreenOnFirstTap, { capture: true, passive: true });
+        }
+        const promptEl = document.getElementById("mobile-landscape-prompt");
+        if (promptEl) {
+          const isPortraitPhone = window.innerHeight > window.innerWidth && Math.min(window.innerWidth, window.innerHeight) <= 760;
+          const showPrompt = Boolean(isPortraitPhone && !this._landscapePromptDismissed);
+          promptEl.classList.toggle("hidden", !showPrompt);
+          promptEl.style.display = showPrompt ? "flex" : "none";
+        }
+      };
+      const bindMobileDock = () => {
+        const dock = document.getElementById("mobile-fs-dock");
+        if (!dock || this._mobileDockBound) return;
+        this._mobileDockBound = true;
+        const closeOverlays = () => {
+          document.getElementById("mobile-quick-popover")?.remove();
+        };
+        document.getElementById("btn-mob-left-drawer")?.addEventListener("click", (e) => {
+          e.stopPropagation();
+          closeOverlays();
+          stateManager.toggleSidebar("right", false);
+          stateManager.toggleSidebar("left");
+        });
+        document.getElementById("btn-mob-right-drawer")?.addEventListener("click", (e) => {
+          e.stopPropagation();
+          closeOverlays();
+          stateManager.toggleSidebar("left", false);
+          stateManager.toggleSidebar("right");
+        });
+        document.querySelectorAll("[data-mob-view]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            closeOverlays();
+            const v = btn.getAttribute("data-mob-view");
+            if (v) stateManager.setViewMode(v);
+          });
+        });
+        document.querySelectorAll("[data-mob-mode]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            closeOverlays();
+            const m = btn.getAttribute("data-mob-mode");
+            if (m) stateManager.setMode(m);
+          });
+        });
+        document.getElementById("btn-mob-undo")?.addEventListener("click", () => this.historyManager?.undo());
+        document.getElementById("btn-mob-redo")?.addEventListener("click", () => this.historyManager?.redo());
+        document.getElementById("btn-mob-delete")?.addEventListener("click", () => {
+          if (!this.deleteCurrentSelection()) {
+            this.map3DEngine?.showStatusHint?.("Pilih perangkat, kabel, objek 3D, atau ruangan terlebih dahulu.");
+          }
+        });
+        document.getElementById("btn-mob-rotate-sel")?.addEventListener("click", () => {
+          if (stateManager.getViewMode() === "3d") {
+            if (!this.map3DEngine?.rotateSelectedIn3D({ dY: 15 })) {
+              this.map3DEngine?.showStatusHint?.("Pilih perangkat, objek 3D, atau ruangan 3D untuk memutar.");
+            }
+          }
+        });
+        document.getElementById("btn-mob-auth")?.addEventListener("click", () => {
+          closeOverlays();
+          this.authModal?.show("login");
+        });
+        document.getElementById("btn-mob-fs-native")?.addEventListener("click", () => {
+          this._mobileExitedFullscreen = false;
+          this.toolbar?.setWorkspaceFullscreen?.(true, { requestNative: true, lockLandscape: true });
+        });
+        document.getElementById("btn-mob-toggle-toolbar")?.addEventListener("click", () => {
+          closeOverlays();
+          this._mobileExitedFullscreen = true;
+          this.toolbar?.setWorkspaceFullscreen?.(false);
+        });
+        document.getElementById("btn-mob-enter-landscape-fs")?.addEventListener("click", () => {
+          this._landscapePromptDismissed = true;
+          document.getElementById("mobile-landscape-prompt")?.classList.add("hidden");
+          const p = document.getElementById("mobile-landscape-prompt");
+          if (p) p.style.display = "none";
+          this.toolbar?.setWorkspaceFullscreen?.(true, { requestNative: true, lockLandscape: true });
+        });
+        document.getElementById("btn-mob-dismiss-landscape")?.addEventListener("click", () => {
+          this._landscapePromptDismissed = true;
+          const p = document.getElementById("mobile-landscape-prompt");
+          if (p) {
+            p.classList.add("hidden");
+            p.style.display = "none";
+          }
+        });
+        document.getElementById("btn-mob-search")?.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const existing = document.getElementById("mobile-quick-popover");
+          if (existing?.getAttribute("data-kind") === "search") {
+            existing.remove();
+            return;
+          }
+          closeOverlays();
+          const pop = document.createElement("div");
+          pop.id = "mobile-quick-popover";
+          pop.setAttribute("data-kind", "search");
+          pop.style.cssText = "position:absolute;top:48px;left:50%;transform:translateX(-50%);width:min(360px,calc(100vw - 24px));background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:10px;padding:8px;box-shadow:var(--shadow-lg);z-index:96;display:flex;flex-direction:column;gap:6px;";
+          pop.innerHTML = `
+          <input type="text" id="mob-search-inp" placeholder="Cari perangkat, IP, VLAN..." autocomplete="off"
+                 style="width:100%;padding:6px 10px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-primary);color:var(--text-primary);font-size:12px;">
+          <div id="mob-search-res" style="max-height:170px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;"></div>
+        `;
+          document.getElementById("map-viewport")?.appendChild(pop);
+          const inp = pop.querySelector("#mob-search-inp");
+          const resBox = pop.querySelector("#mob-search-res");
+          const renderHits = (q) => {
+            const hits = this.searchEngine?.searchDevices?.(q, { browseWhenEmpty: true, limit: 8 }) || [];
+            resBox.innerHTML = hits.length === 0 ? '<div style="font-size:11px;color:var(--text-muted);padding:4px;">Tidak ada hasil</div>' : hits.map((d) => `<button type="button" class="btn btn-secondary btn-sm mob-search-hit" data-id="${d.id}" style="justify-content:space-between;font-size:11px;padding:5px 8px;"><span>${d.name}</span><span style="opacity:0.7;font-family:var(--font-mono);">${d.network?.ip || d.type}</span></button>`).join("");
+            resBox.querySelectorAll(".mob-search-hit").forEach((b) => {
+              b.addEventListener("click", () => {
+                const id = b.getAttribute("data-id");
+                const dev = this.deviceManager?.getDeviceById(id);
+                if (dev) {
+                  this.deviceManager.selectDevice(id);
+                  if (stateManager.getViewMode() === "3d") {
+                    this.map3DEngine?.focusOnDevice(id);
+                  } else {
+                    this.viewportNavigator?.focusOnDevice(dev);
+                  }
+                }
+                pop.remove();
+              });
+            });
+          };
+          inp.addEventListener("input", () => renderHits(inp.value));
+          renderHits("");
+          setTimeout(() => inp.focus(), 20);
+        });
+        document.getElementById("btn-mob-menu")?.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const existing = document.getElementById("mobile-quick-popover");
+          if (existing?.getAttribute("data-kind") === "menu") {
+            existing.remove();
+            return;
+          }
+          closeOverlays();
+          const pop = document.createElement("div");
+          pop.id = "mobile-quick-popover";
+          pop.setAttribute("data-kind", "menu");
+          pop.style.cssText = "position:absolute;top:48px;right:10px;width:min(260px,calc(100vw - 20px));max-height:calc(100dvh - 64px);overflow-y:auto;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:10px;padding:6px;box-shadow:var(--shadow-lg);z-index:96;display:grid;grid-template-columns:1fr;gap:4px;";
+          const actions = [
+            { id: "mob-act-teknisi", label: "Mode Teknisi (Roblox Mobile)", fn: () => {
+              if (stateManager.getViewMode() !== "3d") stateManager.setViewMode("3d");
+              setTimeout(() => this.map3DEngine?.setAvatarMode(true, { perspective: "tpp" }), 40);
+            } },
+            { id: "mob-act-fpp", label: "Mode FPP (Kamera Orang Pertama)", fn: () => {
+              if (stateManager.getViewMode() !== "3d") stateManager.setViewMode("3d");
+              setTimeout(() => this.map3DEngine?.setAvatarMode(true, { perspective: "fpp" }), 40);
+            } },
+            { id: "mob-act-rooms3d", label: "Ruangan & Gedung 3D (.GLB)", fn: () => this.room3DModal?.show() },
+            { id: "mob-act-obj3d", label: "Studio Objek 3D", fn: () => this.object3DModal?.show() },
+            { id: "mob-act-dev3d", label: "Model 3D Perangkat", fn: () => this.device3DModelModal?.show() },
+            { id: "mob-act-topo", label: "Diagram Topologi", fn: () => this.topologyModal?.show() },
+            { id: "mob-act-ip", label: "Tabel IP & VLAN", fn: () => this.ipVlanModal?.show() },
+            { id: "mob-act-proj", label: "Kelola Proyek", fn: () => this.projectModal?.show() },
+            { id: "mob-act-export", label: "Ekspor (JSON / PNG / PDF)", fn: () => this.exportModal?.show() },
+            { id: "mob-act-scale", label: "Kalibrasi Skala Peta", fn: () => this.mapScaleModal?.show() },
+            { id: "mob-act-fit", label: "Pas-kan Peta ke Layar (Fit)", fn: () => {
+              if (stateManager.getViewMode() === "3d") this.map3DEngine?.zoomExtents();
+              else this.mapEngine?.interactions?.fitToScreen(24);
+            } },
+            { id: "mob-act-theme", label: "Ganti Tema (Terang / Gelap)", fn: () => this.toolbar?.toggleTheme() }
+          ];
+          pop.innerHTML = actions.map((a) => `<button type="button" class="navbar-dropdown-item" id="${a.id}" style="font-size:11.5px;padding:7px 9px;">${a.label}</button>`).join("");
+          document.getElementById("map-viewport")?.appendChild(pop);
+          actions.forEach((a) => {
+            pop.querySelector(`#${a.id}`)?.addEventListener("click", () => {
+              pop.remove();
+              a.fn();
+            });
+          });
+        });
+        document.getElementById("map-viewport")?.addEventListener("pointerdown", (ev) => {
+          if (!document.body.classList.contains("is-mobile-touch")) return;
+          const target = ev.target;
+          if (!target.closest?.("#mobile-quick-popover") && !target.closest?.("#mobile-fs-dock")) {
+            closeOverlays();
+          }
+          if (!target.closest?.(".sidebar") && !target.closest?.("#btn-mob-left-drawer") && !target.closest?.("#btn-mob-right-drawer")) {
+            if (stateManager.getState().ui.leftSidebarOpen) stateManager.toggleSidebar("left", false);
+            if (stateManager.getState().ui.rightSidebarOpen) stateManager.toggleSidebar("right", false);
+          }
+        });
+        const syncDockButtons = () => {
+          const curView = stateManager.getViewMode();
+          const curMode = stateManager.getMode();
+          document.querySelectorAll("[data-mob-view]").forEach((b) => {
+            b.classList.toggle("active", b.getAttribute("data-mob-view") === curView);
+          });
+          document.querySelectorAll("[data-mob-mode]").forEach((b) => {
+            b.classList.toggle("active", b.getAttribute("data-mob-mode") === curMode);
+          });
+          const rotBtn = document.getElementById("btn-mob-rotate-sel");
+          if (rotBtn) rotBtn.style.display = curView === "3d" ? "inline-flex" : "none";
+        };
+        eventBus.on("viewmode:changed", syncDockButtons);
+        eventBus.on("mode:changed", syncDockButtons);
+        eventBus.on("ui:sidebar-toggled", ({ side, open }) => {
+          if (side === "left") document.getElementById("btn-mob-left-drawer")?.classList.toggle("active", Boolean(open));
+          if (side === "right") document.getElementById("btn-mob-right-drawer")?.classList.toggle("active", Boolean(open));
+        });
+        syncDockButtons();
+      };
+      bindMobileDock();
+      applyMobileEnvironment(true);
+      const onViewportChange = () => {
+        applyMobileEnvironment(false);
+        this.map3DEngine?.syncMobileRobloxControlsVisibility?.();
+      };
+      window.addEventListener("resize", onViewportChange);
+      window.addEventListener("orientationchange", () => setTimeout(onViewportChange, 120));
     }
     /**
      * Pre-populate realistic sample network topology with devices & cable routes

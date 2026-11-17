@@ -229,14 +229,38 @@ export class Toolbar {
     this.setWorkspaceFullscreen(!isActive);
   }
 
-  setWorkspaceFullscreen(enabled) {
+  requestNativeFullscreenAndLandscape() {
+    const tryLockOrientation = () => {
+      try {
+        const res = screen?.orientation?.lock?.('landscape');
+        if (res && typeof res.catch === 'function') res.catch(() => {});
+      } catch { /* ignore browsers without orientation lock */ }
+    };
+
+    if (!document.fullscreenElement && document.documentElement?.requestFullscreen) {
+      try {
+        document.documentElement.requestFullscreen()
+          .then(tryLockOrientation)
+          .catch(tryLockOrientation);
+        return;
+      } catch { /* fall through */ }
+    }
+    tryLockOrientation();
+  }
+
+  setWorkspaceFullscreen(enabled, { requestNative = true, lockLandscape = false } = {}) {
     this.syncWorkspaceFullscreenUI(enabled);
 
     if (enabled) {
-      if (!document.fullscreenElement && document.documentElement?.requestFullscreen) {
-        document.documentElement.requestFullscreen().catch(() => {});
+      if (requestNative) {
+        if (lockLandscape) {
+          this.requestNativeFullscreenAndLandscape();
+        } else if (!document.fullscreenElement && document.documentElement?.requestFullscreen) {
+          document.documentElement.requestFullscreen().catch(() => {});
+        }
       }
     } else if (document.fullscreenElement && document.exitFullscreen) {
+      try { screen?.orientation?.unlock?.(); } catch { /* ignore */ }
       document.exitFullscreen().catch(() => {});
     }
   }

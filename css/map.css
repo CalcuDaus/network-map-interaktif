@@ -980,3 +980,381 @@
   border-color: var(--status-warning);
   font-weight: 600;
 }
+
+/* ==========================================================================
+   Mobile Landscape Fullscreen Quick-Dock & Roblox Mobile Touch Controls
+   ========================================================================== */
+#map-3d-container,
+#map-3d-container canvas {
+  touch-action: none;
+}
+
+.mobile-fs-dock {
+  display: none;
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100vw - 16px);
+  z-index: 68;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-lg);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  pointer-events: auto;
+}
+
+.mobile-fs-dock::-webkit-scrollbar {
+  display: none;
+}
+
+body.is-mobile-touch.workspace-fullscreen .mobile-fs-dock {
+  display: flex;
+}
+
+.mob-dock-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.mob-dock-btn.mob-dock-icon {
+  width: 28px;
+  padding: 0;
+  justify-content: center;
+}
+
+.mob-dock-btn.active {
+  background-color: var(--accent-blue);
+  border-color: var(--accent-blue);
+  color: var(--text-inverse);
+}
+
+.mob-dock-btn:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.mob-dock-seg {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-primary);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.mob-dock-seg-btn {
+  height: 26px;
+  min-width: 28px;
+  padding: 0 7px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.mob-dock-seg-btn.active {
+  background-color: var(--accent-blue);
+  color: var(--text-inverse);
+}
+
+/* Roblox Mobile Overlay (Virtual Joystick + Jump & Interact Cluster) */
+.mobile-roblox-controls {
+  position: absolute;
+  inset: 0;
+  z-index: 42;
+  pointer-events: none;
+  user-select: none;
+}
+
+.mobile-roblox-controls.hidden {
+  display: none !important;
+}
+
+.mob-joystick-zone {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  width: 132px;
+  height: 132px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.mob-joystick-base {
+  position: relative;
+  width: 112px;
+  height: 112px;
+  border-radius: 50%;
+  background: rgba(15, 23, 42, 0.42);
+  border: 2px solid rgba(255, 248, 207, 0.55);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35), inset 0 0 18px rgba(0, 0, 0, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+}
+
+.mob-joystick-base.is-sprinting {
+  border-color: var(--accent-leaf, #76c457);
+  box-shadow: 0 0 18px rgba(118, 196, 87, 0.55), inset 0 0 16px rgba(118, 196, 87, 0.25);
+}
+
+.mob-joystick-knob {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ffffff, #cbd5e1);
+  border: 2px solid rgba(42, 124, 19, 0.9);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+  transform: translate3d(0, 0, 0);
+  pointer-events: none;
+  will-change: transform;
+}
+
+.mob-joystick-sprint-badge {
+  position: absolute;
+  top: -10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent-blue, #2a7c13);
+  color: #fff8cf;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  opacity: 0;
+  transition: opacity 0.14s ease;
+  pointer-events: none;
+}
+
+.mob-joystick-base.is-sprinting .mob-joystick-sprint-badge {
+  opacity: 1;
+}
+
+.mob-roblox-actions {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.mob-carry-rot-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  pointer-events: auto;
+}
+
+.mob-carry-rot-group.hidden {
+  display: none !important;
+}
+
+.mob-action-pill {
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1.5px solid rgba(255, 248, 207, 0.65);
+  background: rgba(15, 23, 42, 0.72);
+  color: #fff8cf;
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.mob-action-pill.is-warn {
+  border-color: #f59e0b;
+  background: rgba(180, 83, 9, 0.85);
+}
+
+.mob-action-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.mob-action-btn {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 248, 207, 0.7);
+  background: rgba(15, 23, 42, 0.62);
+  color: #fff8cf;
+  font-size: 10px;
+  font-weight: 700;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  cursor: pointer;
+  pointer-events: auto;
+  touch-action: manipulation;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.mob-action-btn.hidden {
+  display: none !important;
+}
+
+.mob-action-btn:disabled {
+  opacity: 0.35;
+}
+
+.mob-action-btn.is-carry:not(:disabled),
+.mob-action-btn.is-drop {
+  border-color: var(--accent-leaf, #76c457);
+  background: rgba(42, 124, 19, 0.84);
+}
+
+.mob-action-btn.is-inspect.is-ready {
+  border-color: #38bdf8;
+  background: rgba(2, 132, 199, 0.85);
+}
+
+.mob-action-btn.active {
+  border-color: #facc15;
+}
+
+.mob-jump-btn {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 2.5px solid rgba(255, 248, 207, 0.85);
+  background: rgba(42, 124, 19, 0.78);
+  color: #fff8cf;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  cursor: pointer;
+  pointer-events: auto;
+  touch-action: manipulation;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.42);
+}
+
+.mob-jump-btn:active,
+.mob-action-btn:active {
+  transform: scale(0.93);
+}
+
+/* Keep Mode Teknisi HUD bar tucked cleanly between left joystick & right action wheel on mobile */
+body.is-mobile-touch .hud-3d-avatar-bar {
+  bottom: 8px;
+  width: min(500px, calc(100vw - 320px));
+  min-width: 240px;
+  padding: 5px 8px;
+  gap: 6px;
+}
+
+body.is-mobile-touch .hud-3d-avatar-bar .avatar-bar-controls-hint {
+  display: none;
+}
+
+body.is-mobile-touch .hud-3d-avatar-bar .avatar-bar-nearest {
+  font-size: 10px;
+  padding: 2px 6px;
+}
+
+body.is-mobile-touch .map-info-hud {
+  left: 10px;
+  bottom: 10px;
+  padding: 4px 9px;
+  font-size: 10px;
+}
+
+body.is-mobile-touch .map-hud-controls {
+  right: 10px;
+  bottom: 10px;
+}
+
+/* Portrait Guidance Overlay */
+.mobile-landscape-prompt {
+  position: fixed;
+  inset: 0;
+  z-index: 11000;
+  background: rgba(14, 25, 11, 0.78);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.mobile-landscape-prompt.hidden {
+  display: none !important;
+}
+
+.mobile-landscape-card {
+  max-width: 340px;
+  width: 100%;
+  background: var(--bg-secondary);
+  border: 1.5px solid var(--accent-blue);
+  border-radius: 14px;
+  padding: 18px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  box-shadow: var(--shadow-lg);
+}
+
+.mobile-landscape-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.mobile-landscape-desc {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.mobile-landscape-btns {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 4px;
+}

@@ -10,6 +10,7 @@ import { getDeviceIconSvg, getDefaultIconForType } from '../devices/device-icon-
 import { getBuiltinGlbCustomTemplates } from '../devices/device-schema.js';
 import { eventBus } from '../core/event-bus.js';
 import { stateManager } from '../core/state-manager.js';
+import { isMobileTouchDevice } from '../utils/helpers.js';
 
 export class DevicePalette {
   /**
@@ -567,6 +568,11 @@ export class DevicePalette {
           itemEl.classList.add('active-placement');
 
           eventBus.emit('palette:selected-to-place', { type });
+        }
+
+        // On mobile drawer mode, collapse sidebar automatically so user can tap the map right away
+        if ((typeof document !== 'undefined' && document.body?.classList?.contains('is-mobile-touch')) || isMobileTouchDevice()) {
+          stateManager.toggleSidebar('left', false);
         }
       });
     });
