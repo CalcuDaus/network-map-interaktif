@@ -904,6 +904,16 @@ class NetMapApp {
           this.map3DEngine?.rotateSelectedIn3D(e.shiftKey ? { dX: 15 } : { dY: 15 });
           return;
         }
+        if ((e.key === '+' || e.key === '=') && stateManager.getSelectedRoom3dId?.()) {
+          e.preventDefault();
+          this.map3DEngine?.scaleSelectedRoomIn3D(e.shiftKey ? 1.25 : 1.1);
+          return;
+        }
+        if ((e.key === '-' || e.key === '_') && stateManager.getSelectedRoom3dId?.()) {
+          e.preventDefault();
+          this.map3DEngine?.scaleSelectedRoomIn3D(e.shiftKey ? 0.8 : 0.9);
+          return;
+        }
         if (lower === 'b') {
           e.preventDefault();
           this.map3DEngine?.setNavTool('box');

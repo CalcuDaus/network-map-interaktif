@@ -21,6 +21,7 @@ export class Room3DModal {
     this.modalEl = null;
     this.editingRoomId = null;
     this.uploadedRoomGlbUrl = '';
+    this.formBaseDimensions = { widthMeters: 24, depthMeters: 20, heightMeters: 4.5 };
 
     this.createModalDOM();
     this.bindEvents();
@@ -120,6 +121,27 @@ export class Room3DModal {
               </div>
             </div>
 
+            <!-- Proportional Scale Slider + Lock Aspect Ratio -->
+            <div style="background: rgba(42,124,19,0.06); border: 1px solid var(--border-color, #e5cca0); border-radius: 7px; padding: 8px; display: flex; flex-direction: column; gap: 6px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                <span style="font-size: 10.5px; font-weight: 700; color: var(--text-primary);">Skala Gedung / Ruangan: <strong id="r3d-scale-pct" style="color: var(--accent-blue, #2a7c13);">100%</strong></span>
+                <label style="display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 600; color: var(--text-primary); cursor: pointer;">
+                  <input type="checkbox" id="r3d-lock-aspect" checked>
+                  <span>Kunci Rasio Proporsional</span>
+                </label>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <input type="range" id="r3d-scale-slider" min="0.25" max="4" step="0.05" value="1" style="flex: 1; accent-color: var(--accent-blue, #2a7c13);">
+                <input type="number" id="r3d-scale-input" min="0.2" max="5" step="0.05" value="1"
+                       style="width: 64px; background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 3px 6px; font-size: 11.5px; font-family: var(--font-mono);">
+              </div>
+              <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+                ${[0.5, 0.75, 1, 1.25, 1.5, 2].map((s) => `
+                  <button type="button" class="btn btn-secondary btn-sm btn-r3d-scale-preset" data-scale="${s}" style="font-size: 10px; padding: 2px 7px; font-family: var(--font-mono);">${s}x</button>
+                `).join('')}
+              </div>
+            </div>
+
             <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
               <div style="display: flex; flex-direction: column; gap: 3px;">
                 <label style="font-size: 10.5px; font-weight: 600; color: var(--text-primary);">Dinding</label>
@@ -216,7 +238,46 @@ export class Room3DModal {
       this.modalEl.querySelector('#r3d-wall-color').value = '#2a7c13';
       this.modalEl.querySelector('#r3d-floor-color').value = '#1e293b';
       this.modalEl.querySelector('#r3d-opacity').value = '18';
+      this.setFormBaseAndScale({ widthMeters: 48, depthMeters: 34, heightMeters: 6 }, 1);
     });
+
+    const scaleSlider = this.modalEl.querySelector('#r3d-scale-slider');
+    const scaleInput = this.modalEl.querySelector('#r3d-scale-input');
+    const wInput = this.modalEl.querySelector('#r3d-width');
+    const dInput = this.modalEl.querySelector('#r3d-depth');
+    const hInput = this.modalEl.querySelector('#r3d-height');
+    const lockCb = this.modalEl.querySelector('#r3d-lock-aspect');
+
+    scaleSlider?.addEventListener('input', () => this.applyScaleMultiplierToForm(scaleSlider.value));
+    scaleInput?.addEventListener('input', () => this.applyScaleMultiplierToForm(scaleInput.value));
+    this.modalEl.querySelectorAll('.btn-r3d-scale-preset').forEach((btn) => {
+      btn.addEventListener('click', () => this.applyScaleMultiplierToForm(btn.getAttribute('data-scale')));
+    });
+
+    const syncFromAxisInput = (axis) => {
+      const val = parseFloat(
+        axis === 'w' ? wInput?.value : axis === 'd' ? dInput?.value : hInput?.value
+      );
+      if (!Number.isFinite(val) || val <= 0) return;
+      const base = this.formBaseDimensions;
+      if (lockCb?.checked) {
+        const refBase = axis === 'w' ? base.widthMeters : axis === 'd' ? base.depthMeters : base.heightMeters;
+        if (refBase > 0) {
+          this.applyScaleMultiplierToForm(val / refBase, { skipAxis: axis });
+          return;
+        }
+      }
+      this.formBaseDimensions = {
+        widthMeters: Math.max(2, parseFloat(wInput?.value) || base.widthMeters),
+        depthMeters: Math.max(2, parseFloat(dInput?.value) || base.depthMeters),
+        heightMeters: Math.max(1.5, parseFloat(hInput?.value) || base.heightMeters)
+      };
+      this.updateScaleReadout(1);
+      this.previewEditingRoomDimensions();
+    };
+    wInput?.addEventListener('change', () => syncFromAxisInput('w'));
+    dInput?.addEventListener('change', () => syncFromAxisInput('d'));
+    hInput?.addEventListener('change', () => syncFromAxisInput('h'));
 
     this.modalEl.querySelector('#btn-room3d-use-selected')?.addEventListener('click', () => {
       const selId = this.deviceManager?.selectedDeviceId;
@@ -299,6 +360,7 @@ export class Room3DModal {
       this.modalEl.querySelector('#r3d-width').value = preset.widthMeters;
       this.modalEl.querySelector('#r3d-depth').value = preset.depthMeters;
       this.modalEl.querySelector('#r3d-height').value = preset.heightMeters;
+      this.setFormBaseAndScale({ widthMeters: preset.widthMeters, depthMeters: preset.depthMeters, heightMeters: preset.heightMeters }, 1, true);
       const rotInput = this.modalEl.querySelector('#r3d-rot-y');
       if (rotInput) rotInput.value = '0';
       this.modalEl.querySelector('#r3d-wall-color').value = preset.wallColor || '#2a7c13';
@@ -333,6 +395,53 @@ export class Room3DModal {
     return roomData;
   }
 
+  setFormBaseAndScale(baseDims, scale = 1, lockAspect = true) {
+    this.formBaseDimensions = {
+      widthMeters: Math.max(2, Number(baseDims?.widthMeters) || 24),
+      depthMeters: Math.max(2, Number(baseDims?.depthMeters) || 20),
+      heightMeters: Math.max(1.5, Number(baseDims?.heightMeters) || 4.5)
+    };
+    const lockCb = this.modalEl.querySelector('#r3d-lock-aspect');
+    if (lockCb) lockCb.checked = Boolean(lockAspect);
+    this.updateScaleReadout(scale);
+  }
+
+  updateScaleReadout(scale = 1) {
+    const clamped = clamp(Number(scale) || 1, 0.2, 5);
+    const slider = this.modalEl.querySelector('#r3d-scale-slider');
+    const numInput = this.modalEl.querySelector('#r3d-scale-input');
+    const pctEl = this.modalEl.querySelector('#r3d-scale-pct');
+    if (slider) slider.value = String(clamp(clamped, 0.25, 4));
+    if (numInput) numInput.value = Number(clamped.toFixed(2));
+    if (pctEl) pctEl.textContent = `${Math.round(clamped * 100)}%`;
+  }
+
+  applyScaleMultiplierToForm(rawScale, { skipAxis = '' } = {}) {
+    const scale = clamp(parseFloat(rawScale) || 1, 0.2, 5);
+    const base = this.formBaseDimensions || { widthMeters: 24, depthMeters: 20, heightMeters: 4.5 };
+    const wEl = this.modalEl.querySelector('#r3d-width');
+    const dEl = this.modalEl.querySelector('#r3d-depth');
+    const hEl = this.modalEl.querySelector('#r3d-height');
+    if (wEl && skipAxis !== 'w') wEl.value = clamp(Number((base.widthMeters * scale).toFixed(2)), 2, 200);
+    if (dEl && skipAxis !== 'd') dEl.value = clamp(Number((base.depthMeters * scale).toFixed(2)), 2, 200);
+    if (hEl && skipAxis !== 'h') hEl.value = clamp(Number((base.heightMeters * scale).toFixed(2)), 1.5, 40);
+    this.updateScaleReadout(scale);
+    this.previewEditingRoomDimensions();
+  }
+
+  previewEditingRoomDimensions() {
+    if (!this.editingRoomId || !this.map3DEngine?.rebuildSingleRoom3dMesh) return;
+    const cur = stateManager.getRoom3dById?.(this.editingRoomId);
+    if (!cur) return;
+    const widthMeters = clamp(parseFloat(this.modalEl.querySelector('#r3d-width')?.value) || cur.widthMeters, 2, 200);
+    const depthMeters = clamp(parseFloat(this.modalEl.querySelector('#r3d-depth')?.value) || cur.depthMeters, 2, 200);
+    const heightMeters = clamp(parseFloat(this.modalEl.querySelector('#r3d-height')?.value) || cur.heightMeters, 1.5, 40);
+    this.map3DEngine.rebuildSingleRoom3dMesh(
+      { ...cur, widthMeters, depthMeters, heightMeters },
+      stateManager.getSelectedRoom3dId?.() === cur.id
+    );
+  }
+
   resetForm() {
     this.editingRoomId = null;
     this.uploadedRoomGlbUrl = '';
@@ -343,6 +452,7 @@ export class Room3DModal {
     this.modalEl.querySelector('#r3d-width').value = '24';
     this.modalEl.querySelector('#r3d-depth').value = '20';
     this.modalEl.querySelector('#r3d-height').value = '4.5';
+    this.setFormBaseAndScale({ widthMeters: 24, depthMeters: 20, heightMeters: 4.5 }, 1, true);
     const rotInput = this.modalEl.querySelector('#r3d-rot-y');
     if (rotInput) rotInput.value = '0';
     this.modalEl.querySelector('#r3d-glb-url').value = '';
@@ -361,15 +471,26 @@ export class Room3DModal {
 
     const existing = [...stateManager.getRooms3d()];
     const existingItem = this.editingRoomId ? existing.find((r) => r.id === this.editingRoomId) : null;
+    const widthMeters = clamp(parseFloat(this.modalEl.querySelector('#r3d-width')?.value) || 20, 2, 200);
+    const depthMeters = clamp(parseFloat(this.modalEl.querySelector('#r3d-depth')?.value) || 16, 2, 200);
+    const heightMeters = clamp(parseFloat(this.modalEl.querySelector('#r3d-height')?.value) || 4.5, 1.5, 40);
+    const scaleVal = clamp(parseFloat(this.modalEl.querySelector('#r3d-scale-input')?.value) || 1, 0.2, 5);
+    const lockAspectRatio = Boolean(this.modalEl.querySelector('#r3d-lock-aspect')?.checked);
+
     const roomData = {
       ...(existingItem || {}),
       id: this.editingRoomId || generateId('room3d'),
       name,
       x: clamp(parseFloat(this.modalEl.querySelector('#r3d-x')?.value) || 0.5, 0, 1),
       y: clamp(parseFloat(this.modalEl.querySelector('#r3d-y')?.value) || 0.5, 0, 1),
-      widthMeters: clamp(parseFloat(this.modalEl.querySelector('#r3d-width')?.value) || 20, 2, 200),
-      depthMeters: clamp(parseFloat(this.modalEl.querySelector('#r3d-depth')?.value) || 16, 2, 200),
-      heightMeters: clamp(parseFloat(this.modalEl.querySelector('#r3d-height')?.value) || 4.5, 1.5, 40),
+      widthMeters,
+      depthMeters,
+      heightMeters,
+      baseWidthMeters: this.formBaseDimensions?.widthMeters || widthMeters,
+      baseDepthMeters: this.formBaseDimensions?.depthMeters || depthMeters,
+      baseHeightMeters: this.formBaseDimensions?.heightMeters || heightMeters,
+      modelScale: Number(scaleVal.toFixed(3)),
+      lockAspectRatio,
       rotationY: clamp(parseFloat(this.modalEl.querySelector('#r3d-rot-y')?.value) || 0, -360, 360),
       wallColor: this.modalEl.querySelector('#r3d-wall-color')?.value || '#2a7c13',
       floorColor: this.modalEl.querySelector('#r3d-floor-color')?.value || '#1e293b',
@@ -409,6 +530,9 @@ export class Room3DModal {
 
     container.innerHTML = rooms.map((r) => {
       const rotDeg = Math.round(Number(r.rotationY ?? r.rotationDeg) || 0);
+      const scalePct = r.baseWidthMeters > 0
+        ? Math.round((Number(r.widthMeters) / Number(r.baseWidthMeters)) * 100)
+        : Math.round((Number(r.modelScale) || 1) * 100);
       return `
       <div style="background: var(--bg-secondary, #fbe6c2); border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
         <div style="min-width: 0;">
@@ -416,10 +540,12 @@ export class Room3DModal {
             ${r.name}
           </div>
           <div style="font-size: 10px; color: var(--text-muted); font-family: var(--font-mono);">
-            ${r.widthMeters}x${r.depthMeters}x${r.heightMeters}m • ${rotDeg}° • (${Number(r.x ?? 0.5).toFixed(2)}, ${Number(r.y ?? 0.5).toFixed(2)})${r.customModelUrl ? ' • GLB' : ''}
+            ${r.widthMeters}x${r.depthMeters}x${r.heightMeters}m • ${scalePct}% • ${rotDeg}°${r.customModelUrl ? ' • GLB' : ''}
           </div>
         </div>
         <div style="display: flex; gap: 4px; flex-shrink: 0;">
+          <button type="button" class="btn btn-secondary btn-sm btn-r3d-scale-step" data-id="${r.id}" data-factor="0.9" style="font-size: 10px; padding: 2px 6px;" title="Perkecil skala -10%">-</button>
+          <button type="button" class="btn btn-secondary btn-sm btn-r3d-scale-step" data-id="${r.id}" data-factor="1.1" style="font-size: 10px; padding: 2px 6px;" title="Perbesar skala +10%">+</button>
           <button type="button" class="btn btn-primary btn-sm btn-r3d-move" data-id="${r.id}" style="font-size: 10px; padding: 2px 7px;" title="Tutup modal dan langsung geser ruangan di kanvas 3D">Geser</button>
           <button type="button" class="btn btn-secondary btn-sm btn-r3d-edit" data-id="${r.id}" style="font-size: 10px; padding: 2px 6px;">Edit</button>
           <button type="button" class="btn btn-sm btn-r3d-del" data-id="${r.id}" style="font-size: 10px; padding: 2px 6px; background: rgba(239,68,68,0.14); color: #dc2626;">Hapus</button>
@@ -427,6 +553,16 @@ export class Room3DModal {
       </div>
     `;
     }).join('');
+
+    container.querySelectorAll('.btn-r3d-scale-step').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-id');
+        const factor = parseFloat(btn.getAttribute('data-factor')) || 1;
+        stateManager.selectRoom3d?.(id);
+        this.map3DEngine?.scaleSelectedRoomIn3D?.(factor);
+        this.renderRoomList();
+      });
+    });
 
     container.querySelectorAll('.btn-r3d-move').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -458,6 +594,15 @@ export class Room3DModal {
         this.modalEl.querySelector('#r3d-width').value = room.widthMeters;
         this.modalEl.querySelector('#r3d-depth').value = room.depthMeters;
         this.modalEl.querySelector('#r3d-height').value = room.heightMeters;
+        const baseW = Number(room.baseWidthMeters) || Number(room.widthMeters) || 20;
+        const baseD = Number(room.baseDepthMeters) || Number(room.depthMeters) || 16;
+        const baseH = Number(room.baseHeightMeters) || Number(room.heightMeters) || 4.5;
+        const curScale = Number(room.modelScale) || (baseW > 0 ? Number(room.widthMeters) / baseW : 1);
+        this.setFormBaseAndScale(
+          { widthMeters: baseW, depthMeters: baseD, heightMeters: baseH },
+          curScale,
+          room.lockAspectRatio !== false
+        );
         const rotInput = this.modalEl.querySelector('#r3d-rot-y');
         if (rotInput) rotInput.value = Number(room.rotationY ?? room.rotationDeg) || 0;
         this.modalEl.querySelector('#r3d-wall-color').value = room.wallColor || '#2a7c13';

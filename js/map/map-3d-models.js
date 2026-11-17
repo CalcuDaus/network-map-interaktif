@@ -10,6 +10,177 @@ import { BUILTIN_GLB_BASE64 } from './builtin-glb-data.js';
 
 const gltfLoader = new GLTFLoader();
 const glbCache = new Map(); // url -> Promise<THREE.Group>
+const glbCollisionCache = new Map(); // url -> CollisionProfile
+
+const ROOM_ROOF_RE = /atap|plafon|kanopi|lisplang|roof|ceiling/i;
+const ROOM_FLOOR_RE = /lantai|selasar|koridor|beranda|panggung|umpak|floor/i;
+
+function _addTriToGridCells(cellMap, cellSize, tri) {
+  const gx0 = Math.floor(tri.minX / cellSize);
+  const gx1 = Math.floor(tri.maxX / cellSize);
+  const gz0 = Math.floor(tri.minZ / cellSize);
+  const gz1 = Math.floor(tri.maxZ / cellSize);
+  for (let gx = gx0; gx <= gx1; gx++) {
+    for (let gz = gz0; gz <= gz1; gz++) {
+      const key = `${gx},${gz}`;
+      let arr = cellMap.get(key);
+      if (!arr) {
+        arr = [];
+        cellMap.set(key, arr);
+      }
+      arr.push(tri);
+    }
+  }
+}
+
+/**
+ * Extract spatial triangle hash grids (walls, walkable floors, roofs) from a loaded GLB root
+ * in centered-bottom meter coordinates (x in [-W/2, W/2], y in [0, H], z in [-D/2, D/2]).
+ * @param {THREE.Object3D} root
+ * @returns {Object}
+ */
+export function buildGlbCollisionProfile(root) {
+  root.updateMatrixWorld(true);
+  const rootBox = new THREE.Box3().setFromObject(root);
+  const rawSizeVec = new THREE.Vector3();
+  const rootCenter = new THREE.Vector3();
+  rootBox.getSize(rawSizeVec);
+  rootBox.getCenter(rootCenter);
+
+  const rawSize = {
+    x: Math.max(0.01, rawSizeVec.x),
+    y: Math.max(0.01, rawSizeVec.y),
+    z: Math.max(0.01, rawSizeVec.z)
+  };
+  const maxDim = Math.max(rawSize.x, rawSize.y, rawSize.z) || 1;
+  const unitSize = {
+    x: rawSize.x / maxDim,
+    y: rawSize.y / maxDim,
+    z: rawSize.z / maxDim
+  };
+
+  const offX = -rootCenter.x;
+  const offY = -rootBox.min.y;
+  const offZ = -rootCenter.z;
+
+  const cellSize = 1.25;
+  const wallCells = new Map();
+  const floorCells = new Map();
+  const roofCells = new Map();
+
+  const vA = new THREE.Vector3();
+  const vB = new THREE.Vector3();
+  const vC = new THREE.Vector3();
+  const e1 = new THREE.Vector3();
+  const e2 = new THREE.Vector3();
+  const norm = new THREE.Vector3();
+
+  let wallTriCount = 0;
+  let floorTriCount = 0;
+
+  root.traverse((obj) => {
+    if (!obj?.isMesh || !obj.geometry?.attributes?.position) return;
+    const meshName = String(obj.name || '');
+    const isFloorNamed = ROOM_FLOOR_RE.test(meshName);
+    const isRoof = ROOM_ROOF_RE.test(meshName) && !isFloorNamed && !/tangga|stair/i.test(meshName);
+    const posAttr = obj.geometry.attributes.position;
+    const indexAttr = obj.geometry.index;
+    const matWorld = obj.matrixWorld;
+    const triCount = indexAttr ? Math.floor(indexAttr.count / 3) : Math.floor(posAttr.count / 3);
+
+    for (let t = 0; t < triCount; t++) {
+      const i0 = indexAttr ? indexAttr.getX(t * 3) : t * 3;
+      const i1 = indexAttr ? indexAttr.getX(t * 3 + 1) : t * 3 + 1;
+      const i2 = indexAttr ? indexAttr.getX(t * 3 + 2) : t * 3 + 2;
+
+      vA.fromBufferAttribute(posAttr, i0).applyMatrix4(matWorld);
+      vB.fromBufferAttribute(posAttr, i1).applyMatrix4(matWorld);
+      vC.fromBufferAttribute(posAttr, i2).applyMatrix4(matWorld);
+
+      const ax = vA.x + offX;
+      const ay = vA.y + offY;
+      const az = vA.z + offZ;
+      const bx = vB.x + offX;
+      const by = vB.y + offY;
+      const bz = vB.z + offZ;
+      const cx = vC.x + offX;
+      const cy = vC.y + offY;
+      const cz = vC.z + offZ;
+
+      e1.set(bx - ax, by - ay, bz - az);
+      e2.set(cx - ax, cy - ay, cz - az);
+      norm.crossVectors(e1, e2);
+      const len = norm.length();
+      if (len < 1e-7) continue;
+      norm.divideScalar(len);
+
+      const tri = {
+        ax, ay, az,
+        bx, by, bz,
+        cx, cy, cz,
+        minX: Math.min(ax, bx, cx),
+        maxX: Math.max(ax, bx, cx),
+        minY: Math.min(ay, by, cy),
+        maxY: Math.max(ay, by, cy),
+        minZ: Math.min(az, bz, cz),
+        maxZ: Math.max(az, bz, cz),
+        ny: norm.y
+      };
+
+      if (isRoof) {
+        _addTriToGridCells(roofCells, cellSize, tri);
+      } else if (Math.abs(tri.ny) > 0.72) {
+        _addTriToGridCells(floorCells, cellSize, tri);
+        floorTriCount += 1;
+      } else if (!isFloorNamed || (tri.maxY - tri.minY) > 0.08) {
+        _addTriToGridCells(wallCells, cellSize, tri);
+        wallTriCount += 1;
+      }
+    }
+  });
+
+  return {
+    rawSize,
+    unitSize,
+    halfW: rawSize.x * 0.5,
+    halfD: rawSize.z * 0.5,
+    height: rawSize.y,
+    cellSize,
+    wallCells,
+    floorCells,
+    roofCells,
+    wallTriCount,
+    floorTriCount
+  };
+}
+
+/**
+ * Scale a normalized GLB room wrapper smoothly across X/Y/Z to match room widthMeters/heightMeters/depthMeters.
+ * @param {THREE.Group} glbWrapper
+ * @param {Object} room
+ */
+export function applyRoomGlbScale(glbWrapper, room) {
+  if (!glbWrapper || !room) return { sx: 1, sy: 1, sz: 1 };
+  const targetW = Math.max(2, Number(room.widthMeters) || 14);
+  const targetD = Math.max(2, Number(room.depthMeters) || 12);
+  const targetH = Math.max(1.5, Number(room.heightMeters) || 3.5);
+  const unitSize = glbWrapper.userData?.unitSize || { x: 1, y: 0.25, z: 0.6 };
+  const loadedTarget = Number(glbWrapper.userData?.loadedTargetSize) || 1;
+  const curW = Math.max(0.01, unitSize.x * loadedTarget);
+  const curH = Math.max(0.01, unitSize.y * loadedTarget);
+  const curD = Math.max(0.01, unitSize.z * loadedTarget);
+
+  glbWrapper.scale.set(targetW / curW, targetH / curH, targetD / curD);
+  glbWrapper.position.y = 0.025;
+  glbWrapper.updateMatrixWorld(true);
+
+  const rawSize = glbWrapper.userData?.rawSize || unitSize;
+  return {
+    sx: targetW / Math.max(0.01, rawSize.x),
+    sy: targetH / Math.max(0.01, rawSize.y),
+    sz: targetD / Math.max(0.01, rawSize.z)
+  };
+}
 
 function base64ToArrayBuffer(base64) {
   const binary = atob(base64);
@@ -49,12 +220,44 @@ function addBox(group, w, h, d, x, y, z, mat) {
  * @param {number} [targetSize=1.2]
  * @returns {Promise<THREE.Group>}
  */
+const LEGACY_BUILDING_GLB_ALIASES = {
+  'assets/models/gedung_utama_kepsek_tu.glb': 'assets/models/gedung_utama_kepsek_tu_cutaway.glb',
+  'assets/models/gedung_sekolah_3ruangan.glb': 'assets/models/gedung_sekolah_3ruangan_cutaway.glb'
+};
+
+function normalizeGlbCacheKey(url) {
+  const raw = String(url || '').trim();
+  if (!raw) return '';
+  if (raw.startsWith('data:') || raw.startsWith('blob:') || /^https?:\/\//i.test(raw)) {
+    return raw;
+  }
+  const clean = raw.replace(/^\/+/, '').replace(/^\.\//, '');
+  return LEGACY_BUILDING_GLB_ALIASES[clean] || clean;
+}
+
+function resolveEmbeddedGlbBase64(url) {
+  const raw = String(url || '').trim();
+  if (!raw) return '';
+  const canonical = normalizeGlbCacheKey(raw);
+  const clean = raw.replace(/^\/+/, '').replace(/^\.\//, '');
+  return BUILTIN_GLB_BASE64[raw] || BUILTIN_GLB_BASE64[clean] || BUILTIN_GLB_BASE64[canonical] || '';
+}
+
+/**
+ * Load and normalize a custom .glb/.gltf model (cached by URL, scaled to targetSize, centered on ground y=0).
+ * Supports both data-URI/URL fetch and embedded BUILTIN_GLB_BASE64 fallback/fast-path.
+ * Automatically evicts failed promises from glbCache so transient network errors can recover on retry.
+ * @param {string} url
+ * @param {number} [targetSize=1.2]
+ * @returns {Promise<THREE.Group>}
+ */
 export function loadCustomGlbModel(url, targetSize = 1.2) {
   if (!url) return Promise.reject(new Error('Empty model URL'));
 
-  if (!glbCache.has(url)) {
+  const cacheKey = normalizeGlbCacheKey(url);
+  if (!glbCache.has(cacheKey)) {
     const promise = new Promise((resolve, reject) => {
-      const embeddedB64 = BUILTIN_GLB_BASE64[url];
+      const embeddedB64 = resolveEmbeddedGlbBase64(url);
       if (embeddedB64) {
         try {
           const buffer = base64ToArrayBuffer(embeddedB64);
@@ -90,12 +293,24 @@ export function loadCustomGlbModel(url, targetSize = 1.2) {
         undefined,
         (err) => reject(err)
       );
+    }).catch((err) => {
+      glbCache.delete(cacheKey);
+      throw err;
     });
-    glbCache.set(url, promise);
+    glbCache.set(cacheKey, promise);
   }
 
-  return glbCache.get(url).then((cachedRoot) => {
+  return glbCache.get(cacheKey).then((cachedRoot) => {
+    if (!glbCollisionCache.has(cacheKey)) {
+      glbCollisionCache.set(cacheKey, buildGlbCollisionProfile(cachedRoot));
+    }
+    const profile = glbCollisionCache.get(cacheKey);
     const clone = cachedRoot.clone(true);
+    // Tag cloned meshes so scene clear/rebuild helpers never dispose cached shared GPU geometries/textures
+    clone.traverse((node) => {
+      node.userData.sharedGlbResource = true;
+    });
+
     const box = new THREE.Box3().setFromObject(clone);
     const size = new THREE.Vector3();
     const center = new THREE.Vector3();
@@ -116,6 +331,19 @@ export function loadCustomGlbModel(url, targetSize = 1.2) {
     clone.position.y -= scaledBox.min.y;
 
     const wrapper = new THREE.Group();
+    wrapper.userData.sharedGlbResource = true;
+    wrapper.userData.loadedTargetSize = targetSize;
+    wrapper.userData.rawSize = {
+      x: Math.max(0.01, size.x),
+      y: Math.max(0.01, size.y),
+      z: Math.max(0.01, size.z)
+    };
+    wrapper.userData.unitSize = {
+      x: wrapper.userData.rawSize.x / maxDim,
+      y: wrapper.userData.rawSize.y / maxDim,
+      z: wrapper.userData.rawSize.z / maxDim
+    };
+    wrapper.userData.collisionProfile = profile;
     wrapper.add(clone);
     wrapper.updateMatrixWorld(true);
     wrapper.userData.extractedPorts = extractPortsFromGlbWrapper(wrapper);
@@ -585,7 +813,7 @@ export const BUILTIN_ROOM_BUILDING_PRESETS = [
   {
     id: 'gedung-kepsek-tu-cutaway',
     name: 'Gedung Kepsek & TU (Cutaway)',
-    subtitle: 'Interior terlihat (28×15×5.9m)',
+    subtitle: 'Ruangan bersih tanpa dekorasi (28×15×5.9m)',
     widthMeters: 28,
     depthMeters: 15,
     heightMeters: 5.9,
@@ -595,21 +823,9 @@ export const BUILTIN_ROOM_BUILDING_PRESETS = [
     customModelUrl: 'assets/models/gedung_utama_kepsek_tu_cutaway.glb'
   },
   {
-    id: 'gedung-kepsek-tu-full',
-    name: 'Gedung Kepsek & TU (Full)',
-    subtitle: 'Atap lengkap (28×15×5.9m)',
-    widthMeters: 28,
-    depthMeters: 15,
-    heightMeters: 5.9,
-    wallColor: '#3b82f6',
-    floorColor: '#1e293b',
-    opacity: 0.18,
-    customModelUrl: 'assets/models/gedung_utama_kepsek_tu.glb'
-  },
-  {
     id: 'gedung-3ruangan-cutaway',
     name: 'Gedung 3 Ruangan (Cutaway)',
-    subtitle: 'Interior terlihat (27.9×9.5×5.25m)',
+    subtitle: 'Ruangan bersih tanpa dekorasi (27.9×9.5×5.25m)',
     widthMeters: 27.9,
     depthMeters: 9.5,
     heightMeters: 5.25,
@@ -619,16 +835,16 @@ export const BUILTIN_ROOM_BUILDING_PRESETS = [
     customModelUrl: 'assets/models/gedung_sekolah_3ruangan_cutaway.glb'
   },
   {
-    id: 'gedung-3ruangan-full',
-    name: 'Gedung 3 Ruangan (Full)',
-    subtitle: 'Atap lengkap (27.9×9.5×5.25m)',
-    widthMeters: 27.9,
-    depthMeters: 9.5,
-    heightMeters: 5.25,
-    wallColor: '#2a7c13',
+    id: 'gedung-perhotelan-2lantai-cutaway',
+    name: 'Gedung Perhotelan 2 Lantai (Cutaway)',
+    subtitle: '2 lantai bersih tanpa dekorasi (25.7×18.1×9.7m)',
+    widthMeters: 25.72,
+    depthMeters: 18.1,
+    heightMeters: 9.67,
+    wallColor: '#16a34a',
     floorColor: '#1e293b',
     opacity: 0.18,
-    customModelUrl: 'assets/models/gedung_sekolah_3ruangan.glb'
+    customModelUrl: 'assets/models/gedung_perhotelan_2lantai_cutaway.glb'
   }
 ];
 
@@ -647,6 +863,11 @@ export function createBuildingRoomPresetData(presetOrId, { x = 0.5, y = 0.5, exi
     widthMeters: preset.widthMeters,
     depthMeters: preset.depthMeters,
     heightMeters: preset.heightMeters,
+    baseWidthMeters: preset.widthMeters,
+    baseDepthMeters: preset.depthMeters,
+    baseHeightMeters: preset.heightMeters,
+    modelScale: 1,
+    lockAspectRatio: true,
     rotationY: 0,
     wallColor: preset.wallColor || '#2a7c13',
     floorColor: preset.floorColor || '#1e293b',

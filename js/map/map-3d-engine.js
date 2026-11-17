@@ -18,6 +18,7 @@ import {
   createCustomObject3DGroup,
   OBJECT3D_PRESETS,
   loadCustomGlbModel,
+  applyRoomGlbScale,
   create3DPortsSubGroup,
   createRobloxAvatar3DGroup,
   updateRobloxAvatarLabel,
@@ -26,7 +27,34 @@ import {
 } from './map-3d-models.js';
 import { clamp, generateId } from '../utils/helpers.js';
 import { CAMPUS_MAP_DATA_URL } from './campus-map-data.js';
-import { authManager, getPeerColorHex } from '../storage/auth-manager.js';
+import {
+  authManager,
+  getPeerColorHex,
+  AVATAR_SCALE_MIN,
+  AVATAR_SCALE_MAX,
+  AVATAR_SCALE_DEFAULT,
+  AVATAR_SCALE_STEP,
+  clampAvatarScale
+} from '../storage/auth-manager.js';
+
+const AVATAR_SCALE_STORAGE_KEY = 'netmap_avatar_scale_v1';
+const BASE_AVATAR_COLLIDER = { radius: 0.48, height: 1.88, stepHeight: 0.38 };
+
+function resolveEngineAvatarScale(ctx) {
+  if (ctx && typeof ctx.getAvatarScale === 'function') {
+    return ctx.getAvatarScale();
+  }
+  return clampAvatarScale(ctx?.avatarScale);
+}
+
+function buildScaledAvatarCollider(scale = AVATAR_SCALE_DEFAULT, base = BASE_AVATAR_COLLIDER) {
+  const s = clampAvatarScale(scale);
+  return {
+    radius: Math.round((Number(base?.radius) || BASE_AVATAR_COLLIDER.radius) * s * 1000) / 1000,
+    height: Math.round((Number(base?.height) || BASE_AVATAR_COLLIDER.height) * s * 1000) / 1000,
+    stepHeight: Number(base?.stepHeight) || BASE_AVATAR_COLLIDER.stepHeight
+  };
+}
 
 export class Map3DEngine {
   /**
@@ -129,7 +157,9 @@ export class Map3DEngine {
     this._lastPresenceEmitAt = 0;
     this._lastPresenceSnapshotKey = '';
     this._lastPeersHudKey = '';
-    this.avatarCollider = { radius: 0.48, height: 1.88, stepHeight: 0.18 };
+    this._baseAvatarCollider = { radius: 0.48, height: 1.88, stepHeight: 0.38 };
+    this.avatarScale = this._loadSavedAvatarScale();
+    this.avatarCollider = this._computeAvatarCollider(this.avatarScale);
     this.deviceColliders = [];
     this.avatarState = {
       x: 0,
@@ -632,24 +662,82 @@ export class Map3DEngine {
     this.syncCables();
   }
 
+  _attachRoomFallbackMesh(room, roomGroup) {
+    if (!roomGroup || roomGroup.userData?.hasFallbackRoomMesh) return;
+    const w = Math.max(2, Number(room.widthMeters) || 14);
+    const d = Math.max(2, Number(room.depthMeters) || 12);
+    const h = Math.max(1.5, Number(room.heightMeters) || 4);
+    const wallHex = room.wallColor || '#2a7c13';
+    const floorHex = room.floorColor || '#1e293b';
+
+    const floorMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(w, d),
+      new THREE.MeshStandardMaterial({
+        color: floorHex,
+        roughness: 0.9,
+        metalness: 0.05,
+        transparent: true,
+        opacity: 0.65,
+        side: THREE.DoubleSide
+      })
+    );
+    floorMesh.rotation.x = -Math.PI / 2;
+    floorMesh.position.y = 0.04;
+    floorMesh.userData.roomId = room.id;
+
+    const wallBox = new THREE.Mesh(
+      new THREE.BoxGeometry(w, h, d),
+      new THREE.MeshStandardMaterial({
+        color: wallHex,
+        transparent: true,
+        opacity: Math.max(0.12, Math.min(0.45, Number(room.opacity) || 0.2)),
+        roughness: 0.65,
+        depthWrite: false,
+        side: THREE.DoubleSide
+      })
+    );
+    wallBox.position.y = h / 2;
+    wallBox.userData.roomId = room.id;
+
+    roomGroup.add(floorMesh);
+    roomGroup.add(wallBox);
+    roomGroup.userData.hasFallbackRoomMesh = true;
+  }
+
+  _mountRoomGlbIntoGroup(roomGroup, glb, room) {
+    if (!roomGroup || !glb || !room) return;
+    if (roomGroup.userData.placeholderWireframe) {
+      roomGroup.remove(roomGroup.userData.placeholderWireframe);
+      roomGroup.userData.placeholderWireframe.geometry?.dispose?.();
+      roomGroup.userData.placeholderWireframe.material?.dispose?.();
+      roomGroup.userData.placeholderWireframe = null;
+    }
+    const colScale = applyRoomGlbScale(glb, room);
+    glb.traverse((c) => {
+      c.userData.roomId = room.id;
+    });
+    roomGroup.add(glb);
+    roomGroup.userData.attachedRoomGlb = glb;
+    roomGroup.userData.attachedRoomUrl = room.customModelUrl;
+    roomGroup.userData.roomCollisionProfile = glb.userData?.collisionProfile || null;
+    roomGroup.userData.roomCollisionScale = colScale;
+  }
+
   _attachRoomCustomGlb(room, roomGroup) {
     if (!room?.customModelUrl || !roomGroup) return;
-    const targetSpan = Math.max(Number(room.widthMeters) || 14, Number(room.depthMeters) || 12);
-    loadCustomGlbModel(room.customModelUrl, targetSpan)
+    loadCustomGlbModel(room.customModelUrl, 1.0)
       .then((glb) => {
         if (!this.roomsGroup.children.includes(roomGroup)) return;
-        if (roomGroup.userData.placeholderWireframe) {
-          roomGroup.remove(roomGroup.userData.placeholderWireframe);
-          roomGroup.userData.placeholderWireframe.geometry?.dispose?.();
-          roomGroup.userData.placeholderWireframe.material?.dispose?.();
-          roomGroup.userData.placeholderWireframe = null;
-        }
-        glb.traverse((c) => {
-          c.userData.roomId = room.id;
-        });
-        roomGroup.add(glb);
+        this._mountRoomGlbIntoGroup(roomGroup, glb, room);
       })
-      .catch((err) => console.warn('[Map3DEngine] Custom room GLB failed:', err));
+      .catch((err) => {
+        console.warn('[Map3DEngine] Custom room GLB failed:', err);
+        if (!this.roomsGroup.children.includes(roomGroup)) return;
+        this._attachRoomFallbackMesh(room, roomGroup);
+        this.showStatusHint?.(
+          `⚠️ Model GLB "${room.name || 'Ruangan 3D'}" gagal dimuat — menampilkan bentuk fallback.`
+        );
+      });
   }
 
   syncRooms() {
@@ -675,21 +763,28 @@ export class Map3DEngine {
   rebuildSingleRoom3dMesh(room, isSelected = true) {
     if (!this.isInitialized || !room?.id) return null;
     const prev = this.room3dMeshMap.get(room.id);
+    let reusedGlb = null;
     if (prev) {
+      if (
+        prev.userData?.attachedRoomGlb &&
+        prev.userData?.attachedRoomUrl === room.customModelUrl
+      ) {
+        reusedGlb = prev.userData.attachedRoomGlb;
+        prev.remove(reusedGlb);
+      }
       this.roomsGroup.remove(prev);
-      prev.traverse((c) => {
-        if (c.geometry) c.geometry.dispose();
-        if (c.material) {
-          if (Array.isArray(c.material)) c.material.forEach((m) => m.dispose());
-          else c.material.dispose();
-        }
-      });
+      this._disposeObject3DResources(prev);
     }
     const next = create3DRoomGroup(room, (nx, ny) => this.normToWorld(nx, ny), isSelected);
     next.userData.roomId = room.id;
     this.roomsGroup.add(next);
     this.room3dMeshMap.set(room.id, next);
-    this._attachRoomCustomGlb(room, next);
+
+    if (reusedGlb) {
+      this._mountRoomGlbIntoGroup(next, reusedGlb, room);
+    } else {
+      this._attachRoomCustomGlb(room, next);
+    }
     return next;
   }
 
@@ -731,13 +826,7 @@ export class Map3DEngine {
     const prev = this.object3dMeshMap.get(obj.id);
     if (prev) {
       this.objects3dGroup.remove(prev);
-      prev.traverse((c) => {
-        if (c.geometry) c.geometry.dispose();
-        if (c.material) {
-          if (Array.isArray(c.material)) c.material.forEach((m) => m.dispose());
-          else c.material.dispose();
-        }
-      });
+      this._disposeObject3DResources(prev);
     }
     const next = createCustomObject3DGroup(obj, (nx, ny) => this.normToWorld(nx, ny), isSelected);
     this.objects3dGroup.add(next);
@@ -1871,7 +1960,7 @@ export class Map3DEngine {
         stateManager.selectRoom3d?.(roomHit.roomId);
         const room = stateManager.getRoom3dById?.(roomHit.roomId);
         this.showStatusHint(
-          `🏠 Ruangan "${room?.name || 'Ruangan 3D'}" dipilih — Drag handle oranye / tool Move (M) untuk geser • Rotate (R) / [ ] putar • Kuning ubah ukuran`
+          `🏠 Ruangan "${room?.name || 'Ruangan 3D'}" dipilih — Drag handle oranye / Move (M) geser • Rotate (R) / [ ] putar • Kuning / + - ubah skala`
         );
         return;
       }
@@ -2531,6 +2620,9 @@ export class Map3DEngine {
       const planeY = Math.max(0, Number(gizmoHit.point?.y) || 0);
       const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -planeY);
       const worldCenter = this.normToWorld(room.x ?? 0.5, room.y ?? 0.5);
+      const startW = Number(room.widthMeters) || 14;
+      const startD = Number(room.depthMeters) || 12;
+      const startH = Number(room.heightMeters) || 3.5;
       this.object3dDragState = {
         kind: 'room-scale',
         roomId: room.id,
@@ -2538,10 +2630,13 @@ export class Map3DEngine {
         centerX: worldCenter.x,
         centerZ: worldCenter.z,
         rotYRad: ((Number(room.rotationY ?? room.rotationDeg) || 0) * Math.PI) / 180,
-        startWidth: Number(room.widthMeters) || 14,
-        startDepth: Number(room.depthMeters) || 12,
-        latestWidth: Number(room.widthMeters) || 14,
-        latestDepth: Number(room.depthMeters) || 12,
+        startWidth: startW,
+        startDepth: startD,
+        startHeight: startH,
+        latestWidth: startW,
+        latestDepth: startD,
+        latestHeight: startH,
+        lockAspectRatio: room.lockAspectRatio !== undefined ? Boolean(room.lockAspectRatio) : Boolean(room.customModelUrl),
         draftRoom: { ...room }
       };
       dom.setPointerCapture?.(e.pointerId);
@@ -2621,7 +2716,7 @@ export class Map3DEngine {
 
     if (state.kind === 'room-pushpull') {
       const dyPx = state.startClientY - e.clientY;
-      const camDist = this.camera ? this.camera.position.distanceTo(this.controls.target) : 25;
+      const camDist = Math.max(4, this.camera ? this.camera.position.distanceTo(this.controls.target) : 25);
       const deltaMeters = (dyPx / Math.max(200, rect.height)) * camDist * 1.15;
       const nextH = clamp(Number((state.startHeight + deltaMeters).toFixed(2)), 1.5, 40);
       state.latestHeight = nextH;
@@ -2662,13 +2757,29 @@ export class Map3DEngine {
       const sin = Math.sin(state.rotYRad || 0);
       const lx = dx * cos - dz * sin;
       const lz = dx * sin + dz * cos;
-      const nextW = clamp(Number((Math.abs(lx) * 2).toFixed(2)), 2, 200);
-      const nextD = clamp(Number((Math.abs(lz) * 2).toFixed(2)), 2, 200);
+      const rawW = Math.abs(lx) * 2;
+      const rawD = Math.abs(lz) * 2;
+      let nextW;
+      let nextD;
+      let nextH = state.startHeight;
+      if (state.lockAspectRatio && !e.shiftKey && state.startWidth > 0 && state.startDepth > 0) {
+        const ratio = clamp(Math.max(rawW / state.startWidth, rawD / state.startDepth), 0.15, 6.0);
+        nextW = clamp(Number((state.startWidth * ratio).toFixed(2)), 2, 200);
+        nextD = clamp(Number((state.startDepth * ratio).toFixed(2)), 2, 200);
+        nextH = clamp(Number((state.startHeight * ratio).toFixed(2)), 1.5, 40);
+      } else {
+        nextW = clamp(Number(rawW.toFixed(2)), 2, 200);
+        nextD = clamp(Number(rawD.toFixed(2)), 2, 200);
+      }
       state.latestWidth = nextW;
       state.latestDepth = nextD;
-      state.draftRoom = { ...state.draftRoom, widthMeters: nextW, depthMeters: nextD };
+      state.latestHeight = nextH;
+      state.draftRoom = { ...state.draftRoom, widthMeters: nextW, depthMeters: nextD, heightMeters: nextH };
       this.rebuildSingleRoom3dMesh(state.draftRoom, true);
-      this.showStatusHint(`📐 Ukuran Ruangan "${state.draftRoom.name}": ${nextW.toFixed(2)}m × ${nextD.toFixed(2)}m`);
+      const pct = state.startWidth > 0 ? Math.round((nextW / (state.draftRoom.baseWidthMeters || state.startWidth)) * 100) : 100;
+      this.showStatusHint(
+        `📐 Skala Ruangan "${state.draftRoom.name}": ${nextW.toFixed(1)}×${nextD.toFixed(1)}×${nextH.toFixed(1)}m (${pct}%) • Tahan Shift untuk ubah Lebar/Panjang bebas`
+      );
       return;
     }
 
@@ -2848,9 +2959,15 @@ export class Map3DEngine {
     }
     if (state.kind === 'room-scale') {
       this._suppressNextClick = true;
+      const baseW = Number(state.draftRoom?.baseWidthMeters) || 0;
+      const scaleUpdate = baseW > 0
+        ? { modelScale: Number((state.latestWidth / baseW).toFixed(3)) }
+        : {};
       stateManager.updateRoom3d?.(state.roomId, {
         widthMeters: state.latestWidth,
-        depthMeters: state.latestDepth
+        depthMeters: state.latestDepth,
+        heightMeters: state.latestHeight ?? state.startHeight,
+        ...scaleUpdate
       });
       return;
     }
@@ -3128,13 +3245,21 @@ export class Map3DEngine {
       });
     });
 
+    const mc = meshGroup?.getObjectByName?.('DeviceModelContainer');
+    const startRotY = Number(device.spatial3d?.rotationY ?? device.rotation ?? 0) || 0;
+    const startHolderY = meshGroup ? meshGroup.position.y : 0;
+
     this.dragMoveState = {
       deviceId: devId,
+      device,
       startNormX: device.position.x,
       startNormY: device.position.y,
       startWorldX: devWorld.x,
       startWorldZ: devWorld.z,
       effY,
+      startHolderY,
+      startRotY,
+      hasModelContainer: Boolean(mc),
       plane: dragPlane,
       grabOffsetX: devWorld.x - hitPt.x,
       grabOffsetZ: devWorld.z - hitPt.z,
@@ -3142,10 +3267,97 @@ export class Map3DEngine {
       meshOffsetZ,
       portInitials: this._collectDevicePortInitials(devId),
       peers,
-      latestNorm: null
+      latestNorm: null,
+      wallMountSnap: null
     };
 
     dom.setPointerCapture?.(e.pointerId);
+  }
+
+  /**
+   * Raycast against vertical 3D walls of buildings (roomsGroup) and 3D objects (objects3dGroup)
+   * so devices can snap/mount flush onto any wall facing outward along the surface normal.
+   */
+  find3DWallMountTarget(rayOrigin, rayDir, maxDist = 4.2, { device = null, minHitY = 0.25, maxHitY = 5.2 } = {}) {
+    if (!rayOrigin || !rayDir) return null;
+    const roots = [
+      ...(this.roomsGroup?.children || []),
+      ...(this.objects3dGroup?.children || [])
+    ];
+    if (roots.length === 0) return null;
+
+    const meshTargets = [];
+    const visit = (node) => {
+      if (!node || node.visible === false) return;
+      if (node.userData?.gizmoType || node.userData?.isSelectionRing || node.userData?.isCarriedByAvatar) return;
+      if (node.isMesh) {
+        if (!/atap|plafon|kanopi|lisplang|roof|ceiling/i.test(String(node.name || ''))) {
+          meshTargets.push(node);
+        }
+        return;
+      }
+      if (Array.isArray(node.children)) {
+        for (const ch of node.children) visit(ch);
+      }
+    };
+    roots.forEach((root) => {
+      root?.updateMatrixWorld?.(true);
+      visit(root);
+    });
+    if (meshTargets.length === 0) return null;
+
+    const wallRay = new THREE.Raycaster(rayOrigin.clone(), rayDir.clone().normalize(), 0.05, maxDist);
+    wallRay.camera = this.camera || null;
+    const hits = wallRay.intersectObjects(meshTargets, false);
+    if (!hits || hits.length === 0) return null;
+
+    const normalMat = new THREE.Matrix3();
+    const worldNormal = new THREE.Vector3();
+
+    for (const hit of hits) {
+      const obj = hit?.object;
+      if (!obj || !obj.isMesh || !hit.face) continue;
+
+      normalMat.getNormalMatrix(obj.matrixWorld);
+      worldNormal.copy(hit.face.normal).applyMatrix3(normalMat).normalize();
+      if (worldNormal.dot(wallRay.ray.direction) > 0) {
+        worldNormal.negate();
+      }
+
+      // Only accept near-vertical surfaces (walls, pillars, rack sides, cabinets)
+      if (Math.abs(worldNormal.y) >= 0.52) continue;
+      if (hit.point.y < minHitY || hit.point.y > maxHitY) continue;
+
+      const devScale = ((device?.spatial3d?.modelScale || 1) * (this.deviceScaleMultiplier || 3.0));
+      const existingCol = device?.id ? this.deviceColliders?.find((c) => c.id === device.id) : null;
+      const fp = this.getDeviceCollisionFootprint
+        ? this.getDeviceCollisionFootprint(device, devScale)
+        : { halfD: 0.45 };
+      const wallStandoff = existingCol
+        ? Math.max(0.14, Math.min(0.6, (Number(existingCol.halfD) || 0.35) * 0.9 + 0.04))
+        : Math.max(0.14, Math.min(0.55, (Number(fp.halfD) || 0.4) * 0.6 + 0.04));
+
+      const horizLen = Math.hypot(worldNormal.x, worldNormal.z) || 1;
+      const nx = worldNormal.x / horizLen;
+      const nz = worldNormal.z / horizLen;
+      const worldPos = new THREE.Vector3(
+        hit.point.x + nx * wallStandoff,
+        hit.point.y,
+        hit.point.z + nz * wallStandoff
+      );
+      const wallRotYDeg = ((Math.round((Math.atan2(nx, nz) * 180) / Math.PI) % 360) + 360) % 360;
+
+      return {
+        point: hit.point.clone(),
+        worldPos,
+        worldNormal: new THREE.Vector3(nx, 0, nz),
+        elevationMeters: Number(clamp(hit.point.y, 0.25, maxHitY).toFixed(2)),
+        rotationY: wallRotYDeg,
+        distance: hit.distance,
+        objectName: obj.name || 'Dinding 3D'
+      };
+    }
+    return null;
   }
 
   updateDeviceDragMove(e) {
@@ -3155,6 +3367,59 @@ export class Map3DEngine {
     this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
     this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
     this.raycaster.setFromCamera(this.pointer, this.camera);
+
+    const meshGroup = this.deviceMeshMap.get(state.deviceId);
+    const modelContainer = meshGroup?.getObjectByName?.('DeviceModelContainer');
+
+    // Allow snapping a single dragged device flush onto any 3D building/room wall under the cursor
+    if (state.peers.length === 0) {
+      const wallHit = this.find3DWallMountTarget(
+        this.raycaster.ray.origin,
+        this.raycaster.ray.direction,
+        500,
+        { device: state.device, minHitY: 0.25, maxHitY: 12.0 }
+      );
+      if (wallHit) {
+        const { normX, normY } = this.worldToNorm(wallHit.worldPos.x, wallHit.worldPos.z);
+        const clampedWorld = this.normToWorld(normX, normY);
+        const mountY = wallHit.elevationMeters;
+        if (meshGroup) {
+          meshGroup.position.set(clampedWorld.x, mountY, clampedWorld.z);
+          if (modelContainer) {
+            modelContainer.rotation.y = (wallHit.rotationY * Math.PI) / 180;
+          }
+          const holderPorts = meshGroup.userData?.devPorts || [];
+          const userScale = meshGroup.userData?.userModelScale || ((state.device?.spatial3d?.modelScale || 1) * (this.deviceScaleMultiplier || 3.0));
+          this.registerDevicePortTransforms(
+            state.device,
+            holderPorts,
+            clampedWorld.x,
+            mountY,
+            clampedWorld.z,
+            userScale,
+            new THREE.Euler(0, (wallHit.rotationY * Math.PI) / 180, 0, 'YXZ')
+          );
+          this.effectivePosMap.set(
+            state.deviceId,
+            new THREE.Vector3(clampedWorld.x, mountY + 0.35 * (this.deviceScaleMultiplier || 3.0), clampedWorld.z)
+          );
+        }
+        state.latestNorm = { x: normX, y: normY };
+        state.wallMountSnap = {
+          elevationMeters: mountY,
+          rotationY: wallHit.rotationY,
+          mountType: 'wall'
+        };
+        this.syncCables();
+        this.showStatusHint(`📌 Menempel ke dinding 3D (Tinggi: ${mountY.toFixed(2)}m • Hadap: ${wallHit.rotationY}°)`);
+        return;
+      }
+      if (state.wallMountSnap) {
+        state.wallMountSnap = null;
+        if (meshGroup) meshGroup.position.y = state.startHolderY;
+        if (modelContainer) modelContainer.rotation.y = (state.startRotY * Math.PI) / 180;
+      }
+    }
 
     const hitPt = new THREE.Vector3();
     if (!this.raycaster.ray.intersectPlane(state.plane, hitPt)) return;
@@ -3167,7 +3432,6 @@ export class Map3DEngine {
     const primaryShiftX = clampedWorld.x - state.startWorldX;
     const primaryShiftZ = clampedWorld.z - state.startWorldZ;
 
-    const meshGroup = this.deviceMeshMap.get(state.deviceId);
     if (meshGroup) {
       meshGroup.position.x = clampedWorld.x + state.meshOffsetX;
       meshGroup.position.z = clampedWorld.z + state.meshOffsetZ;
@@ -3229,6 +3493,28 @@ export class Map3DEngine {
         moves.push({ id: peer.id, position: peer.latestNorm });
       }
     });
+    if (state.wallMountSnap && this.deviceManager?.updateDevice) {
+      this.deviceManager.moveDeviceGroup(moves, { syncRenderer: false });
+      const dev = this.deviceManager.getDeviceById?.(state.deviceId);
+      const baseSp = { ...getDefaultSpatial3d(dev?.type), ...(dev?.spatial3d || {}) };
+      this.deviceManager.updateDevice(state.deviceId, {
+        spatial3d: {
+          ...baseSp,
+          elevationMeters: state.wallMountSnap.elevationMeters,
+          rotationY: state.wallMountSnap.rotationY,
+          mountType: 'wall',
+          offsetX: 0,
+          offsetY: 0,
+          offsetZ: 0
+        }
+      });
+      this.syncDevices();
+      this.syncCables();
+      this.showStatusHint(
+        `📌 Perangkat ditempelkan ke dinding 3D (Tinggi: ${state.wallMountSnap.elevationMeters.toFixed(2)}m • Hadap: ${state.wallMountSnap.rotationY}°)`
+      );
+      return;
+    }
     this.deviceManager.moveDeviceGroup(moves, { syncRenderer: true });
   }
 
@@ -3458,6 +3744,35 @@ export class Map3DEngine {
     return false;
   }
 
+  scaleSelectedRoomIn3D(factor = 1.1) {
+    const selRoomId = stateManager.getSelectedRoom3dId?.();
+    if (!selRoomId) return false;
+    const room = stateManager.getRoom3dById?.(selRoomId);
+    if (!room || room.locked) return false;
+
+    const mul = Math.max(0.25, Math.min(4.0, Number(factor) || 1));
+    const curW = Math.max(2, Number(room.widthMeters) || 14);
+    const curD = Math.max(2, Number(room.depthMeters) || 12);
+    const curH = Math.max(1.5, Number(room.heightMeters) || 3.5);
+    const nextW = clamp(Number((curW * mul).toFixed(2)), 2, 200);
+    const nextD = clamp(Number((curD * mul).toFixed(2)), 2, 200);
+    const nextH = clamp(Number((curH * mul).toFixed(2)), 1.5, 40);
+    const baseW = Number(room.baseWidthMeters) || curW;
+    const nextScale = Number((nextW / baseW).toFixed(3));
+
+    stateManager.updateRoom3d?.(selRoomId, {
+      widthMeters: nextW,
+      depthMeters: nextD,
+      heightMeters: nextH,
+      modelScale: nextScale
+    });
+    const pct = Math.round(nextScale * 100);
+    this.showStatusHint(
+      `📐 Skala Ruangan "${room.name}": ${nextW.toFixed(1)}×${nextD.toFixed(1)}×${nextH.toFixed(1)}m (${pct}%)`
+    );
+    return true;
+  }
+
   syncSelectionRings() {
     if (!this.isInitialized || !this.deviceMeshMap) return;
     const primaryId = this.deviceManager?.selectedDeviceId;
@@ -3658,18 +3973,127 @@ export class Map3DEngine {
     return this.setAvatarPerspective(this.avatarPerspective === 'fpp' ? 'tpp' : 'fpp');
   }
 
+  _loadSavedAvatarScale() {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const raw = localStorage.getItem(AVATAR_SCALE_STORAGE_KEY);
+        if (raw !== null && raw !== '') {
+          return clampAvatarScale(raw);
+        }
+      }
+    } catch { /* ignore storage restrictions */ }
+    return AVATAR_SCALE_DEFAULT;
+  }
+
+  _computeAvatarCollider(scale = this.avatarScale) {
+    return buildScaledAvatarCollider(scale, this._baseAvatarCollider || BASE_AVATAR_COLLIDER);
+  }
+
+  getAvatarScale() {
+    return clampAvatarScale(this.avatarScale);
+  }
+
+  getAvatarScaleBounds() {
+    return {
+      min: AVATAR_SCALE_MIN,
+      max: AVATAR_SCALE_MAX,
+      defaultScale: AVATAR_SCALE_DEFAULT,
+      step: AVATAR_SCALE_STEP
+    };
+  }
+
+  _syncAvatarScaleHudControl() {
+    if (typeof document === 'undefined') return;
+    const curScale = this.getAvatarScale();
+    const rangeEl = document.getElementById('range-avatar-scale');
+    if (rangeEl) rangeEl.value = curScale.toFixed(2);
+    const valEl = document.getElementById('avatar-scale-value');
+    if (valEl) valEl.textContent = `${curScale.toFixed(2)}x`;
+    const downBtn = document.getElementById('btn-avatar-scale-down');
+    if (downBtn) downBtn.disabled = curScale <= AVATAR_SCALE_MIN + 1e-4;
+    const upBtn = document.getElementById('btn-avatar-scale-up');
+    if (upBtn) upBtn.disabled = curScale >= AVATAR_SCALE_MAX - 1e-4;
+  }
+
+  /**
+   * Adjust local technician character scale strictly within safe multiplayer limits.
+   * @param {number} scale
+   * @param {{ persist?: boolean, silent?: boolean }} [options]
+   * @returns {number} Clamped avatar scale
+   */
+  setAvatarScale(scale, { persist = true, silent = false } = {}) {
+    const parsed = Number(scale);
+    const nextScale = clampAvatarScale(scale);
+    const wasClamped = Number.isFinite(parsed) && (parsed < AVATAR_SCALE_MIN - 1e-6 || parsed > AVATAR_SCALE_MAX + 1e-6);
+
+    this.avatarScale = nextScale;
+    this.avatarCollider = this._computeAvatarCollider(nextScale);
+
+    if (persist) {
+      try {
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem(AVATAR_SCALE_STORAGE_KEY, String(nextScale));
+        }
+      } catch { /* ignore storage restrictions */ }
+    }
+
+    if (this.avatarGroup) {
+      this.avatarGroup.scale.setScalar(nextScale);
+    }
+
+    if (this.avatarMode) {
+      if (typeof this.resolveAvatarCollisionStep === 'function') {
+        const ax = Number(this.avatarState.x) || 0;
+        const ay = Number(this.avatarState.y) || 0;
+        const az = Number(this.avatarState.z) || 0;
+        const resolved = this.resolveAvatarCollisionStep(ax, ay, az, {
+          prevX: ax,
+          prevY: ay,
+          prevZ: az,
+          vy: Number(this.avatarState.vy) || 0,
+          isTeleport: true
+        });
+        this.avatarState.x = resolved.x;
+        this.avatarState.y = resolved.y;
+        this.avatarState.z = resolved.z;
+        if (this.avatarGroup) {
+          this.avatarGroup.position.set(resolved.x, resolved.y, resolved.z);
+        }
+      }
+      if (this.carriedObjects?.length > 0) {
+        this.updateCarriedObjectsTransform?.();
+      }
+      if (!this.simulatorFocusedDeviceId) {
+        this.syncAvatarCameraFromAngles();
+      }
+    }
+
+    this._syncAvatarScaleHudControl();
+    this.publishLocalPresence?.(true);
+
+    if (!silent) {
+      this.showStatusHint?.(
+        wasClamped
+          ? `Skala karakter dibatasi ${AVATAR_SCALE_MIN}x - ${AVATAR_SCALE_MAX}x (${nextScale.toFixed(2)}x) agar multiplayer tetap kondusif.`
+          : `Ukuran karakter teknisi: ${nextScale.toFixed(2)}x (batas ${AVATAR_SCALE_MIN}x - ${AVATAR_SCALE_MAX}x).`
+      );
+    }
+    return nextScale;
+  }
+
   getAvatarFollowCameraPose(followDist = this.avatarState.camDist || 5.8) {
     const camYaw = Number.isFinite(this.avatarState.camYaw)
       ? this.avatarState.camYaw
       : (Number(this.avatarState.yaw) || 0);
+    const scale = resolveEngineAvatarScale(this);
 
     if (this.avatarPerspective === 'fpp') {
       const bobOffset = (this.avatarState.isMoving && this.avatarState.isGrounded)
-        ? Math.sin((Number(this.avatarState.walkPhase) || 0) * 2) * 0.032
+        ? Math.sin((Number(this.avatarState.walkPhase) || 0) * 2) * 0.032 * scale
         : 0;
       const eyePos = new THREE.Vector3(
         this.avatarState.x,
-        Math.max(0.45, this.avatarState.y + 1.66 + bobOffset),
+        Math.max(0.45, this.avatarState.y + 1.66 * scale + bobOffset),
         this.avatarState.z
       );
       const lookPitch = clamp(-(Number.isFinite(this.avatarState.camPitch) ? this.avatarState.camPitch : 0), -1.35, 1.35);
@@ -3687,10 +4111,10 @@ export class Map3DEngine {
       -0.15,
       1.18
     );
-    const dist = clamp(Number(followDist) || 5.8, 2.0, 22.0);
+    const dist = clamp(Number(followDist) || 5.8, Math.max(2.0, 2.0 * scale), 22.0);
     const target = new THREE.Vector3(
       this.avatarState.x,
-      this.avatarState.y + 1.38,
+      this.avatarState.y + 1.38 * scale,
       this.avatarState.z
     );
     const horiz = Math.cos(camPitch) * dist;
@@ -3774,6 +4198,9 @@ export class Map3DEngine {
     } else {
       updateRobloxAvatarLabel(this.avatarGroup, localAvatarLabel, '#76c457');
     }
+    const curScale = resolveEngineAvatarScale(this);
+    this.avatarCollider = buildScaledAvatarCollider(curScale, this._baseAvatarCollider || BASE_AVATAR_COLLIDER);
+    this.avatarGroup.scale.setScalar(curScale);
     if (this.scene && !this.scene.children.includes(this.avatarGroup)) {
       this.scene.add(this.avatarGroup);
     }
@@ -4195,6 +4622,24 @@ export class Map3DEngine {
     return true;
   }
 
+  _getAvatarWallAimRay() {
+    const ax = Number(this.avatarState?.x) || 0;
+    const ay = Number(this.avatarState?.y) || 0;
+    const az = Number(this.avatarState?.z) || 0;
+    const scale = resolveEngineAvatarScale(this);
+    if (this.avatarPerspective === 'fpp' && typeof this.getAvatarFollowCameraPose === 'function') {
+      const pose = this.getAvatarFollowCameraPose(this.avatarState?.camDist);
+      const dir = pose.target.clone().sub(pose.endPos).normalize();
+      return { origin: pose.endPos.clone(), dir, maxDist: Number((4.2 + Math.max(0, scale - 1) * 0.8).toFixed(2)) };
+    }
+    const yaw = Number(this.avatarState?.yaw) || 0;
+    return {
+      origin: new THREE.Vector3(ax, ay + 1.35 * scale, az),
+      dir: new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw)),
+      maxDist: Number((3.4 + Math.max(0, scale - 1) * 0.8).toFixed(2))
+    };
+  }
+
   getCarriedDropSupportElevation(dropX, dropZ, excludeId = '') {
     const objects = typeof stateManager?.getObjects3d === 'function' ? stateManager.getObjects3d() : [];
     const carriedIds = new Set((this.carriedObjects || []).map((c) => c.objId || c.devId));
@@ -4221,6 +4666,13 @@ export class Map3DEngine {
         supportY = topY;
       }
     }
+
+    const avatarFloorLimit = Math.max(2.4, (Number(this.avatarState?.y) || 0) + 1.5);
+    const roomFloorY = this._sampleRoomFloorHeightAtWorld?.(dropX, dropZ, avatarFloorLimit) || 0;
+    if (roomFloorY > supportY) {
+      supportY = roomFloorY;
+    }
+
     return Number(supportY.toFixed(2));
   }
 
@@ -4241,13 +4693,15 @@ export class Map3DEngine {
       if (rad > maxFootRad) maxFootRad = rad;
     }
 
-    const carryFwdDist = isFpp ? (1.1 + maxFootRad * 0.55) : (0.95 + maxFootRad * 0.65);
+    const carryScale = resolveEngineAvatarScale(this);
+    const carryDistMul = 1 + (carryScale - 1) * 0.55;
+    const carryFwdDist = (isFpp ? 1.1 : 0.95) * carryDistMul + maxFootRad * (isFpp ? 0.55 : 0.65);
     const rawAnchorX = ax + fwdX * carryFwdDist;
     const rawAnchorZ = az + fwdZ * carryFwdDist;
     const anchorNorm = this.worldToNorm ? this.worldToNorm(rawAnchorX, rawAnchorZ) : { normX: 0.5, normY: 0.5 };
     const anchorWorld = this.normToWorld ? this.normToWorld(anchorNorm.normX, anchorNorm.normY) : { x: rawAnchorX, z: rawAnchorZ };
 
-    let stackY = ay + (isFpp ? 0.68 : 0.86);
+    let stackY = ay + (isFpp ? 0.68 : 0.86) * carryScale;
     let anyMovedDevices = false;
 
     for (const item of this.carriedObjects) {
@@ -4361,21 +4815,60 @@ export class Map3DEngine {
     const maxProjFwd = Math.max(...placements.map((p) => p.projFwd));
     let latCursor = -totalSpan * 0.5;
     let needsDeviceSync = false;
+    let mountedOnWallCount = 0;
+
+    // Detect if technician is aiming/facing a 3D room wall to mount device(s) directly onto it
+    const firstDevItem = placements.find((p) => p.item.kind === 'device');
+    const aimRay = (!silent && firstDevItem) ? this._getAvatarWallAimRay() : null;
+    const sampleDev = firstDevItem ? this.deviceManager?.getDeviceById?.(firstDevItem.item.devId) : null;
+    const wallMountHit = (aimRay && sampleDev)
+      ? this.find3DWallMountTarget(aimRay.origin, aimRay.dir, aimRay.maxDist, { device: sampleDev, minHitY: 0.25, maxHitY: 12.0 })
+      : null;
 
     for (let i = 0; i < placements.length; i++) {
       const { item, normRotY, projFwd, projLat } = placements[i];
       const latOffset = placements.length === 1 ? 0 : (latCursor + projLat);
       latCursor += projLat * 2 + gap;
 
-      const fwdDist = placements.length === 1
-        ? Math.max(1.35, avatarRadius + projFwd + 0.35)
-        : Math.max(1.5, avatarRadius + maxProjFwd + 0.4);
+      let rawDropX;
+      let rawDropZ;
+      let dropNorm;
+      let dropWorld;
+      let dropElev;
+      let targetRotY = normRotY;
+      let wallMountedThisItem = false;
 
-      const rawDropX = ax + fwdX * fwdDist + rightX * latOffset;
-      const rawDropZ = az + fwdZ * fwdDist + rightZ * latOffset;
-      const dropNorm = this.worldToNorm ? this.worldToNorm(rawDropX, rawDropZ) : { normX: 0.5, normY: 0.5 };
-      const dropWorld = this.normToWorld ? this.normToWorld(dropNorm.normX, dropNorm.normY) : { x: rawDropX, z: rawDropZ };
-      const dropElev = this.getCarriedDropSupportElevation(dropWorld.x, dropWorld.z, item.objId || item.devId);
+      if (item.kind === 'device' && wallMountHit) {
+        const dev = this.deviceManager?.getDeviceById?.(item.devId);
+        const tangentX = -wallMountHit.worldNormal.z;
+        const tangentZ = wallMountHit.worldNormal.x;
+        // Recompute standoff per device when dropping multiple items onto the wall
+        const devHit = (dev && dev !== sampleDev)
+          ? this.find3DWallMountTarget(aimRay.origin, aimRay.dir, aimRay.maxDist, { device: dev, minHitY: 0.25, maxHitY: 12.0 }) || wallMountHit
+          : wallMountHit;
+        rawDropX = devHit.worldPos.x + tangentX * latOffset;
+        rawDropZ = devHit.worldPos.z + tangentZ * latOffset;
+        dropNorm = this.worldToNorm ? this.worldToNorm(rawDropX, rawDropZ) : { normX: 0.5, normY: 0.5 };
+        dropWorld = this.normToWorld ? this.normToWorld(dropNorm.normX, dropNorm.normY) : { x: rawDropX, z: rawDropZ };
+        const defaultElev = Number(getDefaultSpatial3d(dev?.type)?.elevationMeters) || 1.65;
+        const avatarBaseY = Math.max(0, Number(this.avatarState?.y) || 0);
+        dropElev = this.avatarPerspective === 'fpp'
+          ? clamp(devHit.elevationMeters, 0.25, 11.5)
+          : Number(clamp(avatarBaseY + Math.max(1.35, defaultElev), 0.35, 11.5).toFixed(2));
+        targetRotY = devHit.rotationY;
+        wallMountedThisItem = true;
+        mountedOnWallCount += 1;
+      } else {
+        const fwdDist = placements.length === 1
+          ? Math.max(1.35, avatarRadius + projFwd + 0.35)
+          : Math.max(1.5, avatarRadius + maxProjFwd + 0.4);
+
+        rawDropX = ax + fwdX * fwdDist + rightX * latOffset;
+        rawDropZ = az + fwdZ * fwdDist + rightZ * latOffset;
+        dropNorm = this.worldToNorm ? this.worldToNorm(rawDropX, rawDropZ) : { normX: 0.5, normY: 0.5 };
+        dropWorld = this.normToWorld ? this.normToWorld(dropNorm.normX, dropNorm.normY) : { x: rawDropX, z: rawDropZ };
+        dropElev = this.getCarriedDropSupportElevation(dropWorld.x, dropWorld.z, item.objId || item.devId);
+      }
 
       if (item.kind === 'device') {
         needsDeviceSync = true;
@@ -4396,7 +4889,8 @@ export class Map3DEngine {
             spatial3d: {
               ...baseSp,
               elevationMeters: dropElev,
-              rotationY: normRotY,
+              rotationY: targetRotY,
+              ...(wallMountedThisItem ? { mountType: 'wall' } : {}),
               offsetX: 0,
               offsetY: 0,
               offsetZ: 0
@@ -4464,9 +4958,16 @@ export class Map3DEngine {
     this.publishLocalPresence?.(true);
 
     if (!silent) {
-      const msg = toDrop.length === 1
-        ? `✅ Menaruh "${toDrop[0].name}"${this.carriedObjects.length > 0 ? ` (sisa dibawa: ${this.carriedObjects.length})` : ''}`
-        : `✅ Menaruh ${toDrop.length} item sekaligus ke posisi teknisi`;
+      let msg;
+      if (mountedOnWallCount > 0) {
+        msg = mountedOnWallCount === 1 && toDrop.length === 1
+          ? `📌 Menempelkan "${toDrop[0].name}" langsung ke dinding 3D ruangan${this.carriedObjects.length > 0 ? ` (sisa dibawa: ${this.carriedObjects.length})` : ''}`
+          : `📌 Menempelkan ${mountedOnWallCount} perangkat ke dinding 3D ruangan`;
+      } else {
+        msg = toDrop.length === 1
+          ? `✅ Menaruh "${toDrop[0].name}"${this.carriedObjects.length > 0 ? ` (sisa dibawa: ${this.carriedObjects.length})` : ''}`
+          : `✅ Menaruh ${toDrop.length} item sekaligus ke posisi teknisi`;
+      }
       this.showStatusHint(msg);
     }
     return toDrop.length;
@@ -4566,7 +5067,7 @@ export class Map3DEngine {
     }
 
     const resolved = this.resolveAvatarCollisionStep
-      ? this.resolveAvatarCollisionStep(candX, candY, candZ, { prevY, vy: candVy })
+      ? this.resolveAvatarCollisionStep(candX, candY, candZ, { prevX, prevY, prevZ, vy: candVy })
       : { x: candX, y: candY, z: candZ, vy: candVy, isGrounded: candGrounded, collided: false };
 
     this.avatarState.x = resolved.x;
@@ -4793,10 +5294,9 @@ export class Map3DEngine {
       }
     }
 
-    // 3. Online remote technician characters
+    // 3. Online remote technician characters (clamped per-peer scale prevents giant-collider griefing)
     const selfCid = String(authManager?.clientId || '');
-    const peerRadius = Number(this.avatarCollider?.radius) || 0.48;
-    const peerHeight = Number(this.avatarCollider?.height) || 1.88;
+    const basePeerCol = this._baseAvatarCollider || { radius: 0.48, height: 1.88 };
     if (this.remoteAvatarMap instanceof Map) {
       for (const [cid, entry] of this.remoteAvatarMap.entries()) {
         if (!entry || String(cid) === selfCid) continue;
@@ -4806,6 +5306,9 @@ export class Map3DEngine {
         const py = Math.max(0, Number(pos?.y ?? entry.currentY ?? entry.targetY) || 0);
         const pz = Number(pos?.z ?? entry.currentZ ?? entry.targetZ);
         if (!Number.isFinite(px) || !Number.isFinite(pz)) continue;
+        const peerScale = clampAvatarScale(entry.scale ?? entry.peer?.avatarScale);
+        const peerRadius = Math.round(basePeerCol.radius * peerScale * 1000) / 1000;
+        const peerHeight = Math.round(basePeerCol.height * peerScale * 1000) / 1000;
         colliders.push({
           id: `peer:${cid}`,
           kind: 'circle',
@@ -4823,11 +5326,337 @@ export class Map3DEngine {
     return colliders;
   }
 
-  resolveAvatarCollisionStep(candX, candY, candZ, { prevY = candY, vy = 0, isTeleport = false } = {}) {
-    const colCfg = this.avatarCollider || { radius: 0.48, height: 1.88, stepHeight: 0.18 };
+  _closestPointOnSegment2D(px, pz, x1, z1, x2, z2) {
+    const vx = x2 - x1;
+    const vz = z2 - z1;
+    const lenSq = vx * vx + vz * vz;
+    if (lenSq < 1e-10) return { qx: x1, qz: z1, dxSeg: 0, dzSeg: 0 };
+    const t = Math.max(0, Math.min(1, ((px - x1) * vx + (pz - z1) * vz) / lenSq));
+    return { qx: x1 + t * vx, qz: z1 + t * vz, dxSeg: vx, dzSeg: vz };
+  }
+
+  _isPointInTriangle2D(px, pz, ax, az, bx, bz, cx, cz) {
+    const d1 = (px - bx) * (az - bz) - (ax - bx) * (pz - bz);
+    const d2 = (px - cx) * (bz - cz) - (bx - cx) * (pz - cz);
+    const d3 = (px - ax) * (cz - az) - (cx - ax) * (pz - az);
+    const hasNeg = (d1 < -1e-7) || (d2 < -1e-7) || (d3 < -1e-7);
+    const hasPos = (d1 > 1e-7) || (d2 > 1e-7) || (d3 > 1e-7);
+    return !(hasNeg && hasPos);
+  }
+
+  _closestPointOnTriangleXZ(px, pz, ax, az, bx, bz, cx, cz) {
+    const s1 = this._closestPointOnSegment2D(px, pz, ax, az, bx, bz);
+    const s2 = this._closestPointOnSegment2D(px, pz, bx, bz, cx, cz);
+    const s3 = this._closestPointOnSegment2D(px, pz, cx, cz, ax, az);
+    const d1Sq = (px - s1.qx) ** 2 + (pz - s1.qz) ** 2;
+    const d2Sq = (px - s2.qx) ** 2 + (pz - s2.qz) ** 2;
+    const d3Sq = (px - s3.qx) ** 2 + (pz - s3.qz) ** 2;
+    let best = s1;
+    let bestSq = d1Sq;
+    if (d2Sq < bestSq) { best = s2; bestSq = d2Sq; }
+    if (d3Sq < bestSq) { best = s3; bestSq = d3Sq; }
+    const area2 = Math.abs((bx - ax) * (cz - az) - (cx - ax) * (bz - az));
+    const inside = area2 > 1e-6 && this._isPointInTriangle2D(px, pz, ax, az, bx, bz, cx, cz);
+    return { qx: best.qx, qz: best.qz, distSq: bestSq, inside, dxSeg: best.dxSeg, dzSeg: best.dzSeg };
+  }
+
+  _mapWorldToRoomFrame(room, colScale, wx, wz) {
+    const wPos = this.normToWorld ? this.normToWorld(room.x ?? 0.5, room.y ?? 0.5) : { x: 0, z: 0 };
+    const rotY = ((Number(room.rotationY ?? room.rotationDeg) || 0) * Math.PI) / 180;
+    const cos = Math.cos(rotY);
+    const sin = Math.sin(rotY);
+    const dx = wx - wPos.x;
+    const dz = wz - wPos.z;
+    const rx = dx * cos - dz * sin;
+    const rz = dx * sin + dz * cos;
+    return {
+      wPos,
+      cos,
+      sin,
+      rx,
+      rz,
+      px: rx / Math.max(0.01, colScale.sx),
+      pz: rz / Math.max(0.01, colScale.sz)
+    };
+  }
+
+  _sampleRoomFloorHeightAtWorld(wx, wz, maxClimbY = 2.4) {
+    const rooms = typeof stateManager?.getRooms3d === 'function' ? stateManager.getRooms3d() : [];
+    let bestY = 0;
+    for (const room of rooms) {
+      if (!room) continue;
+      const roomGroup = this.room3dMeshMap?.get(room.id);
+      const profile = roomGroup?.userData?.roomCollisionProfile;
+      const colScale = roomGroup?.userData?.roomCollisionScale;
+      if (!profile || !colScale) {
+        if (!room.customModelUrl) {
+          const wPos = this.normToWorld ? this.normToWorld(room.x ?? 0.5, room.y ?? 0.5) : { x: 0, z: 0 };
+          const rw = (Number(room.widthMeters) || 14) * 0.5;
+          const rd = (Number(room.depthMeters) || 12) * 0.5;
+          const rotY = ((Number(room.rotationY ?? room.rotationDeg) || 0) * Math.PI) / 180;
+          if (0.08 <= maxClimbY && this._isCircleOverRotatedBoxXZ(wx, wz, 0.05, wPos.x, wPos.z, rw, rd, rotY)) {
+            bestY = Math.max(bestY, 0.08);
+          }
+        }
+        continue;
+      }
+
+      const f = this._mapWorldToRoomFrame(room, colScale, wx, wz);
+      if (Math.abs(f.rx) > profile.halfW * colScale.sx + 0.35 || Math.abs(f.rz) > profile.halfD * colScale.sz + 0.35) {
+        continue;
+      }
+
+      const gx = Math.floor(f.px / profile.cellSize);
+      const gz = Math.floor(f.pz / profile.cellSize);
+      for (let ix = gx - 1; ix <= gx + 1; ix++) {
+        for (let iz = gz - 1; iz <= gz + 1; iz++) {
+          const tris = profile.floorCells.get(`${ix},${iz}`);
+          if (!tris) continue;
+          for (const tri of tris) {
+            if (f.px < tri.minX - 0.15 || f.px > tri.maxX + 0.15 || f.pz < tri.minZ - 0.15 || f.pz > tri.maxZ + 0.15) continue;
+            const worldTriMaxY = tri.maxY * colScale.sy + 0.025;
+            if (worldTriMaxY > maxClimbY + 0.12) continue;
+
+            const v0x = tri.cx - tri.ax;
+            const v0z = tri.cz - tri.az;
+            const v1x = tri.bx - tri.ax;
+            const v1z = tri.bz - tri.az;
+            const v2x = f.px - tri.ax;
+            const v2z = f.pz - tri.az;
+            const denom = v0x * v1z - v1x * v0z;
+            if (Math.abs(denom) < 1e-6) continue;
+            const u = (v2x * v1z - v1x * v2z) / denom;
+            const v = (v0x * v2z - v2x * v0z) / denom;
+            const w = 1 - u - v;
+            if (u < -0.15 || v < -0.15 || w < -0.15) continue;
+
+            const uc = Math.max(0, Math.min(1, u));
+            const vc = Math.max(0, Math.min(1, v));
+            const wc = Math.max(0, 1 - uc - vc);
+            const sum = uc + vc + wc || 1;
+            const localY = (wc * tri.ay + vc * tri.by + uc * tri.cy) / sum;
+            const worldSurfY = localY * colScale.sy + 0.025;
+            if (worldSurfY <= maxClimbY && worldSurfY > bestY) {
+              bestY = worldSurfY;
+            }
+          }
+        }
+      }
+    }
+    return bestY;
+  }
+
+  _intersectSegments2D(p0x, p0z, p1x, p1z, e0x, e0z, e1x, e1z) {
+    const dx1 = p1x - p0x;
+    const dz1 = p1z - p0z;
+    const dx2 = e1x - e0x;
+    const dz2 = e1z - e0z;
+    const denom = dx1 * dz2 - dz1 * dx2;
+    if (Math.abs(denom) < 1e-8) return null;
+    const rx = e0x - p0x;
+    const rz = e0z - p0z;
+    const t = (rx * dz2 - rz * dx2) / denom;
+    const u = (rx * dz1 - rz * dx1) / denom;
+    if (t >= 0 && t <= 1 && u >= -1e-4 && u <= 1 + 1e-4) {
+      return {
+        t,
+        hx: p0x + t * dx1,
+        hz: p0z + t * dz1,
+        ex: dx2,
+        ez: dz2
+      };
+    }
+    return null;
+  }
+
+  _resolveAvatarAgainstRoomBuildings(x, y, z, { prevX, prevZ, radius, height, stepHeight, isTeleport }) {
+    const rooms = typeof stateManager?.getRooms3d === 'function' ? stateManager.getRooms3d() : [];
+    if (rooms.length === 0) return { x, z, collided: false };
+
+    let curX = x;
+    let curZ = z;
+    let collided = false;
+    const minWallClearY = isTeleport ? y + 0.06 : y + stepHeight;
+    // Allow walking smoothly underneath 2.1m GLB doorway headers while standing on 0.30m interior floors
+    const doorClearHeight = Math.min(height, 1.65);
+
+    for (const room of rooms) {
+      if (!room) continue;
+      const roomGroup = this.room3dMeshMap?.get(room.id);
+      const profile = roomGroup?.userData?.roomCollisionProfile;
+      const colScale = roomGroup?.userData?.roomCollisionScale;
+      if (!profile || !colScale) continue;
+
+      const f = this._mapWorldToRoomFrame(room, colScale, curX, curZ);
+      const prevFrame = this._mapWorldToRoomFrame(room, colScale, prevX ?? curX, prevZ ?? curZ);
+      const sx = colScale.sx;
+      const sy = colScale.sy;
+      const sz = colScale.sz;
+      const margin = radius + 0.6;
+      const minRx = Math.min(f.rx, prevFrame.rx);
+      const maxRx = Math.max(f.rx, prevFrame.rx);
+      const minRz = Math.min(f.rz, prevFrame.rz);
+      const maxRz = Math.max(f.rz, prevFrame.rz);
+      if (maxRx < -profile.halfW * sx - margin || minRx > profile.halfW * sx + margin ||
+          maxRz < -profile.halfD * sz - margin || minRz > profile.halfD * sz + margin) {
+        continue;
+      }
+
+      let rx = f.rx;
+      let rz = f.rz;
+      let roomMoved = false;
+      const invSx = 1 / Math.max(0.01, sx);
+      const invSz = 1 / Math.max(0.01, sz);
+
+      // 1. Continuous swept segment clamp: prevents tunneling across thin GLB walls on fast steps
+      const stepDistSq = (rx - prevFrame.rx) ** 2 + (rz - prevFrame.rz) ** 2;
+      if (!isTeleport && stepDistSq > 1e-6) {
+        const sgx0 = Math.floor((minRx * invSx - radius * invSx) / profile.cellSize);
+        const sgx1 = Math.floor((maxRx * invSx + radius * invSx) / profile.cellSize);
+        const sgz0 = Math.floor((minRz * invSz - radius * invSz) / profile.cellSize);
+        const sgz1 = Math.floor((maxRz * invSz + radius * invSz) / profile.cellSize);
+        const sweptSeen = new Set();
+        let earliest = null;
+
+        for (let gx = sgx0; gx <= sgx1; gx++) {
+          for (let gz = sgz0; gz <= sgz1; gz++) {
+            const tris = profile.wallCells.get(`${gx},${gz}`);
+            if (!tris) continue;
+            for (const tri of tris) {
+              if (sweptSeen.has(tri)) continue;
+              sweptSeen.add(tri);
+              const triMinY = tri.minY * sy + 0.025;
+              const triMaxY = tri.maxY * sy + 0.025;
+              if (minWallClearY >= triMaxY - 1e-4 || y + doorClearHeight <= triMinY + 1e-4) continue;
+              if (maxRx < tri.minX * sx - 0.05 || minRx > tri.maxX * sx + 0.05 ||
+                  maxRz < tri.minZ * sz - 0.05 || minRz > tri.maxZ * sz + 0.05) continue;
+
+              const ax = tri.ax * sx; const az = tri.az * sz;
+              const bx = tri.bx * sx; const bz = tri.bz * sz;
+              const cx = tri.cx * sx; const cz = tri.cz * sz;
+              for (const edgeHit of [
+                this._intersectSegments2D(prevFrame.rx, prevFrame.rz, rx, rz, ax, az, bx, bz),
+                this._intersectSegments2D(prevFrame.rx, prevFrame.rz, rx, rz, bx, bz, cx, cz),
+                this._intersectSegments2D(prevFrame.rx, prevFrame.rz, rx, rz, cx, cz, ax, az)
+              ]) {
+                if (edgeHit && (!earliest || edgeHit.t < earliest.t)) {
+                  earliest = edgeHit;
+                }
+              }
+            }
+          }
+        }
+
+        if (earliest) {
+          const segLen = Math.hypot(earliest.ex, earliest.ez) || 1;
+          let nx = -earliest.ez / segLen;
+          let nz = earliest.ex / segLen;
+          const toPrevX = prevFrame.rx - earliest.hx;
+          const toPrevZ = prevFrame.rz - earliest.hz;
+          if (nx * toPrevX + nz * toPrevZ < 0) {
+            nx = -nx;
+            nz = -nz;
+          }
+          const signedDist = (rx - earliest.hx) * nx + (rz - earliest.hz) * nz;
+          if (signedDist < radius) {
+            const push = radius - signedDist + 0.01;
+            rx += nx * push;
+            rz += nz * push;
+            roomMoved = true;
+            collided = true;
+          }
+        }
+      }
+
+      // 2. Circle-vs-Triangle pushout around current position (slides cleanly along walls & corners)
+      const radLocalX = radius * invSx;
+      const radLocalZ = radius * invSz;
+      const gx0 = Math.floor((rx * invSx - radLocalX) / profile.cellSize);
+      const gx1 = Math.floor((rx * invSx + radLocalX) / profile.cellSize);
+      const gz0 = Math.floor((rz * invSz - radLocalZ) / profile.cellSize);
+      const gz1 = Math.floor((rz * invSz + radLocalZ) / profile.cellSize);
+      const seenTris = new Set();
+
+      for (let gx = gx0; gx <= gx1; gx++) {
+        for (let gz = gz0; gz <= gz1; gz++) {
+          const tris = profile.wallCells.get(`${gx},${gz}`);
+          if (!tris) continue;
+          for (const tri of tris) {
+            if (seenTris.has(tri)) continue;
+            seenTris.add(tri);
+
+            const triMinY = tri.minY * sy + 0.025;
+            const triMaxY = tri.maxY * sy + 0.025;
+            if (minWallClearY >= triMaxY - 1e-4 || y + doorClearHeight <= triMinY + 1e-4) {
+              continue;
+            }
+
+            if (
+              rx + radius < tri.minX * sx || rx - radius > tri.maxX * sx ||
+              rz + radius < tri.minZ * sz || rz - radius > tri.maxZ * sz
+            ) {
+              continue;
+            }
+
+            const hit = this._closestPointOnTriangleXZ(
+              rx, rz,
+              tri.ax * sx, tri.az * sz,
+              tri.bx * sx, tri.bz * sz,
+              tri.cx * sx, tri.cz * sz
+            );
+
+            if (hit.inside || hit.distSq < radius * radius - 1e-7) {
+              const dist = Math.sqrt(hit.distSq);
+              let pushDirX;
+              let pushDirZ;
+              let pen;
+
+              if (hit.inside) {
+                pushDirX = dist > 1e-6 ? (hit.qx - rx) / dist : 0;
+                pushDirZ = dist > 1e-6 ? (hit.qz - rz) / dist : 1;
+                pen = dist + radius;
+              } else if (dist > 1e-6) {
+                pushDirX = (rx - hit.qx) / dist;
+                pushDirZ = (rz - hit.qz) / dist;
+                pen = radius - dist;
+              } else {
+                const backX = prevFrame.rx - rx;
+                const backZ = prevFrame.rz - rz;
+                const backLen = Math.hypot(backX, backZ);
+                if (backLen > 1e-6) {
+                  pushDirX = backX / backLen;
+                  pushDirZ = backZ / backLen;
+                } else {
+                  const segLen = Math.hypot(hit.dxSeg, hit.dzSeg) || 1;
+                  pushDirX = -hit.dzSeg / segLen;
+                  pushDirZ = hit.dxSeg / segLen;
+                }
+                pen = radius;
+              }
+
+              rx += pushDirX * pen;
+              rz += pushDirZ * pen;
+              roomMoved = true;
+              collided = true;
+            }
+          }
+        }
+      }
+
+      if (roomMoved) {
+        curX = f.wPos.x + rx * f.cos + rz * f.sin;
+        curZ = f.wPos.z - rx * f.sin + rz * f.cos;
+      }
+    }
+
+    return { x: curX, z: curZ, collided };
+  }
+
+  resolveAvatarCollisionStep(candX, candY, candZ, { prevX = candX, prevY = candY, prevZ = candZ, vy = 0, isTeleport = false } = {}) {
+    const colCfg = this.avatarCollider || { radius: 0.48, height: 1.88, stepHeight: 0.38 };
     const radius = Number(colCfg.radius) || 0.48;
     const height = Number(colCfg.height) || 1.88;
-    const stepHeight = Number(colCfg.stepHeight) || 0.18;
+    const stepHeight = Number(colCfg.stepHeight) || 0.38;
     const footRadius = radius * 0.65;
 
     const { worldW, worldD } = this.getWorldDimensions ? this.getWorldDimensions() : { worldW: 48, worldD: 32 };
@@ -4861,8 +5690,12 @@ export class Map3DEngine {
       }
     }
 
-    // Vertical platform landing / standing check (tables, low boxes, cabinets)
-    let supportY = 0;
+    // Vertical platform landing / standing check (tables, low boxes, cabinets, plus 3D building interior floors)
+    let supportY = this._sampleRoomFloorHeightAtWorld(x, z, (isTeleport ? y : prevY) + stepHeight);
+    if (isTeleport && supportY > y) {
+      y = supportY;
+      isGrounded = true;
+    }
     if (!isTeleport) {
       for (const c of colliders) {
         if (!c.supportable) continue;
@@ -4884,10 +5717,26 @@ export class Map3DEngine {
       }
     }
 
-    // Iterative XZ pushout & wall sliding (2 passes handle wall corners & nearby peers)
+    // Iterative XZ pushout & wall sliding (2 passes handle wall corners, building walls & nearby peers)
     const verticalFloorCheck = isTeleport ? y + 0.05 : y + stepHeight;
+    const buildingRadius = Math.min(radius, 0.42);
     for (let pass = 0; pass < 2; pass++) {
       let movedInPass = false;
+      const roomRes = this._resolveAvatarAgainstRoomBuildings(x, y, z, {
+        prevX,
+        prevZ,
+        radius: buildingRadius,
+        height,
+        stepHeight,
+        isTeleport
+      });
+      if (roomRes.collided) {
+        x = Math.max(-maxX, Math.min(maxX, roomRes.x));
+        z = Math.max(-maxZ, Math.min(maxZ, roomRes.z));
+        collided = true;
+        movedInPass = true;
+      }
+
       for (const c of colliders) {
         const minClearY = c.category === 'peer' ? y + 0.05 : verticalFloorCheck;
         if (minClearY >= c.topY - 1e-4 || y + height <= c.baseY + 1e-4) {
@@ -4904,6 +5753,15 @@ export class Map3DEngine {
         }
       }
       if (!movedInPass) break;
+    }
+
+    // Re-sample floor height cleanly after sliding along a wall step
+    if (!isTeleport && collided) {
+      const postSupportY = this._sampleRoomFloorHeightAtWorld(x, z, prevY + stepHeight);
+      if (y <= postSupportY + 0.001 && nextVy <= 0) {
+        y = postSupportY;
+        isGrounded = true;
+      }
     }
 
     return {
@@ -4959,7 +5817,8 @@ export class Map3DEngine {
       }
     }
 
-    const snapKey = `${this.avatarMode ? 1 : 0}:${this.avatarPerspective}:${wx.toFixed(2)}:${wy.toFixed(2)}:${wz.toFixed(2)}:${vx.toFixed(1)}:${vz.toFixed(1)}:${yaw.toFixed(2)}:${moving ? 1 : 0}:${grounded ? 1 : 0}:${carrying ? 1 : 0}`;
+    const avatarScale = resolveEngineAvatarScale(this);
+    const snapKey = `${this.avatarMode ? 1 : 0}:${this.avatarPerspective}:${avatarScale.toFixed(2)}:${wx.toFixed(2)}:${wy.toFixed(2)}:${wz.toFixed(2)}:${vx.toFixed(1)}:${vz.toFixed(1)}:${yaw.toFixed(2)}:${moving ? 1 : 0}:${grounded ? 1 : 0}:${carrying ? 1 : 0}`;
     if (!force && snapKey === this._lastPresenceSnapshotKey) return;
 
     this._lastPresenceEmitAt = now;
@@ -4969,6 +5828,7 @@ export class Map3DEngine {
       viewMode: '3d',
       avatarMode: Boolean(this.avatarMode),
       perspective: this.avatarPerspective,
+      avatarScale,
       x: Number(wx.toFixed(3)),
       y: Number(wy.toFixed(3)),
       z: Number(wz.toFixed(3)),
@@ -4990,20 +5850,7 @@ export class Map3DEngine {
 
   _disposeAvatarMeshGroup(group) {
     if (!group) return;
-    group.traverse((obj) => {
-      if (obj.geometry) obj.geometry.dispose();
-      if (obj.material) {
-        if (Array.isArray(obj.material)) {
-          obj.material.forEach((m) => {
-            if (m.map) m.map.dispose();
-            m.dispose();
-          });
-        } else {
-          if (obj.material.map) obj.material.map.dispose();
-          obj.material.dispose();
-        }
-      }
-    });
+    this._disposeObject3DResources(group);
     if (this.avatarMode && this.carriedObjects?.length > 0) {
       this.updateCarriedObjectsTransform?.();
     }
@@ -5035,6 +5882,7 @@ export class Map3DEngine {
     if (authManager?.clientId && peer.clientId === authManager.clientId) return false;
 
     const { tx, ty, tz, tyaw, colorHex, labelText } = this._resolveRemotePeerPose(peer);
+    const peerScale = clampAvatarScale(peer.avatarScale);
     const nowPerf = typeof performance !== 'undefined' ? performance.now() : Date.now();
     const hasExplicitVel = Number.isFinite(Number(peer.vx)) && Number.isFinite(Number(peer.vz));
     const maxSpeed = peer.isRunning ? 12.5 : 8.0;
@@ -5051,10 +5899,12 @@ export class Map3DEngine {
       group.visible = true;
       group.position.set(tx, ty, tz);
       group.rotation.y = tyaw;
+      group.scale.setScalar(peerScale);
       this.remoteAvatarsGroup.add(group);
       entry = {
         clientId: peer.clientId,
         group,
+        scale: peerScale,
         currentX: tx,
         currentY: ty,
         currentZ: tz,
@@ -5104,6 +5954,8 @@ export class Map3DEngine {
     entry.targetY = ty;
     entry.targetZ = tz;
     entry.targetYaw = tyaw;
+    entry.scale = peerScale;
+    entry.group?.scale?.setScalar?.(peerScale);
     entry.lastPacketAt = nowPerf;
     entry.state.isMoving = Boolean(peer.isMoving);
     entry.state.isRunning = Boolean(peer.isRunning);
@@ -5240,6 +6092,7 @@ export class Map3DEngine {
     const allDevs = (this.deviceManager?.getAllDevices?.() || []).filter((d) => d.layerVisible !== false);
     const optionsHtml = allDevs.map((d) => `<option value="${this.escapeHudHtml(d.id)}">${this.escapeHudHtml(d.name)}${d.network?.ip ? ` (${this.escapeHudHtml(d.network.ip)})` : ''}</option>`).join('');
     const isFpp = this.avatarPerspective === 'fpp';
+    const curScale = resolveEngineAvatarScale(this);
 
     hudEl.innerHTML = `
       <div class="avatar-bar-status">
@@ -5248,7 +6101,7 @@ export class Map3DEngine {
           <span>${isFpp ? 'Mode Teknisi (FPP)' : 'Mode Teknisi (TPP)'}</span>
           <span id="avatar-online-peers-slot" class="sim-inspector-badge">Rekan: 0 online</span>
         </span>
-        <span class="avatar-bar-controls-hint"><strong>WASD</strong> Jalan • <strong>Spasi</strong> Lompat • <strong>E</strong> Angkat • <strong>Q</strong> Taruh • <strong>[ / ]</strong> Putar • <strong>V</strong> View</span>
+        <span class="avatar-bar-controls-hint"><strong>WASD</strong> Jalan • <strong>Spasi</strong> Lompat • <strong>E</strong> Angkat • <strong>Q</strong> Taruh / Tempel Dinding • <strong>[ / ]</strong> Putar • <strong>V</strong> View</span>
       </div>
       <div class="avatar-bar-nearest" id="avatar-nearest-slot">
         <span>Terdekat: --</span>
@@ -5257,6 +6110,13 @@ export class Map3DEngine {
         <div class="avatar-perspective-switch" title="Pilih perspektif kamera (Pintasan: V atau Scroll)">
           <button type="button" class="avatar-persp-btn ${!isFpp ? 'active' : ''}" data-avatar-persp="tpp">TPP</button>
           <button type="button" class="avatar-persp-btn ${isFpp ? 'active' : ''}" data-avatar-persp="fpp">FPP (V)</button>
+        </div>
+        <div class="avatar-scale-control" title="Ukuran karakter teknisi (dibatasi ${AVATAR_SCALE_MIN}x - ${AVATAR_SCALE_MAX}x agar multiplayer kondusif)">
+          <span class="avatar-scale-label">Ukuran</span>
+          <button type="button" id="btn-avatar-scale-down" class="avatar-scale-step-btn" title="Perkecil karakter (${AVATAR_SCALE_MIN}x min)" ${curScale <= AVATAR_SCALE_MIN + 1e-4 ? 'disabled' : ''}>-</button>
+          <input type="range" id="range-avatar-scale" class="avatar-scale-range" min="${AVATAR_SCALE_MIN}" max="${AVATAR_SCALE_MAX}" step="${AVATAR_SCALE_STEP}" value="${curScale.toFixed(2)}" aria-label="Skala Karakter Teknisi">
+          <button type="button" id="btn-avatar-scale-up" class="avatar-scale-step-btn" title="Perbesar karakter (${AVATAR_SCALE_MAX}x maks)" ${curScale >= AVATAR_SCALE_MAX - 1e-4 ? 'disabled' : ''}>+</button>
+          <span id="avatar-scale-value" class="avatar-scale-value">${curScale.toFixed(2)}x</span>
         </div>
         <select id="select-avatar-teleport" class="avatar-teleport-select" title="Teleport karakter ke depan perangkat">
           <option value="">Teleport ke Perangkat...</option>
@@ -5283,6 +6143,28 @@ export class Map3DEngine {
         const mode = btn.getAttribute('data-avatar-persp');
         if (mode) this.setAvatarPerspective(mode);
       });
+    });
+
+    const scaleRange = hudEl.querySelector('#range-avatar-scale');
+    if (scaleRange) {
+      scaleRange.addEventListener('input', (ev) => {
+        ev.stopPropagation();
+        this.setAvatarScale(ev.target.value, { silent: true });
+      });
+      scaleRange.addEventListener('change', (ev) => {
+        ev.stopPropagation();
+        this.setAvatarScale(ev.target.value, { silent: false });
+      });
+    }
+
+    hudEl.querySelector('#btn-avatar-scale-down')?.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      this.setAvatarScale(Math.round((this.getAvatarScale() - AVATAR_SCALE_STEP) * 100) / 100);
+    });
+
+    hudEl.querySelector('#btn-avatar-scale-up')?.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      this.setAvatarScale(Math.round((this.getAvatarScale() + AVATAR_SCALE_STEP) * 100) / 100);
     });
 
     const teleportSel = hudEl.querySelector('#select-avatar-teleport');
@@ -5337,7 +6219,16 @@ export class Map3DEngine {
     const carryNamesKey = carriedCount > 0
       ? this.carriedObjects.map((c) => c.objId || c.devId).join(',')
       : '';
-    const carryKey = `${carriedCount}:${carryNamesKey}:${pickObjId}:${pickDistText}`;
+    const carriedDev = carriedCount > 0
+      ? this.carriedObjects.find((c) => c.kind === 'device')
+      : null;
+    const aimRay = carriedDev ? this._getAvatarWallAimRay?.() : null;
+    const sampleCarryDev = carriedDev ? this.deviceManager?.getDeviceById?.(carriedDev.devId) : null;
+    const wallReadyHit = (aimRay && sampleCarryDev)
+      ? this.find3DWallMountTarget?.(aimRay.origin, aimRay.dir, aimRay.maxDist, { device: sampleCarryDev, minHitY: 0.25, maxHitY: 12.0 })
+      : null;
+    const wallKey = wallReadyHit ? `W:${wallReadyHit.elevationMeters}` : '';
+    const carryKey = `${carriedCount}:${carryNamesKey}:${pickObjId}:${pickDistText}:${wallKey}`;
 
     const btnPick = document.getElementById('btn-avatar-carry-pickup');
     const btnDrop = document.getElementById('btn-avatar-carry-drop');
@@ -5347,7 +6238,11 @@ export class Map3DEngine {
     }
     if (btnDrop) {
       btnDrop.classList.toggle('hidden', carriedCount === 0);
-      btnDrop.textContent = carriedCount > 1 ? `Taruh (${carriedCount}) (Q)` : `Taruh (Q)`;
+      if (wallReadyHit) {
+        btnDrop.textContent = carriedCount > 1 ? `Tempel (${carriedCount}) (Q)` : `Tempel Dinding (Q)`;
+      } else {
+        btnDrop.textContent = carriedCount > 1 ? `Taruh (${carriedCount}) (Q)` : `Taruh (Q)`;
+      }
     }
 
     if (
@@ -5371,6 +6266,9 @@ export class Map3DEngine {
       const names = this.carriedObjects.slice(-2).map((c) => this.escapeHudHtml(c.name)).join(', ');
       const prefix = carriedCount > 2 ? `+${carriedCount - 2} lagi, ` : '';
       carryPart = ` <span class="sim-inspector-badge is-carrying">Dibawa (${carriedCount}): ${prefix}${names}</span>`;
+      if (wallReadyHit) {
+        carryPart += ` <span class="sim-inspector-badge is-pickable">[Q] Tempel ke Dinding 3D (${wallReadyHit.elevationMeters.toFixed(1)}m)</span>`;
+      }
     }
     if (pickObjId && carriedCount < (this.maxCarriedObjects || 8)) {
       const hintVerb = carriedCount > 0 ? '+[E] Angkat' : '[E] Angkat';
@@ -5987,25 +6885,29 @@ export class Map3DEngine {
     }
   }
 
+  _disposeObject3DResources(root) {
+    if (!root) return;
+    root.traverse((obj) => {
+      // Never dispose shared geometries/materials/textures originating from glbCache clones
+      if (obj.userData?.sharedGlbResource) return;
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material) {
+        const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+        mats.forEach((m) => {
+          if (!m) return;
+          if (m.map && m.map !== this.groundTexture) m.map.dispose();
+          m.dispose();
+        });
+      }
+    });
+  }
+
   clearGroup(group) {
     if (!group) return;
     while (group.children.length > 0) {
       const child = group.children[0];
       group.remove(child);
-      child.traverse((obj) => {
-        if (obj.geometry) obj.geometry.dispose();
-        if (obj.material) {
-          if (Array.isArray(obj.material)) {
-            obj.material.forEach((m) => {
-              if (m.map && m.map !== this.groundTexture) m.map.dispose();
-              m.dispose();
-            });
-          } else {
-            if (obj.material.map && obj.material.map !== this.groundTexture) obj.material.map.dispose();
-            obj.material.dispose();
-          }
-        }
-      });
+      this._disposeObject3DResources(child);
     }
   }
 

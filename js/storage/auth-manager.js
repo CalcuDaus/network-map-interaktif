@@ -17,6 +17,23 @@ const LOCAL_PRESENCE_STORAGE_KEY = 'netmap_presence_peers_v1';
 const DEFAULT_SEED_SALT = 'netmap_salt_2026';
 const DEFAULT_MAIN_SERVER_PASSWORD = 'server123';
 const PRESENCE_TTL_MS = 15000;
+export const AVATAR_SCALE_MIN = 0.8;
+export const AVATAR_SCALE_MAX = 1.75;
+export const AVATAR_SCALE_DEFAULT = 1.0;
+export const AVATAR_SCALE_STEP = 0.05;
+
+/**
+ * Clamp technician avatar scale inside fair multiplayer limits.
+ * @param {*} rawScale
+ * @returns {number}
+ */
+export function clampAvatarScale(rawScale) {
+  const n = Number(rawScale);
+  if (!Number.isFinite(n) || n <= 0) return AVATAR_SCALE_DEFAULT;
+  const clamped = Math.min(AVATAR_SCALE_MAX, Math.max(AVATAR_SCALE_MIN, n));
+  return Math.round(clamped * 100) / 100;
+}
+
 const PEER_COLOR_PALETTE = [
   '#2563eb', '#dc2626', '#d97706', '#7c3aed',
   '#0891b2', '#db2777', '#ea580c', '#4f46e5'
@@ -184,6 +201,7 @@ export class AuthManager {
       isGrounded: true,
       isCarrying: false,
       walkPhase: 0,
+      avatarScale: AVATAR_SCALE_DEFAULT,
       nearestDeviceId: null
     };
 
@@ -888,6 +906,15 @@ export class AuthManager {
     return peers;
   }
 
+  _sanitizePeerPresence(peer, extra = {}) {
+    if (!peer || typeof peer !== 'object') return peer;
+    return {
+      ...peer,
+      avatarScale: clampAvatarScale(peer.avatarScale),
+      ...extra
+    };
+  }
+
   _buildLocalPresencePayload() {
     if (!this.isAuthenticated()) return null;
     const wsKey = this.getActiveWorkspaceKey() || 'main';
@@ -899,6 +926,7 @@ export class AuthManager {
       workspaceKey: wsKey,
       colorHex: getPeerColorHex(this.currentUser.username || this.clientId),
       ...this.localPresenceState,
+      avatarScale: clampAvatarScale(this.localPresenceState.avatarScale),
       updatedAt: Date.now()
     };
   }
@@ -936,7 +964,7 @@ export class AuthManager {
 
       for (const [cid, peer] of Object.entries(store)) {
         if (cid !== this.clientId && peer?.workspaceKey === targetWs) {
-          this.remotePeers.set(cid, peer);
+          this.remotePeers.set(cid, this._sanitizePeerPresence(peer));
         }
       }
       this._pruneAndEmitPresence();
@@ -956,7 +984,7 @@ export class AuthManager {
       : (this.isPublicPreviewActive() ? 'main' : null);
     if (!targetWs || peer.workspaceKey !== targetWs) return this.getRemotePeers();
 
-    const updatedPeer = { ...peer, updatedAt: Date.now() };
+    const updatedPeer = this._sanitizePeerPresence(peer, { updatedAt: Date.now() });
     this.remotePeers.set(peer.clientId, updatedPeer);
     const peers = this.getRemotePeers();
     eventBus.emit('presence:updated', {
@@ -1131,6 +1159,9 @@ export class AuthManager {
     const prevGrounded = this._lastTransitionState.isGrounded;
 
     Object.assign(this.localPresenceState, partialState);
+    if ('avatarScale' in partialState) {
+      this.localPresenceState.avatarScale = clampAvatarScale(partialState.avatarScale);
+    }
     this._presenceDirty = true;
 
     const nowMoving = Boolean(this.localPresenceState.isMoving);
@@ -1240,7 +1271,7 @@ export class AuthManager {
     for (const peer of peers) {
       if (!peer || !peer.clientId || peer.clientId === this.clientId) continue;
       incomingIds.add(peer.clientId);
-      this.remotePeers.set(peer.clientId, { ...peer, updatedAt: peer.updatedAt || now });
+      this.remotePeers.set(peer.clientId, this._sanitizePeerPresence(peer, { updatedAt: peer.updatedAt || now }));
     }
     for (const [cid, existing] of Array.from(this.remotePeers.entries())) {
       if (!incomingIds.has(cid) && (!existing || (now - (existing.updatedAt || 0)) > 2000)) {

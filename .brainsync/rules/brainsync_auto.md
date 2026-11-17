@@ -1,7 +1,7 @@
 
 
 # Project Memory — network-map-interaktif
-> 47 notes | Score threshold: >40
+> 58 notes | Score threshold: >40
 
 ## Safety — Never Run Destructive Commands
 
@@ -16,15 +16,15 @@
 - **ALWAYS** ask the user before running commands that modify system state, install packages, or make network requests.
 - When in doubt, **show the command first** and wait for approval.
 
-**Stack:** JavaScript
+**Stack:** JavaScript · DB: MySQL
 
 ## 📝 NOTE: 1 uncommitted file(s) in working tree.\n\n## Active: `.`
 
 - **🟢 Edited docker-compose.yml (73 changes, 8min) — confirmed 3x**
 - **🟢 Edited index.html (5 changes, 15min) — confirmed 3x**
 - **convention in .gitignore**
-- **🟢 Edited docker-compose.yml (72 changes, 57min)**
-- **🟢 Edited docker-compose.yml (150 changes, 28min)**
+- **Fixed null crash in Quick — prevents XSS injection attacks — confirmed 4x**
+- **convention in .gitignore**
 
 ## Project Standards
 
@@ -34,6 +34,7 @@
 - Fixed null crash in Quick — prevents XSS injection attacks — confirmed 4x
 - convention in .gitignore
 - convention in .gitignore
+- Git Commit: feat: implement project management and authentication featur — confirmed 3x
 
 ## Learned Patterns
 

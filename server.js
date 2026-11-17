@@ -19,6 +19,22 @@ const DEFAULT_DB_FILE = path.join(ROOT_DIR, 'data', 'netmap-server-db.json');
 const MAX_BODY_BYTES = 25 * 1024 * 1024;
 const SESSION_TTL_DAYS = 30;
 const PRESENCE_TTL_MS = 15000;
+const AVATAR_SCALE_MIN = 0.8;
+const AVATAR_SCALE_MAX = 1.75;
+const AVATAR_SCALE_DEFAULT = 1.0;
+
+/**
+ * Clamp technician avatar scale inside fair multiplayer limits on the server.
+ * @param {*} rawScale
+ * @returns {number}
+ */
+function clampAvatarScale(rawScale) {
+  const n = Number(rawScale);
+  if (!Number.isFinite(n) || n <= 0) return AVATAR_SCALE_DEFAULT;
+  const clamped = Math.min(AVATAR_SCALE_MAX, Math.max(AVATAR_SCALE_MIN, n));
+  return Math.round(clamped * 100) / 100;
+}
+
 const DEFAULT_SEED_SALT = 'netmap_salt_2026';
 const DEFAULT_MAIN_SERVER_PASSWORD = 'server123';
 
@@ -893,6 +909,7 @@ function getPresenceStore(store) {
         isGrounded: payload.isGrounded !== false,
         isCarrying: Boolean(payload.isCarrying),
         walkPhase: Number.isFinite(Number(payload.walkPhase)) ? Number(payload.walkPhase) : 0,
+        avatarScale: clampAvatarScale(payload.avatarScale),
         nearestDeviceId: payload.nearestDeviceId || null,
         colorHex: typeof payload.colorHex === 'string' ? payload.colorHex : '#2563eb',
         clientTs: Number.isFinite(Number(payload.clientTs)) ? Number(payload.clientTs) : now,
@@ -1718,7 +1735,12 @@ module.exports = {
   createStorageAdapter,
   createNetMapRequestHandler,
   attachPresenceRealtime,
+  getPresenceStore,
   encodeWsFrame,
+  clampAvatarScale,
+  AVATAR_SCALE_MIN,
+  AVATAR_SCALE_MAX,
+  AVATAR_SCALE_DEFAULT,
   JsonFileStore,
   MySqlStore,
   verifyPassword,
