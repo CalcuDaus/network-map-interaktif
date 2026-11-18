@@ -3,7 +3,7 @@
  * Fast app-shell & static asset caching while bypassing live API and WebSocket routes.
  */
 
-const CACHE_NAME = 'netmap-pwa-v1';
+const CACHE_NAME = 'netmap-pwa-v5';
 
 const CORE_ASSETS = [
   './',
@@ -69,7 +69,7 @@ self.addEventListener('fetch', (event) => {
 
   if (isNavOrCode) {
     event.respondWith(
-      fetch(req)
+      fetch(req, { cache: 'no-store' })
         .then((res) => {
           if (res && res.status === 200 && res.type === 'basic') {
             const copy = res.clone();

@@ -24,6 +24,7 @@ export class DeviceManager {
     this.devices = new Map(); // id -> device object
     this.selectedDeviceId = null;
     this.selectedDeviceIds = new Set();
+    this.lastInteractedDeviceId = null;
 
     // Initialize renderer
     this.renderer = new DeviceRenderer({
@@ -81,6 +82,7 @@ export class DeviceManager {
     }
 
     this.devices.set(device.id, device);
+    this.lastInteractedDeviceId = device.id;
 
     // Render on canvas
     const group = this.renderer.renderDevice(device);
@@ -146,6 +148,7 @@ export class DeviceManager {
     device.position.x = clamp(position.x, 0, 1);
     device.position.y = clamp(position.y, 0, 1);
     device.updatedAt = new Date().toISOString();
+    this.lastInteractedDeviceId = id;
 
     if (syncRenderer && typeof this.renderer?.setDevicePosition === 'function') {
       this.renderer.setDevicePosition(id, device.position);
@@ -173,6 +176,7 @@ export class DeviceManager {
       device.position.x = clamp(position.x, 0, 1);
       device.position.y = clamp(position.y, 0, 1);
       device.updatedAt = now;
+      this.lastInteractedDeviceId = id;
 
       if (syncRenderer && typeof this.renderer?.setDevicePosition === 'function') {
         this.renderer.setDevicePosition(id, device.position);
@@ -263,6 +267,9 @@ export class DeviceManager {
 
     this.renderer.removeDevice(id);
     this.devices.delete(id);
+    if (this.lastInteractedDeviceId === id) {
+      this.lastInteractedDeviceId = null;
+    }
 
     if (wasSelected) {
       if (this.selectedDeviceIds.size === 0) {
@@ -320,6 +327,9 @@ export class DeviceManager {
   _commitSelectionState(primaryDevice) {
     const selectedIds = Array.from(this.selectedDeviceIds);
     this.selectedDeviceId = primaryDevice ? primaryDevice.id : (selectedIds[selectedIds.length - 1] || null);
+    if (this.selectedDeviceId) {
+      this.lastInteractedDeviceId = this.selectedDeviceId;
+    }
 
     if (typeof this.renderer?.setSelectedDevices === 'function') {
       this.renderer.setSelectedDevices(this.selectedDeviceIds, this.selectedDeviceId);

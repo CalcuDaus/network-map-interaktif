@@ -157,6 +157,8 @@ export class Map3DEngine {
     this.pen3dCategory = 'cat6';
     this.dragMoveState = null;
     this.dragRotateState = null;
+    this._activeMoveGuideIds = new Set();
+    this._moveGuideTimer = null;
     this.boxSelectState = null;
     this.activeDraw3dTemplate = { ...OBJECT3D_PRESETS.pole };
     this.object3dDragState = null;
@@ -234,6 +236,11 @@ export class Map3DEngine {
     this.avatarSimSettingsOpen = false;
     this.avatarSimDeckFilter = 'all';
     this.avatarSimDeckSearch = '';
+    this.transformGizmoGroup = new THREE.Group();
+    this.transformGizmoGroup.name = 'TransformGizmo3D';
+    this.transformGizmoGroup.visible = false;
+    this.transformGizmoDragState = null;
+    this.buildPlacementConfig = this._loadSavedBuildPlacementConfig();
     this.mobileJoystickState = {
       active: false,
       pointerId: null,
@@ -251,6 +258,8 @@ export class Map3DEngine {
     this._mobileLongPressOrigin = null;
 
     this.bindGlobalListeners();
+    this.bindRoomLockButton();
+    this.syncRoomLockUI();
   }
 
   init() {
@@ -308,6 +317,7 @@ export class Map3DEngine {
     this.scene.add(this.devicesGroup);
     this.scene.add(this.cablesGroup);
     this.scene.add(this.remoteAvatarsGroup);
+    this.scene.add(this.transformGizmoGroup);
 
     // Pointer interaction: Look-Around drag, Box/Marquee select, SketchUp Gizmo/Draw3D, click raycast
     const dom = this.renderer.domElement;
@@ -325,6 +335,7 @@ export class Map3DEngine {
           e.ctrlKey ||
           e.metaKey ||
           Boolean(this.checkCableHandleHitAtEvent(e)) ||
+          Boolean(this.checkTransformGizmoHitAtEvent(e)) ||
           Boolean(this.checkGizmoHitAtEvent(e));
         if (shouldBlockOrbit && this.controls && this.controls.enabled) {
           this.controls.enabled = false;
@@ -350,6 +361,15 @@ export class Map3DEngine {
       const isTouch = e.pointerType === 'touch';
       if (isTouch) {
         this._touchActiveInSession = true;
+      }
+
+      if (stateManager.getMode() !== 'draw-cable' && (e.button === 0 || isTouch)) {
+        const transformGizmoHit = this.checkTransformGizmoHitAtEvent(e);
+        if (transformGizmoHit) {
+          cancelLongPress();
+          this.startTransformGizmoDrag(e, dom, transformGizmoHit);
+          return;
+        }
       }
 
       if (this.avatarMode && !this.simulatorFocusedDeviceId && isTouch) {
@@ -424,6 +444,10 @@ export class Map3DEngine {
           cancelLongPress();
         }
       }
+      if (this.transformGizmoDragState) {
+        this.updateTransformGizmoDrag(e);
+        return;
+      }
       if (this.cableDragState) {
         this.updateCableHandleDrag(e);
         return;
@@ -489,7 +513,10 @@ export class Map3DEngine {
           }
           return;
         }
-        if (e.buttons === 0 && !e.altKey) {
+        const isBuildMode = Boolean(this.buildPlacementConfig?.buildModeEnabled);
+        const allowHoverLook = !isBuildMode && e.buttons === 0 && !e.altKey;
+        const allowBuildOrbitDrag = isBuildMode && (((e.buttons & 2) !== 0) || ((e.buttons & 4) !== 0));
+        if (allowHoverLook || allowBuildOrbitDrag) {
           const prev = this.avatarState._lastMouseClient;
           this.avatarState._lastMouseClient = { x: e.clientX, y: e.clientY };
           if (prev) {
@@ -534,6 +561,9 @@ export class Map3DEngine {
       if (this._temporarilyDisabledControlsForBox) {
         this._temporarilyDisabledControlsForBox = false;
         if (this.controls) this.controls.enabled = true;
+      }
+      if (this.transformGizmoDragState) {
+        this.finishTransformGizmoDrag(e, dom);
       }
       if (this.cableDragState) {
         this.finishCableHandleDrag(e, dom);
@@ -660,6 +690,8 @@ export class Map3DEngine {
     this.avatarMode = false;
     this.avatarState._lastMouseClient = null;
     this.avatarState.isCarrying = false;
+    this.transformGizmoDragState = null;
+    if (this.transformGizmoGroup) this.transformGizmoGroup.visible = false;
     if (this.avatarGroup) this.avatarGroup.visible = false;
     if (this.fppViewmodelGroup) this.fppViewmodelGroup.visible = false;
     authManager.updateLocalPresence({ viewMode: '2d', avatarMode: false, isMoving: false, isRunning: false, isCarrying: false });
@@ -906,6 +938,26 @@ export class Map3DEngine {
     return Boolean(room?.locked);
   }
 
+  isObject3dLocked(objOrId) {
+    if (this.roomsLocked) return true;
+    const obj = typeof objOrId === 'string'
+      ? stateManager.getObject3dById?.(objOrId)
+      : objOrId;
+    return Boolean(obj?.locked);
+  }
+
+  bindRoomLockButton() {
+    if (typeof document === 'undefined') return;
+    const btn = document.getElementById('btn-3d-lock-rooms');
+    if (!btn || btn.dataset?.roomLockBound === '1') return;
+    if (btn.dataset) btn.dataset.roomLockBound = '1';
+    btn.addEventListener('click', (ev) => {
+      ev.preventDefault?.();
+      ev.stopPropagation?.();
+      this.toggleRoomsLocked();
+    });
+  }
+
   setRoomsLocked(locked, { silent = false } = {}) {
     this.roomsLocked = Boolean(locked);
     try {
@@ -913,18 +965,24 @@ export class Map3DEngine {
         localStorage.setItem('netmap_rooms3d_locked_v1', this.roomsLocked ? '1' : '0');
       }
     } catch { /* ignore */ }
-    if (this.roomsLocked && stateManager.getSelectedRoom3dId?.()) {
-      stateManager.deselectRoom3d?.();
+    if (this.roomsLocked) {
+      if (stateManager.getSelectedRoom3dId?.()) {
+        stateManager.deselectRoom3d?.();
+      }
+      if (stateManager.getSelectedObject3dId?.()) {
+        stateManager.deselectObject3d?.();
+      }
     }
     this.syncRoomLockUI();
     if (this.isActive && this.isInitialized) {
       this.syncRooms();
+      this.syncObjects3d();
     }
     eventBus.emit('rooms3d:lock-changed', { locked: this.roomsLocked });
     if (!silent) {
       this.showStatusHint(
         this.roomsLocked
-          ? '🔒 Semua Ruangan 3D dikunci — aman menggeser perangkat tanpa menggeser ruangan.'
+          ? '🔒 Semua Ruangan & Struktur 3D dikunci — aman menggeser perangkat tanpa menggeser ruangan.'
           : '🔓 Kunci Ruangan 3D dibuka — ruangan dapat dipilih & digeser kembali.'
       );
     }
@@ -956,11 +1014,17 @@ export class Map3DEngine {
 
   syncRoomLockUI() {
     if (typeof document === 'undefined') return;
+    this.bindRoomLockButton();
     const btn = document.getElementById('btn-3d-lock-rooms');
     if (!btn) return;
     const locked = Boolean(this.roomsLocked);
-    btn.classList.toggle('active', locked);
-    btn.setAttribute('aria-pressed', String(locked));
+    btn.classList?.toggle('active', locked);
+    btn.setAttribute?.('aria-pressed', String(locked));
+    if (btn.style) {
+      btn.style.backgroundColor = locked ? '#d97706' : '';
+      btn.style.borderColor = locked ? '#b45309' : '';
+      btn.style.color = locked ? '#ffffff' : '';
+    }
     btn.innerHTML = locked
       ? `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg><span>Ruangan Terkunci</span>`
       : `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg><span>Kunci Ruangan</span>`;
@@ -1038,7 +1102,7 @@ export class Map3DEngine {
       const meshGroup = createCustomObject3DGroup(
         obj,
         (nx, ny) => this.normToWorld(nx, ny),
-        obj.id === selectedId
+        obj.id === selectedId && !this.isObject3dLocked(obj)
       );
       this.objects3dGroup.add(meshGroup);
       this.object3dMeshMap.set(obj.id, meshGroup);
@@ -1047,6 +1111,7 @@ export class Map3DEngine {
       this.updateCarriedObjectsTransform?.();
     }
     this.updateAvatarDeviceLabelsVisibility?.();
+    this.syncTransformGizmo?.();
   }
 
   rebuildSingleObject3dMesh(obj, isSelected = true) {
@@ -1309,8 +1374,9 @@ export class Map3DEngine {
           });
       }
 
-      // Vertical Elevation Pole down to ground (helps read Z stacking!)
+      // Vertical Elevation Pole down to ground (hidden by default; shown only while moving device)
       if (finalY > 0.15) {
+        const showGuide = this.shouldShowElevationGuide(dev.id);
         const stemGeo = new THREE.CylinderGeometry(0.05 * Math.max(1, this.deviceScaleMultiplier * 0.4), 0.05 * Math.max(1, this.deviceScaleMultiplier * 0.4), finalY, 8);
         const stemMat = new THREE.MeshBasicMaterial({
           color: cat.color,
@@ -1319,6 +1385,9 @@ export class Map3DEngine {
         });
         const stem = new THREE.Mesh(stemGeo, stemMat);
         stem.position.set(0, -finalY / 2, 0);
+        stem.visible = showGuide;
+        stem.userData.isElevationGuide = true;
+        stem.raycast = () => {};
         holder.add(stem);
 
         // Floor footprint dot
@@ -1328,6 +1397,9 @@ export class Map3DEngine {
         );
         footprint.rotation.x = -Math.PI / 2;
         footprint.position.set(0, -finalY + 0.05, 0);
+        footprint.visible = showGuide;
+        footprint.userData.isElevationGuide = true;
+        footprint.raycast = () => {};
         holder.add(footprint);
       }
 
@@ -1407,6 +1479,7 @@ export class Map3DEngine {
       this.updateCarriedObjectsTransform?.();
     }
     this.updateAvatarDeviceLabelsVisibility?.();
+    this.syncTransformGizmo?.();
   }
 
   isLegacyProceduralPortSet(ports) {
@@ -2132,7 +2205,17 @@ export class Map3DEngine {
           additive: Boolean(e.shiftKey)
         });
         if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
-          if (this.autoFocusOnClick || this.simulatorFocusedDeviceId) {
+          if (['move', 'rotate', 'box'].includes(this.navTool)) {
+            const devObj = this.deviceManager.getDeviceById?.(devId);
+            this.showStatusHint(
+              `↕️ "${devObj?.name || devId}" dipilih — Gunakan tombol Panah (Arrow) keyboard atau seret untuk menggeser X/Y.`
+            );
+          } else if (this.buildPlacementConfig?.buildModeEnabled) {
+            const devObj = this.deviceManager.getDeviceById?.(devId);
+            this.showStatusHint(
+              `🛠️ "${devObj?.name || devId}" dipilih — Seret panah/lingkaran Gizmo RGB (X Merah, Y Hijau, Z Biru) untuk geser & putar presisi.`
+            );
+          } else if (this.autoFocusOnClick || this.simulatorFocusedDeviceId) {
             this.focusOnDevice(devId, { viewAngle: this.simulatorViewAngle || 'front' });
           }
         }
@@ -2430,6 +2513,8 @@ export class Map3DEngine {
     if (!validTools.includes(tool)) return;
     this.navTool = tool;
     this.applyNavToolConfig();
+    this.syncElevationGuides();
+    this.syncTransformGizmo?.();
     eventBus.emit('map3d:navtool-changed', { tool });
   }
 
@@ -2633,8 +2718,9 @@ export class Map3DEngine {
     return entries;
   }
 
-  findObject3dHit(raycaster = this.raycaster) {
+  findObject3dHit(raycaster = this.raycaster, { includeLocked = false } = {}) {
     if (!this.objects3dGroup || this.objects3dGroup.children.length === 0) return null;
+    if (!includeLocked && this.roomsLocked) return null;
     const hits = raycaster.intersectObjects(this.objects3dGroup.children, true);
     for (let i = 0; i < hits.length; i++) {
       let curr = hits[i].object;
@@ -2644,6 +2730,9 @@ export class Map3DEngine {
         if (!gizmoType && curr.userData?.gizmoType) gizmoType = curr.userData.gizmoType;
         if (!object3dId && curr.userData?.object3dId) object3dId = curr.userData.object3dId;
         if (object3dId) {
+          if (!includeLocked && this.isObject3dLocked(object3dId)) {
+            break;
+          }
           return { object3dId, gizmoType, point: hits[i].point.clone(), object: hits[i].object };
         }
         curr = curr.parent;
@@ -2703,6 +2792,10 @@ export class Map3DEngine {
     }
     const obj = stateManager.getObject3dById(gizmoHit.object3dId);
     if (!obj) return;
+    if (this.isObject3dLocked(obj)) {
+      this.showStatusHint(`🔒 Ruangan / Objek "${obj.name}" sedang dikunci.`);
+      return;
+    }
     if (gizmoHit.gizmoType === 'pushpull') {
       this.object3dDragState = {
         kind: 'pushpull',
@@ -2764,7 +2857,7 @@ export class Map3DEngine {
     let baseElev = 0;
 
     // Check if placing on top of an existing 3D object
-    const objHit = this.findObject3dHit(this.raycaster);
+    const objHit = this.findObject3dHit(this.raycaster, { includeLocked: true });
     if (objHit?.object3dId) {
       const baseObj = stateManager.getObject3dById(objHit.object3dId);
       if (baseObj) {
@@ -2862,6 +2955,10 @@ export class Map3DEngine {
   startObject3dMoveDrag(e, dom, objHit) {
     const obj = stateManager.getObject3dById(objHit.object3dId);
     if (!obj) return;
+    if (this.isObject3dLocked(obj)) {
+      this.showStatusHint(`🔒 Ruangan / Objek "${obj.name}" sedang dikunci.`);
+      return;
+    }
     stateManager.selectObject3d(obj.id);
     this.deviceManager.deselectDevice();
     this.cableManager.deselectConnection();
@@ -3547,6 +3644,9 @@ export class Map3DEngine {
     const mc = meshGroup?.getObjectByName?.('DeviceModelContainer');
     const startRotY = Number(device.spatial3d?.rotationY ?? device.rotation ?? 0) || 0;
     const startHolderY = meshGroup ? meshGroup.position.y : 0;
+    const startSupportY = typeof this.getCarriedDropSupportElevation === 'function'
+      ? this.getCarriedDropSupportElevation(devWorld.x, devWorld.z, devId)
+      : 0;
 
     this.dragMoveState = {
       deviceId: devId,
@@ -3557,6 +3657,7 @@ export class Map3DEngine {
       startWorldZ: devWorld.z,
       effY,
       startHolderY,
+      startSupportY,
       startRotY,
       hasModelContainer: Boolean(mc),
       plane: dragPlane,
@@ -3567,9 +3668,11 @@ export class Map3DEngine {
       portInitials: this._collectDevicePortInitials(devId),
       peers,
       latestNorm: null,
-      wallMountSnap: null
+      wallMountSnap: null,
+      surfaceSnapElev: null
     };
 
+    this.syncElevationGuides();
     dom.setPointerCapture?.(e.pointerId);
   }
 
@@ -3724,26 +3827,69 @@ export class Map3DEngine {
     const hitPt = new THREE.Vector3();
     if (!this.raycaster.ray.intersectPlane(state.plane, hitPt)) return;
 
-    const newWorldX = hitPt.x + state.grabOffsetX;
-    const newWorldZ = hitPt.z + state.grabOffsetZ;
+    let newWorldX = hitPt.x + state.grabOffsetX;
+    let newWorldZ = hitPt.z + state.grabOffsetZ;
+    let activeElevY = state.startHolderY;
+    let snappedToGrid = false;
+    let surfaceSnapped = false;
+    let collisionBlocker = null;
+
+    if (state.peers.length === 0) {
+      if (this.applyBuildGridSnapWorld) {
+        const g = this.applyBuildGridSnapWorld(newWorldX, newWorldZ);
+        newWorldX = g.x;
+        newWorldZ = g.z;
+        snappedToGrid = g.snapped;
+      }
+      if (this.buildPlacementConfig?.surfaceSnapEnabled && this.resolveBuildPlacementSurfaceElevation) {
+        const sup = this.resolveBuildPlacementSurfaceElevation(newWorldX, newWorldZ, state.startHolderY, {
+          excludeId: state.deviceId,
+          startSupportY: state.startSupportY
+        });
+        activeElevY = sup.elevationMeters;
+        surfaceSnapped = sup.surfaceSnapped;
+      }
+      if (!this.buildPlacementConfig?.allowClipping && this.resolveBuildPlacementCollision) {
+        const sp = { ...getDefaultSpatial3d(state.device?.type), ...(state.device?.spatial3d || {}) };
+        const scale = (sp.modelScale || 1) * (this.deviceScaleMultiplier || 3.0);
+        const fp = this.getDeviceCollisionFootprint
+          ? this.getDeviceCollisionFootprint(state.device, scale)
+          : { halfW: 0.45, halfD: 0.38, height: 0.35 };
+        const colRes = this.resolveBuildPlacementCollision(newWorldX, newWorldZ, activeElevY, {
+          halfW: fp.halfW,
+          halfD: fp.halfD,
+          height: fp.height,
+          excludeIds: [state.deviceId]
+        });
+        newWorldX = colRes.x;
+        newWorldZ = colRes.z;
+        if (colRes.collided) {
+          collisionBlocker = colRes.blockerName || 'Objek lain';
+        }
+      }
+    }
+
     const { normX, normY } = this.worldToNorm(newWorldX, newWorldZ);
     const clampedWorld = this.normToWorld(normX, normY);
 
     const primaryShiftX = clampedWorld.x - state.startWorldX;
     const primaryShiftZ = clampedWorld.z - state.startWorldZ;
+    const primaryShiftY = activeElevY - state.startHolderY;
+    state.surfaceSnapElev = Math.abs(primaryShiftY) > 0.005 ? activeElevY : null;
 
     if (meshGroup) {
       meshGroup.position.x = clampedWorld.x + state.meshOffsetX;
+      meshGroup.position.y = activeElevY;
       meshGroup.position.z = clampedWorld.z + state.meshOffsetZ;
 
       this.effectivePosMap.set(
         state.deviceId,
-        new THREE.Vector3(meshGroup.position.x, state.effY, meshGroup.position.z)
+        new THREE.Vector3(meshGroup.position.x, state.effY + primaryShiftY, meshGroup.position.z)
       );
       state.portInitials.forEach(({ key, initial }) => {
         this.portWorldPosMap.set(
           key,
-          new THREE.Vector3(initial.x + primaryShiftX, initial.y, initial.z + primaryShiftZ)
+          new THREE.Vector3(initial.x + primaryShiftX, initial.y + primaryShiftY, initial.z + primaryShiftZ)
         );
       });
     }
@@ -3779,12 +3925,22 @@ export class Map3DEngine {
     }
 
     this.syncCables();
+    this.syncTransformGizmo?.();
+    if (collisionBlocker) {
+      this.showStatusHint(`🧱 Anti-Tabrakan aktif: digeser menghindari "${collisionBlocker}" (aktifkan MoveObjects untuk tumpuk bebas)`);
+    } else if (surfaceSnapped) {
+      this.showStatusHint(`🧲 Surface Snap: menempel rata pada elevasi Z:${activeElevY.toFixed(2)}m`);
+    } else if (snappedToGrid) {
+      const step = this.buildPlacementConfig?.gridSnapMeters || 0.5;
+      this.showStatusHint(`⊞ Snap Grid (${step}m): X:${clampedWorld.x.toFixed(1)}m • Y:${clampedWorld.z.toFixed(1)}m`);
+    }
   }
 
   finishDeviceDragMove(e, dom) {
     const state = this.dragMoveState;
     this.dragMoveState = null;
     dom.releasePointerCapture?.(e.pointerId);
+    this.syncElevationGuides();
     if (!state?.latestNorm) return;
 
     const moves = [{ id: state.deviceId, position: state.latestNorm }];
@@ -3815,14 +3971,34 @@ export class Map3DEngine {
       );
       return;
     }
+    if (state.surfaceSnapElev !== null && state.surfaceSnapElev !== undefined && this.deviceManager?.updateDevice) {
+      this.deviceManager.moveDeviceGroup(moves, { syncRenderer: false });
+      const dev = this.deviceManager.getDeviceById?.(state.deviceId);
+      const baseSp = { ...getDefaultSpatial3d(dev?.type), ...(dev?.spatial3d || {}) };
+      this.deviceManager.updateDevice(state.deviceId, {
+        spatial3d: {
+          ...baseSp,
+          elevationMeters: Number(state.surfaceSnapElev.toFixed(2)),
+          offsetY: 0
+        }
+      });
+      this.syncDevices();
+      this.syncCables();
+      return;
+    }
     this.deviceManager.moveDeviceGroup(moves, { syncRenderer: true });
+    this.syncTransformGizmo?.();
   }
 
   _computeDragAngles(startRx, startRy, startRz, startClientX, startClientY, e) {
     const dx = e.clientX - startClientX;
     const dy = startClientY - e.clientY;
-    const snap = Boolean(e.ctrlKey || e.metaKey);
-    const snapFn = (val) => (snap ? Math.round(val / 15) * 15 : Math.round(val));
+    const snapKey = Boolean(e.ctrlKey || e.metaKey);
+    const buildSnapDeg = this.buildPlacementConfig?.buildModeEnabled
+      ? (Number(this.buildPlacementConfig?.angleSnapDeg) || 0)
+      : 0;
+    const snapStep = snapKey ? 15 : buildSnapDeg;
+    const snapFn = (val) => (snapStep > 0 ? Math.round(val / snapStep) * snapStep : Math.round(val));
 
     let rx = Number(startRx) || 0;
     let ry = Number(startRy) || 0;
@@ -3984,15 +4160,35 @@ export class Map3DEngine {
   }
 
   rotateSelectedIn3D({ dX = 0, dY = 0, dZ = 0, reset = false } = {}) {
+    const angleSnap = this.buildPlacementConfig?.buildModeEnabled
+      ? (Number(this.buildPlacementConfig?.angleSnapDeg) || 0)
+      : (this.avatarMode ? (Number(this.buildPlacementConfig?.angleSnapDeg) || 0) : 0);
+    const effStep = (val) => {
+      if (!val || reset) return val;
+      if (angleSnap > 0 && Math.abs(val) === 15) return Math.sign(val) * angleSnap;
+      return val;
+    };
+    const stepX = effStep(dX);
+    const stepY = effStep(dY);
+    const stepZ = effStep(dZ);
+    const snapSigned = (deg) => (angleSnap > 0 ? clamp(Math.round(deg / angleSnap) * angleSnap, -180, 180) : clamp(Math.round(deg), -180, 180));
+    const snapYaw = (deg) => {
+      if (angleSnap > 0 && this.applyBuildAngleSnap) return this.applyBuildAngleSnap(deg);
+      return ((Math.round(deg) % 360) + 360) % 360;
+    };
+
     if (this.avatarMode && Array.isArray(this.carriedObjects) && this.carriedObjects.length > 0) {
       const topItem = this.carriedObjects[this.carriedObjects.length - 1];
       if (reset) {
         topItem.relativeYawOffset = 0;
       } else {
-        topItem.relativeYawOffset = ((Number(topItem.relativeYawOffset) || 0) + (dY || dZ || 0));
+        const delta = stepY || stepZ || 0;
+        const avatarDeg = ((Number(this.avatarState?.yaw) || 0) * 180) / Math.PI;
+        const targetWorldYaw = snapYaw(avatarDeg + (Number(topItem.relativeYawOffset) || 0) + delta);
+        topItem.relativeYawOffset = angleSnap > 0 ? (targetWorldYaw - avatarDeg) : ((Number(topItem.relativeYawOffset) || 0) + delta);
       }
       this.updateCarriedObjectsTransform?.();
-      this.showStatusHint(`🔄 Putar "${topItem.name}" sebelum ditaruh (${this.carriedObjects.length} objek dibawa)`);
+      this.showStatusHint(`🔄 Putar "${topItem.name}"${angleSnap > 0 ? ` (Snap ${angleSnap}°)` : ''} sebelum ditaruh (${this.carriedObjects.length} objek dibawa)`);
       return true;
     }
 
@@ -4003,9 +4199,9 @@ export class Map3DEngine {
         const dev = this.deviceManager.getDeviceById(id);
         if (!dev || dev.layerLocked) return;
         const base = { ...getDefaultSpatial3d(dev.type), ...(dev.spatial3d || {}) };
-        const rx = reset ? 0 : clamp((Number(base.rotationX) || 0) + dX, -180, 180);
-        const ry = reset ? 0 : (((Number(base.rotationY) || 0) + dY) % 360 + 360) % 360;
-        const rz = reset ? 0 : clamp((Number(base.rotationZ) || 0) + dZ, -180, 180);
+        const rx = reset ? 0 : snapSigned((Number(base.rotationX) || 0) + stepX);
+        const ry = reset ? 0 : snapYaw((Number(base.rotationY) || 0) + stepY);
+        const rz = reset ? 0 : snapSigned((Number(base.rotationZ) || 0) + stepZ);
         this.deviceManager.updateDevice(id, {
           spatial3d: { ...base, rotationX: rx, rotationY: ry, rotationZ: rz }
         });
@@ -4020,10 +4216,13 @@ export class Map3DEngine {
     const selObjId = stateManager.getSelectedObject3dId?.();
     if (selObjId) {
       const obj = stateManager.getObject3dById(selObjId);
-      if (!obj) return false;
-      const rx = reset ? 0 : clamp((Number(obj.rotationX) || 0) + dX, -180, 180);
-      const ry = reset ? 0 : (((Number(obj.rotationY ?? obj.rotationDeg) || 0) + dY) % 360 + 360) % 360;
-      const rz = reset ? 0 : clamp((Number(obj.rotationZ) || 0) + dZ, -180, 180);
+      if (!obj || this.isObject3dLocked(obj)) {
+        if (obj) this.showStatusHint(`🔒 Ruangan / Objek "${obj.name}" sedang dikunci.`);
+        return false;
+      }
+      const rx = reset ? 0 : snapSigned((Number(obj.rotationX) || 0) + stepX);
+      const ry = reset ? 0 : snapYaw((Number(obj.rotationY ?? obj.rotationDeg) || 0) + stepY);
+      const rz = reset ? 0 : snapSigned((Number(obj.rotationZ) || 0) + stepZ);
       stateManager.updateObject3d(selObjId, { rotationX: rx, rotationY: ry, rotationZ: rz });
       this.showStatusHint(`🔄 Rotasi "${obj.name}": X:${rx}° Y:${ry}° Z:${rz}°`);
       return true;
@@ -4036,9 +4235,9 @@ export class Map3DEngine {
         if (room) this.showStatusHint(`🔒 Ruangan "${room.name}" sedang dikunci.`);
         return false;
       }
-      const rx = reset ? 0 : clamp((Number(room.rotationX) || 0) + dX, -180, 180);
-      const ry = reset ? 0 : (((Number(room.rotationY ?? room.rotationDeg) || 0) + dY) % 360 + 360) % 360;
-      const rz = reset ? 0 : clamp((Number(room.rotationZ) || 0) + dZ, -180, 180);
+      const rx = reset ? 0 : snapSigned((Number(room.rotationX) || 0) + stepX);
+      const ry = reset ? 0 : snapYaw((Number(room.rotationY ?? room.rotationDeg) || 0) + stepY);
+      const rz = reset ? 0 : snapSigned((Number(room.rotationZ) || 0) + stepZ);
       stateManager.updateRoom3d?.(selRoomId, { rotationX: rx, rotationY: ry, rotationZ: rz });
       this.showStatusHint(`🔄 Rotasi Ruangan "${room.name}": X:${rx}° Y:${ry}° Z:${rz}°`);
       return true;
@@ -4079,6 +4278,52 @@ export class Map3DEngine {
     return true;
   }
 
+  shouldShowElevationGuide(devId) {
+    if (!devId || this.avatarMode || this.simulatorFocusedDeviceId) return false;
+    if (this.dragMoveState) {
+      if (this.dragMoveState.deviceId === devId) return true;
+      if (Array.isArray(this.dragMoveState.peers) && this.dragMoveState.peers.some((p) => p?.id === devId)) {
+        return true;
+      }
+    }
+    if (this._activeMoveGuideIds?.has(devId)) return true;
+    const isSelected = Boolean(this.deviceManager?.isDeviceSelected?.(devId)) || this.deviceManager?.selectedDeviceId === devId;
+    return Boolean(this.navTool === 'move' && isSelected);
+  }
+
+  syncElevationGuides() {
+    if (!this.deviceMeshMap) return;
+    this.deviceMeshMap.forEach((holder, devId) => {
+      const showGuide = this.shouldShowElevationGuide(devId);
+      holder.traverse((child) => {
+        if (child.userData?.isElevationGuide) {
+          child.visible = showGuide;
+        }
+      });
+    });
+  }
+
+  flashMoveElevationGuide(deviceIds = [], durationMs = 950) {
+    if (!this._activeMoveGuideIds) this._activeMoveGuideIds = new Set();
+    this._activeMoveGuideIds.clear();
+    (Array.isArray(deviceIds) ? deviceIds : [deviceIds]).forEach((id) => {
+      if (id) this._activeMoveGuideIds.add(id);
+    });
+    this.syncElevationGuides();
+    if (this._moveGuideTimer) {
+      clearTimeout(this._moveGuideTimer);
+      this._moveGuideTimer = null;
+    }
+    if (this._activeMoveGuideIds.size > 0) {
+      this._moveGuideTimer = setTimeout(() => {
+        this._moveGuideTimer = null;
+        this._activeMoveGuideIds?.clear();
+        this.syncElevationGuides();
+      }, durationMs);
+      this._moveGuideTimer?.unref?.();
+    }
+  }
+
   syncSelectionRings() {
     if (!this.isInitialized || !this.deviceMeshMap) return;
     const primaryId = this.deviceManager?.selectedDeviceId;
@@ -4094,6 +4339,8 @@ export class Map3DEngine {
         }
       });
     });
+    this.syncElevationGuides();
+    this.syncTransformGizmo?.();
   }
 
   animateCameraTo(endPos, endTarget, duration = 380) {
@@ -4128,16 +4375,11 @@ export class Map3DEngine {
     let right = 0;
     let up = 0;
 
-    const hasEntitySelection =
-      (this.deviceManager?.getSelectedDeviceIds?.()?.length || 0) > 0 ||
-      Boolean(this.deviceManager?.selectedDeviceId) ||
-      Boolean(stateManager.getSelectedObject3dId?.()) ||
-      Boolean(stateManager.getSelectedRoom3dId?.());
-
-    if (this.keysPressed.has('w') || (!hasEntitySelection && this.keysPressed.has('arrowup'))) forward += 1;
-    if (this.keysPressed.has('s') || (!hasEntitySelection && this.keysPressed.has('arrowdown'))) forward -= 1;
-    if (this.keysPressed.has('d') || (!hasEntitySelection && this.keysPressed.has('arrowright'))) right += 1;
-    if (this.keysPressed.has('a') || (!hasEntitySelection && this.keysPressed.has('arrowleft'))) right -= 1;
+    // Arrow keys are dedicated exclusively to moving/nudging selected devices; WASD/QE control 3D camera
+    if (this.keysPressed.has('w')) forward += 1;
+    if (this.keysPressed.has('s')) forward -= 1;
+    if (this.keysPressed.has('d')) right += 1;
+    if (this.keysPressed.has('a')) right -= 1;
     if (this.keysPressed.has('e') || this.keysPressed.has('pageup')) up += 1;
     if (this.keysPressed.has('q') || this.keysPressed.has('pagedown')) up -= 1;
 
@@ -4170,6 +4412,7 @@ export class Map3DEngine {
   }
 
   tryLockAvatarPointer() {
+    if (this.buildPlacementConfig?.buildModeEnabled) return;
     if (this._touchActiveInSession || isMobileTouchDevice()) return;
     if (typeof document === 'undefined' || !this.renderer?.domElement) return;
     if (document.pointerLockElement === this.renderer.domElement) return;
@@ -4572,6 +4815,8 @@ export class Map3DEngine {
         this.fppViewmodelGroup.visible = false;
       }
       this.updateAvatarDeviceLabelsVisibility?.();
+      this.syncElevationGuides?.();
+      this.syncTransformGizmo?.();
       this.releaseAvatarPointerLock();
       this.syncAvatarCrosshair();
       this.syncAvatarControlsUI();
@@ -4672,6 +4917,8 @@ export class Map3DEngine {
     }
 
     this.configureControlsForAvatarMode(true);
+    this.syncElevationGuides?.();
+    this.syncTransformGizmo?.();
     this.syncAvatarMeshVisibilityForPerspective();
     this.syncAvatarControlsUI();
     this.syncAvatarCrosshair();
@@ -5212,7 +5459,9 @@ export class Map3DEngine {
 
     const placements = toDrop.map((item) => {
       const worldRotY = (((yaw * 180) / Math.PI) + (Number(item.relativeYawOffset) || 0));
-      const normRotY = ((Math.round(worldRotY) % 360) + 360) % 360;
+      const normRotY = this.applyBuildAngleSnap
+        ? this.applyBuildAngleSnap(worldRotY)
+        : (((Math.round(worldRotY) % 360) + 360) % 360);
       const rotRad = (normRotY * Math.PI) / 180;
       const cosR = Math.cos(rotRad);
       const sinR = Math.sin(rotRad);
@@ -5231,8 +5480,9 @@ export class Map3DEngine {
     let mountedOnWallCount = 0;
 
     // Detect if technician is aiming/facing a 3D room wall to mount device(s) directly onto it
+    const surfaceSnapOn = this.buildPlacementConfig?.surfaceSnapEnabled !== false;
     const firstDevItem = placements.find((p) => p.item.kind === 'device');
-    const aimRay = (!silent && firstDevItem) ? this._getAvatarWallAimRay() : null;
+    const aimRay = (!silent && surfaceSnapOn && firstDevItem) ? this._getAvatarWallAimRay() : null;
     const sampleDev = firstDevItem ? this.deviceManager?.getDeviceById?.(firstDevItem.item.devId) : null;
     const wallMountHit = (aimRay && sampleDev)
       ? this.find3DWallMountTarget(aimRay.origin, aimRay.dir, aimRay.maxDist, { device: sampleDev, minHitY: 0.25, maxHitY: 12.0 })
@@ -5278,9 +5528,32 @@ export class Map3DEngine {
 
         rawDropX = ax + fwdX * fwdDist + rightX * latOffset;
         rawDropZ = az + fwdZ * fwdDist + rightZ * latOffset;
+        if (this.applyBuildGridSnapWorld) {
+          const snappedXZ = this.applyBuildGridSnapWorld(rawDropX, rawDropZ);
+          rawDropX = snappedXZ.x;
+          rawDropZ = snappedXZ.z;
+        }
         dropNorm = this.worldToNorm ? this.worldToNorm(rawDropX, rawDropZ) : { normX: 0.5, normY: 0.5 };
         dropWorld = this.normToWorld ? this.normToWorld(dropNorm.normX, dropNorm.normY) : { x: rawDropX, z: rawDropZ };
-        dropElev = this.getCarriedDropSupportElevation(dropWorld.x, dropWorld.z, item.objId || item.devId);
+        dropElev = surfaceSnapOn
+          ? this.getCarriedDropSupportElevation(dropWorld.x, dropWorld.z, item.objId || item.devId)
+          : Number(Math.max(0, Number(this.avatarState?.y) || 0).toFixed(2));
+
+        if (!this.buildPlacementConfig?.allowClipping && this.resolveBuildPlacementCollision && item.kind === 'device') {
+          const colRes = this.resolveBuildPlacementCollision(dropWorld.x, dropWorld.z, dropElev, {
+            halfW: (item.widthMeters || 0.9) * 0.5,
+            halfD: (item.depthMeters || 0.7) * 0.5,
+            height: item.heightMeters || 0.45,
+            excludeIds: [item.devId]
+          });
+          if (colRes.collided) {
+            dropNorm = this.worldToNorm ? this.worldToNorm(colRes.x, colRes.z) : dropNorm;
+            dropWorld = this.normToWorld ? this.normToWorld(dropNorm.normX, dropNorm.normY) : { x: colRes.x, z: colRes.z };
+            if (surfaceSnapOn) {
+              dropElev = this.getCarriedDropSupportElevation(dropWorld.x, dropWorld.z, item.objId || item.devId);
+            }
+          }
+        }
       }
 
       if (item.kind === 'device') {
@@ -5851,10 +6124,10 @@ export class Map3DEngine {
 
     let forward = 0;
     let right = 0;
-    if (this.keysPressed.has('w') || this.keysPressed.has('arrowup')) forward += 1;
-    if (this.keysPressed.has('s') || this.keysPressed.has('arrowdown')) forward -= 1;
-    if (this.keysPressed.has('d') || this.keysPressed.has('arrowright')) right += 1;
-    if (this.keysPressed.has('a') || this.keysPressed.has('arrowleft')) right -= 1;
+    if (this.keysPressed.has('w')) forward += 1;
+    if (this.keysPressed.has('s')) forward -= 1;
+    if (this.keysPressed.has('d')) right += 1;
+    if (this.keysPressed.has('a')) right -= 1;
 
     let joyForward = 0;
     let joyRight = 0;
@@ -7013,6 +7286,8 @@ export class Map3DEngine {
     const isDeckOpen = Boolean(this.avatarSimDeckOpen);
     const isSettingsOpen = Boolean(this.avatarSimSettingsOpen);
     const curLabelMode = this.avatarLabelMode || 'proximity';
+    const buildCfg = this.getBuildPlacementConfig();
+    const isBuildOpen = Boolean(buildCfg.buildModeEnabled && !isDeckOpen && !isSettingsOpen);
 
     hudEl.innerHTML = `
       <div class="avatar-bar-status">
@@ -7023,10 +7298,65 @@ export class Map3DEngine {
           <span id="avatar-compact-nearest" class="avatar-compact-nearest">Siap</span>
         </span>
         <div class="avatar-hud-top-tools">
+          <button type="button" id="btn-avatar-build-mode" class="avatar-hud-pill-btn ${buildCfg.buildModeEnabled ? 'active' : ''}" title="Build / Placement Mode (B): Grid Snap, Angle Snap, Collision/MoveObjects, Gizmo RGB, Surface Snap">🛠️ Build Mode</button>
           <button type="button" id="btn-avatar-sim-devices" class="avatar-hud-pill-btn ${isDeckOpen ? 'active' : ''}" title="Buka Pengatur Perangkat &amp; Tata Letak Simulator">📦 Layout (${allDevs.length})</button>
           <button type="button" id="btn-avatar-sim-settings" class="avatar-hud-pill-btn ${isSettingsOpen ? 'active' : ''}" title="Atur Ukuran Avatar, Sensitivitas &amp; Label 3D">⚙ Setelan</button>
           <button type="button" id="btn-avatar-hud-minimize" class="avatar-hud-min-btn" aria-expanded="${!isMin}" title="Minimize / Tampilkan Panel Mode Teknisi">${isMin ? '▴ Panel' : '▾ Minimize'}</button>
           <button type="button" id="btn-avatar-compact-exit" class="avatar-hud-min-btn is-exit" title="Keluar dari Mode Teknisi">✕ Keluar</button>
+        </div>
+      </div>
+      <div id="avatar-sim-build-panel" class="avatar-sim-build-panel ${isBuildOpen ? '' : 'hidden'}">
+        <div class="build-mode-header">
+          <span class="avatar-sim-strip-label">🛠️ Build / Placement Mode (Klik kanan+seret untuk putar kamera)</span>
+          <span id="build-mode-target-badge" class="sim-inspector-badge">Target: --</span>
+        </div>
+        <div class="build-mode-grid">
+          <div class="build-mode-row" title="Grid Snapping: sejajarkan posisi objek ke kotak grid lantai, atau Free Placement untuk geser bebas">
+            <span class="build-mode-key">Grid Snap</span>
+            <button type="button" id="btn-build-grid-snap" class="avatar-sim-chip ${buildCfg.gridSnapEnabled ? 'active' : ''}">${buildCfg.gridSnapEnabled ? '⊞ Snap Grid: ON' : '⊡ Free Placement'}</button>
+            <select id="select-build-grid-size" class="avatar-teleport-select build-mini-select" title="Ukuran kotak Grid (meter)">
+              <option value="0.25" ${Math.abs(buildCfg.gridSnapMeters - 0.25) < 0.02 ? 'selected' : ''}>0.25m</option>
+              <option value="0.5" ${Math.abs(buildCfg.gridSnapMeters - 0.5) < 0.02 ? 'selected' : ''}>0.50m</option>
+              <option value="1" ${Math.abs(buildCfg.gridSnapMeters - 1) < 0.02 ? 'selected' : ''}>1.00m</option>
+              <option value="2" ${Math.abs(buildCfg.gridSnapMeters - 2) < 0.02 ? 'selected' : ''}>2.00m</option>
+            </select>
+          </div>
+          <div class="build-mode-row" title="Rotation / Angle Snap: putar bebas 360° atau per sudut 15° / 45° / 90°">
+            <span class="build-mode-key">Angle Snap</span>
+            <select id="select-build-angle-snap" class="avatar-teleport-select build-mini-select" title="Sudut kunci rotasi">
+              <option value="0" ${buildCfg.angleSnapDeg === 0 ? 'selected' : ''}>Bebas (360°)</option>
+              <option value="15" ${buildCfg.angleSnapDeg === 15 ? 'selected' : ''}>Snap 15°</option>
+              <option value="45" ${buildCfg.angleSnapDeg === 45 ? 'selected' : ''}>Snap 45°</option>
+              <option value="90" ${buildCfg.angleSnapDeg === 90 ? 'selected' : ''}>Snap 90°</option>
+            </select>
+            <button type="button" id="btn-build-rot-ccw" class="avatar-sim-mini-btn" title="Putar kiri ([)">↺</button>
+            <button type="button" id="btn-build-rot-cw" class="avatar-sim-mini-btn" title="Putar kanan (])">↻</button>
+          </div>
+          <div class="build-mode-row" title="Collision / Clipping: Anti-Tabrakan mencegah objek menembus; MoveObjects mengizinkan tumpuk bebas">
+            <span class="build-mode-key">Collision</span>
+            <button type="button" id="btn-build-collision" class="avatar-sim-chip ${buildCfg.allowClipping ? 'is-moveobjects active' : ''}">${buildCfg.allowClipping ? '👻 MoveObjects (Bebas)' : '🧱 Anti-Tabrakan'}</button>
+          </div>
+          <div class="build-mode-row" title="Surface Snapping / Object Alignment: tempelkan objek rata di atas permukaan meja, rak, lantai, atau dinding 3D">
+            <span class="build-mode-key">Surface Snap</span>
+            <button type="button" id="btn-build-surface-snap" class="avatar-sim-chip ${buildCfg.surfaceSnapEnabled ? 'active' : ''}">${buildCfg.surfaceSnapEnabled ? '🧲 Tempel Meja/Rak: ON' : '🧲 Surface Snap: OFF'}</button>
+          </div>
+          <div class="build-mode-row is-gizmo-row" title="Gizmo / Transform Controls: seret panah atau lingkaran merah (X), hijau (Y/Tinggi), biru (Z) pada objek">
+            <span class="build-mode-key">Gizmo RGB</span>
+            <button type="button" id="btn-build-gizmo" class="avatar-sim-chip ${buildCfg.gizmoEnabled ? 'active' : ''}">${buildCfg.gizmoEnabled ? '🎯 Gizmo: ON' : '🎯 Gizmo: OFF'}</button>
+            <select id="select-build-gizmo-mode" class="avatar-teleport-select build-mini-select" title="Jenis sumbu Gizmo">
+              <option value="both" ${buildCfg.gizmoMode === 'both' ? 'selected' : ''}>Panah + Putar</option>
+              <option value="translate" ${buildCfg.gizmoMode === 'translate' ? 'selected' : ''}>Panah Geser</option>
+              <option value="rotate" ${buildCfg.gizmoMode === 'rotate' ? 'selected' : ''}>Lingkaran Putar</option>
+            </select>
+            <div class="gizmo-nudge-group">
+              <button type="button" class="gizmo-axis-btn is-x" data-gizmo-nudge="x:-1" title="Geser X-">−X</button>
+              <button type="button" class="gizmo-axis-btn is-x" data-gizmo-nudge="x:1" title="Geser X+">+X</button>
+              <button type="button" class="gizmo-axis-btn is-y" data-gizmo-nudge="y:-1" title="Turun Y/Tinggi-">−Y</button>
+              <button type="button" class="gizmo-axis-btn is-y" data-gizmo-nudge="y:1" title="Naik Y/Tinggi+">+Y</button>
+              <button type="button" class="gizmo-axis-btn is-z" data-gizmo-nudge="z:-1" title="Geser Z-">−Z</button>
+              <button type="button" class="gizmo-axis-btn is-z" data-gizmo-nudge="z:1" title="Geser Z+">+Z</button>
+            </div>
+          </div>
         </div>
       </div>
       <div id="avatar-sim-settings-popover" class="avatar-sim-popover ${isSettingsOpen ? '' : 'hidden'}">
@@ -7206,6 +7536,74 @@ export class Map3DEngine {
       this.setAvatarMode(false);
     });
 
+    hudEl.querySelector('#btn-avatar-build-mode')?.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      this.toggleBuildMode();
+    });
+
+    hudEl.querySelector('#btn-build-grid-snap')?.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      this.setBuildPlacementConfig({ gridSnapEnabled: !this.buildPlacementConfig.gridSnapEnabled });
+    });
+
+    hudEl.querySelector('#select-build-grid-size')?.addEventListener('change', (ev) => {
+      ev.stopPropagation();
+      this.setBuildPlacementConfig({ gridSnapMeters: Number(ev.target.value) || 0.5, gridSnapEnabled: true });
+    });
+
+    hudEl.querySelector('#select-build-angle-snap')?.addEventListener('change', (ev) => {
+      ev.stopPropagation();
+      this.setBuildPlacementConfig({ angleSnapDeg: Number(ev.target.value) || 0 });
+    });
+
+    hudEl.querySelector('#btn-build-rot-ccw')?.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const targetDev = this.getTransformGizmoTargetDevice();
+      if (targetDev && !this.deviceManager?.selectedDeviceId) {
+        this.deviceManager?.selectDevice?.(targetDev.id);
+      }
+      this.rotateSelectedIn3D({ dY: -15 });
+    });
+
+    hudEl.querySelector('#btn-build-rot-cw')?.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const targetDev = this.getTransformGizmoTargetDevice();
+      if (targetDev && !this.deviceManager?.selectedDeviceId) {
+        this.deviceManager?.selectDevice?.(targetDev.id);
+      }
+      this.rotateSelectedIn3D({ dY: 15 });
+    });
+
+    hudEl.querySelector('#btn-build-collision')?.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      this.setBuildPlacementConfig({ allowClipping: !this.buildPlacementConfig.allowClipping });
+    });
+
+    hudEl.querySelector('#btn-build-surface-snap')?.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      this.setBuildPlacementConfig({ surfaceSnapEnabled: !this.buildPlacementConfig.surfaceSnapEnabled });
+    });
+
+    hudEl.querySelector('#btn-build-gizmo')?.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      this.setBuildPlacementConfig({ gizmoEnabled: !this.buildPlacementConfig.gizmoEnabled });
+    });
+
+    hudEl.querySelector('#select-build-gizmo-mode')?.addEventListener('change', (ev) => {
+      ev.stopPropagation();
+      this.setBuildPlacementConfig({ gizmoMode: ev.target.value, gizmoEnabled: true });
+    });
+
+    hudEl.querySelectorAll('[data-gizmo-nudge]')?.forEach((btn) => {
+      btn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        const spec = String(btn.getAttribute('data-gizmo-nudge') || '').split(':');
+        const axis = spec[0];
+        const dir = Number(spec[1]) || 1;
+        this.nudgeDeviceAlongGizmoAxis(axis, dir);
+      });
+    });
+
     hudEl.querySelector('#btn-avatar-sim-devices')?.addEventListener('click', (ev) => {
       ev.stopPropagation();
       this.avatarSimDeckOpen = !this.avatarSimDeckOpen;
@@ -7214,6 +7612,7 @@ export class Map3DEngine {
       hudEl.querySelector('#btn-avatar-sim-settings')?.classList?.toggle('active', this.avatarSimSettingsOpen);
       hudEl.querySelector('#avatar-sim-device-deck')?.classList?.toggle('hidden', !this.avatarSimDeckOpen);
       hudEl.querySelector('#avatar-sim-settings-popover')?.classList?.toggle('hidden', !this.avatarSimSettingsOpen);
+      this.syncBuildPlacementHudUI?.();
       if (this.avatarSimDeckOpen) this.renderAvatarSimDeckList();
     });
 
@@ -7225,6 +7624,7 @@ export class Map3DEngine {
       hudEl.querySelector('#btn-avatar-sim-devices')?.classList?.toggle('active', this.avatarSimDeckOpen);
       hudEl.querySelector('#avatar-sim-settings-popover')?.classList?.toggle('hidden', !this.avatarSimSettingsOpen);
       hudEl.querySelector('#avatar-sim-device-deck')?.classList?.toggle('hidden', !this.avatarSimDeckOpen);
+      this.syncBuildPlacementHudUI?.();
     });
 
     hudEl.querySelector('#select-avatar-label-mode')?.addEventListener('change', (ev) => {
@@ -7287,6 +7687,7 @@ export class Map3DEngine {
     this.renderAvatarSimDeckList();
     this.updateAvatarDeviceLabelsVisibility();
     this.updateAvatarProximityHud();
+    this.syncBuildPlacementHudUI?.();
     this.updateRemotePeersHud?.(authManager.getRemotePeers());
   }
 
@@ -7476,6 +7877,8 @@ export class Map3DEngine {
     this._lastAvatarHudDistKey = distText;
     this._lastAvatarHudCarryKey = carryKey;
     this.updateAvatarDeviceLabelsVisibility?.();
+    this.syncTransformGizmo?.();
+    this.syncBuildPlacementHudUI?.();
     if (this.avatarSimDeckOpen) this.renderAvatarSimDeckList?.();
 
     const dev = nearestId ? this.deviceManager?.getDeviceById?.(nearestId) : null;
@@ -7512,6 +7915,779 @@ export class Map3DEngine {
     }
 
     slot.innerHTML = `${devPart}${carryPart}`;
+  }
+
+  _loadSavedBuildPlacementConfig() {
+    const defaults = {
+      buildModeEnabled: false,
+      gridSnapEnabled: false,
+      gridSnapMeters: 0.5,
+      angleSnapDeg: 45,
+      allowClipping: false,
+      gizmoEnabled: true,
+      gizmoMode: 'both',
+      surfaceSnapEnabled: true
+    };
+    try {
+      if (typeof localStorage === 'undefined') return defaults;
+      const raw = localStorage.getItem('netmap_build_placement_cfg_v1');
+      if (!raw) return defaults;
+      const parsed = JSON.parse(raw);
+      return {
+        buildModeEnabled: Boolean(parsed?.buildModeEnabled),
+        gridSnapEnabled: Boolean(parsed?.gridSnapEnabled),
+        gridSnapMeters: clamp(Number(parsed?.gridSnapMeters) || 0.5, 0.1, 5.0),
+        angleSnapDeg: [0, 15, 45, 90].includes(Number(parsed?.angleSnapDeg)) ? Number(parsed.angleSnapDeg) : 45,
+        allowClipping: Boolean(parsed?.allowClipping),
+        gizmoEnabled: parsed?.gizmoEnabled !== false,
+        gizmoMode: ['both', 'translate', 'rotate'].includes(parsed?.gizmoMode) ? parsed.gizmoMode : 'both',
+        surfaceSnapEnabled: parsed?.surfaceSnapEnabled !== false
+      };
+    } catch {
+      return defaults;
+    }
+  }
+
+  getBuildPlacementConfig() {
+    return { ...(this.buildPlacementConfig || this._loadSavedBuildPlacementConfig()) };
+  }
+
+  setBuildPlacementConfig(patch = {}, { silent = false } = {}) {
+    const prev = this.getBuildPlacementConfig();
+    const next = {
+      buildModeEnabled: patch.buildModeEnabled !== undefined ? Boolean(patch.buildModeEnabled) : prev.buildModeEnabled,
+      gridSnapEnabled: patch.gridSnapEnabled !== undefined ? Boolean(patch.gridSnapEnabled) : prev.gridSnapEnabled,
+      gridSnapMeters: patch.gridSnapMeters !== undefined ? clamp(Number(patch.gridSnapMeters) || 0.5, 0.1, 5.0) : prev.gridSnapMeters,
+      angleSnapDeg: patch.angleSnapDeg !== undefined
+        ? ([0, 15, 45, 90].includes(Number(patch.angleSnapDeg)) ? Number(patch.angleSnapDeg) : 0)
+        : prev.angleSnapDeg,
+      allowClipping: patch.allowClipping !== undefined ? Boolean(patch.allowClipping) : prev.allowClipping,
+      gizmoEnabled: patch.gizmoEnabled !== undefined ? Boolean(patch.gizmoEnabled) : prev.gizmoEnabled,
+      gizmoMode: (patch.gizmoMode && ['both', 'translate', 'rotate'].includes(patch.gizmoMode)) ? patch.gizmoMode : prev.gizmoMode,
+      surfaceSnapEnabled: patch.surfaceSnapEnabled !== undefined ? Boolean(patch.surfaceSnapEnabled) : prev.surfaceSnapEnabled
+    };
+    this.buildPlacementConfig = next;
+
+    if (next.buildModeEnabled && !prev.buildModeEnabled) {
+      this.avatarSimDeckOpen = false;
+      this.avatarSimSettingsOpen = false;
+      this.releaseAvatarPointerLock?.();
+    }
+
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('netmap_build_placement_cfg_v1', JSON.stringify(next));
+      }
+    } catch { /* ignore storage restrictions */ }
+
+    this.syncTransformGizmo();
+    this.syncBuildPlacementHudUI();
+    if (Array.isArray(this.carriedObjects) && this.carriedObjects.length > 0) {
+      this.updateCarriedObjectsTransform?.();
+    }
+
+    if (!silent) {
+      if (patch.buildModeEnabled !== undefined) {
+        this.showStatusHint(
+          next.buildModeEnabled
+            ? '🛠️ Build / Placement Mode AKTIF — Gunakan Gizmo RGB (X/Y/Z), Grid Snap, Angle Snap, MoveObjects & Surface Snap.'
+            : '🛠️ Build / Placement Mode dimatikan.'
+        );
+      } else if (patch.gridSnapEnabled !== undefined || patch.gridSnapMeters !== undefined) {
+        this.showStatusHint(
+          next.gridSnapEnabled
+            ? `⊞ Grid Snapping AKTIF (${next.gridSnapMeters}m)`
+            : '⊡ Free Placement AKTIF (geser bebas tanpa snap grid)'
+        );
+      } else if (patch.angleSnapDeg !== undefined) {
+        this.showStatusHint(
+          next.angleSnapDeg > 0
+            ? `🧭 Rotation Angle Snap: ${next.angleSnapDeg}°`
+            : '🧭 Rotasi Bebas (360° tanpa snap sudut)'
+        );
+      } else if (patch.allowClipping !== undefined) {
+        this.showStatusHint(
+          next.allowClipping
+            ? '👻 MoveObjects AKTIF: Objek boleh saling menumpuk / tembus'
+            : '🧱 Collision / Anti-Tabrakan AKTIF: Objek tidak saling menembus'
+        );
+      } else if (patch.surfaceSnapEnabled !== undefined) {
+        this.showStatusHint(
+          next.surfaceSnapEnabled
+            ? '🧲 Surface Snapping AKTIF: Objek otomatis menempel rata di atas meja/rak/dinding'
+            : '🧲 Surface Snapping dimatikan: Pertahankan elevasi manual'
+        );
+      } else if (patch.gizmoEnabled !== undefined || patch.gizmoMode !== undefined) {
+        this.showStatusHint(
+          next.gizmoEnabled
+            ? `🎯 Gizmo RGB Transform Controls AKTIF (${next.gizmoMode})`
+            : '🎯 Gizmo RGB disembunyikan'
+        );
+      }
+    }
+    return { ...next };
+  }
+
+  toggleBuildMode(force) {
+    const nextEnabled = force !== undefined ? Boolean(force) : !Boolean(this.buildPlacementConfig?.buildModeEnabled);
+    return this.setBuildPlacementConfig({ buildModeEnabled: nextEnabled });
+  }
+
+  syncBuildPlacementHudUI() {
+    if (typeof document === 'undefined') return;
+    const hudEl = document.getElementById('hud-3d-avatar-bar');
+    if (!hudEl) return;
+    const cfg = this.getBuildPlacementConfig();
+    const isBuildOpen = Boolean(cfg.buildModeEnabled && !this.avatarSimDeckOpen && !this.avatarSimSettingsOpen);
+
+    hudEl.querySelector('#btn-avatar-build-mode')?.classList?.toggle('active', Boolean(cfg.buildModeEnabled));
+    hudEl.querySelector('#btn-avatar-sim-devices')?.classList?.toggle('active', Boolean(this.avatarSimDeckOpen));
+    hudEl.querySelector('#btn-avatar-sim-settings')?.classList?.toggle('active', Boolean(this.avatarSimSettingsOpen));
+    hudEl.querySelector('#avatar-sim-device-deck')?.classList?.toggle('hidden', !this.avatarSimDeckOpen);
+    hudEl.querySelector('#avatar-sim-settings-popover')?.classList?.toggle('hidden', !this.avatarSimSettingsOpen);
+    hudEl.querySelector('#avatar-sim-build-panel')?.classList?.toggle('hidden', !isBuildOpen);
+
+    const gridBtn = hudEl.querySelector('#btn-build-grid-snap');
+    if (gridBtn) {
+      gridBtn.classList.toggle('active', cfg.gridSnapEnabled);
+      gridBtn.textContent = cfg.gridSnapEnabled ? '⊞ Snap Grid: ON' : '⊡ Free Placement';
+    }
+    const gridSel = hudEl.querySelector('#select-build-grid-size');
+    if (gridSel) gridSel.value = String(cfg.gridSnapMeters);
+
+    const angleSel = hudEl.querySelector('#select-build-angle-snap');
+    if (angleSel) angleSel.value = String(cfg.angleSnapDeg);
+
+    const colBtn = hudEl.querySelector('#btn-build-collision');
+    if (colBtn) {
+      colBtn.classList.toggle('active', cfg.allowClipping);
+      colBtn.classList.toggle('is-moveobjects', cfg.allowClipping);
+      colBtn.textContent = cfg.allowClipping ? '👻 MoveObjects (Bebas)' : '🧱 Anti-Tabrakan';
+    }
+
+    const surfBtn = hudEl.querySelector('#btn-build-surface-snap');
+    if (surfBtn) {
+      surfBtn.classList.toggle('active', cfg.surfaceSnapEnabled);
+      surfBtn.textContent = cfg.surfaceSnapEnabled ? '🧲 Tempel Meja/Rak: ON' : '🧲 Surface Snap: OFF';
+    }
+
+    const gizBtn = hudEl.querySelector('#btn-build-gizmo');
+    if (gizBtn) {
+      gizBtn.classList.toggle('active', cfg.gizmoEnabled);
+      gizBtn.textContent = cfg.gizmoEnabled ? '🎯 Gizmo: ON' : '🎯 Gizmo: OFF';
+    }
+    const gizSel = hudEl.querySelector('#select-build-gizmo-mode');
+    if (gizSel) gizSel.value = cfg.gizmoMode;
+
+    const badge = hudEl.querySelector('#build-mode-target-badge');
+    if (badge) {
+      const targetDev = this.getTransformGizmoTargetDevice();
+      badge.textContent = targetDev ? `Target: ${targetDev.name}` : 'Target: (Dekati / Klik Perangkat)';
+    }
+  }
+
+  applyBuildGridSnapWorld(wx, wz) {
+    const rawX = Number(wx) || 0;
+    const rawZ = Number(wz) || 0;
+    if (!this.buildPlacementConfig?.gridSnapEnabled) {
+      return { x: rawX, z: rawZ, snapped: false };
+    }
+    const step = clamp(Number(this.buildPlacementConfig?.gridSnapMeters) || 0.5, 0.1, 5.0);
+    return {
+      x: Math.round(rawX / step) * step,
+      z: Math.round(rawZ / step) * step,
+      snapped: true
+    };
+  }
+
+  applyBuildAngleSnap(deg, { signed = false } = {}) {
+    const raw = Number(deg) || 0;
+    const snap = Number(this.buildPlacementConfig?.angleSnapDeg) || 0;
+    const val = snap > 0 ? Math.round(raw / snap) * snap : Math.round(raw);
+    if (signed) {
+      return clamp(val, -180, 180);
+    }
+    return ((val % 360) + 360) % 360;
+  }
+
+  resolveBuildPlacementSurfaceElevation(wx, wz, currentElev = 0, { excludeId = '', startSupportY = 0 } = {}) {
+    const curY = Number(currentElev) || 0;
+    if (!this.buildPlacementConfig?.surfaceSnapEnabled || typeof this.getCarriedDropSupportElevation !== 'function') {
+      return { elevationMeters: curY, surfaceSnapped: false };
+    }
+    const supY = this.getCarriedDropSupportElevation(wx, wz, excludeId);
+    const startSup = Number(startSupportY) || 0;
+    if (supY > 0.01 && (this.buildPlacementConfig?.buildModeEnabled || supY >= curY - 0.15 || Math.abs(curY - startSup) < 0.15)) {
+      return { elevationMeters: Number(supY.toFixed(2)), surfaceSnapped: true };
+    }
+    if (startSup > 0.01 && supY <= 0.01 && Math.abs(curY - startSup) < 0.15) {
+      return { elevationMeters: 0, surfaceSnapped: false };
+    }
+    return { elevationMeters: curY, surfaceSnapped: false };
+  }
+
+  resolveBuildPlacementCollision(wx, wz, elevY = 0, { halfW = 0.45, halfD = 0.38, height = 0.35, excludeIds = [] } = {}) {
+    let x = Number(wx) || 0;
+    let z = Number(wz) || 0;
+    const elev = Number(elevY) || 0;
+    if (this.buildPlacementConfig?.allowClipping) {
+      return { x, z, collided: false, blockerName: null };
+    }
+    const excluded = new Set((Array.isArray(excludeIds) ? excludeIds : [excludeIds]).filter(Boolean));
+    (this.carriedObjects || []).forEach((c) => {
+      if (c?.devId) excluded.add(c.devId);
+    });
+    const devices = (this.deviceManager?.getAllDevices?.() || []).filter(
+      (d) => d && d.layerVisible !== false && !excluded.has(d.id)
+    );
+    if (devices.length === 0) {
+      return { x, z, collided: false, blockerName: null };
+    }
+
+    let collided = false;
+    let blockerName = null;
+    for (let pass = 0; pass < 3; pass++) {
+      let moved = false;
+      for (const other of devices) {
+        const sp = { ...getDefaultSpatial3d(other.type), ...(other.spatial3d || {}) };
+        const otherElev = (Number(sp.elevationMeters) || 0) + (Number(sp.offsetY) || 0);
+        const otherScale = (sp.modelScale || 1) * (this.deviceScaleMultiplier || 3.0);
+        const fp = this.getDeviceCollisionFootprint
+          ? this.getDeviceCollisionFootprint(other, otherScale)
+          : { halfW: 0.45, halfD: 0.38, height: 0.35 };
+        if (elev >= otherElev + fp.height - 0.04 || elev + height <= otherElev + 0.04) {
+          continue;
+        }
+
+        const otherWorld = (this.normToWorld && other.position)
+          ? this.normToWorld(other.position.x, other.position.y)
+          : this.effectivePosMap?.get(other.id);
+        if (!otherWorld) continue;
+
+        const dx = x - otherWorld.x;
+        const dz = z - otherWorld.z;
+        const minSepX = halfW + fp.halfW + 0.08;
+        const minSepZ = halfD + fp.halfD + 0.08;
+
+        if (Math.abs(dx) < minSepX && Math.abs(dz) < minSepZ) {
+          const overlapX = minSepX - Math.abs(dx);
+          const overlapZ = minSepZ - Math.abs(dz);
+          if (Math.abs(dx) < 1e-4 && Math.abs(dz) < 1e-4) {
+            x += minSepX;
+          } else if (overlapX <= overlapZ) {
+            x += overlapX * (dx >= 0 ? 1 : -1);
+          } else {
+            z += overlapZ * (dz >= 0 ? 1 : -1);
+          }
+          collided = true;
+          moved = true;
+          if (!blockerName) blockerName = other.name || other.id;
+        }
+      }
+      if (!moved) break;
+    }
+
+    return {
+      x: Number(x.toFixed(4)),
+      z: Number(z.toFixed(4)),
+      collided,
+      blockerName
+    };
+  }
+
+  getTransformGizmoTargetDevice() {
+    if (!this.isInitialized || this.simulatorFocusedDeviceId) return null;
+    if (this.buildPlacementConfig?.gizmoEnabled === false) return null;
+    const carriedIds = new Set((this.carriedObjects || []).map((c) => c?.devId).filter(Boolean));
+
+    const selId = this.deviceManager?.selectedDeviceId || null;
+    const allowFor3dTool = Boolean(this.buildPlacementConfig?.buildModeEnabled || this.navTool === 'move' || this.navTool === 'rotate');
+    if (selId && !carriedIds.has(selId) && allowFor3dTool) {
+      const dev = this.deviceManager?.getDeviceById?.(selId);
+      if (dev && dev.layerVisible !== false) return dev;
+    }
+
+    if (this.avatarMode && this.buildPlacementConfig?.buildModeEnabled) {
+      const nearId = this.avatarState?.nearestDeviceId || null;
+      const nearDist = Number(this.avatarState?.nearestDist ?? Infinity);
+      if (nearId && nearDist <= 15 && !carriedIds.has(nearId)) {
+        const nearDev = this.deviceManager?.getDeviceById?.(nearId);
+        if (nearDev && nearDev.layerVisible !== false) return nearDev;
+      }
+    }
+    return null;
+  }
+
+  _rebuildTransformGizmoVisuals(deviceId, scaleBase, gizmoMode) {
+    this.clearGroup(this.transformGizmoGroup);
+    const armLen = 1.15 * scaleBase;
+    const shaftRad = 0.032 * scaleBase;
+    const coneRad = 0.088 * scaleBase;
+    const coneLen = 0.24 * scaleBase;
+    const hitRad = 0.14 * scaleBase;
+    const ringRad = 0.88 * scaleBase;
+    const ringTube = 0.026 * scaleBase;
+
+    const showTranslate = gizmoMode === 'both' || gizmoMode === 'translate';
+    const showRotate = gizmoMode === 'both' || gizmoMode === 'rotate';
+
+    const coreMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(0.1 * scaleBase, 14, 14),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false, transparent: true, opacity: 0.95 })
+    );
+    coreMesh.renderOrder = 1000;
+    this.transformGizmoGroup.add(coreMesh);
+
+    const axes = [
+      { axis: 'x', color: 0xef4444, arrowRotZ: -Math.PI / 2, arrowRotX: 0, ringRotX: 0, ringRotY: Math.PI / 2, rScale: 1.0 },
+      { axis: 'y', color: 0x22c55e, arrowRotZ: 0, arrowRotX: 0, ringRotX: Math.PI / 2, ringRotY: 0, rScale: 1.04 },
+      { axis: 'z', color: 0x3b82f6, arrowRotZ: 0, arrowRotX: Math.PI / 2, ringRotX: 0, ringRotY: 0, rScale: 0.96 }
+    ];
+
+    axes.forEach((cfg) => {
+      if (showTranslate) {
+        const axisGroup = new THREE.Group();
+        const mat = new THREE.MeshBasicMaterial({
+          color: cfg.color,
+          depthTest: false,
+          transparent: true,
+          opacity: 0.94
+        });
+
+        const shaft = new THREE.Mesh(new THREE.CylinderGeometry(shaftRad, shaftRad, armLen, 10), mat);
+        shaft.position.y = armLen * 0.5;
+        shaft.renderOrder = 1000;
+        shaft.userData = { isTransformGizmo: true, gizmoKind: 'translate', gizmoAxis: cfg.axis, deviceId };
+        axisGroup.add(shaft);
+
+        const cone = new THREE.Mesh(new THREE.ConeGeometry(coneRad, coneLen, 12), mat);
+        cone.position.y = armLen + coneLen * 0.5;
+        cone.renderOrder = 1000;
+        cone.userData = { isTransformGizmo: true, gizmoKind: 'translate', gizmoAxis: cfg.axis, deviceId };
+        axisGroup.add(cone);
+
+        const hitMesh = new THREE.Mesh(
+          new THREE.CylinderGeometry(hitRad, hitRad, armLen + coneLen, 8),
+          new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.0, depthWrite: false, depthTest: false })
+        );
+        hitMesh.position.y = (armLen + coneLen) * 0.5;
+        hitMesh.renderOrder = 1000;
+        hitMesh.userData = { isTransformGizmo: true, gizmoKind: 'translate', gizmoAxis: cfg.axis, deviceId };
+        axisGroup.add(hitMesh);
+
+        axisGroup.rotation.set(cfg.arrowRotX, 0, cfg.arrowRotZ);
+        this.transformGizmoGroup.add(axisGroup);
+      }
+
+      if (showRotate) {
+        const ringMat = new THREE.MeshBasicMaterial({
+          color: cfg.color,
+          depthTest: false,
+          transparent: true,
+          opacity: 0.78,
+          side: THREE.DoubleSide
+        });
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(ringRad * cfg.rScale, ringTube, 8, 42), ringMat);
+        ring.rotation.set(cfg.ringRotX, cfg.ringRotY, 0);
+        ring.renderOrder = 999;
+        ring.userData = { isTransformGizmo: true, gizmoKind: 'rotate', gizmoAxis: cfg.axis, deviceId };
+        this.transformGizmoGroup.add(ring);
+      }
+    });
+
+    this.transformGizmoGroup.userData = { deviceId, scaleBase, gizmoMode };
+  }
+
+  syncTransformGizmo() {
+    if (!this.transformGizmoGroup || !this.scene) return;
+    const targetDev = this.getTransformGizmoTargetDevice();
+    if (!this.isActive || !targetDev) {
+      this.transformGizmoGroup.visible = false;
+      return;
+    }
+    if (!this.scene.children.includes(this.transformGizmoGroup)) {
+      this.scene.add(this.transformGizmoGroup);
+    }
+
+    const holder = this.deviceMeshMap?.get(targetDev.id);
+    const sp = { ...getDefaultSpatial3d(targetDev.type), ...(targetDev.spatial3d || {}) };
+    const userScale = (sp.modelScale || 1) * (this.deviceScaleMultiplier || 3.0);
+    const scaleBase = Number(clamp(userScale * 0.52, 0.9, 3.2).toFixed(2));
+    const gizmoMode = this.buildPlacementConfig?.gizmoMode || 'both';
+
+    const cached = this.transformGizmoGroup.userData || {};
+    if (
+      this.transformGizmoGroup.children.length === 0
+      || cached.deviceId !== targetDev.id
+      || cached.gizmoMode !== gizmoMode
+      || Math.abs((cached.scaleBase || 0) - scaleBase) > 0.05
+    ) {
+      this._rebuildTransformGizmoVisuals(targetDev.id, scaleBase, gizmoMode);
+    }
+
+    let wx;
+    let wy;
+    let wz;
+    if (holder) {
+      wx = holder.position.x;
+      wy = holder.position.y;
+      wz = holder.position.z;
+    } else {
+      const w = this.normToWorld ? this.normToWorld(targetDev.position?.x ?? 0.5, targetDev.position?.y ?? 0.5) : { x: 0, z: 0 };
+      wx = w.x + (Number(sp.offsetX) || 0);
+      wy = Math.max(0, (Number(sp.elevationMeters) || 0) + (Number(sp.offsetY) || 0));
+      wz = w.z + (Number(sp.offsetZ) || 0);
+    }
+
+    this.transformGizmoGroup.position.set(wx, wy + 0.14 * scaleBase, wz);
+    this.transformGizmoGroup.visible = true;
+    this.transformGizmoGroup.updateMatrixWorld?.(true);
+  }
+
+  checkTransformGizmoHitAtEvent(e) {
+    if (!this.isInitialized || !this.camera || !this.renderer?.domElement) return null;
+    if (!this.transformGizmoGroup?.visible || this.transformGizmoGroup.children.length === 0) return null;
+
+    const isPointerLocked = typeof document !== 'undefined' && document.pointerLockElement === this.renderer.domElement;
+    if (isPointerLocked) {
+      this.pointer.set(0, 0);
+    } else {
+      const rect = this.renderer.domElement.getBoundingClientRect();
+      this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    }
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    this.transformGizmoGroup.updateMatrixWorld?.(true);
+    const hits = this.raycaster.intersectObjects(this.transformGizmoGroup.children, true);
+    for (const h of hits) {
+      const ud = h.object?.userData;
+      if (ud?.isTransformGizmo && ud.deviceId) {
+        return {
+          gizmoKind: ud.gizmoKind,
+          gizmoAxis: ud.gizmoAxis,
+          deviceId: ud.deviceId,
+          point: h.point.clone(),
+          object: h.object
+        };
+      }
+    }
+    return null;
+  }
+
+  startTransformGizmoDrag(e, dom, hit) {
+    const dev = this.deviceManager?.getDeviceById?.(hit?.deviceId);
+    if (!dev) return false;
+    if (dev.layerLocked) {
+      this.showStatusHint(`🔒 Perangkat "${dev.name}" dikunci pada Layer.`);
+      return false;
+    }
+    if (
+      authManager?.isAuthenticated?.()
+      && authManager.getActiveWorkspaceKey?.() === 'main'
+      && authManager.isMainWorkspaceUnlocked?.() === false
+    ) {
+      this.showStatusHint('🔒 Server Utama terkunci (hanya lihat).');
+      return false;
+    }
+
+    this.deviceManager?.selectDevice?.(dev.id);
+    if (this.controls) {
+      this.controls.enabled = false;
+      this._temporarilyDisabledControlsForBox = true;
+    }
+    dom.setPointerCapture?.(e.pointerId);
+
+    const meshGroup = this.deviceMeshMap?.get(dev.id);
+    const devWorld = this.normToWorld(dev.position.x, dev.position.y);
+    const sp = { ...getDefaultSpatial3d(dev.type), ...(dev.spatial3d || {}) };
+    const startHolderY = meshGroup ? meshGroup.position.y : Math.max(0, (Number(sp.elevationMeters) || 0) + (Number(sp.offsetY) || 0));
+    const meshOffsetX = meshGroup ? (meshGroup.position.x - devWorld.x) : 0;
+    const meshOffsetZ = meshGroup ? (meshGroup.position.z - devWorld.z) : 0;
+    const prevEff = this.effectivePosMap.get(dev.id);
+    const effY = prevEff ? prevEff.y : startHolderY;
+    const dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -startHolderY);
+    const hitPt = new THREE.Vector3();
+    this.raycaster.ray.intersectPlane(dragPlane, hitPt);
+
+    if (hit.gizmoKind === 'translate' && hit.gizmoAxis === 'y') {
+      this.flashMoveElevationGuide?.(dev.id, 1500);
+    }
+
+    this.transformGizmoDragState = {
+      deviceId: dev.id,
+      dev,
+      gizmoKind: hit.gizmoKind,
+      gizmoAxis: hit.gizmoAxis,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      startWorldX: devWorld.x,
+      startWorldZ: devWorld.z,
+      startElev: Math.max(0, Number(sp.elevationMeters) || 0),
+      startHolderY,
+      startSupportY: typeof this.getCarriedDropSupportElevation === 'function'
+        ? this.getCarriedDropSupportElevation(devWorld.x, devWorld.z, dev.id)
+        : 0,
+      startRx: Number(sp.rotationX) || 0,
+      startRy: Number(sp.rotationY ?? dev.rotation ?? 0) || 0,
+      startRz: Number(sp.rotationZ) || 0,
+      meshOffsetX,
+      meshOffsetZ,
+      effY,
+      plane: dragPlane,
+      grabOffsetX: hitPt ? (devWorld.x - hitPt.x) : 0,
+      grabOffsetZ: hitPt ? (devWorld.z - hitPt.z) : 0,
+      portInitials: this._collectDevicePortInitials(dev.id),
+      moved: false,
+      latestNorm: null,
+      latestElev: null,
+      latestRot: null
+    };
+    return true;
+  }
+
+  updateTransformGizmoDrag(e) {
+    const state = this.transformGizmoDragState;
+    if (!state) return;
+    if (Math.hypot(e.clientX - state.startClientX, e.clientY - state.startClientY) > 2) {
+      state.moved = true;
+    }
+
+    const meshGroup = this.deviceMeshMap?.get(state.deviceId);
+    const modelContainer = meshGroup?.getObjectByName?.('DeviceModelContainer');
+    const holderPorts = meshGroup?.userData?.devPorts || [];
+    const userScale = meshGroup?.userData?.userModelScale || ((state.dev?.spatial3d?.modelScale || 1) * (this.deviceScaleMultiplier || 3.0));
+
+    if (state.gizmoKind === 'rotate') {
+      const deltaDeg = (e.clientX - state.startClientX) * 0.75 + (state.startClientY - e.clientY) * 0.35;
+      let rx = state.startRx;
+      let ry = state.startRy;
+      let rz = state.startRz;
+      if (state.gizmoAxis === 'x') {
+        rx = this.applyBuildAngleSnap(state.startRx + deltaDeg, { signed: true });
+      } else if (state.gizmoAxis === 'z') {
+        rz = this.applyBuildAngleSnap(state.startRz + deltaDeg, { signed: true });
+      } else {
+        ry = this.applyBuildAngleSnap(state.startRy + deltaDeg);
+      }
+      state.latestRot = { rx, ry, rz };
+      const euler = new THREE.Euler((rx * Math.PI) / 180, (ry * Math.PI) / 180, (rz * Math.PI) / 180, 'YXZ');
+      if (modelContainer) {
+        modelContainer.rotation.copy(euler);
+      }
+      const wx = meshGroup ? meshGroup.position.x : state.startWorldX;
+      const wy = meshGroup ? meshGroup.position.y : state.startHolderY;
+      const wz = meshGroup ? meshGroup.position.z : state.startWorldZ;
+      this.registerDevicePortTransforms(state.dev, holderPorts, wx, wy, wz, userScale, euler);
+      this.syncCables();
+      const axisBadge = state.gizmoAxis === 'x' ? '🟥 Rotasi X' : (state.gizmoAxis === 'z' ? '🟦 Rotasi Z' : '🟩 Rotasi Y');
+      this.showStatusHint(`${axisBadge}: "${state.dev.name}" -> X:${rx}° Y:${ry}° Z:${rz}°`);
+      return;
+    }
+
+    if (state.gizmoAxis === 'y') {
+      const camDist = this.camera ? this.camera.position.distanceTo(this.transformGizmoGroup.position) : 6;
+      const stepFactor = Math.max(0.004, camDist * 0.0022);
+      const rawElev = clamp(state.startElev + (state.startClientY - e.clientY) * stepFactor, 0, 25);
+      const nextElev = this.buildPlacementConfig?.gridSnapEnabled
+        ? Math.round(rawElev / Math.min(0.5, Number(this.buildPlacementConfig.gridSnapMeters) || 0.25)) * Math.min(0.5, Number(this.buildPlacementConfig.gridSnapMeters) || 0.25)
+        : Math.round(rawElev * 20) / 20;
+      const finalElev = Number(clamp(nextElev, 0, 25).toFixed(2));
+      const shiftY = finalElev - state.startElev;
+      state.latestElev = finalElev;
+      if (meshGroup) {
+        meshGroup.position.y = state.startHolderY + shiftY;
+      }
+      this.effectivePosMap.set(
+        state.deviceId,
+        new THREE.Vector3(meshGroup ? meshGroup.position.x : state.startWorldX, state.effY + shiftY, meshGroup ? meshGroup.position.z : state.startWorldZ)
+      );
+      state.portInitials.forEach(({ key, initial }) => {
+        this.portWorldPosMap.set(key, new THREE.Vector3(initial.x, initial.y + shiftY, initial.z));
+      });
+      this.syncTransformGizmo();
+      this.flashMoveElevationGuide?.(state.deviceId, 800);
+      this.syncCables();
+      this.showStatusHint(`🟩 Geser Sumbu Y (Elevasi): "${state.dev.name}" -> Z:${finalElev.toFixed(2)}m`);
+      return;
+    }
+
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+    const hitPt = new THREE.Vector3();
+    if (!this.raycaster.ray.intersectPlane(state.plane, hitPt)) return;
+
+    let targetX = state.gizmoAxis === 'x' ? (hitPt.x + state.grabOffsetX) : state.startWorldX;
+    let targetZ = state.gizmoAxis === 'z' ? (hitPt.z + state.grabOffsetZ) : state.startWorldZ;
+    const snapped = this.applyBuildGridSnapWorld(targetX, targetZ);
+    if (state.gizmoAxis === 'x') targetX = snapped.x;
+    if (state.gizmoAxis === 'z') targetZ = snapped.z;
+
+    let targetElev = state.startHolderY;
+    if (this.buildPlacementConfig?.surfaceSnapEnabled) {
+      const sup = this.resolveBuildPlacementSurfaceElevation(targetX, targetZ, state.startHolderY, {
+        excludeId: state.deviceId,
+        startSupportY: state.startSupportY
+      });
+      targetElev = sup.elevationMeters;
+    }
+
+    let collisionMsg = '';
+    if (!this.buildPlacementConfig?.allowClipping) {
+      const fp = this.getDeviceCollisionFootprint
+        ? this.getDeviceCollisionFootprint(state.dev, userScale)
+        : { halfW: 0.45, halfD: 0.38, height: 0.35 };
+      const col = this.resolveBuildPlacementCollision(targetX, targetZ, targetElev, {
+        halfW: fp.halfW,
+        halfD: fp.halfD,
+        height: fp.height,
+        excludeIds: [state.deviceId]
+      });
+      if (state.gizmoAxis === 'x') targetX = col.x;
+      if (state.gizmoAxis === 'z') targetZ = col.z;
+      if (col.collided) {
+        collisionMsg = ` • 🧱 Tertahan "${col.blockerName}"`;
+      }
+    }
+
+    const { normX, normY } = this.worldToNorm(targetX, targetZ);
+    const clamped = this.normToWorld(normX, normY);
+    const shiftX = clamped.x - state.startWorldX;
+    const shiftY = targetElev - state.startHolderY;
+    const shiftZ = clamped.z - state.startWorldZ;
+
+    state.latestNorm = { x: normX, y: normY };
+    state.latestElev = Math.abs(shiftY) > 0.005 ? Number(targetElev.toFixed(2)) : null;
+
+    if (meshGroup) {
+      meshGroup.position.set(clamped.x + state.meshOffsetX, targetElev, clamped.z + state.meshOffsetZ);
+    }
+    this.effectivePosMap.set(
+      state.deviceId,
+      new THREE.Vector3(clamped.x + state.meshOffsetX, state.effY + shiftY, clamped.z + state.meshOffsetZ)
+    );
+    state.portInitials.forEach(({ key, initial }) => {
+      this.portWorldPosMap.set(key, new THREE.Vector3(initial.x + shiftX, initial.y + shiftY, initial.z + shiftZ));
+    });
+    this.syncTransformGizmo();
+    this.syncCables();
+    const axisTag = state.gizmoAxis === 'x' ? '🟥 Geser Sumbu X' : '🟦 Geser Sumbu Z';
+    this.showStatusHint(`${axisTag}: "${state.dev.name}" -> X:${clamped.x.toFixed(1)}m Z:${clamped.z.toFixed(1)}m${collisionMsg}`);
+  }
+
+  finishTransformGizmoDrag(e, dom) {
+    const state = this.transformGizmoDragState;
+    this.transformGizmoDragState = null;
+    dom.releasePointerCapture?.(e.pointerId);
+    if (!state || !state.moved) return;
+
+    this._suppressNextClick = true;
+    if (state.latestNorm && this.deviceManager?.moveDeviceGroup) {
+      this.deviceManager.moveDeviceGroup([{ id: state.deviceId, position: state.latestNorm }], { syncRenderer: false });
+    }
+    const dev = this.deviceManager?.getDeviceById?.(state.deviceId);
+    if (dev && (state.latestElev !== null || state.latestRot !== null)) {
+      const baseSp = { ...getDefaultSpatial3d(dev.type), ...(dev.spatial3d || {}) };
+      this.deviceManager?.updateDevice?.(state.deviceId, {
+        spatial3d: {
+          ...baseSp,
+          ...(state.latestElev !== null ? { elevationMeters: state.latestElev, offsetY: 0 } : {}),
+          ...(state.latestRot !== null ? {
+            rotationX: state.latestRot.rx,
+            rotationY: state.latestRot.ry,
+            rotationZ: state.latestRot.rz
+          } : {})
+        }
+      });
+    }
+    this.syncDevices();
+    this.syncCables();
+    this.syncTransformGizmo();
+  }
+
+  nudgeDeviceAlongGizmoAxis(axis = 'x', dir = 1, kind = 'translate') {
+    const targetDev = this.getTransformGizmoTargetDevice() || (this.deviceManager?.selectedDeviceId ? this.deviceManager.getDeviceById(this.deviceManager.selectedDeviceId) : null);
+    if (!targetDev || targetDev.layerLocked) {
+      this.showStatusHint(targetDev ? `🔒 Perangkat "${targetDev.name}" dikunci.` : 'Pilih atau dekati perangkat untuk digeser.');
+      return false;
+    }
+
+    const ax = String(axis || 'x').toLowerCase();
+    const sign = dir >= 0 ? 1 : -1;
+    if (kind === 'rotate') {
+      const step = this.buildPlacementConfig?.angleSnapDeg > 0 ? this.buildPlacementConfig.angleSnapDeg : 15;
+      if (ax === 'x') return this.rotateSelectedIn3D({ dX: sign * step });
+      if (ax === 'z') return this.rotateSelectedIn3D({ dZ: sign * step });
+      return this.rotateSelectedIn3D({ dY: sign * step });
+    }
+
+    const sp = { ...getDefaultSpatial3d(targetDev.type), ...(targetDev.spatial3d || {}) };
+    const stepMeters = this.buildPlacementConfig?.gridSnapEnabled
+      ? Math.max(0.1, Number(this.buildPlacementConfig.gridSnapMeters) || 0.5)
+      : 0.25;
+
+    if (ax === 'y') {
+      const curElev = Number(sp.elevationMeters) || 0;
+      const nextElev = Number(clamp(curElev + sign * Math.min(0.5, stepMeters), 0, 25).toFixed(2));
+      this.deviceManager?.updateDevice?.(targetDev.id, {
+        spatial3d: { ...sp, elevationMeters: nextElev }
+      });
+      this.flashMoveElevationGuide?.(targetDev.id, 900);
+      this.syncDevices();
+      this.syncCables();
+      this.syncTransformGizmo();
+      this.showStatusHint(`🟩 Sumbu Y (Elevasi) "${targetDev.name}": Z:${nextElev.toFixed(2)}m`);
+      return true;
+    }
+
+    const curW = this.normToWorld(targetDev.position.x, targetDev.position.y);
+    let nextX = curW.x + (ax === 'x' ? sign * stepMeters : 0);
+    let nextZ = curW.z + (ax === 'z' ? sign * stepMeters : 0);
+    const snapped = this.applyBuildGridSnapWorld(nextX, nextZ);
+    nextX = snapped.x;
+    nextZ = snapped.z;
+
+    let nextElev = Number(sp.elevationMeters) || 0;
+    if (this.buildPlacementConfig?.surfaceSnapEnabled) {
+      const startSup = typeof this.getCarriedDropSupportElevation === 'function'
+        ? this.getCarriedDropSupportElevation(curW.x, curW.z, targetDev.id)
+        : 0;
+      const supRes = this.resolveBuildPlacementSurfaceElevation(nextX, nextZ, nextElev, {
+        excludeId: targetDev.id,
+        startSupportY: startSup
+      });
+      nextElev = supRes.elevationMeters;
+    }
+
+    if (!this.buildPlacementConfig?.allowClipping) {
+      const scale = (sp.modelScale || 1) * (this.deviceScaleMultiplier || 3.0);
+      const fp = this.getDeviceCollisionFootprint
+        ? this.getDeviceCollisionFootprint(targetDev, scale)
+        : { halfW: 0.45, halfD: 0.38, height: 0.35 };
+      const colRes = this.resolveBuildPlacementCollision(nextX, nextZ, nextElev, {
+        halfW: fp.halfW,
+        halfD: fp.halfD,
+        height: fp.height,
+        excludeIds: [targetDev.id]
+      });
+      nextX = colRes.x;
+      nextZ = colRes.z;
+    }
+
+    const { normX, normY } = this.worldToNorm(nextX, nextZ);
+    this.deviceManager?.moveDeviceGroup?.([{ id: targetDev.id, position: { x: normX, y: normY } }], { syncRenderer: false });
+    if (Math.abs(nextElev - (Number(sp.elevationMeters) || 0)) > 0.005) {
+      this.deviceManager?.updateDevice?.(targetDev.id, {
+        spatial3d: { ...sp, elevationMeters: Number(nextElev.toFixed(2)), offsetY: 0 }
+      });
+    }
+    this.syncDevices();
+    this.syncCables();
+    this.syncTransformGizmo();
+    const label = ax === 'x' ? '🟥 X' : '🟦 Z';
+    this.showStatusHint(`${label} "${targetDev.name}": (${nextX.toFixed(2)}m, ${nextZ.toFixed(2)}m • Z:${nextElev.toFixed(2)}m)`);
+    return true;
   }
 
   zoomExtents() {
@@ -8158,11 +9334,11 @@ export class Map3DEngine {
 
   bindGlobalListeners() {
     const scheduleSyncDevAndCables = () => {
-      if (!this.isActive || this.dragMoveState || this.dragRotateState) return;
+      if (!this.isActive || this.dragMoveState || this.dragRotateState || this.transformGizmoDragState) return;
       if (this._pendingSyncRaf) return;
       this._pendingSyncRaf = requestAnimationFrame(() => {
         this._pendingSyncRaf = null;
-        if (!this.isActive || this.dragMoveState || this.dragRotateState) return;
+        if (!this.isActive || this.dragMoveState || this.dragRotateState || this.transformGizmoDragState) return;
         this.syncDevices();
         this.syncCables();
         if (this.simulatorFocusedDeviceId) {
@@ -8181,6 +9357,9 @@ export class Map3DEngine {
     const handleSelectionVisuals = () => {
       if (!this.isActive) return;
       this.syncSelectionRings();
+      if (this.avatarMode) {
+        this.syncBuildPlacementHudUI?.();
+      }
       if (this.simulatorFocusedDeviceId) {
         if (this.deviceManager?.getDeviceById?.(this.simulatorFocusedDeviceId)) {
           this.renderSimulatorInspectorHud(this.simulatorFocusedDeviceId);
@@ -8383,7 +9562,11 @@ export class Map3DEngine {
         }
         return;
       }
-      this.keysPressed.add(e.key.toLowerCase());
+      const lowerKey = e.key.toLowerCase();
+      if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(lowerKey)) {
+        return; // Reserved for device X/Y nudging, never camera/avatar WASD walk
+      }
+      this.keysPressed.add(lowerKey);
       if (e.shiftKey) this.keysPressed.add('shift');
     });
 

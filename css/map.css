@@ -1356,8 +1356,100 @@ body.is-mobile-touch .hud-3d-avatar-bar .avatar-bar-nearest {
 }
 
 .avatar-sim-popover.hidden,
-.avatar-sim-deck.hidden {
+.avatar-sim-deck.hidden,
+.avatar-sim-build-panel.hidden {
   display: none !important;
+}
+
+.avatar-sim-build-panel {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 6px 8px;
+  border-radius: var(--radius-md);
+  border: 1px solid #f59e0b;
+  background: var(--bg-primary);
+}
+
+.build-mode-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.build-mode-grid {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.build-mode-row {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.build-mode-key {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.build-mini-select {
+  height: 22px !important;
+  font-size: 10px !important;
+  padding: 0 5px !important;
+  max-width: 112px !important;
+}
+
+.avatar-sim-chip.is-moveobjects.active {
+  background: #7c3aed;
+  border-color: #7c3aed;
+  color: #ffffff;
+}
+
+.gizmo-nudge-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.gizmo-axis-btn {
+  height: 21px;
+  padding: 0 5px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  color: #ffffff;
+  line-height: 1;
+}
+
+.gizmo-axis-btn.is-x {
+  background: #dc2626;
+  border-color: #b91c1c;
+}
+
+.gizmo-axis-btn.is-y {
+  background: #16a34a;
+  border-color: #15803d;
+}
+
+.gizmo-axis-btn.is-z {
+  background: #2563eb;
+  border-color: #1d4ed8;
+}
+
+.gizmo-axis-btn:hover {
+  filter: brightness(1.12);
 }
 
 .avatar-sim-deck {
@@ -1554,7 +1646,8 @@ body.is-mobile-touch .hud-3d-avatar-bar .avatar-bar-nearest {
 
 .hud-3d-avatar-bar.is-minimized .avatar-hud-pill-btn,
 .hud-3d-avatar-bar.is-minimized .avatar-sim-popover,
-.hud-3d-avatar-bar.is-minimized .avatar-sim-deck {
+.hud-3d-avatar-bar.is-minimized .avatar-sim-deck,
+.hud-3d-avatar-bar.is-minimized .avatar-sim-build-panel {
   display: none !important;
 }
 

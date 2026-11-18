@@ -1671,11 +1671,9 @@ function createNetMapRequestHandler(store, rootDir = ROOT_DIR) {
       const contentType = isManifest
         ? 'application/manifest+json; charset=utf-8'
         : (MIME_TYPES[ext] || 'application/octet-stream');
-      const cacheControl = ext === '.html'
+      const cacheControl = (ext === '.html' || ext === '.css' || ext === '.js' || isManifest || isSw)
         ? 'no-store, no-cache, must-revalidate'
-        : ((ext === '.css' || ext === '.js' || isManifest || isSw)
-            ? 'no-cache, must-revalidate'
-            : 'public, max-age=604800');
+        : 'public, max-age=604800';
       const headers = {
         'Content-Type': contentType,
         'Cache-Control': cacheControl,

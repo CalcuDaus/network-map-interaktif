@@ -7,7 +7,7 @@ import { eventBus } from '../core/event-bus.js';
 import { stateManager } from '../core/state-manager.js';
 import { DEVICE_CATEGORIES, DEVICE_STATUSES, DEVICE_CATALOG } from '../devices/device-library.js';
 import { validateIp, validateMac, validateVlan, getDefaultSpatial3d, FUNDING_SOURCE_PRESETS } from '../devices/device-schema.js';
-import { formatDecimals } from '../utils/helpers.js';
+import { clamp, formatDecimals } from '../utils/helpers.js';
 import { NETWORK_ICON_DEFS, getDeviceIconSvg, getDefaultIconForType } from '../devices/device-icon-factory.js';
 import { metersToPixels, calculateCoverageArea, formatCoverageArea } from '../devices/wireless-coverage.js';
 
@@ -580,8 +580,29 @@ export class PropertiesPanel {
               <input type="date" id="prop-installed" value="${device.installedAt || ''}"
                      style="background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 12px; padding: 5px 8px;">
             </div>
-            <div style="grid-column: span 2; font-size: 11px; color: var(--text-muted); background: var(--bg-secondary); padding: 6px; border-radius: 4px; font-family: var(--font-mono);">
-              Koordinat: X=${formatDecimals(device.position.x, 4)}, Y=${formatDecimals(device.position.y, 4)}
+            <div style="grid-column: span 2; display: flex; flex-direction: column; gap: 6px; background: var(--bg-secondary); padding: 8px; border-radius: 6px; border: 1px solid var(--border-color);">
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+                <span style="font-size: 10.5px; font-weight: 700; color: var(--text-primary);">Posisi X / Y Denah</span>
+                <span id="prop-coord-readout" style="font-size: 10px; color: var(--text-muted); font-family: var(--font-mono);">Koordinat: X=${formatDecimals(device.position.x, 4)}, Y=${formatDecimals(device.position.y, 4)}</span>
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                <label style="display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-muted);">
+                  <span>X:</span>
+                  <input type="number" id="prop-pos-x" min="0" max="1" step="0.004" value="${formatDecimals(device.position.x, 4)}" ${device.layerLocked ? 'disabled' : ''}
+                         style="width: 100%; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 11px; padding: 3px 5px; font-family: var(--font-mono);">
+                </label>
+                <label style="display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-muted);">
+                  <span>Y:</span>
+                  <input type="number" id="prop-pos-y" min="0" max="1" step="0.004" value="${formatDecimals(device.position.y, 4)}" ${device.layerLocked ? 'disabled' : ''}
+                         style="width: 100%; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); font-size: 11px; padding: 3px 5px; font-family: var(--font-mono);">
+                </label>
+              </div>
+              <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;">
+                <button type="button" class="btn btn-secondary btn-sm btn-prop-nudge" data-dx="-0.004" data-dy="0" ${device.layerLocked ? 'disabled' : ''} style="font-size: 10px; padding: 3px 4px; height: auto;" title="Geser kiri (-X) • Arrow Left">◀ -X</button>
+                <button type="button" class="btn btn-secondary btn-sm btn-prop-nudge" data-dx="0" data-dy="-0.004" ${device.layerLocked ? 'disabled' : ''} style="font-size: 10px; padding: 3px 4px; height: auto;" title="Geser atas (-Y) • Arrow Up">▲ -Y</button>
+                <button type="button" class="btn btn-secondary btn-sm btn-prop-nudge" data-dx="0" data-dy="0.004" ${device.layerLocked ? 'disabled' : ''} style="font-size: 10px; padding: 3px 4px; height: auto;" title="Geser bawah (+Y) • Arrow Down">▼ +Y</button>
+                <button type="button" class="btn btn-secondary btn-sm btn-prop-nudge" data-dx="0.004" data-dy="0" ${device.layerLocked ? 'disabled' : ''} style="font-size: 10px; padding: 3px 4px; height: auto;" title="Geser kanan (+X) • Arrow Right">▶ +X</button>
+              </div>
             </div>
             <div style="grid-column: span 2; display: flex; flex-direction: column; gap: 4px;">
               <label style="font-size: 11px; color: var(--text-muted);">Catatan Teknis</label>
@@ -996,6 +1017,32 @@ export class PropertiesPanel {
       this.saveForm(devId);
     });
 
+    // Live X/Y numeric controls & directional nudge buttons
+    const posXInput = document.getElementById('prop-pos-x');
+    const posYInput = document.getElementById('prop-pos-y');
+    const applyPosCoords = (nx, ny) => {
+      if (this.currentDevice?.layerLocked) return;
+      const x = clamp(Number((Number(nx) || 0).toFixed(4)), 0, 1);
+      const y = clamp(Number((Number(ny) || 0).toFixed(4)), 0, 1);
+      this.deviceManager.moveDeviceGroup([{ id: devId, position: { x, y } }], { syncRenderer: true });
+      if (stateManager.getViewMode?.() === '3d') {
+        window.__netmapApp?.map3DEngine?.syncDevices?.();
+        window.__netmapApp?.map3DEngine?.syncCables?.();
+      }
+    };
+    posXInput?.addEventListener('change', (e) => applyPosCoords(e.target.value, this.currentDevice?.position?.y ?? 0.5));
+    posYInput?.addEventListener('change', (e) => applyPosCoords(this.currentDevice?.position?.x ?? 0.5, e.target.value));
+    this.container.querySelectorAll('.btn-prop-nudge').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (this.currentDevice?.layerLocked) return;
+        const dx = parseFloat(btn.getAttribute('data-dx')) || 0;
+        const dy = parseFloat(btn.getAttribute('data-dy')) || 0;
+        const curX = Number(this.currentDevice?.position?.x ?? 0.5);
+        const curY = Number(this.currentDevice?.position?.y ?? 0.5);
+        applyPosCoords(curX + dx, curY + dy);
+      });
+    });
+
     // Live status update immediately on dropdown change
     document.getElementById('prop-status')?.addEventListener('change', (e) => {
       const nextStatus = e.target.value || 'unknown';
@@ -1130,14 +1177,18 @@ export class PropertiesPanel {
       }
     });
 
-    // Update coordinates & 3D rotation display if modified externally (e.g. canvas Rotate tool)
+    // Update coordinates & 3D rotation display if modified externally (e.g. canvas drag or Arrow keys)
     eventBus.on('device:moved', ({ deviceId, position }) => {
-      if (this.currentDevice?.id === deviceId) {
+      if (this.currentDevice?.id === deviceId && position) {
         this.currentDevice.position = position;
-        const coordEl = this.container.querySelector('[style*="Koordinat:"]');
+        const coordEl = document.getElementById('prop-coord-readout');
         if (coordEl) {
           coordEl.textContent = `Koordinat: X=${formatDecimals(position.x, 4)}, Y=${formatDecimals(position.y, 4)}`;
         }
+        const posXEl = document.getElementById('prop-pos-x');
+        const posYEl = document.getElementById('prop-pos-y');
+        if (posXEl && document.activeElement !== posXEl) posXEl.value = formatDecimals(position.x, 4);
+        if (posYEl && document.activeElement !== posYEl) posYEl.value = formatDecimals(position.y, 4);
       }
     });
 

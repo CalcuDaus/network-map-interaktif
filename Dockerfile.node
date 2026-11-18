@@ -17,8 +17,7 @@ RUN npm ci --omit=dev --no-audit --no-fund \
   && mkdir -p /app/data
 
 # Salin seluruh file proyek yang dibutuhkan di production
-COPY index.html ./
-COPY server.js ./
+COPY index.html manifest.json sw.js server.js ./
 COPY sql/ ./sql/
 COPY css/ ./css/
 COPY js/ ./js/

@@ -809,9 +809,7 @@ class NetMapApp {
     document.getElementById('btn-3d-rooms')?.addEventListener('click', () => {
       this.room3DModal?.show();
     });
-    document.getElementById('btn-3d-lock-rooms')?.addEventListener('click', () => {
-      this.map3DEngine?.toggleRoomsLocked();
-    });
+    this.map3DEngine?.bindRoomLockButton?.();
     this.map3DEngine?.syncRoomLockUI?.();
     document.getElementById('btn-3d-objects')?.addEventListener('click', () => {
       this.object3DModal?.toggle();
@@ -851,8 +849,16 @@ class NetMapApp {
 
   setupKeyboardShortcuts() {
     window.addEventListener('keydown', (e) => {
-      // Don't trigger shortcuts if focus is inside an input, textarea, or select
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) {
+      // Don't trigger shortcuts if typing inside a text input, textarea, select, or contentEditable
+      const activeEl = document.activeElement;
+      const tag = activeEl?.tagName;
+      const inputType = tag === 'INPUT' ? String(activeEl.type || 'text').toLowerCase() : '';
+      const isTextInput =
+        tag === 'TEXTAREA' ||
+        tag === 'SELECT' ||
+        Boolean(activeEl?.isContentEditable) ||
+        (tag === 'INPUT' && !['range', 'checkbox', 'radio', 'button', 'color', 'submit', 'reset'].includes(inputType));
+      if (isTextInput) {
         return;
       }
 
@@ -885,11 +891,10 @@ class NetMapApp {
         return;
       }
 
-      // Arrow key nudging for selected device(s) (or selected 3D object/room) in both 2D and 3D mode
+      // Arrow key nudging for selected device(s) (or selected 3D object/room) in both 2D and 3D mode (including Mode Teknisi)
       if (
         ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) &&
         !e.ctrlKey && !e.metaKey &&
-        !this.map3DEngine?.avatarMode &&
         this.nudgeSelectionByArrowKey(e)
       ) {
         e.preventDefault();
@@ -955,7 +960,11 @@ class NetMapApp {
         }
         if (lower === 'b') {
           e.preventDefault();
-          this.map3DEngine?.setNavTool('box');
+          if (this.map3DEngine?.avatarMode || e.shiftKey) {
+            this.map3DEngine?.toggleBuildMode?.();
+          } else {
+            this.map3DEngine?.setNavTool('box');
+          }
           return;
         }
         if (lower === 'p') {
@@ -1017,19 +1026,21 @@ class NetMapApp {
           this.deviceDetailModal?.show(this.deviceManager.selectedDeviceId, 'overview');
           return;
         }
-        if (['w', 'a', 's', 'd', 'q', 'e', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(lower)) {
+        if (['w', 'a', 's', 'd', 'q', 'e'].includes(lower)) {
           return; // Handled smoothly by Map3DEngine walk loop
         }
         if (e.key === 'Escape') {
-          if (this.map3DEngine?.simulatorFocusedDeviceId || this.map3DEngine?.pendingCableSourceId) {
-            if (this.map3DEngine.pendingCableSourceId && !this.map3DEngine.simulatorFocusedDeviceId) {
-              this.map3DEngine.pendingCableSourceId = null;
-              this.map3DEngine.pendingCableSourcePort = '';
-              this.map3DEngine.syncDevices();
-              this.map3DEngine.syncCables();
-            } else {
-              this.map3DEngine.exitSimulatorFocus({ restoreCamera: true });
-            }
+          if (this.map3DEngine?.pendingCableSourceId && !this.map3DEngine.simulatorFocusedDeviceId) {
+            this.map3DEngine.pendingCableSourceId = null;
+            this.map3DEngine.pendingCableSourcePort = '';
+            this.map3DEngine.syncDevices();
+            this.map3DEngine.syncCables();
+            return;
+          }
+          if (this.map3DEngine?.simulatorFocusedDeviceId) {
+            // Exit port focus cleanly while keeping the device selected for arrow-key adjustment
+            this.map3DEngine.exitSimulatorFocus({ restoreCamera: true });
+            return;
           }
           this.deviceManager.deselectDevice();
           this.cableManager.deselectConnection();
@@ -1130,7 +1141,7 @@ class NetMapApp {
     const key = e?.key;
     if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(key)) return false;
 
-    const step = e.shiftKey ? 0.01 : (e.altKey ? 0.0005 : 0.002);
+    const step = e.shiftKey ? 0.015 : (e.altKey ? 0.001 : 0.004);
     let dx = 0;
     let dy = 0;
     if (key === 'ArrowLeft') dx = -step;
@@ -1138,16 +1149,45 @@ class NetMapApp {
     else if (key === 'ArrowUp') dy = -step;
     else if (key === 'ArrowDown') dy = step;
 
-    const selectedDeviceIds = this.deviceManager?.getSelectedDeviceIds?.() || [];
+    let selectedDeviceIds = this.deviceManager?.getSelectedDeviceIds?.() || [];
+    if (selectedDeviceIds.length === 0 && this.deviceManager?.selectedDeviceId) {
+      selectedDeviceIds = [this.deviceManager.selectedDeviceId];
+    }
+
+    const hasSelObjOrRoom = stateManager.getViewMode() === '3d' && (
+      Boolean(stateManager.getSelectedObject3dId?.()) ||
+      Boolean(stateManager.getSelectedRoom3dId?.())
+    );
+
+    if (selectedDeviceIds.length === 0 && !hasSelObjOrRoom) {
+      const fallbackId =
+        this.propertiesPanel?.currentDevice?.id ||
+        this.map3DEngine?.simulatorFocusedDeviceId ||
+        (this.map3DEngine?.avatarMode ? this.map3DEngine?.avatarState?.nearestDeviceId : null) ||
+        this.deviceManager?.lastInteractedDeviceId ||
+        null;
+      if (fallbackId && this.deviceManager?.getDeviceById?.(fallbackId)) {
+        this.deviceManager.selectDevice(fallbackId);
+        selectedDeviceIds = this.deviceManager.getSelectedDeviceIds();
+      }
+    }
+
     if (selectedDeviceIds.length > 0) {
       const moved = this.deviceManager.nudgeSelectedDevices(dx, dy, { syncRenderer: true });
       if (moved.length === 0) {
         this.map3DEngine?.showStatusHint?.('🔒 Perangkat yang dipilih terkunci pada Layer.');
         return true;
       }
+      if (moved.length === 1 && typeof document !== 'undefined') {
+        const coordStatus = document.getElementById('status-coordinates');
+        if (coordStatus) {
+          coordStatus.textContent = `X: ${moved[0].position.x.toFixed(4)}, Y: ${moved[0].position.y.toFixed(4)}`;
+        }
+      }
       if (stateManager.getViewMode() === '3d') {
         this.map3DEngine?.syncDevices?.();
         this.map3DEngine?.syncCables?.();
+        this.map3DEngine?.flashMoveElevationGuide?.(moved.map((d) => d.id));
         const hint = moved.length === 1
           ? `↕️ "${moved[0].name}" (X: ${moved[0].position.x.toFixed(4)}, Y: ${moved[0].position.y.toFixed(4)}) — Shift=cepat • Alt=halus`
           : `↕️ ${moved.length} perangkat digeser (Shift=cepat • Alt=halus)`;
@@ -1161,6 +1201,10 @@ class NetMapApp {
       if (selObjId) {
         const obj = stateManager.getObject3dById?.(selObjId);
         if (!obj) return false;
+        if (this.map3DEngine?.isObject3dLocked?.(obj)) {
+          this.map3DEngine?.showStatusHint?.(`🔒 Objek/Ruangan "${obj.name}" sedang dikunci.`);
+          return true;
+        }
         const prevX = Number(obj.x) || 0;
         const prevY = Number(obj.y) || 0;
         const newX = clamp(Number((prevX + dx).toFixed(4)), 0, 1);
@@ -1261,9 +1305,11 @@ class NetMapApp {
 
     const proto = window.location?.protocol || '';
     if ((proto === 'http:' || proto === 'https:') && 'serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js', { scope: './' }).catch((err) => {
-        console.warn('[NetMap PWA] Service Worker registration skipped:', err?.message || err);
-      });
+      navigator.serviceWorker.register('./sw.js', { scope: './' })
+        .then((reg) => reg?.update?.())
+        .catch((err) => {
+          console.warn('[NetMap PWA] Service Worker registration skipped:', err?.message || err);
+        });
     }
 
     const isInstalledPwa = () => Boolean(
