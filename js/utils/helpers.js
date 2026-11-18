@@ -3,6 +3,20 @@
  */
 
 /**
+ * Escape HTML special characters for safe DOM interpolation
+ * @param {string} str
+ * @returns {string}
+ */
+export function escapeHtml(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
  * Clamp a number between a minimum and maximum value
  * @param {number} val 
  * @param {number} min 

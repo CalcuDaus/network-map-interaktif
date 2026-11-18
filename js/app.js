@@ -38,6 +38,11 @@ import { Object3DModal } from './ui/object-3d-modal.js';
 import { Device3DModelModal } from './ui/device-3d-modal.js';
 import { PortPickerModal } from './ui/port-picker-modal.js';
 import { DeviceDetailModal } from './ui/device-detail-modal.js';
+import { BuildStudioPalette } from './ui/build-studio-palette.js';
+import { NetworkSimulator } from './simulation/network-simulator.js';
+import { PacketTracerPanel } from './ui/packet-tracer-panel.js';
+import { QuestManager } from './gamification/quest-manager.js';
+import { WorkspaceController } from './core/workspace-controller.js';
 import { clamp, isMobileTouchDevice } from './utils/helpers.js';
 
 class NetMapApp {
@@ -72,6 +77,11 @@ class NetMapApp {
     this.exportModal = null;
     this.projectModal = null;
     this.historyManager = null;
+    this.buildStudioPalette = null;
+    this.networkSimulator = null;
+    this.packetTracerPanel = null;
+    this.questManager = null;
+    this.workspaceController = null;
   }
 
   async init() {
@@ -280,6 +290,41 @@ class NetMapApp {
     });
     this.setup3DControls();
 
+    // 14f. Initialize Dual-Workspace Mode (Studio Bangunan 3D vs Lab Engineering Jaringan), Packet Tracer & Gamification
+    const buildStudioContainer = document.getElementById('build-studio-palette-container');
+    if (buildStudioContainer) {
+      this.buildStudioPalette = new BuildStudioPalette({
+        container: buildStudioContainer,
+        map3DEngine: this.map3DEngine,
+        room3DModal: this.room3DModal,
+        object3DModal: this.object3DModal
+      });
+    }
+    this.networkSimulator = new NetworkSimulator({
+      deviceManager: this.deviceManager,
+      cableManager: this.cableManager,
+      map3DEngine: this.map3DEngine
+    });
+    this.packetTracerPanel = new PacketTracerPanel({
+      simulator: this.networkSimulator,
+      deviceManager: this.deviceManager,
+      map3DEngine: this.map3DEngine
+    });
+    this.questManager = new QuestManager({
+      deviceManager: this.deviceManager,
+      cableManager: this.cableManager,
+      map3DEngine: this.map3DEngine,
+      onSwitchWorkspace: (ws) => this.workspaceController?.switchWorkspace(ws, { open3D: ws === 'build' })
+    });
+    this.workspaceController = new WorkspaceController({
+      map3DEngine: this.map3DEngine,
+      buildStudioPalette: this.buildStudioPalette,
+      packetTracerPanel: this.packetTracerPanel,
+      questManager: this.questManager,
+      deviceManager: this.deviceManager
+    });
+    this.workspaceController.init();
+
     // Global reference for modal coordination
     window.__netmapApp = this;
 
@@ -350,6 +395,7 @@ class NetMapApp {
     const runSync = () => this.syncToolbarLayoutFit();
 
     window.addEventListener('resize', runSync);
+    eventBus.on('workspace:changed', () => requestAnimationFrame(runSync));
     if (typeof ResizeObserver !== 'undefined') {
       this._toolbarResizeObserver = new ResizeObserver(() => {
         const w = toolbar.clientWidth;

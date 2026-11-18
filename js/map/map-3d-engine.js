@@ -119,6 +119,10 @@ export class Map3DEngine {
     this.devicesGroup = new THREE.Group();
     this.cablesGroup = new THREE.Group();
     this.coverageGroup = new THREE.Group();
+    this.packetFlowGroup = new THREE.Group();
+    this.packetFlowGroup.name = 'PacketFlow3DGroup';
+    this.activePacketFlows = [];
+    this.workspaceGhostDevices = false;
 
     // Lookup maps
     this.deviceMeshMap = new Map(); // deviceId -> THREE.Group
@@ -334,6 +338,7 @@ export class Map3DEngine {
     this.scene.add(this.coverageGroup);
     this.scene.add(this.devicesGroup);
     this.scene.add(this.cablesGroup);
+    this.scene.add(this.packetFlowGroup);
     this.scene.add(this.remoteAvatarsGroup);
     this.scene.add(this.transformGizmoGroup);
 
@@ -762,6 +767,7 @@ export class Map3DEngine {
         this.publishLocalPresence(false);
       }
       this.updateRemoteAvatars(dt);
+      this.updatePacketFlows3D?.(now);
       this.controls?.update();
       this.syncFppViewmodelTransform();
       this.renderer?.render(this.scene, this.camera);
@@ -2638,9 +2644,11 @@ export class Map3DEngine {
 
     this.raycaster.setFromCamera(this.pointer, this.camera);
 
-    // 1. Raycast Devices & Cables; prioritize foreground Cables/Handles outside draw-cable mode
-    const devHits = this.raycaster.intersectObjects(this.devicesGroup.children, true);
-    const cableHitsPre = stateManager.getMode() !== 'draw-cable'
+    // 1. Raycast Devices & Cables (skipped when Studio Bangunan dims/ghosts devices)
+    const devHits = !this.workspaceGhostDevices
+      ? this.raycaster.intersectObjects(this.devicesGroup.children, true)
+      : [];
+    const cableHitsPre = !this.workspaceGhostDevices && stateManager.getMode() !== 'draw-cable'
       ? this.raycaster.intersectObjects(this.cablesGroup.children, true)
       : [];
 
@@ -2925,8 +2933,12 @@ export class Map3DEngine {
     }
     this.raycaster.setFromCamera(this.pointer, this.camera);
 
-    const devHits = this.raycaster.intersectObjects(this.devicesGroup.children, true);
-    const cableHits = this.raycaster.intersectObjects(this.cablesGroup.children, true);
+    const devHits = !this.workspaceGhostDevices
+      ? this.raycaster.intersectObjects(this.devicesGroup.children, true)
+      : [];
+    const cableHits = !this.workspaceGhostDevices
+      ? this.raycaster.intersectObjects(this.cablesGroup.children, true)
+      : [];
 
     // 1. Prioritize Right-click on foreground 3D Cable / Handle -> Cable Context Menu
     if (cableHits.length > 0 && (
@@ -3004,8 +3016,12 @@ export class Map3DEngine {
     this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
     this.raycaster.setFromCamera(this.pointer, this.camera);
 
-    const devHits = this.raycaster.intersectObjects(this.devicesGroup.children, true);
-    const cableHits = this.raycaster.intersectObjects(this.cablesGroup.children, true);
+    const devHits = !this.workspaceGhostDevices
+      ? this.raycaster.intersectObjects(this.devicesGroup.children, true)
+      : [];
+    const cableHits = !this.workspaceGhostDevices
+      ? this.raycaster.intersectObjects(this.cablesGroup.children, true)
+      : [];
 
     // Priority: Double-click on Cable / Waypoint -> Delete Waypoint or Insert Smart Pen-Tool Point
     if (cableHits.length > 0 && (
@@ -4231,7 +4247,9 @@ export class Map3DEngine {
     this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
     this.raycaster.setFromCamera(this.pointer, this.camera);
 
-    const devHits = this.raycaster.intersectObjects(this.devicesGroup.children, true);
+    const devHits = !this.workspaceGhostDevices
+      ? this.raycaster.intersectObjects(this.devicesGroup.children, true)
+      : [];
     if (devHits.length === 0) {
       // If user clicked a 3D Builder object in Move mode, drag that object (+ mounted devices)
       const objHit = this.findObject3dHit(this.raycaster);
@@ -4689,7 +4707,9 @@ export class Map3DEngine {
     this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
     this.raycaster.setFromCamera(this.pointer, this.camera);
 
-    const devHits = this.raycaster.intersectObjects(this.devicesGroup.children, true);
+    const devHits = !this.workspaceGhostDevices
+      ? this.raycaster.intersectObjects(this.devicesGroup.children, true)
+      : [];
     if (devHits.length === 0) {
       const objHit = this.findObject3dHit(this.raycaster);
       if (objHit?.object3dId) {
@@ -5503,6 +5523,7 @@ export class Map3DEngine {
       }
       this.showStatusHint('Mode Teknisi dimatikan — kembali ke navigasi kamera bebas.');
       this.publishLocalPresence?.(true);
+      eventBus.emit('map3d:avatar-toggled', { active: false });
       return false;
     }
 
@@ -5614,6 +5635,7 @@ export class Map3DEngine {
         ? 'Mode FPP aktif: Gerakkan mouse lihat dari mata teknisi, WASD jalan, Spasi lompat, V ke TPP, F inspeksi.'
         : 'Mode Teknisi aktif: Gerakkan mouse lihat sekeliling, WASD jalan, Shift lari, Spasi lompat, V ke FPP, F inspeksi.'
     );
+    eventBus.emit('map3d:avatar-toggled', { active: true, perspective: this.avatarPerspective });
     return true;
   }
 
@@ -8718,8 +8740,8 @@ export class Map3DEngine {
   syncBuildPlacementHudUI() {
     if (typeof document === 'undefined') return;
     const hudEl = document.getElementById('hud-3d-avatar-bar');
-    if (!hudEl) return;
     const cfg = this.getBuildPlacementConfig();
+    if (hudEl) {
     const isBuildOpen = Boolean(cfg.buildModeEnabled && !this.avatarSimDeckOpen && !this.avatarSimSettingsOpen);
 
     hudEl.querySelector('#btn-avatar-build-mode')?.classList?.toggle('active', Boolean(cfg.buildModeEnabled));
@@ -8761,10 +8783,41 @@ export class Map3DEngine {
     const gizSel = hudEl.querySelector('#select-build-gizmo-mode');
     if (gizSel) gizSel.value = cfg.gizmoMode;
 
-    const badge = hudEl.querySelector('#build-mode-target-badge');
-    if (badge) {
-      const targetDev = this.getTransformGizmoTargetDevice();
-      badge.textContent = targetDev ? `Target: ${targetDev.name}` : 'Target: (Dekati / Klik Perangkat)';
+      const badge = hudEl?.querySelector('#build-mode-target-badge');
+      if (badge) {
+        const targetDev = this.getTransformGizmoTargetDevice();
+        badge.textContent = targetDev ? `Target: ${targetDev.name}` : 'Target: (Dekati / Klik Perangkat)';
+      }
+    }
+
+    // Sync dedicated Studio Bangunan 3D floating bar when rendered in DOM
+    const studioBar = document.getElementById('hud-3d-build-studio');
+    if (studioBar) {
+      const sGrid = studioBar.querySelector('#btn-studio-grid-snap');
+      if (sGrid) {
+        sGrid.classList.toggle('active', cfg.gridSnapEnabled);
+        sGrid.textContent = cfg.gridSnapEnabled ? '⊞ Snap: ON' : '⊡ Bebas';
+      }
+      const sGridSz = studioBar.querySelector('#select-studio-grid-size');
+      if (sGridSz) sGridSz.value = String(cfg.gridSnapMeters);
+      const sAngle = studioBar.querySelector('#select-studio-angle-snap');
+      if (sAngle) sAngle.value = String(cfg.angleSnapDeg);
+      const sCol = studioBar.querySelector('#btn-studio-collision');
+      if (sCol) {
+        sCol.classList.toggle('active', cfg.allowClipping);
+        sCol.textContent = cfg.allowClipping ? '👻 Tembus' : '🧱 Anti-Tabrakan';
+      }
+      const sSurf = studioBar.querySelector('#btn-studio-surface-snap');
+      if (sSurf) {
+        sSurf.classList.toggle('active', cfg.surfaceSnapEnabled);
+      }
+      const sGiz = studioBar.querySelector('#btn-studio-gizmo');
+      if (sGiz) {
+        sGiz.classList.toggle('active', cfg.gizmoEnabled);
+        sGiz.textContent = cfg.gizmoEnabled ? '🎯 Gizmo: ON' : '🎯 Gizmo: OFF';
+      }
+      const sGizMode = studioBar.querySelector('#select-studio-gizmo-mode');
+      if (sGizMode) sGizMode.value = cfg.gizmoMode;
     }
   }
 
@@ -10272,5 +10325,110 @@ export class Map3DEngine {
     window.addEventListener('blur', () => {
       this.keysPressed.clear();
     });
+  }
+
+  /**
+   * Toggle ghost/non-interactive rendering of network devices & cables while in Studio Bangunan 3D.
+   * @param {boolean} enabled
+   */
+  setWorkspaceGhostDevices(enabled) {
+    this.workspaceGhostDevices = Boolean(enabled);
+    if (this.cablesGroup) {
+      this.cablesGroup.visible = !this.workspaceGhostDevices;
+    }
+    if (this.devicesGroup) {
+      this.devicesGroup.traverse((obj) => {
+        if (!obj.isMesh || !obj.material) return;
+        const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+        mats.forEach((m) => {
+          if (!m) return;
+          if (m.userData?._origOpacity === undefined) {
+            m.userData = { ...(m.userData || {}), _origOpacity: m.opacity ?? 1, _origTransparent: Boolean(m.transparent) };
+          }
+          if (this.workspaceGhostDevices) {
+            m.transparent = true;
+            m.opacity = Math.min(0.28, m.userData._origOpacity);
+          } else {
+            m.opacity = m.userData._origOpacity;
+            m.transparent = m.userData._origTransparent;
+          }
+        });
+      });
+    }
+    return this.workspaceGhostDevices;
+  }
+
+  /**
+   * Spawn glowing 3D packet sphere(s) along the world coordinates of a simulated network path.
+   * @param {string[]} deviceIds
+   * @param {{ success?: boolean, durationMs?: number }} [options]
+   * @returns {{ hopCount: number, success: boolean }}
+   */
+  animatePacketPath3D(deviceIds = [], { success = true, durationMs = 1500 } = {}) {
+    if (!Array.isArray(deviceIds) || deviceIds.length === 0) {
+      return { hopCount: 0, success: Boolean(success) };
+    }
+
+    const waypoints = deviceIds
+      .map((id) => {
+        const eff = this.effectivePosMap?.get?.(id);
+        if (eff) return eff.clone().add(new THREE.Vector3(0, 0.35, 0));
+        const dev = this.deviceManager?.getDeviceById?.(id);
+        if (!dev) return null;
+        const w = this.normToWorld?.(dev.position?.x ?? 0.5, dev.position?.y ?? 0.5) || { x: 0, z: 0 };
+        const elev = Number(dev.spatial3d?.elevationMeters) || 0.4;
+        return new THREE.Vector3(w.x, elev + 0.35, w.z);
+      })
+      .filter(Boolean);
+
+    if (waypoints.length === 0) {
+      return { hopCount: 0, success: Boolean(success) };
+    }
+
+    const color = success ? 0x22c55e : 0xef4444;
+    const sphere = new THREE.Mesh(
+      new THREE.SphereGeometry(0.32, 16, 16),
+      new THREE.MeshBasicMaterial({ color })
+    );
+    sphere.position.copy(waypoints[0]);
+    sphere.userData.isPacketProbe = true;
+    this.packetFlowGroup?.add(sphere);
+
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    this.activePacketFlows.push({
+      mesh: sphere,
+      waypoints,
+      startTime: now,
+      duration: Math.max(400, Number(durationMs) || 1500)
+    });
+
+    return { hopCount: waypoints.length, success: Boolean(success) };
+  }
+
+  updatePacketFlows3D(now = typeof performance !== 'undefined' ? performance.now() : Date.now()) {
+    if (!Array.isArray(this.activePacketFlows) || this.activePacketFlows.length === 0) return;
+    const remaining = [];
+    for (const flow of this.activePacketFlows) {
+      const elapsed = now - flow.startTime;
+      const t = Math.min(1, Math.max(0, elapsed / flow.duration));
+      if (t >= 1 || !flow.mesh) {
+        this.packetFlowGroup?.remove(flow.mesh);
+        flow.mesh?.geometry?.dispose?.();
+        flow.mesh?.material?.dispose?.();
+        continue;
+      }
+      const pts = flow.waypoints;
+      if (pts.length === 1) {
+        flow.mesh.position.copy(pts[0]);
+      } else {
+        const segFloat = t * (pts.length - 1);
+        const idx = Math.min(pts.length - 2, Math.floor(segFloat));
+        const alpha = segFloat - idx;
+        flow.mesh.position.lerpVectors(pts[idx], pts[idx + 1], alpha);
+        flow.mesh.position.y += Math.sin(alpha * Math.PI) * 0.45;
+      }
+      remaining.push(flow);
+    }
+    this.activePacketFlows = remaining;
   }
 }

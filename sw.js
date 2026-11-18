@@ -3,7 +3,7 @@
  * Fast app-shell & static asset caching while bypassing live API and WebSocket routes.
  */
 
-const CACHE_NAME = 'netmap-pwa-v7';
+const CACHE_NAME = 'netmap-pwa-v8';
 
 const CORE_ASSETS = [
   './',
