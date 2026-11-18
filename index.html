@@ -8,6 +8,10 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="screen-orientation" content="landscape">
+  <meta name="theme-color" content="#2a7c13">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="assets/icons/icon.svg">
+  <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
   <title>SmartSchool NetMap — Interactive Network Infrastructure Mapper</title>
   <meta name="description" content="Visual interactive network infrastructure mapping and documentation system">
 
@@ -20,9 +24,9 @@
 
   <!-- Core Stylesheets -->
   <link rel="stylesheet" href="css/main.css?v=20261113-3d-sketchup">
-  <link rel="stylesheet" href="css/layout.css?v=20261117-mobile">
-  <link rel="stylesheet" href="css/components.css?v=20261117-mobile">
-  <link rel="stylesheet" href="css/map.css?v=20261117-mobile">
+  <link rel="stylesheet" href="css/layout.css?v=20261118-pwa">
+  <link rel="stylesheet" href="css/components.css?v=20261118-pwa">
+  <link rel="stylesheet" href="css/map.css?v=20261118-pwa">
 
   <!-- Vendor Libraries (Offline-First with CDN fallback) -->
   <script src="assets/vendor/konva.min.js"></script>
@@ -174,6 +178,13 @@
               <span style="flex: 1;">Panduan 3D</span>
               <span id="badge-menu-3d-hints" style="font-size: 10px; opacity: 0.75;">Tampil</span>
             </button>
+            <div style="height: 1px; background: var(--border-color); margin: 3px 4px;"></div>
+            <button id="btn-menu-install-pwa" class="navbar-dropdown-item" role="menuitem"
+              title="Install SmartSchool NetMap sebagai Aplikasi (PWA)">
+              <i data-lucide="download" style="width: 14px; height: 14px; color: var(--accent-blue);"></i>
+              <span style="flex: 1;">Install Aplikasi (PWA)</span>
+              <span id="badge-menu-pwa" style="font-size: 10px; opacity: 0.75;">Siap</span>
+            </button>
           </div>
         </div>
       </div>
@@ -238,6 +249,11 @@
 
         <button id="btn-toggle-right-sidebar" class="btn btn-icon" title="Toggle Panel Properti">
           <i data-lucide="panel-right"></i>
+        </button>
+
+        <button id="btn-install-pwa" class="btn btn-secondary btn-sm" title="Install Aplikasi Web (PWA) ke Perangkat">
+          <i data-lucide="download" style="width: 14px; height: 14px; color: var(--accent-blue);"></i>
+          <span>Install App</span>
         </button>
 
         <!-- Workspace Fullscreen Toggle -->
@@ -400,13 +416,25 @@
             <i data-lucide="layout-grid" style="width: 13px; height: 13px;"></i>
             <span>Menu</span>
           </button>
+          <button type="button" id="btn-mob-install-pwa" class="mob-dock-btn mob-dock-icon" title="Install Aplikasi (PWA)">
+            <i data-lucide="download" style="width: 13px; height: 13px;"></i>
+          </button>
           <button type="button" id="btn-mob-fs-native" class="mob-dock-btn mob-dock-icon" title="Fullscreen &amp; Landscape">
             <i data-lucide="maximize" style="width: 13px; height: 13px;"></i>
           </button>
           <button type="button" id="btn-mob-toggle-toolbar" class="mob-dock-btn mob-dock-icon" title="Tampilkan Toolbar Lengkap">
             <i data-lucide="minimize-2" style="width: 13px; height: 13px;"></i>
           </button>
+          <button type="button" id="btn-mob-hide-dock" class="mob-dock-btn mob-dock-icon" title="Minimize / Sembunyikan Navbar Atas (Layar Penuh Murni)">
+            <i data-lucide="chevron-up" style="width: 14px; height: 14px;"></i>
+          </button>
         </div>
+
+        <!-- Floating Tab to Restore Hidden Mobile Navbar in Pure Fullscreen -->
+        <button type="button" id="btn-mob-show-dock" class="mob-show-dock-tab hidden" style="display: none;" title="Tampilkan Navbar Atas">
+          <i data-lucide="chevron-down" style="width: 13px; height: 13px;"></i>
+          <span>Navbar</span>
+        </button>
 
         <!-- Floating Exit Fullscreen Button (Visible only in Workspace Fullscreen on Desktop) -->
         <button id="btn-exit-workspace-fullscreen" class="workspace-exit-fs-btn"
@@ -781,7 +809,7 @@
   </div>
 
   <!-- Application Bootstrap (Bundled for file:// and http:// compatibility) -->
-  <script src="js/bundle.js?v=20261117-mobile"></script>
+  <script src="js/bundle.js?v=20261118-pwa"></script>
 </body>
 
 </html>

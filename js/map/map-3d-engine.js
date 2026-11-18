@@ -214,6 +214,11 @@ export class Map3DEngine {
     this._lastAvatarHudNearestId = null;
     this._lastAvatarHudDistKey = '';
     this._lastAvatarHudCarryKey = '';
+    let savedHudMin = null;
+    try {
+      savedHudMin = typeof localStorage !== 'undefined' ? localStorage.getItem('netmap_avatar_hud_min_v1') : null;
+    } catch { /* ignore storage restrictions */ }
+    this.avatarHudMinimized = savedHudMin !== null ? savedHudMin === '1' : isMobileTouchDevice();
     this.mobileJoystickState = {
       active: false,
       pointerId: null,
@@ -1247,6 +1252,7 @@ export class Map3DEngine {
       // Floating Label Sprite
       if (this.showLabels) {
         const label = create3DLabelSprite(dev, elev);
+        label.userData = { ...(label.userData || {}), isDeviceLabel: true };
         const labelScaleFactor = Math.max(0.75, Math.min(1.6, this.deviceScaleMultiplier * 0.42));
         label.scale.multiplyScalar(labelScaleFactor);
         label.position.set(0, 1.15 * userModelScale + 0.8, 0);
@@ -4539,6 +4545,18 @@ export class Map3DEngine {
     this.syncAvatarControlsUI();
     this.syncAvatarCrosshair();
     this.findNearestDeviceToAvatar();
+    if (isMobileTouchDevice()) {
+      if (typeof document !== 'undefined') {
+        document.getElementById('hud-3d-controls')?.classList?.add('is-minimized');
+      }
+      let savedHudMin = null;
+      try {
+        savedHudMin = typeof localStorage !== 'undefined' ? localStorage.getItem('netmap_avatar_hud_min_v1') : null;
+      } catch { /* ignore */ }
+      if (savedHudMin === null) {
+        this.avatarHudMinimized = true;
+      }
+    }
     this.renderAvatarHudBar();
     this.bindMobileRobloxControls?.();
     this.syncMobileRobloxControlsVisibility?.();
@@ -4982,6 +5000,9 @@ export class Map3DEngine {
           holder.scale.setScalar(scale);
           holder.rotation.y = deltaRotRad;
           holder.userData.isCarriedByAvatar = true;
+          holder.children?.forEach((c) => {
+            if (c?.userData?.isDeviceLabel) c.visible = false;
+          });
         }
         this.effectivePosMap?.set(item.devId, new THREE.Vector3(anchorWorld.x, stackY + 0.35 * scale, anchorWorld.z));
         if (Array.isArray(item.portInitials) && item.portInitials.length > 0) {
@@ -5141,6 +5162,9 @@ export class Map3DEngine {
           holder.scale.setScalar(1);
           holder.rotation.y = 0;
           holder.userData.isCarriedByAvatar = false;
+          holder.children?.forEach((c) => {
+            if (c?.userData?.isDeviceLabel) c.visible = true;
+          });
         }
         const dev = this.deviceManager?.getDeviceById?.(item.devId);
         if (dev && this.deviceManager) {
@@ -6498,6 +6522,29 @@ export class Map3DEngine {
     }
   }
 
+  setAvatarHudMinimized(minimized, { persist = true } = {}) {
+    this.avatarHudMinimized = Boolean(minimized);
+    if (persist && typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem('netmap_avatar_hud_min_v1', this.avatarHudMinimized ? '1' : '0');
+      } catch { /* ignore storage errors */ }
+    }
+    if (typeof document !== 'undefined') {
+      const hudEl = document.getElementById('hud-3d-avatar-bar');
+      hudEl?.classList?.toggle('is-minimized', this.avatarHudMinimized);
+      const minBtn = document.getElementById('btn-avatar-hud-minimize');
+      if (minBtn) {
+        minBtn.setAttribute('aria-expanded', String(!this.avatarHudMinimized));
+        minBtn.textContent = this.avatarHudMinimized ? '▴ Panel' : '▾ Minimize';
+      }
+    }
+    return this.avatarHudMinimized;
+  }
+
+  toggleAvatarHudMinimized() {
+    return this.setAvatarHudMinimized(!this.avatarHudMinimized);
+  }
+
   renderAvatarHudBar() {
     if (typeof document === 'undefined') return;
     const hudEl = document.getElementById('hud-3d-avatar-bar');
@@ -6514,6 +6561,7 @@ export class Map3DEngine {
     const isFpp = this.avatarPerspective === 'fpp';
     const curScale = resolveEngineAvatarScale(this);
     const curSens = resolveEngineMouseSensitivity(this);
+    const isMin = Boolean(this.avatarHudMinimized);
 
     hudEl.innerHTML = `
       <div class="avatar-bar-status">
@@ -6521,6 +6569,9 @@ export class Map3DEngine {
           <span class="avatar-bar-dot"></span>
           <span>${isFpp ? 'Mode Teknisi (FPP)' : 'Mode Teknisi (TPP)'}</span>
           <span id="avatar-online-peers-slot" class="sim-inspector-badge">Rekan: 0 online</span>
+          <span id="avatar-compact-nearest" class="avatar-compact-nearest">Siap</span>
+          <button type="button" id="btn-avatar-hud-minimize" class="avatar-hud-min-btn" aria-expanded="${!isMin}" title="Minimize / Tampilkan Panel Mode Teknisi">${isMin ? '▴ Panel' : '▾ Minimize'}</button>
+          <button type="button" id="btn-avatar-compact-exit" class="avatar-hud-min-btn is-exit" title="Keluar dari Mode Teknisi">✕ Keluar</button>
         </span>
         <span class="avatar-bar-controls-hint"><strong>WASD</strong> Jalan • <strong>Spasi</strong> Lompat • <strong>E</strong> Angkat • <strong>Q</strong> Taruh / Tempel Dinding • <strong>[ / ]</strong> Putar • <strong>, / .</strong> Mouse • <strong>V</strong> View</span>
       </div>
@@ -6558,12 +6609,23 @@ export class Map3DEngine {
     `;
 
     hudEl.classList.remove('hidden');
+    hudEl.classList.toggle('is-minimized', isMin);
     hudEl.style.display = 'flex';
     this._lastAvatarHudNearestId = null;
     this._lastAvatarHudDistKey = '';
     this._lastAvatarHudCarryKey = '';
 
     hudEl.onpointerdown = (ev) => ev.stopPropagation();
+
+    hudEl.querySelector('#btn-avatar-hud-minimize')?.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      this.toggleAvatarHudMinimized();
+    });
+
+    hudEl.querySelector('#btn-avatar-compact-exit')?.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      this.setAvatarMode(false);
+    });
 
     hudEl.querySelectorAll('[data-avatar-persp]')?.forEach((btn) => {
       btn.addEventListener('click', (ev) => {
@@ -6740,6 +6802,20 @@ export class Map3DEngine {
     this._lastAvatarHudCarryKey = carryKey;
 
     const dev = nearestId ? this.deviceManager?.getDeviceById?.(nearestId) : null;
+    const compactSlot = document.getElementById('avatar-compact-nearest');
+    if (compactSlot) {
+      if (carriedCount > 0) {
+        compactSlot.textContent = wallReadyHit
+          ? `Siap Tempel (${carriedCount})`
+          : `Bawa (${carriedCount})`;
+      } else if (dev) {
+        compactSlot.textContent = `${dev.name} (${distText})`;
+      } else if (pickObjId) {
+        compactSlot.textContent = `${pickName} (${pickDistText})`;
+      } else {
+        compactSlot.textContent = 'Siap';
+      }
+    }
     const devPart = !dev
       ? '<span>Perangkat: --</span>'
       : `<span>Perangkat:</span> <span class="avatar-bar-nearest-name">${this.escapeHudHtml(dev.name)}</span>${dev.network?.ip ? ` <span class="sim-inspector-badge is-ip">${this.escapeHudHtml(dev.network.ip)}</span>` : ''} <span class="sim-inspector-badge">${distText}</span>`;

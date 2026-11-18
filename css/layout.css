@@ -1263,27 +1263,48 @@ body.is-mobile-touch {
   -webkit-tap-highlight-color: transparent;
 }
 
+body.is-mobile-touch #hud-3d-controls,
 body.is-mobile-touch.workspace-fullscreen #hud-3d-controls {
-  top: 48px !important;
+  top: 6px !important;
   left: 8px !important;
   max-width: calc(100vw - 16px) !important;
   flex-wrap: nowrap;
   overflow-x: auto;
   overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
-  padding: 4px 7px;
-  gap: 5px;
+  padding: 3px 6px;
+  gap: 4px;
 }
 
+body.is-mobile-touch.workspace-fullscreen #hud-3d-controls,
+body.is-mobile-touch.workspace-fullscreen #hud-3d-controls.is-minimized {
+  top: 42px !important;
+}
+
+body.is-mobile-touch #hud-3d-controls::-webkit-scrollbar,
 body.is-mobile-touch.workspace-fullscreen #hud-3d-controls::-webkit-scrollbar {
   display: none;
 }
 
 body.is-mobile-touch #hud-3d-controls.is-minimized {
-  top: 48px !important;
+  top: 6px !important;
 }
 
 body.is-mobile-touch #hud-3d-hints {
+  display: none !important;
+}
+
+body.is-mobile-touch .hud-3d-exit-fs-btn {
+  display: none !important;
+}
+
+body.is-mobile-touch.mobile-dock-minimized #mobile-fs-dock,
+body.is-mobile-touch.mobile-dock-minimized #hud-3d-controls {
+  display: none !important;
+}
+
+body.is-mobile-touch #map-viewport:has(#hud-3d-avatar-bar:not(.hidden)) #hud-3d-controls.is-minimized {
   display: none !important;
 }
 

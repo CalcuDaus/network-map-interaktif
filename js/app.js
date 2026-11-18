@@ -333,9 +333,10 @@ class NetMapApp {
     // 19. Restore from IndexedDB or seed initial campus data
     await this.loadOrSeedProject();
 
-    // 20. Final icon rendering, toolbar overflow guard & Mobile Landscape/Fullscreen UX
+    // 20. Final icon rendering, toolbar overflow guard, PWA & Mobile Landscape/Fullscreen UX
     this.renderIcons();
     this.setupToolbarResponsiveFit();
+    this.setupPwaSupport();
     this.setupMobileExperience();
 
     console.info('[NetMap] Phase 5 Application ready. Complete NetMap MVP operational.');
@@ -1142,53 +1143,195 @@ class NetMapApp {
   }
 
   /**
-   * Configure mobile touch UX: auto landscape+fullscreen default, portrait guidance prompt,
-   * drawer behavior, and compact mobile quick-dock mirroring all desktop capabilities.
+   * Initialize Progressive Web App (Service Worker + Install prompt handling).
+   */
+  setupPwaSupport() {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+    if (this._pwaInitialized) return;
+    this._pwaInitialized = true;
+    this._deferredPwaPrompt = null;
+
+    const proto = window.location?.protocol || '';
+    if ((proto === 'http:' || proto === 'https:') && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js', { scope: './' }).catch((err) => {
+        console.warn('[NetMap PWA] Service Worker registration skipped:', err?.message || err);
+      });
+    }
+
+    const isInstalledPwa = () => Boolean(
+      window.matchMedia?.('(display-mode: standalone)')?.matches ||
+      window.matchMedia?.('(display-mode: fullscreen)')?.matches ||
+      window.navigator?.standalone
+    );
+
+    const updatePwaUI = () => {
+      const installed = isInstalledPwa();
+      const canPrompt = Boolean(this._deferredPwaPrompt);
+      const badge = document.getElementById('badge-menu-pwa');
+      if (badge) badge.textContent = installed ? 'Terpasang' : (canPrompt ? 'Install' : 'Siap');
+      const btnTop = document.getElementById('btn-install-pwa');
+      if (btnTop) {
+        btnTop.style.display = installed ? 'none' : '';
+        btnTop.classList.toggle('is-ready', canPrompt);
+      }
+      const btnMob = document.getElementById('btn-mob-install-pwa');
+      if (btnMob) {
+        btnMob.style.display = installed ? 'none' : '';
+        btnMob.classList.toggle('is-ready', canPrompt);
+      }
+    };
+
+    this._updatePwaUI = updatePwaUI;
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      this._deferredPwaPrompt = e;
+      updatePwaUI();
+    });
+
+    window.addEventListener('appinstalled', () => {
+      this._deferredPwaPrompt = null;
+      updatePwaUI();
+      this.map3DEngine?.showStatusHint?.('Aplikasi SmartSchool NetMap berhasil dipasang!');
+    });
+
+    document.getElementById('btn-install-pwa')?.addEventListener('click', () => this.triggerPwaInstall());
+    document.getElementById('btn-menu-install-pwa')?.addEventListener('click', () => {
+      this.toolbar?.closeNavbarDropdowns?.();
+      this.triggerPwaInstall();
+    });
+
+    updatePwaUI();
+  }
+
+  /**
+   * Trigger native PWA install prompt when available, or display quick manual browser guide.
+   */
+  async triggerPwaInstall() {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return { outcome: 'unsupported' };
+    const showPwaToast = (text) => {
+      this.map3DEngine?.showStatusHint?.(text);
+      document.getElementById('netmap-pwa-toast')?.remove();
+      const toast = document.createElement('div');
+      toast.id = 'netmap-pwa-toast';
+      toast.style.cssText = 'position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:9999;max-width:min(420px,calc(100vw - 24px));background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--accent-blue);border-radius:10px;padding:10px 14px;box-shadow:var(--shadow-lg);font-size:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;';
+      toast.innerHTML = `<span>${text}</span><button type="button" style="border:none;background:var(--accent-blue);color:#fff;border-radius:6px;padding:4px 9px;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0;">Tutup</button>`;
+      toast.querySelector('button')?.addEventListener('click', () => toast.remove());
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 5500);
+    };
+
+    const isInstalled = Boolean(
+      window.matchMedia?.('(display-mode: standalone)')?.matches ||
+      window.matchMedia?.('(display-mode: fullscreen)')?.matches ||
+      window.navigator?.standalone
+    );
+    if (isInstalled) {
+      showPwaToast('SmartSchool NetMap sudah terpasang sebagai aplikasi PWA.');
+      return { outcome: 'already-installed' };
+    }
+
+    if (this._deferredPwaPrompt && typeof this._deferredPwaPrompt.prompt === 'function') {
+      try {
+        await this._deferredPwaPrompt.prompt();
+        const choice = await this._deferredPwaPrompt.userChoice;
+        this._deferredPwaPrompt = null;
+        this._updatePwaUI?.();
+        return { outcome: choice?.outcome || 'prompted' };
+      } catch { /* fall through to guide */ }
+    }
+
+    showPwaToast('Install PWA: Buka menu browser (⋮ / Share) lalu pilih "Install Aplikasi" atau "Tambahkan ke Layar Utama".');
+    return { outcome: 'manual-guide' };
+  }
+
+  /**
+   * Minimize / restore the mobile top floating navbar dock for completely unobstructed fullscreen.
+   */
+  setMobileDockMinimized(minimized, { persist = true } = {}) {
+    if (typeof document === 'undefined') return false;
+    this._mobileDockMinimized = Boolean(minimized);
+    if (persist) {
+      try {
+        localStorage.setItem('netmap_mob_dock_min_v1', this._mobileDockMinimized ? '1' : '0');
+      } catch { /* ignore storage restrictions */ }
+    }
+    document.body.classList.toggle('mobile-dock-minimized', this._mobileDockMinimized);
+    document.getElementById('mobile-fs-dock')?.classList.toggle('is-minimized', this._mobileDockMinimized);
+    const showTab = document.getElementById('btn-mob-show-dock');
+    if (showTab) {
+      showTab.classList.toggle('hidden', !this._mobileDockMinimized);
+      showTab.style.display = this._mobileDockMinimized ? 'inline-flex' : 'none';
+    }
+    return this._mobileDockMinimized;
+  }
+
+  toggleMobileDockMinimized() {
+    return this.setMobileDockMinimized(!this._mobileDockMinimized);
+  }
+
+  /**
+   * Configure mobile touch UX: forced landscape+fullscreen mode without confirmation dialog,
+   * drawer behavior, minimizable navbar, and compact mobile quick-dock mirroring all desktop capabilities.
    */
   setupMobileExperience() {
     if (typeof document === 'undefined' || typeof window === 'undefined') return;
-    this._landscapePromptDismissed = false;
+    this._landscapePromptDismissed = true;
     this._mobilePopoversInitialized = false;
 
     const applyMobileEnvironment = (initialBoot = false) => {
       const isMobile = isMobileTouchDevice();
       document.body.classList.toggle('is-mobile-touch', isMobile);
+      const promptEl = document.getElementById('mobile-landscape-prompt');
+      if (promptEl) {
+        promptEl.classList.add('hidden');
+        promptEl.style.display = 'none';
+      }
       if (!isMobile) {
-        const promptEl = document.getElementById('mobile-landscape-prompt');
-        if (promptEl) {
-          promptEl.classList.add('hidden');
-          promptEl.style.display = 'none';
+        document.body.classList.remove('mobile-dock-minimized');
+        const showTab = document.getElementById('btn-mob-show-dock');
+        if (showTab) {
+          showTab.classList.add('hidden');
+          showTab.style.display = 'none';
         }
         return;
       }
 
       if (initialBoot && !this._mobileBootApplied) {
         this._mobileBootApplied = true;
-        // Default sidebars collapsed & workspace full screen on mobile for wide Roblox-like canvas
+        this._mobileExitedFullscreen = false;
+        // Default sidebars collapsed & force workspace fullscreen + landscape immediately without user prompt
         stateManager.toggleSidebar('left', false);
         stateManager.toggleSidebar('right', false);
-        this.toolbar?.setWorkspaceFullscreen?.(true, { requestNative: false });
-        try {
-          const lockRes = screen?.orientation?.lock?.('landscape');
-          if (lockRes && typeof lockRes.catch === 'function') lockRes.catch(() => {});
-        } catch { /* ignore orientation API restrictions before user gesture */ }
+        this.toolbar?.setWorkspaceFullscreen?.(true, { requestNative: true, lockLandscape: true });
 
-        // First user tap upgrades softly to OS fullscreen + landscape lock unless user exited it
-        const upgradeFullscreenOnFirstTap = () => {
-          document.removeEventListener('pointerdown', upgradeFullscreenOnFirstTap, true);
-          if (document.body.classList.contains('workspace-fullscreen') && !document.fullscreenElement && !this._mobileExitedFullscreen) {
+        let savedDockMin = false;
+        try {
+          savedDockMin = localStorage.getItem('netmap_mob_dock_min_v1') === '1';
+        } catch { /* ignore */ }
+        this.setMobileDockMinimized(savedDockMin, { persist: false });
+
+        // Force native fullscreen + landscape lock on touch/pointer gesture whenever browser requires user activation
+        const forceMobileFullscreenOnGesture = () => {
+          if (!document.body.classList.contains('is-mobile-touch') || this._mobileExitedFullscreen) return;
+          if (!document.body.classList.contains('workspace-fullscreen')) {
+            this.toolbar?.setWorkspaceFullscreen?.(true, { requestNative: true, lockLandscape: true });
+            return;
+          }
+          if (!document.fullscreenElement) {
             this.toolbar?.requestNativeFullscreenAndLandscape?.();
+          } else if (window.innerHeight > window.innerWidth) {
+            try {
+              const res = screen?.orientation?.lock?.('landscape');
+              if (res && typeof res.catch === 'function') res.catch(() => {});
+            } catch { /* ignore */ }
           }
         };
-        document.addEventListener('pointerdown', upgradeFullscreenOnFirstTap, { capture: true, passive: true });
-      }
-
-      const promptEl = document.getElementById('mobile-landscape-prompt');
-      if (promptEl) {
-        const isPortraitPhone = (window.innerHeight > window.innerWidth) && Math.min(window.innerWidth, window.innerHeight) <= 760;
-        const showPrompt = Boolean(isPortraitPhone && !this._landscapePromptDismissed);
-        promptEl.classList.toggle('hidden', !showPrompt);
-        promptEl.style.display = showPrompt ? 'flex' : 'none';
+        document.addEventListener('pointerdown', forceMobileFullscreenOnGesture, { capture: true, passive: true });
+        document.addEventListener('touchstart', forceMobileFullscreenOnGesture, { capture: true, passive: true });
+        document.addEventListener('click', forceMobileFullscreenOnGesture, { capture: true, passive: true });
+      } else {
+        this.setMobileDockMinimized(Boolean(this._mobileDockMinimized), { persist: false });
       }
     };
 
@@ -1251,6 +1394,12 @@ class NetMapApp {
         this.authModal?.show('login');
       });
 
+      document.getElementById('btn-mob-install-pwa')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeOverlays();
+        this.triggerPwaInstall();
+      });
+
       document.getElementById('btn-mob-fs-native')?.addEventListener('click', () => {
         this._mobileExitedFullscreen = false;
         this.toolbar?.setWorkspaceFullscreen?.(true, { requestNative: true, lockLandscape: true });
@@ -1262,11 +1411,24 @@ class NetMapApp {
         this.toolbar?.setWorkspaceFullscreen?.(false);
       });
 
+      document.getElementById('btn-mob-hide-dock')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeOverlays();
+        this.setMobileDockMinimized(true);
+      });
+
+      document.getElementById('btn-mob-show-dock')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.setMobileDockMinimized(false);
+      });
+
       document.getElementById('btn-mob-enter-landscape-fs')?.addEventListener('click', () => {
         this._landscapePromptDismissed = true;
-        document.getElementById('mobile-landscape-prompt')?.classList.add('hidden');
         const p = document.getElementById('mobile-landscape-prompt');
-        if (p) p.style.display = 'none';
+        if (p) {
+          p.classList.add('hidden');
+          p.style.display = 'none';
+        }
         this.toolbar?.setWorkspaceFullscreen?.(true, { requestNative: true, lockLandscape: true });
       });
 
@@ -1349,7 +1511,9 @@ class NetMapApp {
           { id: 'mob-act-export', label: 'Ekspor (JSON / PNG / PDF)', fn: () => this.exportModal?.show() },
           { id: 'mob-act-scale', label: 'Kalibrasi Skala Peta', fn: () => this.mapScaleModal?.show() },
           { id: 'mob-act-fit', label: 'Pas-kan Peta ke Layar (Fit)', fn: () => { if (stateManager.getViewMode() === '3d') this.map3DEngine?.zoomExtents(); else this.mapEngine?.interactions?.fitToScreen(24); } },
-          { id: 'mob-act-theme', label: 'Ganti Tema (Terang / Gelap)', fn: () => this.toolbar?.toggleTheme() }
+          { id: 'mob-act-theme', label: 'Ganti Tema (Terang / Gelap)', fn: () => this.toolbar?.toggleTheme() },
+          { id: 'mob-act-pwa', label: 'Install Aplikasi (PWA)', fn: () => this.triggerPwaInstall() },
+          { id: 'mob-act-hide-nav', label: 'Sembunyikan Navbar Atas', fn: () => this.setMobileDockMinimized(true) }
         ];
         pop.innerHTML = actions.map((a) => `<button type="button" class="navbar-dropdown-item" id="${a.id}" style="font-size:11.5px;padding:7px 9px;">${a.label}</button>`).join('');
         document.getElementById('map-viewport')?.appendChild(pop);

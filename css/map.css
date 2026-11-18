@@ -344,12 +344,14 @@
   display: inline-flex;
   align-items: center;
   gap: 3px;
+  flex-shrink: 0;
 }
 
 .hud-3d-divider {
   width: 1px;
   height: 18px;
   background-color: var(--border-color);
+  flex-shrink: 0;
 }
 
 .hud-3d-btn {
@@ -364,6 +366,8 @@
   color: var(--text-secondary);
   font-size: 11px;
   font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
   cursor: pointer;
   transition: background-color var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
 }
@@ -397,6 +401,8 @@
   gap: 6px;
   font-size: 11px;
   font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
   color: var(--text-secondary);
 }
 
@@ -409,6 +415,8 @@
   color: var(--text-primary);
   font-size: 11px;
   font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
   cursor: pointer;
   outline: none;
 }
@@ -1295,6 +1303,200 @@ body.is-mobile-touch .hud-3d-avatar-bar .avatar-bar-nearest {
   padding: 2px 6px;
 }
 
+.mob-show-dock-tab {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  z-index: 69;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.72);
+  color: #fff8cf;
+  border: 1px solid rgba(255, 248, 207, 0.55);
+  font-size: 10.5px;
+  font-weight: 700;
+  display: none;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+
+body.is-mobile-touch.mobile-dock-minimized #btn-mob-show-dock:not(.hidden) {
+  display: inline-flex !important;
+}
+
+.avatar-compact-nearest {
+  display: none;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  max-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.avatar-hud-min-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.avatar-hud-min-btn.is-exit {
+  display: none;
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #dc2626;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.hud-3d-avatar-bar.is-minimized {
+  bottom: 8px;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: calc(100vw - 290px);
+  padding: 4px 10px;
+  border-radius: 999px;
+  gap: 8px;
+}
+
+.hud-3d-avatar-bar.is-minimized .avatar-bar-nearest,
+.hud-3d-avatar-bar.is-minimized .avatar-bar-actions,
+.hud-3d-avatar-bar.is-minimized .avatar-bar-controls-hint,
+.hud-3d-avatar-bar.is-minimized #avatar-online-peers-slot {
+  display: none !important;
+}
+
+.hud-3d-avatar-bar.is-minimized .avatar-compact-nearest,
+.hud-3d-avatar-bar.is-minimized #btn-avatar-compact-exit {
+  display: inline-flex !important;
+  align-items: center;
+}
+
+/* Compact Mobile 3D Controls Typography & Overflow Prevention */
+body.is-mobile-touch #hud-3d-controls .hud-3d-group {
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+body.is-mobile-touch #hud-3d-controls .hud-3d-divider {
+  height: 14px;
+  flex-shrink: 0;
+}
+
+body.is-mobile-touch #hud-3d-controls .hud-3d-btn {
+  height: 22px;
+  padding: 0 5px;
+  font-size: 9.5px;
+  gap: 3px;
+  border-radius: 5px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+body.is-mobile-touch #hud-3d-controls .hud-3d-btn svg {
+  width: 11px !important;
+  height: 11px !important;
+  flex-shrink: 0;
+}
+
+body.is-mobile-touch #hud-3d-controls .hud-3d-inline {
+  font-size: 9.5px;
+  gap: 3px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+body.is-mobile-touch #hud-3d-controls .hud-3d-select {
+  height: 22px;
+  padding: 0 4px;
+  font-size: 9.5px;
+  border-radius: 5px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 920px) {
+  #hud-3d-controls .hud-3d-btn {
+    height: 22px;
+    padding: 0 5px;
+    font-size: 9.5px;
+    gap: 3px;
+  }
+  #hud-3d-controls .hud-3d-inline,
+  #hud-3d-controls .hud-3d-select {
+    font-size: 9.5px;
+  }
+  #hud-3d-controls .hud-3d-select {
+    height: 22px;
+    padding: 0 4px;
+  }
+}
+
+body.is-mobile-touch .hud-3d-avatar-bar .avatar-bar-title {
+  font-size: 10.5px;
+  gap: 4px;
+}
+
+body.is-mobile-touch .hud-3d-avatar-bar .avatar-persp-btn {
+  height: 21px;
+  padding: 0 6px;
+  font-size: 9.5px;
+}
+
+body.is-mobile-touch .hud-3d-avatar-bar .avatar-scale-control {
+  height: 22px;
+  padding: 0 5px;
+  gap: 3px;
+}
+
+body.is-mobile-touch .hud-3d-avatar-bar .avatar-scale-label,
+body.is-mobile-touch .hud-3d-avatar-bar .avatar-scale-value {
+  font-size: 9.5px;
+}
+
+body.is-mobile-touch .hud-3d-avatar-bar .avatar-scale-value {
+  min-width: 30px;
+}
+
+body.is-mobile-touch .hud-3d-avatar-bar .avatar-scale-range {
+  width: 50px;
+}
+
+body.is-mobile-touch .hud-3d-avatar-bar .avatar-teleport-select {
+  height: 22px;
+  max-width: 132px;
+  font-size: 9.5px;
+  padding: 0 5px;
+}
+
+body.is-mobile-touch .hud-3d-avatar-bar .sim-action-btn,
+body.is-mobile-touch .hud-3d-sim-inspector .sim-action-btn {
+  height: 22px;
+  padding: 0 6px;
+  font-size: 9.5px;
+  white-space: nowrap;
+}
+
+body.is-mobile-touch .hud-3d-sim-inspector {
+  width: min(760px, calc(100vw - 24px));
+  padding: 7px 9px;
+  gap: 5px;
+  font-size: 10.5px;
+}
+
 body.is-mobile-touch .map-info-hud {
   left: 10px;
   bottom: 10px;
@@ -1302,22 +1504,19 @@ body.is-mobile-touch .map-info-hud {
   font-size: 10px;
 }
 
+body.is-mobile-touch #map-viewport:has(#mobile-roblox-controls:not(.hidden)) .map-info-hud,
+body.is-mobile-touch.mobile-dock-minimized .map-info-hud {
+  display: none !important;
+}
+
 body.is-mobile-touch .map-hud-controls {
   right: 10px;
   bottom: 10px;
 }
 
-/* Portrait Guidance Overlay */
+/* Portrait Guidance Overlay permanently hidden: mobile automatically forces fullscreen & landscape */
 .mobile-landscape-prompt {
-  position: fixed;
-  inset: 0;
-  z-index: 11000;
-  background: rgba(14, 25, 11, 0.78);
-  backdrop-filter: blur(8px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
+  display: none !important;
 }
 
 .mobile-landscape-prompt.hidden {

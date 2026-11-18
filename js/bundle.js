@@ -3321,14 +3321,28 @@
       const tryLockOrientation = () => {
         try {
           const res = screen?.orientation?.lock?.("landscape");
-          if (res && typeof res.catch === "function") res.catch(() => {
-          });
+          if (res && typeof res.catch === "function") {
+            res.catch(() => {
+              try {
+                const resPrimary = screen?.orientation?.lock?.("landscape-primary");
+                if (resPrimary && typeof resPrimary.catch === "function") resPrimary.catch(() => {
+                });
+              } catch {
+              }
+            });
+          }
         } catch {
         }
       };
       if (!document.fullscreenElement && document.documentElement?.requestFullscreen) {
         try {
-          document.documentElement.requestFullscreen().then(tryLockOrientation).catch(tryLockOrientation);
+          let reqPromise;
+          try {
+            reqPromise = document.documentElement.requestFullscreen({ navigationUI: "hide" });
+          } catch {
+            reqPromise = document.documentElement.requestFullscreen();
+          }
+          Promise.resolve(reqPromise).then(tryLockOrientation).catch(tryLockOrientation);
           return;
         } catch {
         }
@@ -68022,6 +68036,12 @@ void main() {
       this._lastAvatarHudNearestId = null;
       this._lastAvatarHudDistKey = "";
       this._lastAvatarHudCarryKey = "";
+      let savedHudMin = null;
+      try {
+        savedHudMin = typeof localStorage !== "undefined" ? localStorage.getItem("netmap_avatar_hud_min_v1") : null;
+      } catch {
+      }
+      this.avatarHudMinimized = savedHudMin !== null ? savedHudMin === "1" : isMobileTouchDevice();
       this.mobileJoystickState = {
         active: false,
         pointerId: null,
@@ -68937,6 +68957,7 @@ void main() {
         }
         if (this.showLabels) {
           const label = create3DLabelSprite(dev, elev);
+          label.userData = { ...label.userData || {}, isDeviceLabel: true };
           const labelScaleFactor = Math.max(0.75, Math.min(1.6, this.deviceScaleMultiplier * 0.42));
           label.scale.multiplyScalar(labelScaleFactor);
           label.position.set(0, 1.15 * userModelScale + 0.8, 0);
@@ -71848,6 +71869,19 @@ void main() {
       this.syncAvatarControlsUI();
       this.syncAvatarCrosshair();
       this.findNearestDeviceToAvatar();
+      if (isMobileTouchDevice()) {
+        if (typeof document !== "undefined") {
+          document.getElementById("hud-3d-controls")?.classList?.add("is-minimized");
+        }
+        let savedHudMin = null;
+        try {
+          savedHudMin = typeof localStorage !== "undefined" ? localStorage.getItem("netmap_avatar_hud_min_v1") : null;
+        } catch {
+        }
+        if (savedHudMin === null) {
+          this.avatarHudMinimized = true;
+        }
+      }
       this.renderAvatarHudBar();
       this.bindMobileRobloxControls?.();
       this.syncMobileRobloxControlsVisibility?.();
@@ -72224,6 +72258,9 @@ void main() {
             holder.scale.setScalar(scale);
             holder.rotation.y = deltaRotRad;
             holder.userData.isCarriedByAvatar = true;
+            holder.children?.forEach((c) => {
+              if (c?.userData?.isDeviceLabel) c.visible = false;
+            });
           }
           this.effectivePosMap?.set(item.devId, new Vector3(anchorWorld.x, stackY + 0.35 * scale, anchorWorld.z));
           if (Array.isArray(item.portInitials) && item.portInitials.length > 0) {
@@ -72354,6 +72391,9 @@ void main() {
             holder.scale.setScalar(1);
             holder.rotation.y = 0;
             holder.userData.isCarriedByAvatar = false;
+            holder.children?.forEach((c) => {
+              if (c?.userData?.isDeviceLabel) c.visible = true;
+            });
           }
           const dev = this.deviceManager?.getDeviceById?.(item.devId);
           if (dev && this.deviceManager) {
@@ -73559,6 +73599,28 @@ void main() {
         badge.textContent = `Rekan (${count}): ${names}${count > 3 ? "\u2026" : ""}`;
       }
     }
+    setAvatarHudMinimized(minimized, { persist = true } = {}) {
+      this.avatarHudMinimized = Boolean(minimized);
+      if (persist && typeof localStorage !== "undefined") {
+        try {
+          localStorage.setItem("netmap_avatar_hud_min_v1", this.avatarHudMinimized ? "1" : "0");
+        } catch {
+        }
+      }
+      if (typeof document !== "undefined") {
+        const hudEl = document.getElementById("hud-3d-avatar-bar");
+        hudEl?.classList?.toggle("is-minimized", this.avatarHudMinimized);
+        const minBtn = document.getElementById("btn-avatar-hud-minimize");
+        if (minBtn) {
+          minBtn.setAttribute("aria-expanded", String(!this.avatarHudMinimized));
+          minBtn.textContent = this.avatarHudMinimized ? "\u25B4 Panel" : "\u25BE Minimize";
+        }
+      }
+      return this.avatarHudMinimized;
+    }
+    toggleAvatarHudMinimized() {
+      return this.setAvatarHudMinimized(!this.avatarHudMinimized);
+    }
     renderAvatarHudBar() {
       if (typeof document === "undefined") return;
       const hudEl = document.getElementById("hud-3d-avatar-bar");
@@ -73573,12 +73635,16 @@ void main() {
       const isFpp = this.avatarPerspective === "fpp";
       const curScale = resolveEngineAvatarScale(this);
       const curSens = resolveEngineMouseSensitivity(this);
+      const isMin = Boolean(this.avatarHudMinimized);
       hudEl.innerHTML = `
       <div class="avatar-bar-status">
         <span class="avatar-bar-title">
           <span class="avatar-bar-dot"></span>
           <span>${isFpp ? "Mode Teknisi (FPP)" : "Mode Teknisi (TPP)"}</span>
           <span id="avatar-online-peers-slot" class="sim-inspector-badge">Rekan: 0 online</span>
+          <span id="avatar-compact-nearest" class="avatar-compact-nearest">Siap</span>
+          <button type="button" id="btn-avatar-hud-minimize" class="avatar-hud-min-btn" aria-expanded="${!isMin}" title="Minimize / Tampilkan Panel Mode Teknisi">${isMin ? "\u25B4 Panel" : "\u25BE Minimize"}</button>
+          <button type="button" id="btn-avatar-compact-exit" class="avatar-hud-min-btn is-exit" title="Keluar dari Mode Teknisi">\u2715 Keluar</button>
         </span>
         <span class="avatar-bar-controls-hint"><strong>WASD</strong> Jalan \u2022 <strong>Spasi</strong> Lompat \u2022 <strong>E</strong> Angkat \u2022 <strong>Q</strong> Taruh / Tempel Dinding \u2022 <strong>[ / ]</strong> Putar \u2022 <strong>, / .</strong> Mouse \u2022 <strong>V</strong> View</span>
       </div>
@@ -73615,11 +73681,20 @@ void main() {
       </div>
     `;
       hudEl.classList.remove("hidden");
+      hudEl.classList.toggle("is-minimized", isMin);
       hudEl.style.display = "flex";
       this._lastAvatarHudNearestId = null;
       this._lastAvatarHudDistKey = "";
       this._lastAvatarHudCarryKey = "";
       hudEl.onpointerdown = (ev) => ev.stopPropagation();
+      hudEl.querySelector("#btn-avatar-hud-minimize")?.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        this.toggleAvatarHudMinimized();
+      });
+      hudEl.querySelector("#btn-avatar-compact-exit")?.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        this.setAvatarMode(false);
+      });
       hudEl.querySelectorAll("[data-avatar-persp]")?.forEach((btn) => {
         btn.addEventListener("click", (ev) => {
           ev.stopPropagation();
@@ -73766,6 +73841,18 @@ void main() {
       this._lastAvatarHudDistKey = distText;
       this._lastAvatarHudCarryKey = carryKey;
       const dev = nearestId ? this.deviceManager?.getDeviceById?.(nearestId) : null;
+      const compactSlot = document.getElementById("avatar-compact-nearest");
+      if (compactSlot) {
+        if (carriedCount > 0) {
+          compactSlot.textContent = wallReadyHit ? `Siap Tempel (${carriedCount})` : `Bawa (${carriedCount})`;
+        } else if (dev) {
+          compactSlot.textContent = `${dev.name} (${distText})`;
+        } else if (pickObjId) {
+          compactSlot.textContent = `${pickName} (${pickDistText})`;
+        } else {
+          compactSlot.textContent = "Siap";
+        }
+      }
       const devPart = !dev ? "<span>Perangkat: --</span>" : `<span>Perangkat:</span> <span class="avatar-bar-nearest-name">${this.escapeHudHtml(dev.name)}</span>${dev.network?.ip ? ` <span class="sim-inspector-badge is-ip">${this.escapeHudHtml(dev.network.ip)}</span>` : ""} <span class="sim-inspector-badge">${distText}</span>`;
       let carryPart = "";
       if (carriedCount > 0) {
@@ -78138,6 +78225,7 @@ void main() {
       await this.loadOrSeedProject();
       this.renderIcons();
       this.setupToolbarResponsiveFit();
+      this.setupPwaSupport();
       this.setupMobileExperience();
       console.info("[NetMap] Phase 5 Application ready. Complete NetMap MVP operational.");
     }
@@ -78843,49 +78931,175 @@ void main() {
       return false;
     }
     /**
-     * Configure mobile touch UX: auto landscape+fullscreen default, portrait guidance prompt,
-     * drawer behavior, and compact mobile quick-dock mirroring all desktop capabilities.
+     * Initialize Progressive Web App (Service Worker + Install prompt handling).
+     */
+    setupPwaSupport() {
+      if (typeof window === "undefined" || typeof document === "undefined") return;
+      if (this._pwaInitialized) return;
+      this._pwaInitialized = true;
+      this._deferredPwaPrompt = null;
+      const proto = window.location?.protocol || "";
+      if ((proto === "http:" || proto === "https:") && "serviceWorker" in navigator) {
+        navigator.serviceWorker.register("./sw.js", { scope: "./" }).catch((err) => {
+          console.warn("[NetMap PWA] Service Worker registration skipped:", err?.message || err);
+        });
+      }
+      const isInstalledPwa = () => Boolean(
+        window.matchMedia?.("(display-mode: standalone)")?.matches || window.matchMedia?.("(display-mode: fullscreen)")?.matches || window.navigator?.standalone
+      );
+      const updatePwaUI = () => {
+        const installed = isInstalledPwa();
+        const canPrompt = Boolean(this._deferredPwaPrompt);
+        const badge = document.getElementById("badge-menu-pwa");
+        if (badge) badge.textContent = installed ? "Terpasang" : canPrompt ? "Install" : "Siap";
+        const btnTop = document.getElementById("btn-install-pwa");
+        if (btnTop) {
+          btnTop.style.display = installed ? "none" : "";
+          btnTop.classList.toggle("is-ready", canPrompt);
+        }
+        const btnMob = document.getElementById("btn-mob-install-pwa");
+        if (btnMob) {
+          btnMob.style.display = installed ? "none" : "";
+          btnMob.classList.toggle("is-ready", canPrompt);
+        }
+      };
+      this._updatePwaUI = updatePwaUI;
+      window.addEventListener("beforeinstallprompt", (e) => {
+        e.preventDefault();
+        this._deferredPwaPrompt = e;
+        updatePwaUI();
+      });
+      window.addEventListener("appinstalled", () => {
+        this._deferredPwaPrompt = null;
+        updatePwaUI();
+        this.map3DEngine?.showStatusHint?.("Aplikasi SmartSchool NetMap berhasil dipasang!");
+      });
+      document.getElementById("btn-install-pwa")?.addEventListener("click", () => this.triggerPwaInstall());
+      document.getElementById("btn-menu-install-pwa")?.addEventListener("click", () => {
+        this.toolbar?.closeNavbarDropdowns?.();
+        this.triggerPwaInstall();
+      });
+      updatePwaUI();
+    }
+    /**
+     * Trigger native PWA install prompt when available, or display quick manual browser guide.
+     */
+    async triggerPwaInstall() {
+      if (typeof window === "undefined" || typeof document === "undefined") return { outcome: "unsupported" };
+      const showPwaToast = (text) => {
+        this.map3DEngine?.showStatusHint?.(text);
+        document.getElementById("netmap-pwa-toast")?.remove();
+        const toast = document.createElement("div");
+        toast.id = "netmap-pwa-toast";
+        toast.style.cssText = "position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:9999;max-width:min(420px,calc(100vw - 24px));background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--accent-blue);border-radius:10px;padding:10px 14px;box-shadow:var(--shadow-lg);font-size:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;";
+        toast.innerHTML = `<span>${text}</span><button type="button" style="border:none;background:var(--accent-blue);color:#fff;border-radius:6px;padding:4px 9px;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0;">Tutup</button>`;
+        toast.querySelector("button")?.addEventListener("click", () => toast.remove());
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 5500);
+      };
+      const isInstalled = Boolean(
+        window.matchMedia?.("(display-mode: standalone)")?.matches || window.matchMedia?.("(display-mode: fullscreen)")?.matches || window.navigator?.standalone
+      );
+      if (isInstalled) {
+        showPwaToast("SmartSchool NetMap sudah terpasang sebagai aplikasi PWA.");
+        return { outcome: "already-installed" };
+      }
+      if (this._deferredPwaPrompt && typeof this._deferredPwaPrompt.prompt === "function") {
+        try {
+          await this._deferredPwaPrompt.prompt();
+          const choice = await this._deferredPwaPrompt.userChoice;
+          this._deferredPwaPrompt = null;
+          this._updatePwaUI?.();
+          return { outcome: choice?.outcome || "prompted" };
+        } catch {
+        }
+      }
+      showPwaToast('Install PWA: Buka menu browser (\u22EE / Share) lalu pilih "Install Aplikasi" atau "Tambahkan ke Layar Utama".');
+      return { outcome: "manual-guide" };
+    }
+    /**
+     * Minimize / restore the mobile top floating navbar dock for completely unobstructed fullscreen.
+     */
+    setMobileDockMinimized(minimized, { persist = true } = {}) {
+      if (typeof document === "undefined") return false;
+      this._mobileDockMinimized = Boolean(minimized);
+      if (persist) {
+        try {
+          localStorage.setItem("netmap_mob_dock_min_v1", this._mobileDockMinimized ? "1" : "0");
+        } catch {
+        }
+      }
+      document.body.classList.toggle("mobile-dock-minimized", this._mobileDockMinimized);
+      document.getElementById("mobile-fs-dock")?.classList.toggle("is-minimized", this._mobileDockMinimized);
+      const showTab = document.getElementById("btn-mob-show-dock");
+      if (showTab) {
+        showTab.classList.toggle("hidden", !this._mobileDockMinimized);
+        showTab.style.display = this._mobileDockMinimized ? "inline-flex" : "none";
+      }
+      return this._mobileDockMinimized;
+    }
+    toggleMobileDockMinimized() {
+      return this.setMobileDockMinimized(!this._mobileDockMinimized);
+    }
+    /**
+     * Configure mobile touch UX: forced landscape+fullscreen mode without confirmation dialog,
+     * drawer behavior, minimizable navbar, and compact mobile quick-dock mirroring all desktop capabilities.
      */
     setupMobileExperience() {
       if (typeof document === "undefined" || typeof window === "undefined") return;
-      this._landscapePromptDismissed = false;
+      this._landscapePromptDismissed = true;
       this._mobilePopoversInitialized = false;
       const applyMobileEnvironment = (initialBoot = false) => {
         const isMobile = isMobileTouchDevice();
         document.body.classList.toggle("is-mobile-touch", isMobile);
+        const promptEl = document.getElementById("mobile-landscape-prompt");
+        if (promptEl) {
+          promptEl.classList.add("hidden");
+          promptEl.style.display = "none";
+        }
         if (!isMobile) {
-          const promptEl2 = document.getElementById("mobile-landscape-prompt");
-          if (promptEl2) {
-            promptEl2.classList.add("hidden");
-            promptEl2.style.display = "none";
+          document.body.classList.remove("mobile-dock-minimized");
+          const showTab = document.getElementById("btn-mob-show-dock");
+          if (showTab) {
+            showTab.classList.add("hidden");
+            showTab.style.display = "none";
           }
           return;
         }
         if (initialBoot && !this._mobileBootApplied) {
           this._mobileBootApplied = true;
+          this._mobileExitedFullscreen = false;
           stateManager.toggleSidebar("left", false);
           stateManager.toggleSidebar("right", false);
-          this.toolbar?.setWorkspaceFullscreen?.(true, { requestNative: false });
+          this.toolbar?.setWorkspaceFullscreen?.(true, { requestNative: true, lockLandscape: true });
+          let savedDockMin = false;
           try {
-            const lockRes = screen?.orientation?.lock?.("landscape");
-            if (lockRes && typeof lockRes.catch === "function") lockRes.catch(() => {
-            });
+            savedDockMin = localStorage.getItem("netmap_mob_dock_min_v1") === "1";
           } catch {
           }
-          const upgradeFullscreenOnFirstTap = () => {
-            document.removeEventListener("pointerdown", upgradeFullscreenOnFirstTap, true);
-            if (document.body.classList.contains("workspace-fullscreen") && !document.fullscreenElement && !this._mobileExitedFullscreen) {
+          this.setMobileDockMinimized(savedDockMin, { persist: false });
+          const forceMobileFullscreenOnGesture = () => {
+            if (!document.body.classList.contains("is-mobile-touch") || this._mobileExitedFullscreen) return;
+            if (!document.body.classList.contains("workspace-fullscreen")) {
+              this.toolbar?.setWorkspaceFullscreen?.(true, { requestNative: true, lockLandscape: true });
+              return;
+            }
+            if (!document.fullscreenElement) {
               this.toolbar?.requestNativeFullscreenAndLandscape?.();
+            } else if (window.innerHeight > window.innerWidth) {
+              try {
+                const res = screen?.orientation?.lock?.("landscape");
+                if (res && typeof res.catch === "function") res.catch(() => {
+                });
+              } catch {
+              }
             }
           };
-          document.addEventListener("pointerdown", upgradeFullscreenOnFirstTap, { capture: true, passive: true });
-        }
-        const promptEl = document.getElementById("mobile-landscape-prompt");
-        if (promptEl) {
-          const isPortraitPhone = window.innerHeight > window.innerWidth && Math.min(window.innerWidth, window.innerHeight) <= 760;
-          const showPrompt = Boolean(isPortraitPhone && !this._landscapePromptDismissed);
-          promptEl.classList.toggle("hidden", !showPrompt);
-          promptEl.style.display = showPrompt ? "flex" : "none";
+          document.addEventListener("pointerdown", forceMobileFullscreenOnGesture, { capture: true, passive: true });
+          document.addEventListener("touchstart", forceMobileFullscreenOnGesture, { capture: true, passive: true });
+          document.addEventListener("click", forceMobileFullscreenOnGesture, { capture: true, passive: true });
+        } else {
+          this.setMobileDockMinimized(Boolean(this._mobileDockMinimized), { persist: false });
         }
       };
       const bindMobileDock = () => {
@@ -78939,6 +79153,11 @@ void main() {
           closeOverlays();
           this.authModal?.show("login");
         });
+        document.getElementById("btn-mob-install-pwa")?.addEventListener("click", (e) => {
+          e.stopPropagation();
+          closeOverlays();
+          this.triggerPwaInstall();
+        });
         document.getElementById("btn-mob-fs-native")?.addEventListener("click", () => {
           this._mobileExitedFullscreen = false;
           this.toolbar?.setWorkspaceFullscreen?.(true, { requestNative: true, lockLandscape: true });
@@ -78948,11 +79167,22 @@ void main() {
           this._mobileExitedFullscreen = true;
           this.toolbar?.setWorkspaceFullscreen?.(false);
         });
+        document.getElementById("btn-mob-hide-dock")?.addEventListener("click", (e) => {
+          e.stopPropagation();
+          closeOverlays();
+          this.setMobileDockMinimized(true);
+        });
+        document.getElementById("btn-mob-show-dock")?.addEventListener("click", (e) => {
+          e.stopPropagation();
+          this.setMobileDockMinimized(false);
+        });
         document.getElementById("btn-mob-enter-landscape-fs")?.addEventListener("click", () => {
           this._landscapePromptDismissed = true;
-          document.getElementById("mobile-landscape-prompt")?.classList.add("hidden");
           const p = document.getElementById("mobile-landscape-prompt");
-          if (p) p.style.display = "none";
+          if (p) {
+            p.classList.add("hidden");
+            p.style.display = "none";
+          }
           this.toolbar?.setWorkspaceFullscreen?.(true, { requestNative: true, lockLandscape: true });
         });
         document.getElementById("btn-mob-dismiss-landscape")?.addEventListener("click", () => {
@@ -79039,7 +79269,9 @@ void main() {
               if (stateManager.getViewMode() === "3d") this.map3DEngine?.zoomExtents();
               else this.mapEngine?.interactions?.fitToScreen(24);
             } },
-            { id: "mob-act-theme", label: "Ganti Tema (Terang / Gelap)", fn: () => this.toolbar?.toggleTheme() }
+            { id: "mob-act-theme", label: "Ganti Tema (Terang / Gelap)", fn: () => this.toolbar?.toggleTheme() },
+            { id: "mob-act-pwa", label: "Install Aplikasi (PWA)", fn: () => this.triggerPwaInstall() },
+            { id: "mob-act-hide-nav", label: "Sembunyikan Navbar Atas", fn: () => this.setMobileDockMinimized(true) }
           ];
           pop.innerHTML = actions.map((a) => `<button type="button" class="navbar-dropdown-item" id="${a.id}" style="font-size:11.5px;padding:7px 9px;">${a.label}</button>`).join("");
           document.getElementById("map-viewport")?.appendChild(pop);

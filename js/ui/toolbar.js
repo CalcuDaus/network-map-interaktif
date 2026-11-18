@@ -233,13 +233,26 @@ export class Toolbar {
     const tryLockOrientation = () => {
       try {
         const res = screen?.orientation?.lock?.('landscape');
-        if (res && typeof res.catch === 'function') res.catch(() => {});
+        if (res && typeof res.catch === 'function') {
+          res.catch(() => {
+            try {
+              const resPrimary = screen?.orientation?.lock?.('landscape-primary');
+              if (resPrimary && typeof resPrimary.catch === 'function') resPrimary.catch(() => {});
+            } catch { /* ignore */ }
+          });
+        }
       } catch { /* ignore browsers without orientation lock */ }
     };
 
     if (!document.fullscreenElement && document.documentElement?.requestFullscreen) {
       try {
-        document.documentElement.requestFullscreen()
+        let reqPromise;
+        try {
+          reqPromise = document.documentElement.requestFullscreen({ navigationUI: 'hide' });
+        } catch {
+          reqPromise = document.documentElement.requestFullscreen();
+        }
+        Promise.resolve(reqPromise)
           .then(tryLockOrientation)
           .catch(tryLockOrientation);
         return;

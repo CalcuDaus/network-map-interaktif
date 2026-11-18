@@ -43,6 +43,7 @@ const MIME_TYPES = {
   '.css': 'text/css; charset=utf-8',
   '.js': 'application/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
@@ -1665,19 +1666,27 @@ function createNetMapRequestHandler(store, rootDir = ROOT_DIR) {
       }
 
       const ext = path.extname(filePath).toLowerCase();
-      const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+      const isManifest = reqPath === '/manifest.json' || ext === '.webmanifest';
+      const isSw = reqPath === '/sw.js';
+      const contentType = isManifest
+        ? 'application/manifest+json; charset=utf-8'
+        : (MIME_TYPES[ext] || 'application/octet-stream');
       const cacheControl = ext === '.html'
         ? 'no-store, no-cache, must-revalidate'
-        : ((ext === '.css' || ext === '.js')
+        : ((ext === '.css' || ext === '.js' || isManifest || isSw)
             ? 'no-cache, must-revalidate'
             : 'public, max-age=604800');
-      res.writeHead(200, {
+      const headers = {
         'Content-Type': contentType,
         'Cache-Control': cacheControl,
         'X-Content-Type-Options': 'nosniff',
         'X-Frame-Options': 'SAMEORIGIN',
         'Access-Control-Allow-Origin': '*'
-      });
+      };
+      if (isSw) {
+        headers['Service-Worker-Allowed'] = '/';
+      }
+      res.writeHead(200, headers);
       fs.createReadStream(filePath).pipe(res);
     });
   };
