@@ -354,6 +354,12 @@
   flex-shrink: 0;
 }
 
+@media (max-width: 1480px) {
+  .hud-3d-divider {
+    display: none;
+  }
+}
+
 .hud-3d-btn {
   display: inline-flex;
   align-items: center;
@@ -474,6 +480,9 @@
 }
 
 .road-bar-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: 11px;
   font-weight: 700;
   color: var(--accent-green);
@@ -1554,6 +1563,9 @@ body.is-mobile-touch .hud-3d-avatar-bar .avatar-bar-nearest {
 }
 
 .avatar-sim-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   height: 22px;
   padding: 0 7px;
   border-radius: 999px;
@@ -2206,7 +2218,99 @@ body[data-workspace="network"] #avatar-sim-build-panel {
   box-shadow: var(--shadow-lg);
 }
 
+body:not(.is-mobile-touch) #map-viewport:has(#hud-3d-avatar-bar:not(.hidden).is-minimized) .hud-3d-build-studio {
+  bottom: 72px;
+}
+
+body:not(.is-mobile-touch) #map-viewport:has(#hud-3d-avatar-bar:not(.hidden):not(.is-minimized)) .hud-3d-build-studio {
+  display: none !important;
+}
+
+/* Simple House-Flipper Style Prompt Pill below Center Crosshair / Move Hint */
+.hud-3d-houseflipper-tip {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + 26px);
+  transform: translateX(-50%);
+  z-index: 46;
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  max-width: min(640px, calc(100vw - 36px));
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.84);
+  color: #f8fafc;
+  border: 1.5px solid rgba(56, 189, 248, 0.55);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.35);
+  backdrop-filter: blur(8px);
+  font-size: 11.5px;
+  font-weight: 600;
+  pointer-events: auto;
+  user-select: none;
+}
+
+.hud-3d-houseflipper-tip.is-carrying {
+  border-color: rgba(34, 197, 94, 0.85);
+}
+
+.hud-3d-houseflipper-tip.is-orbit-move {
+  top: auto;
+  bottom: 72px;
+}
+
+.hud-3d-houseflipper-tip.hidden {
+  display: none !important;
+}
+
+.hf-tip-name {
+  font-weight: 800;
+  color: #86efac;
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hf-tip-keys {
+  color: #e2e8f0;
+  white-space: nowrap;
+}
+
+.hf-tip-btn {
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: background 0.15s ease, transform 0.12s ease;
+}
+
+.hf-tip-btn:hover {
+  background: rgba(255, 255, 255, 0.26);
+}
+
+.hf-tip-btn.is-primary {
+  background: #16a34a;
+  border-color: #22c55e;
+}
+
+.hf-tip-btn.is-primary:hover {
+  background: #15803d;
+}
+
 .studio-bar-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: 11px;
   font-weight: 800;
   color: #b45309;
@@ -2471,6 +2575,9 @@ body[data-workspace="network"] #avatar-sim-build-panel {
 }
 
 .pt-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 6px 12px;
   border-radius: 8px;
   border: 1px solid var(--border-color);
@@ -2675,6 +2782,9 @@ body[data-workspace="network"] #avatar-sim-build-panel {
 }
 
 .quest-badge-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 4px 10px;
   border-radius: 999px;
   background: rgba(34, 197, 94, 0.14);
@@ -2713,6 +2823,9 @@ body[data-workspace="network"] #avatar-sim-build-panel {
 }
 
 .quest-item-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: 12.5px;
   font-weight: 800;
   color: var(--text-primary);

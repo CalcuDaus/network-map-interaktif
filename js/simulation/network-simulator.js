@@ -157,7 +157,7 @@ export class NetworkSimulator {
       const dst = this.deviceManager?.getDeviceById?.(cab.destination);
       if (!src || !dst || src.status === 'offline' || dst.status === 'offline') return;
 
-      const label = cab.name || `${cab.details?.portSource || 'port'} ↔ ${cab.details?.portDestination || 'port'}`;
+      const label = cab.name || `${cab.details?.portSource || 'port'} <-> ${cab.details?.portDestination || 'port'}`;
       graph.get(src.id)?.push({
         neighborId: dst.id,
         medium: cab.type || 'utp',
@@ -398,7 +398,7 @@ export class NetworkSimulator {
       ttl,
       osiLayers: {
         l1: `UP — ${pathRes.edges.length} segmen (${hopMedia})`,
-        l2: `FORWARDED — VLAN ${srcVlan}${dstVlan !== srcVlan ? ` → Routed → VLAN ${dstVlan}` : ''} (${hopDevices.map((d) => d.network?.mac || d.name).join(' ➔ ')})`,
+        l2: `FORWARDED — VLAN ${srcVlan}${dstVlan !== srcVlan ? ` -> Routed -> VLAN ${dstVlan}` : ''} (${hopDevices.map((d) => d.network?.mac || d.name).join(' -> ')})`,
         l3: `ICMP Echo Reply from ${dstNet.ip}: bytes=32 time=${latencyMs}ms TTL=${ttl}`
       },
       summary: `Reply from ${dstNet.ip}: time=${latencyMs}ms TTL=${ttl} (${pathRes.nodeIds.length} node)`

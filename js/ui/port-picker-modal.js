@@ -6,6 +6,7 @@
 
 import { eventBus } from '../core/event-bus.js';
 import { getDefaultDevicePorts } from '../devices/device-schema.js';
+import { uiIcon } from '../utils/helpers.js';
 
 export class PortPickerModal {
   /**
@@ -104,7 +105,7 @@ export class PortPickerModal {
         <!-- Footer -->
         <div style="height: 54px; border-top: 1px solid var(--border-color, #e5cca0); background: var(--bg-tertiary, #f2dac8); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; flex-shrink: 0;">
           <button type="button" id="btn-ppm-auto" class="btn btn-secondary btn-sm" title="Pilih otomatis port kosong pertama di kedua perangkat">
-            <span>⚡ Auto-Pilih Port Kosong</span>
+            ${uiIcon('zap', 12)} <span>Auto-Pilih Port Kosong</span>
           </button>
           <div style="display: flex; align-items: center; gap: 8px;">
             <button type="button" id="btn-ppm-skip" class="btn btn-secondary btn-sm">Simpan Tanpa Ganti</button>
@@ -268,7 +269,7 @@ export class PortPickerModal {
             <span style="font-size: 9.5px; font-weight: 700; text-transform: uppercase; padding: 1px 5px; border-radius: 4px; background: ${badgeColor}22; color: ${badgeColor};">${p.type || 'rj45'} • ${p.speed || '1G'}</span>
           </div>
           <div style="font-size: 10px; color: var(--text-muted); font-family: var(--font-mono); white-space: nowrap; margin-left: 6px;">
-            ${isOccupied ? `Terpakai ➔ ${occ.peerName}` : coordText}
+            ${isOccupied ? `Terpakai -> ${occ.peerName}` : coordText}
           </div>
         </button>
       `;
@@ -353,7 +354,7 @@ export class PortPickerModal {
     }
 
     if (portSource && portDestination && srcDev && dstDev) {
-      updates.name = `${srcDev.name} [${portSource}] ➔ ${dstDev.name} [${portDestination}]`;
+      updates.name = `${srcDev.name} [${portSource}] -> ${dstDev.name} [${portDestination}]`;
     }
 
     this.cableManager.updateConnection(cable.id, updates);

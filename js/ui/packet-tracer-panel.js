@@ -6,7 +6,7 @@
 
 import { eventBus } from '../core/event-bus.js';
 import { stateManager } from '../core/state-manager.js';
-import { escapeHtml } from '../utils/helpers.js';
+import { escapeHtml, uiIcon } from '../utils/helpers.js';
 
 export class PacketTracerPanel {
   /**
@@ -38,18 +38,18 @@ export class PacketTracerPanel {
       <div class="modal-card packet-tracer-card">
         <div class="modal-header">
           <div style="display:flex;align-items:center;gap:8px;">
-            <span>⚡</span>
+            ${uiIcon('zap', 18)}
             <div>
               <div style="font-size:14px;font-weight:700;color:var(--text-primary);">Simulasi Jaringan &amp; Terminal CLI (Packet Tracer)</div>
               <div style="font-size:11px;color:var(--text-muted);">Uji Ping/Traceroute, inspeksi OSI Layer 1–3, &amp; konfigurasi Cisco IOS / MikroTik RouterOS</div>
             </div>
           </div>
-          <button type="button" id="btn-pt-close" class="btn btn-icon btn-sm" title="Tutup">✕</button>
+          <button type="button" id="btn-pt-close" class="btn btn-icon btn-sm" title="Tutup">${uiIcon('x', 14)}</button>
         </div>
 
         <div class="pt-tab-bar" role="tablist">
-          <button type="button" class="pt-tab-btn active" data-pt-tab="sim">⚡ Simulasi Paket &amp; PDU (OSI L1–L3)</button>
-          <button type="button" class="pt-tab-btn" data-pt-tab="cli">💻 Terminal CLI (Cisco IOS &amp; MikroTik)</button>
+          <button type="button" class="pt-tab-btn active" data-pt-tab="sim">${uiIcon('zap', 13)} Simulasi Paket &amp; PDU (OSI L1–L3)</button>
+          <button type="button" class="pt-tab-btn" data-pt-tab="cli">${uiIcon('terminal', 13)} Terminal CLI (Cisco IOS &amp; MikroTik)</button>
         </div>
 
         <div id="pt-panel-sim" class="pt-tab-panel">
@@ -64,8 +64,8 @@ export class PacketTracerPanel {
             </label>
           </div>
           <div class="pt-sim-actions">
-            <button type="button" id="btn-pt-run-ping" class="btn btn-primary btn-sm">▶ Kirim Paket Ping (Animasi 3D)</button>
-            <button type="button" id="btn-pt-run-trace" class="btn btn-secondary btn-sm">🧭 Traceroute</button>
+            <button type="button" id="btn-pt-run-ping" class="btn btn-primary btn-sm">${uiIcon('play', 12)} Kirim Paket Ping (Animasi 3D)</button>
+            <button type="button" id="btn-pt-run-trace" class="btn btn-secondary btn-sm">${uiIcon('compass', 12)} Traceroute</button>
           </div>
           <div id="pt-sim-result" class="pt-sim-result">
             Pilih perangkat sumber &amp; tujuan lalu klik <strong>Kirim Paket Ping</strong> untuk melihat rute fisik &amp; PDU OSI Layer 1–3.
@@ -246,7 +246,7 @@ export class PacketTracerPanel {
     const hopNames = (res.hops || []).map((id) => {
       const d = this.deviceManager?.getDeviceById?.(id);
       return `<span class="pt-hop-pill">${escapeHtml(d?.name || id)}</span>`;
-    }).join(' ➔ ');
+    }).join(' -&gt; ');
 
     const traceHtml = showTrace && res.traceHops?.length
       ? `<div class="pt-pdu-row"><strong>Hops Traceroute:</strong><br>${res.traceHops.map((h) => `#${h.hopIndex} ${escapeHtml(h.deviceName)} (${escapeHtml(h.ip)}) — ${h.rttMs} ms`).join('<br>')}</div>`
@@ -254,7 +254,7 @@ export class PacketTracerPanel {
 
     box.innerHTML = `
       <div class="pt-status-banner ${res.success ? 'is-ok' : 'is-fail'}">
-        <span>${res.success ? '✅ PING BERHASIL' : '❌ PING GAGAL'}</span>
+        <span style="display:inline-flex;align-items:center;gap:5px;">${res.success ? `${uiIcon('check', 13)} PING BERHASIL` : `${uiIcon('x', 13)} PING GAGAL`}</span>
         <span>${escapeHtml(res.summary || res.reason || '')}</span>
       </div>
       ${hopNames ? `<div class="pt-hops-row">${hopNames}</div>` : ''}

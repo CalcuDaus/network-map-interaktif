@@ -11,7 +11,7 @@ import {
   createBuildingRoomPresetData,
   getRoomMinDimensions
 } from '../map/map-3d-models.js';
-import { clamp, generateId } from '../utils/helpers.js';
+import { clamp, generateId, uiIcon } from '../utils/helpers.js';
 
 export class Room3DModal {
   /**
@@ -164,7 +164,7 @@ export class Room3DModal {
 
             <label style="display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; color: var(--text-primary); cursor: pointer;">
               <input type="checkbox" id="r3d-locked">
-              <span>🔒 Kunci posisi ruangan ini (tidak ikut tergeser saat klik perangkat)</span>
+              <span>Kunci posisi ruangan ini (tidak ikut tergeser saat klik perangkat)</span>
             </label>
 
             <!-- Custom .GLB/.GLTF Room Model Upload -->
@@ -226,7 +226,7 @@ export class Room3DModal {
             <div style="background: var(--bg-primary, #fff8cf); border: 1px solid var(--border-color, #e5cca0); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px; flex: 1;">
               <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap;">
                 <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--accent-blue, #2a7c13);">Daftar Ruangan 3D Tersimpan</span>
-                <button type="button" id="btn-r3d-lock-all" class="btn btn-secondary btn-sm" style="font-size: 10.5px; padding: 3px 8px;" title="Kunci atau buka kunci posisi semua ruangan 3D">🔓 Kunci Semua</button>
+                <button type="button" id="btn-r3d-lock-all" class="btn btn-secondary btn-sm" style="font-size: 10.5px; padding: 3px 8px;" title="Kunci atau buka kunci posisi semua ruangan 3D">${uiIcon('unlock', 12)} Kunci Semua</button>
               </div>
               <div id="r3d-list-container" style="display: flex; flex-direction: column; gap: 6px; max-height: 190px; overflow-y: auto;"></div>
             </div>
@@ -393,7 +393,7 @@ export class Room3DModal {
     if (!btn) return;
     const locked = Boolean(this.map3DEngine?.roomsLocked);
     btn.className = `btn btn-sm ${locked ? 'btn-primary' : 'btn-secondary'}`;
-    btn.textContent = locked ? '🔒 Semua Terkunci (Klik Buka)' : '🔓 Kunci Semua Ruangan';
+    btn.innerHTML = locked ? `${uiIcon('lock', 12)} Semua Terkunci (Klik Buka)` : `${uiIcon('unlock', 12)} Kunci Semua Ruangan`;
   }
 
   getViewportCenterNorm() {
@@ -587,7 +587,7 @@ export class Room3DModal {
     stateManager.setRooms3d(existing);
     stateManager.selectRoom3d?.(roomData.id);
     this.map3DEngine?.showStatusHint?.(
-      `🏠 Ruangan "${roomData.name}" tersimpan — Klik "Geser" atau pakai tool Move (M) / handle oranye di kanvas 3D untuk memindahkannya.`
+      `Ruangan "${roomData.name}" tersimpan — Klik "Geser" atau pakai tool Move (M) / handle oranye di kanvas 3D untuk memindahkannya.`
     );
     this.renderRoomList();
     this.resetForm();
@@ -620,15 +620,15 @@ export class Room3DModal {
       return `
       <div style="background: var(--bg-secondary, #fbe6c2); border: 1px solid ${isLocked ? '#d97706' : 'var(--border-color)'}; border-radius: 6px; padding: 8px 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
         <div style="min-width: 0;">
-          <div style="font-size: 12px; font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-            ${isLocked ? '🔒 ' : ''}${r.name}
+          <div style="font-size: 12px; font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 4px;">
+            ${isLocked ? uiIcon('lock', 11) : ''}${r.name}
           </div>
           <div style="font-size: 10px; color: var(--text-muted); font-family: var(--font-mono);">
             ${r.widthMeters}x${r.depthMeters}x${r.heightMeters}m • ${scalePct}% • ${rotDeg}°${r.customModelUrl ? ' • GLB' : ''}${isLocked ? ' • Terkunci' : ''}
           </div>
         </div>
         <div style="display: flex; gap: 4px; flex-shrink: 0; flex-wrap: wrap;">
-          <button type="button" class="btn ${roomSelfLocked ? 'btn-primary' : 'btn-secondary'} btn-sm btn-r3d-lock" data-id="${r.id}" style="font-size: 10px; padding: 2px 6px;" title="${roomSelfLocked ? 'Buka kunci ruangan ini' : 'Kunci ruangan ini agar tidak tergeser'}">${roomSelfLocked ? '🔒' : '🔓'}</button>
+          <button type="button" class="btn ${roomSelfLocked ? 'btn-primary' : 'btn-secondary'} btn-sm btn-r3d-lock" data-id="${r.id}" style="font-size: 10px; padding: 2px 6px;" title="${roomSelfLocked ? 'Buka kunci ruangan ini' : 'Kunci ruangan ini agar tidak tergeser'}">${uiIcon(roomSelfLocked ? 'lock' : 'unlock', 11)}</button>
           <button type="button" class="btn btn-secondary btn-sm btn-r3d-scale-step" data-id="${r.id}" data-factor="0.9" ${disabledAttr} title="Perkecil skala -10%">-</button>
           <button type="button" class="btn btn-secondary btn-sm btn-r3d-scale-step" data-id="${r.id}" data-factor="1.1" ${disabledAttr} title="Perbesar skala +10%">+</button>
           <button type="button" class="btn btn-primary btn-sm btn-r3d-move" data-id="${r.id}" ${moveDisabledAttr} title="Tutup modal dan langsung geser ruangan di kanvas 3D">Geser</button>
@@ -675,7 +675,7 @@ export class Room3DModal {
         this.map3DEngine?.setNavTool?.('move');
         this.map3DEngine?.focusOnRoom3d?.(room.id);
         this.map3DEngine?.showStatusHint?.(
-          `🏠 Seret ruangan "${room.name}" langsung di kanvas 3D untuk memindahkannya (M = Geser, R = Putar, [ / ] = Putar 15°).`
+          `Seret ruangan "${room.name}" langsung di kanvas 3D untuk memindahkannya (M = Geser, R = Putar, [ / ] = Putar 15°).`
         );
       });
     });

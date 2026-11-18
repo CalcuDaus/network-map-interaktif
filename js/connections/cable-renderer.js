@@ -253,7 +253,7 @@ export class CableRenderer {
     const cableLen = Number(cable.length) || 0;
     const isOverLimit = mediaType === 'twisted-pair' && (cableLen > 100);
     const labelText = isOverLimit 
-      ? `⚠️ ${cableLen.toFixed(1)}m` 
+      ? `[!] ${cableLen.toFixed(1)}m` 
       : `${cableLen.toFixed(1)}m`;
 
     let badge = this.labelMap.get(cable.id);

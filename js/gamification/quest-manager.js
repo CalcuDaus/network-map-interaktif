@@ -5,7 +5,7 @@
 
 import { eventBus } from '../core/event-bus.js';
 import { stateManager } from '../core/state-manager.js';
-import { escapeHtml } from '../utils/helpers.js';
+import { escapeHtml, uiIcon } from '../utils/helpers.js';
 
 const GAMIFICATION_STORAGE_KEY = 'netmap_gamification_v1';
 
@@ -16,7 +16,7 @@ export const BUILTIN_QUESTS = [
     description: 'Buka Studio Bangunan, pasang minimal 2 gedung/properti 3D dan bangun 1 jalur jalan 3D kampus.',
     workspace: 'build',
     xp: 150,
-    badge: '🏗️ Arsitek Kampus',
+    badge: 'Arsitek Kampus',
     check: ({ stateManager: sm }) => {
       const rooms = sm.getRooms3d().length;
       const roads = sm.getRoads3d().length;
@@ -32,7 +32,7 @@ export const BUILTIN_QUESTS = [
     description: 'Di Lab Jaringan, pasang minimal 3 perangkat jaringan dan hubungkan minimal 2 segmen kabel.',
     workspace: 'network',
     xp: 200,
-    badge: '🔌 Teknisi Backbone',
+    badge: 'Teknisi Backbone',
     check: ({ deviceManager: dm, cableManager: cm }) => {
       const devs = dm?.getAllDevices?.().length || 0;
       const cables = cm?.getAllConnections?.().length || 0;
@@ -48,7 +48,7 @@ export const BUILTIN_QUESTS = [
     description: 'Gunakan Simulasi & CLI untuk mengirim paket Ping antar perangkat hingga status REPLY berhasil.',
     workspace: 'network',
     xp: 250,
-    badge: '📡 Master Packet Tracer',
+    badge: 'Master Packet Tracer',
     check: ({ progress }) => {
       const ok = Boolean(progress.pingSucceeded);
       return {
@@ -63,7 +63,7 @@ export const BUILTIN_QUESTS = [
     description: 'Aktifkan karakter avatar 3D (TPP/FPP) untuk menjelajahi kampus atau memeriksa port perangkat.',
     workspace: 'any',
     xp: 150,
-    badge: '🕶️ Explorer Roblox',
+    badge: 'Explorer Roblox',
     check: ({ progress }) => {
       const ok = Boolean(progress.avatarVisited);
       return {
@@ -211,7 +211,7 @@ export class QuestManager {
       });
       const top = newlyCompleted[0];
       this.map3DEngine?.showStatusHint?.(
-        `🏆 Misi Selesai: "${top.title}" (+${top.xp} XP, Lencana ${top.badge})!`
+        `Misi Selesai: "${top.title}" (+${top.xp} XP, Lencana ${top.badge})!`
       );
     }
 
@@ -245,13 +245,13 @@ export class QuestManager {
       <div class="modal-card quest-modal-card">
         <div class="modal-header">
           <div style="display:flex;align-items:center;gap:8px;">
-            <span>🎯</span>
+            ${uiIcon('award', 18)}
             <div>
               <div style="font-size:14px;font-weight:700;color:var(--text-primary);">Misi Belajar, XP &amp; Lencana Roblox</div>
               <div style="font-size:11px;color:var(--text-muted);">Selesaikan misi Studio Bangunan &amp; Lab Jaringan untuk menaikkan Level Teknisi</div>
             </div>
           </div>
-          <button type="button" id="btn-quest-close" class="btn btn-icon btn-sm" title="Tutup">✕</button>
+          <button type="button" id="btn-quest-close" class="btn btn-icon btn-sm" title="Tutup">${uiIcon('x', 14)}</button>
         </div>
         <div id="quest-summary-banner" class="quest-summary-banner"></div>
         <div id="quest-badges-strip" class="quest-badges-strip"></div>
@@ -290,7 +290,7 @@ export class QuestManager {
     if (badgeStrip) {
       badgeStrip.innerHTML = this.profile.badges.length === 0
         ? '<span style="font-size:11px;color:var(--text-muted);">Belum ada lencana terbuka — selesaikan misi pertamamu!</span>'
-        : this.profile.badges.map((b) => `<span class="quest-badge-chip">${escapeHtml(b)}</span>`).join('');
+        : this.profile.badges.map((b) => `<span class="quest-badge-chip">${uiIcon('award', 11)} ${escapeHtml(b)}</span>`).join('');
     }
 
     const listEl = this.modalEl.querySelector('#quest-cards-list');
@@ -298,7 +298,7 @@ export class QuestManager {
       listEl.innerHTML = evaluated.map((q) => `
         <div class="quest-item-card ${q.completed ? 'is-done' : ''}">
           <div class="quest-item-head">
-            <span class="quest-item-title">${q.completed ? '✅' : '🎯'} ${escapeHtml(q.title)}</span>
+            <span class="quest-item-title">${q.completed ? uiIcon('check', 13) : uiIcon('target', 13)} ${escapeHtml(q.title)}</span>
             <span class="quest-item-xp">+${q.xp} XP</span>
           </div>
           <div class="quest-item-desc">${escapeHtml(q.description)}</div>

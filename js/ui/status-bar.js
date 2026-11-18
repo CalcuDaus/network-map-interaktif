@@ -48,7 +48,7 @@ export class StatusBar {
     const natW = state.project.map.naturalWidth || 1024;
     const mPerPx = savedScale / natW;
     if (this.scaleText) {
-      this.scaleText.textContent = `📐 Skala: ${savedScale}m (1px = ${mPerPx.toFixed(2)}m)`;
+      this.scaleText.textContent = `Skala: ${savedScale}m (1px = ${mPerPx.toFixed(2)}m)`;
     }
   }
 
@@ -80,7 +80,7 @@ export class StatusBar {
     // Scale calibrated event
     eventBus.on('map:scale-calibrated', ({ mapWidthMeters, metersPerPixel }) => {
       if (this.scaleText) {
-        this.scaleText.textContent = `📐 Skala: ${mapWidthMeters}m (1px = ${metersPerPixel.toFixed(2)}m)`;
+        this.scaleText.textContent = `Skala: ${mapWidthMeters}m (1px = ${metersPerPixel.toFixed(2)}m)`;
       }
     });
 
@@ -114,7 +114,7 @@ export class StatusBar {
       } catch (e) {}
       if (this.scaleText && width > 0) {
         const mPerPx = savedScale / width;
-        this.scaleText.textContent = `📐 Skala: ${savedScale}m (1px = ${mPerPx.toFixed(2)}m)`;
+        this.scaleText.textContent = `Skala: ${savedScale}m (1px = ${mPerPx.toFixed(2)}m)`;
       }
     });
   }

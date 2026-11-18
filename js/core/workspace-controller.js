@@ -6,7 +6,7 @@
 
 import { eventBus } from './event-bus.js';
 import { stateManager } from './state-manager.js';
-import { generateId } from '../utils/helpers.js';
+import { generateId, uiIcon } from '../utils/helpers.js';
 
 const ONBOARDING_DISMISSED_KEY = 'netmap_workspace_onboarding_seen_v1';
 
@@ -113,7 +113,7 @@ export class WorkspaceController {
       this.map3DEngine?.setWorkspaceGhostDevices?.(true);
       if (!silent) {
         this.map3DEngine?.showStatusHint?.(
-          '🏗️ Studio Bangunan 3D aktif — Tambah/geser/putar gedung, fasilitas & jalan sekolah. Perangkat jaringan digelapkan.'
+          'Studio Bangunan 3D aktif — Tambah/geser/putar gedung, fasilitas & jalan sekolah. Perangkat jaringan digelapkan.'
         );
       }
     } else {
@@ -122,7 +122,7 @@ export class WorkspaceController {
       this.map3DEngine?.setWorkspaceGhostDevices?.(false);
       if (!silent) {
         this.map3DEngine?.showStatusHint?.(
-          '🌐 Lab Jaringan (Packet Tracer) aktif — Bangunan terkunci otomatis; fokus pasang perangkat, kabel, CLI & Ping.'
+          'Lab Jaringan (Packet Tracer) aktif — Bangunan terkunci otomatis; fokus pasang perangkat, kabel, CLI & Ping.'
         );
       }
     }
@@ -155,6 +155,8 @@ export class WorkspaceController {
     const buildPalette = document.getElementById('build-studio-palette-container');
     if (devPalette) devPalette.style.display = isBuild ? 'none' : '';
     if (buildPalette) buildPalette.style.display = isBuild ? 'block' : 'none';
+    const leftScroll = document.querySelector?.('.sidebar-left .sidebar-content');
+    if (leftScroll) leftScroll.scrollTop = 0;
 
     const buildBar = document.getElementById('hud-3d-build-studio');
     if (buildBar) {
@@ -179,7 +181,7 @@ export class WorkspaceController {
         };
         stateManager.setRooms3d([...stateManager.getRooms3d(), clone]);
         stateManager.selectRoom3d?.(clone.id);
-        this.map3DEngine?.showStatusHint?.(`📋 Duplikat "${clone.name}" dibuat.`);
+        this.map3DEngine?.showStatusHint?.(`Duplikat "${clone.name}" dibuat.`);
         return clone;
       }
     }
@@ -196,7 +198,7 @@ export class WorkspaceController {
           y: Math.min(0.95, (Number(obj.y) || 0.5) + 0.03),
           locked: false
         });
-        this.map3DEngine?.showStatusHint?.(`📋 Duplikat "${clone.name}" dibuat.`);
+        this.map3DEngine?.showStatusHint?.(`Duplikat "${clone.name}" dibuat.`);
         return clone;
       }
     }
@@ -295,28 +297,28 @@ export class WorkspaceController {
             <h2 class="launcher-title">Pilih Mode Belajar Hari Ini</h2>
             <p class="launcher-subtitle">Dua lingkungan terpisah agar lebih fokus &amp; mudah dipahami — dilengkapi Avatar Jelajah Roblox &amp; Misi XP.</p>
           </div>
-          <button type="button" id="btn-launcher-close" class="btn btn-icon btn-sm" title="Tutup">✕</button>
+          <button type="button" id="btn-launcher-close" class="btn btn-icon btn-sm" title="Tutup">${uiIcon('x', 14)}</button>
         </div>
 
         <div class="launcher-cards">
           <button type="button" class="launcher-choice-card is-build" data-pick-workspace="build">
-            <div class="launcher-choice-icon">🏗️</div>
+            <div class="launcher-choice-icon">${uiIcon('building', 26)}</div>
             <div class="launcher-choice-name">Studio Bangunan 3D</div>
             <div class="launcher-choice-desc">Susun gedung kelas PPLG, perpustakaan, taman, tandon air, tiang &amp; jalan kampus dengan Snap Grid, Gizmo RGB, serta jelajahi dengan Avatar.</div>
-            <span class="launcher-choice-cta">Mulai Membangun →</span>
+            <span class="launcher-choice-cta">Mulai Membangun -></span>
           </button>
 
           <button type="button" class="launcher-choice-card is-network" data-pick-workspace="network">
-            <div class="launcher-choice-icon">🌐</div>
+            <div class="launcher-choice-icon">${uiIcon('network', 26)}</div>
             <div class="launcher-choice-name">Lab Engineering Jaringan</div>
             <div class="launcher-choice-desc">Ala Cisco Packet Tracer 3D: pasang Router/Switch/AP, sambungkan kabel antar port, konfigurasi CLI Cisco &amp; MikroTik, serta animasi paket Ping.</div>
-            <span class="launcher-choice-cta">Masuk Lab Jaringan →</span>
+            <span class="launcher-choice-cta">Masuk Lab Jaringan -></span>
           </button>
         </div>
 
         <div class="launcher-footer">
-          <span>💡 Gedung terkunci otomatis saat berada di Lab Jaringan agar tidak tergeser.</span>
-          <button type="button" id="btn-launcher-quests" class="btn btn-secondary btn-sm">🎯 Lihat Misi Belajar</button>
+          <span>Gedung terkunci otomatis saat berada di Lab Jaringan agar tidak tergeser.</span>
+          <button type="button" id="btn-launcher-quests" class="btn btn-secondary btn-sm">${uiIcon('award', 13)} Lihat Misi Belajar</button>
         </div>
       </div>
     `;

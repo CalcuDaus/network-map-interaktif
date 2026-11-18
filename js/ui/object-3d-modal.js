@@ -7,7 +7,7 @@
 import { eventBus } from '../core/event-bus.js';
 import { stateManager } from '../core/state-manager.js';
 import { OBJECT3D_PRESETS, BUILTIN_ROOM_BUILDING_PRESETS, createBuildingRoomPresetData } from '../map/map-3d-models.js';
-import { clamp, generateId } from '../utils/helpers.js';
+import { clamp, generateId, uiIcon } from '../utils/helpers.js';
 
 const PRESET_LIST = [
   { id: 'pole', label: 'Tiang CCTV', icon: 'flag' },
@@ -130,7 +130,7 @@ export class Object3DModal {
         <!-- Section 1: Draw Mode & 8 Preset Library -->
         <div style="background: var(--bg-primary, #fff8cf); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 8px;">
           <button type="button" id="btn-o3d-toggle-draw" class="btn btn-secondary btn-sm" style="width: 100%; justify-content: center; font-weight: 700; font-size: 11.5px;">
-            ✏️ Mode Tarik / Taruh di Lantai 3D (Nonaktif)
+            ${uiIcon('pencil', 12)} Mode Tarik / Taruh di Lantai 3D (Nonaktif)
           </button>
 
           <div style="font-size: 10.5px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.03em;">
@@ -206,7 +206,7 @@ export class Object3DModal {
           </div>
 
           <button type="button" id="btn-o3d-pick-device-pos" class="btn btn-secondary btn-sm" style="font-size: 10.5px;">
-            📍 Ambil Posisi Perangkat Terpilih
+            ${uiIcon('map-pin', 12)} Ambil Posisi Perangkat Terpilih
           </button>
 
           <!-- Dimension Sliders -->
@@ -275,7 +275,7 @@ export class Object3DModal {
             Otomatis memindahkan perangkat terpilih ke atas Tiang CCTV / ke dalam Rak Server Custom dengan elevasi Z yang pas.
           </div>
           <button type="button" id="btn-o3d-mount-devices" class="btn btn-primary btn-sm" style="width: 100%; font-weight: 700; font-size: 11px;">
-            📌 Pasang Perangkat Terpilih di Objek Ini
+            ${uiIcon('pin', 12)} Pasang Perangkat Terpilih di Objek Ini
           </button>
         </div>
 
@@ -586,7 +586,7 @@ export class Object3DModal {
       if (this.map3DEngine?.isActive) {
         this.map3DEngine.syncAll();
         this.map3DEngine.showStatusHint(
-          `📌 ${updated.length} perangkat dipasang pada "${obj.name}".`
+          `${updated.length} perangkat dipasang pada "${obj.name}".`
         );
       }
     }
@@ -683,9 +683,9 @@ export class Object3DModal {
     if (btn) {
       btn.classList.toggle('btn-primary', isDrawActive);
       btn.classList.toggle('btn-secondary', !isDrawActive);
-      btn.textContent = isDrawActive
-        ? '✏️ Mode Gambar 3D AKTIF (Klik/Drag di Lantai)'
-        : '✏️ Mode Tarik / Taruh di Lantai 3D (Nonaktif)';
+      btn.innerHTML = isDrawActive
+        ? `${uiIcon('pencil', 12)} Mode Gambar 3D AKTIF (Klik/Drag di Lantai)`
+        : `${uiIcon('pencil', 12)} Mode Tarik / Taruh di Lantai 3D (Nonaktif)`;
     }
     if (badge) {
       badge.textContent = isDrawActive
@@ -700,11 +700,11 @@ export class Object3DModal {
     const count = this.deviceManager?.getSelectedDeviceIds?.().length || 0;
     const selObj = stateManager.getObject3dById(stateManager.getSelectedObject3dId());
     if (count > 0 && selObj) {
-      btn.textContent = `📌 Pasang ${count} Perangkat ke "${selObj.name}"`;
+      btn.innerHTML = `${uiIcon('pin', 12)} Pasang ${count} Perangkat ke "${selObj.name}"`;
     } else if (count > 0) {
-      btn.textContent = `📌 Pasang ${count} Perangkat ke Objek 3D`;
+      btn.innerHTML = `${uiIcon('pin', 12)} Pasang ${count} Perangkat ke Objek 3D`;
     } else {
-      btn.textContent = '📌 Pasang Perangkat Terpilih di Objek Ini';
+      btn.innerHTML = `${uiIcon('pin', 12)} Pasang Perangkat Terpilih di Objek Ini`;
     }
   }
 

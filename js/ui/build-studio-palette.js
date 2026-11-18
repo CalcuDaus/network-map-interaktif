@@ -11,7 +11,7 @@ import {
   ROAD3D_PRESETS,
   createBuildingRoomPresetData
 } from '../map/map-3d-models.js';
-import { escapeHtml, generateId } from '../utils/helpers.js';
+import { escapeHtml, generateId, uiIcon } from '../utils/helpers.js';
 
 const FACILITY_PRESET_IDS = new Set([
   'parkiran-motor',
@@ -29,14 +29,14 @@ const FACILITY_PRESET_IDS = new Set([
 ]);
 
 const OBJECT_ICON_MAP = {
-  pole: '🗼',
-  'server-rack': '🗄️',
-  'tower-lattice': '📡',
-  box: '📦',
-  cylinder: '🛢️',
-  wall: '🧱',
-  table: '🪑',
-  cabinet: '🗃️'
+  pole: 'radio',
+  'server-rack': 'server',
+  'tower-lattice': 'radio',
+  box: 'box',
+  cylinder: 'box',
+  wall: 'layers',
+  table: 'columns',
+  cabinet: 'sliders'
 };
 
 export class BuildStudioPalette {
@@ -80,7 +80,7 @@ export class BuildStudioPalette {
         id: preset.id,
         category,
         badge,
-        icon: isFacility ? '🌳' : (preset.isCutaway ? '🏗️' : '🏫'),
+        icon: uiIcon(isFacility ? 'trees' : 'building', 15),
         color: preset.wallColor || '#2a7c13',
         name: preset.name,
         subtitle: preset.subtitle || `${preset.widthMeters}×${preset.depthMeters}×${preset.heightMeters}m`,
@@ -95,7 +95,7 @@ export class BuildStudioPalette {
         id: shape,
         category: 'structure',
         badge: 'Struktur',
-        icon: OBJECT_ICON_MAP[shape] || '📐',
+        icon: uiIcon(OBJECT_ICON_MAP[shape] || 'box', 15),
         color: preset.accentColor || preset.color || '#64748b',
         name: preset.name || shape,
         subtitle: `Bentuk 3D modular (${preset.widthMeters}×${preset.depthMeters}×${preset.heightMeters}m)`,
@@ -110,7 +110,7 @@ export class BuildStudioPalette {
         id: style,
         category: 'road',
         badge: 'Jalan 3D',
-        icon: '🛣️',
+        icon: uiIcon('route', 15),
         color: preset.slabColor || '#94a3b8',
         name: preset.name || style,
         subtitle: `Lebar ${preset.widthMeters}m • Jalur ${preset.pathMode === 'smooth' ? 'Lengkung' : 'Lurus'}`,
@@ -172,7 +172,7 @@ export class BuildStudioPalette {
     this.map3DEngine?.setNavTool?.('move');
     this.map3DEngine?.focusOnRoom3d?.(roomData.id);
     this.map3DEngine?.showStatusHint?.(
-      `🏗️ "${roomData.name}" dipasang — Geser di lantai (M), Putar [ / ] atau gunakan Gizmo.`
+      `"${roomData.name}" dipasang — Geser di lantai (M), Putar [ / ] atau gunakan Gizmo.`
     );
     return roomData;
   }
@@ -196,7 +196,7 @@ export class BuildStudioPalette {
     this.map3DEngine?.setRoomsLocked?.(false, { silent: true });
     this.map3DEngine?.setNavTool?.('move');
     this.map3DEngine?.showStatusHint?.(
-      `📐 Objek "${objData.name}" ditempatkan — Gunakan Move (M) atau Rotate (R) untuk menata.`
+      `Objek "${objData.name}" ditempatkan — Gunakan Move (M) atau Rotate (R) untuk menata.`
     );
     return objData;
   }
@@ -217,7 +217,7 @@ export class BuildStudioPalette {
     }
     this.map3DEngine?.setNavTool?.('road3d');
     this.map3DEngine?.showStatusHint?.(
-      `🛣️ Alat Jalan "${preset.name}" siap — Klik titik-titik jalur di permukaan kampus.`
+      `Alat Jalan "${preset.name}" siap — Klik titik-titik jalur di permukaan kampus.`
     );
     return true;
   }
@@ -238,13 +238,13 @@ export class BuildStudioPalette {
       <div class="build-studio-palette">
         <div class="build-studio-actions">
           <button type="button" id="btn-bsp-quick-road" class="btn btn-primary btn-sm" title="Aktifkan Alat Gambar Jalan 3D">
-            🛣️ Jalan 3D
+            ${uiIcon('route', 12)} Jalan 3D
           </button>
           <button type="button" id="btn-bsp-room-mgr" class="btn btn-secondary btn-sm" title="Kelola Ruangan 3D / Upload Model .GLB">
-            🏢 Kelola .GLB
+            ${uiIcon('building', 12)} Kelola .GLB
           </button>
           <button type="button" id="btn-bsp-obj-mgr" class="btn btn-secondary btn-sm" title="Buka Studio Objek 3D Custom">
-            📐 Objek Custom
+            ${uiIcon('box', 12)} Objek Custom
           </button>
         </div>
 

@@ -24,10 +24,10 @@
     rel="stylesheet">
 
   <!-- Core Stylesheets -->
-  <link rel="stylesheet" href="css/main.css?v=20261118-dualmode-v8">
-  <link rel="stylesheet" href="css/layout.css?v=20261118-dualmode-v8">
-  <link rel="stylesheet" href="css/components.css?v=20261118-dualmode-v8">
-  <link rel="stylesheet" href="css/map.css?v=20261118-dualmode-v8">
+  <link rel="stylesheet" href="css/main.css?v=20261118-houseflipper-v12">
+  <link rel="stylesheet" href="css/layout.css?v=20261118-houseflipper-v12">
+  <link rel="stylesheet" href="css/components.css?v=20261118-houseflipper-v12">
+  <link rel="stylesheet" href="css/map.css?v=20261118-houseflipper-v12">
 
   <!-- Vendor Libraries (Offline-First with CDN fallback) -->
   <script src="assets/vendor/konva.min.js"></script>
@@ -92,27 +92,27 @@
         <div id="workspace-mode-switcher" class="workspace-switcher" role="group" aria-label="Pilih Workspace Belajar">
           <button type="button" id="btn-workspace-build" class="workspace-switch-btn" data-workspace-switch="build"
             title="Studio Bangunan 3D — Susun gedung, fasilitas &amp; jalan kampus sekolah">
-            <span>🏗️</span>
+            <i data-lucide="building-2" style="width: 13px; height: 13px;"></i>
             <span>Studio Bangunan</span>
           </button>
           <button type="button" id="btn-workspace-network" class="workspace-switch-btn active" data-workspace-switch="network"
             title="Lab Engineering Jaringan — Pasang perangkat, kabel, simulasi Ping &amp; Terminal CLI">
-            <span>🌐</span>
+            <i data-lucide="network" style="width: 13px; height: 13px;"></i>
             <span>Lab Jaringan</span>
           </button>
           <button type="button" id="btn-open-workspace-launcher" class="btn btn-icon btn-sm"
-            title="Buka Menu Pilih Mode Belajar" style="width: 24px; height: 24px; font-size: 11px;">
-            ❓
+            title="Buka Menu Pilih Mode Belajar" style="width: 24px; height: 24px;">
+            <i data-lucide="help-circle" style="width: 13px; height: 13px;"></i>
           </button>
         </div>
 
         <button type="button" id="btn-open-packet-tracer" class="btn btn-secondary btn-sm ws-network-only"
           title="Buka Simulasi Packet Tracer (Ping/Traceroute OSI L1–L3 &amp; Terminal CLI Cisco/MikroTik)">
-          <span>⚡</span>
-          <span>Simulasi &amp; CLI</span>
+          <i data-lucide="zap" style="width: 13px; height: 13px;"></i>
+          <span>Simulasi</span>
         </button>
 
-        <div class="divider-vertical"></div>
+        <div class="divider-vertical ws-network-only"></div>
 
         <!-- Mode Selectors (PRD Section 3.1) -->
         <div class="segmented-control ws-network-only" role="group" aria-label="Mode Interaksi">
@@ -220,7 +220,7 @@
       <div class="toolbar-section">
         <button type="button" id="navbar-quest-btn" class="btn btn-secondary btn-sm navbar-quest-btn"
           title="Misi Belajar, XP &amp; Lencana Gamifikasi">
-          <span>🎯</span>
+          <i data-lucide="award" style="width: 13px; height: 13px;"></i>
           <span id="navbar-quest-level">Lv.1</span>
           <span id="navbar-quest-xp" class="navbar-quest-xp">0 XP</span>
         </button>
@@ -412,8 +412,12 @@
             <span>Properti</span>
           </button>
           <div class="mob-dock-seg" role="group" aria-label="Workspace Belajar">
-            <button type="button" id="btn-mob-ws-build" class="mob-dock-seg-btn" data-workspace-switch="build" title="Studio Bangunan 3D">🏗️</button>
-            <button type="button" id="btn-mob-ws-network" class="mob-dock-seg-btn active" data-workspace-switch="network" title="Lab Jaringan">🌐</button>
+            <button type="button" id="btn-mob-ws-build" class="mob-dock-seg-btn" data-workspace-switch="build" title="Studio Bangunan 3D">
+              <i data-lucide="building-2" style="width: 13px; height: 13px;"></i>
+            </button>
+            <button type="button" id="btn-mob-ws-network" class="mob-dock-seg-btn active" data-workspace-switch="network" title="Lab Jaringan">
+              <i data-lucide="network" style="width: 13px; height: 13px;"></i>
+            </button>
           </div>
           <div class="mob-dock-seg" role="group" aria-label="Tampilan 2D 3D">
             <button type="button" id="btn-mob-view-2d" class="mob-dock-seg-btn active" data-mob-view="2d">2D</button>
@@ -625,7 +629,7 @@
             <span>Ruangan 3D</span>
           </button>
 
-          <button id="btn-3d-lock-rooms" class="hud-3d-btn" type="button"
+          <button id="btn-3d-lock-rooms" class="hud-3d-btn ws-build-only" type="button"
             title="Kunci Posisi Semua Ruangan 3D — Cegah ruangan ikut terklik/bergeser saat menggeser perangkat">
             <i data-lucide="unlock" style="width: 13px; height: 13px;"></i>
             <span>Kunci Ruangan</span>
@@ -642,7 +646,7 @@
           </button>
           <button id="btn-3d-packet-tracer" class="hud-3d-btn hud-3d-btn-accent ws-network-only" type="button"
             title="Simulasi Ping 3D &amp; Terminal CLI Cisco / MikroTik">
-            <span>⚡</span>
+            <i data-lucide="zap" style="width: 13px; height: 13px;"></i>
             <span>Simulasi &amp; CLI</span>
           </button>
 
@@ -655,6 +659,7 @@
 
         <!-- Center Crosshair Reticle for Direct Mouse-Look Mode Teknisi -->
         <div id="hud-3d-crosshair" class="hud-3d-crosshair hidden" style="display: none;"></div>
+        <div id="hud-3d-houseflipper-tip" class="hud-3d-houseflipper-tip hidden" style="display: none;"></div>
 
         <!-- Mode Teknisi Roblox Avatar Radar & Control Bar (Bottom Center in 3D Mode) -->
         <div id="hud-3d-avatar-bar" class="hud-3d-avatar-bar hidden" style="display: none;"></div>
@@ -662,8 +667,11 @@
         <!-- Dedicated Studio Bangunan 3D Placement Bar (Visible Only in 'build' Workspace) -->
         <div id="hud-3d-build-studio" class="hud-3d-build-studio hidden" style="display: none;"
           aria-label="Alat Placement Studio Bangunan 3D">
-          <span class="studio-bar-badge">🏗️ Studio Bangunan</span>
-          <button type="button" id="btn-studio-grid-snap" class="avatar-sim-chip active" title="Snap ke kotak grid lantai">⊞ Snap: ON</button>
+          <span class="studio-bar-badge"><i data-lucide="building-2" style="width: 13px; height: 13px;"></i> Studio Bangunan</span>
+          <button type="button" id="btn-studio-grid-snap" class="avatar-sim-chip active" title="Snap ke kotak grid lantai">
+            <i data-lucide="grid-3x3" style="width: 12px; height: 12px;"></i>
+            <span>Snap: ON</span>
+          </button>
           <select id="select-studio-grid-size" class="hud-3d-select" title="Ukuran Grid (meter)">
             <option value="0.25">0.25m</option>
             <option value="0.5" selected>0.50m</option>
@@ -676,25 +684,47 @@
             <option value="45" selected>Snap 45°</option>
             <option value="90">Snap 90°</option>
           </select>
-          <button type="button" id="btn-studio-rot-ccw" class="avatar-sim-mini-btn" title="Putar Kiri ([)">↺</button>
-          <button type="button" id="btn-studio-rot-cw" class="avatar-sim-mini-btn" title="Putar Kanan (])">↻</button>
-          <button type="button" id="btn-studio-collision" class="avatar-sim-chip" title="Anti-Tabrakan vs Tembus Bebas">🧱 Anti-Tabrakan</button>
-          <button type="button" id="btn-studio-surface-snap" class="avatar-sim-chip active" title="Tempel otomatis di permukaan">🧲 Surface</button>
-          <button type="button" id="btn-studio-gizmo" class="avatar-sim-chip active" title="Tampilkan Gizmo RGB">🎯 Gizmo: ON</button>
+          <button type="button" id="btn-studio-rot-ccw" class="avatar-sim-mini-btn" title="Putar Kiri ([)">
+            <i data-lucide="rotate-ccw" style="width: 12px; height: 12px;"></i>
+          </button>
+          <button type="button" id="btn-studio-rot-cw" class="avatar-sim-mini-btn" title="Putar Kanan (])">
+            <i data-lucide="rotate-cw" style="width: 12px; height: 12px;"></i>
+          </button>
+          <button type="button" id="btn-studio-collision" class="avatar-sim-chip" title="Anti-Tabrakan vs Tembus Bebas">
+            <i data-lucide="shield" style="width: 12px; height: 12px;"></i>
+            <span>Anti-Tabrakan</span>
+          </button>
+          <button type="button" id="btn-studio-surface-snap" class="avatar-sim-chip active" title="Tempel otomatis di permukaan">
+            <i data-lucide="magnet" style="width: 12px; height: 12px;"></i>
+            <span>Surface</span>
+          </button>
+          <button type="button" id="btn-studio-gizmo" class="avatar-sim-chip active" title="Tampilkan Gizmo RGB">
+            <i data-lucide="move" style="width: 12px; height: 12px;"></i>
+            <span>Gizmo: ON</span>
+          </button>
           <select id="select-studio-gizmo-mode" class="hud-3d-select" title="Mode Sumbu Gizmo">
             <option value="both" selected>Panah + Putar</option>
             <option value="translate">Geser</option>
             <option value="rotate">Putar</option>
           </select>
-          <button type="button" id="btn-studio-duplicate" class="avatar-sim-chip" title="Duplikat Gedung / Objek Terpilih">📋 Duplikat</button>
-          <button type="button" id="btn-studio-road" class="avatar-sim-chip" title="Gambar Jalan &amp; Trotoar 3D">🛣️ Jalan 3D</button>
-          <button type="button" id="btn-studio-to-network" class="btn btn-primary btn-sm" title="Lanjut ke Lab Jaringan">🌐 Lanjut Jaringan →</button>
+          <button type="button" id="btn-studio-duplicate" class="avatar-sim-chip" title="Duplikat Gedung / Objek Terpilih">
+            <i data-lucide="copy" style="width: 12px; height: 12px;"></i>
+            <span>Duplikat</span>
+          </button>
+          <button type="button" id="btn-studio-road" class="avatar-sim-chip" title="Gambar Jalan &amp; Trotoar 3D">
+            <i data-lucide="route" style="width: 12px; height: 12px;"></i>
+            <span>Jalan 3D</span>
+          </button>
+          <button type="button" id="btn-studio-to-network" class="btn btn-primary btn-sm" title="Lanjut ke Lab Jaringan">
+            <i data-lucide="network" style="width: 12px; height: 12px;"></i>
+            <span>Lanjut Jaringan</span>
+          </button>
         </div>
 
         <!-- City-Builder 3D Road & Walkway Toolbar (Floating Bottom Center in Road Mode / Selected Road) -->
         <div id="hud-3d-road-bar" class="hud-3d-road-bar hidden" style="display: none;"
           aria-label="Alat Bangun Jalan 3D">
-          <div class="road-bar-title">🛣️ City-Builder Jalan 3D</div>
+          <div class="road-bar-title"><i data-lucide="route" style="width: 13px; height: 13px;"></i> City-Builder Jalan 3D</div>
           <label class="road-bar-field" title="Model / Permukaan Jalan 3D">
             <span>Model</span>
             <select id="select-road3d-style" class="hud-3d-select">
@@ -727,10 +757,21 @@
             <option value="">-- Jalan (0) --</option>
           </select>
           <div class="road-bar-btns">
-            <button type="button" id="btn-road3d-undo-pt" class="sim-action-btn" title="Hapus titik terakhir (Backspace)">↶ Titik</button>
-            <button type="button" id="btn-road3d-finish-chain" class="sim-action-btn is-primary" title="Selesaikan jalur ini dan siap buat jalan baru (Klik Kanan / Enter)">✓ Selesai Jalur</button>
-            <button type="button" id="btn-road3d-delete" class="sim-action-btn is-exit" title="Hapus jalan terpilih (Delete)">🗑 Hapus</button>
-            <button type="button" id="btn-road3d-close" class="sim-action-btn" title="Tutup alat Jalan 3D">✕</button>
+            <button type="button" id="btn-road3d-undo-pt" class="sim-action-btn" title="Hapus titik terakhir (Backspace)">
+              <i data-lucide="undo-2" style="width: 12px; height: 12px;"></i>
+              <span>Titik</span>
+            </button>
+            <button type="button" id="btn-road3d-finish-chain" class="sim-action-btn is-primary" title="Selesaikan jalur ini dan siap buat jalan baru (Klik Kanan / Enter)">
+              <i data-lucide="check" style="width: 12px; height: 12px;"></i>
+              <span>Selesai Jalur</span>
+            </button>
+            <button type="button" id="btn-road3d-delete" class="sim-action-btn is-exit" title="Hapus jalan terpilih (Delete)">
+              <i data-lucide="trash-2" style="width: 12px; height: 12px;"></i>
+              <span>Hapus</span>
+            </button>
+            <button type="button" id="btn-road3d-close" class="sim-action-btn" title="Tutup alat Jalan 3D">
+              <i data-lucide="x" style="width: 12px; height: 12px;"></i>
+            </button>
           </div>
         </div>
 
@@ -941,7 +982,8 @@
           <button id="status-map-scale-btn" class="status-pill-btn"
             style="background: rgba(42, 124, 19, 0.15); color: var(--accent-green); border: 1px solid rgba(42, 124, 19, 0.35); border-radius: 4px; padding: 2px 8px; font-size: 11px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 4px; font-family: var(--font-mono);"
             title="Klik untuk kalibrasi skala ukuran fisik denah peta">
-            <span id="status-map-scale-text">📐 Skala: 170m (1px = 0.17m)</span>
+            <i data-lucide="ruler" style="width: 12px; height: 12px;"></i>
+            <span id="status-map-scale-text">Skala: 170m (1px = 0.17m)</span>
           </button>
         </div>
         <div class="status-item" style="color: var(--text-muted); font-size: 11px;">
@@ -953,7 +995,7 @@
   </div>
 
   <!-- Application Bootstrap (Bundled for file:// and http:// compatibility) -->
-  <script src="js/bundle.js?v=20261118-dualmode-v8"></script>
+  <script src="js/bundle.js?v=20261118-houseflipper-v12"></script>
 </body>
 
 </html>

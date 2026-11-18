@@ -598,10 +598,10 @@ export class PropertiesPanel {
                 </label>
               </div>
               <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;">
-                <button type="button" class="btn btn-secondary btn-sm btn-prop-nudge" data-dx="-0.004" data-dy="0" ${device.layerLocked ? 'disabled' : ''} style="font-size: 10px; padding: 3px 4px; height: auto;" title="Geser kiri (-X) • Arrow Left">◀ -X</button>
-                <button type="button" class="btn btn-secondary btn-sm btn-prop-nudge" data-dx="0" data-dy="-0.004" ${device.layerLocked ? 'disabled' : ''} style="font-size: 10px; padding: 3px 4px; height: auto;" title="Geser atas (-Y) • Arrow Up">▲ -Y</button>
-                <button type="button" class="btn btn-secondary btn-sm btn-prop-nudge" data-dx="0" data-dy="0.004" ${device.layerLocked ? 'disabled' : ''} style="font-size: 10px; padding: 3px 4px; height: auto;" title="Geser bawah (+Y) • Arrow Down">▼ +Y</button>
-                <button type="button" class="btn btn-secondary btn-sm btn-prop-nudge" data-dx="0.004" data-dy="0" ${device.layerLocked ? 'disabled' : ''} style="font-size: 10px; padding: 3px 4px; height: auto;" title="Geser kanan (+X) • Arrow Right">▶ +X</button>
+                <button type="button" class="btn btn-secondary btn-sm btn-prop-nudge" data-dx="-0.004" data-dy="0" ${device.layerLocked ? 'disabled' : ''} style="font-size: 10px; padding: 3px 4px; height: auto;" title="Geser kiri (-X) • Arrow Left">Kiri (-X)</button>
+                <button type="button" class="btn btn-secondary btn-sm btn-prop-nudge" data-dx="0" data-dy="-0.004" ${device.layerLocked ? 'disabled' : ''} style="font-size: 10px; padding: 3px 4px; height: auto;" title="Geser atas (-Y) • Arrow Up">Atas (-Y)</button>
+                <button type="button" class="btn btn-secondary btn-sm btn-prop-nudge" data-dx="0" data-dy="0.004" ${device.layerLocked ? 'disabled' : ''} style="font-size: 10px; padding: 3px 4px; height: auto;" title="Geser bawah (+Y) • Arrow Down">Bawah (+Y)</button>
+                <button type="button" class="btn btn-secondary btn-sm btn-prop-nudge" data-dx="0.004" data-dy="0" ${device.layerLocked ? 'disabled' : ''} style="font-size: 10px; padding: 3px 4px; height: auto;" title="Geser kanan (+X) • Arrow Right">Kanan (+X)</button>
               </div>
             </div>
             <div style="grid-column: span 2; display: flex; flex-direction: column; gap: 4px;">

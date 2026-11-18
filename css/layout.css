@@ -987,6 +987,62 @@ body.workspace-fullscreen .hud-3d-exit-fs-btn {
   display: none;
 }
 
+#app-toolbar.tb-compact-extras #btn-install-pwa span {
+  display: none;
+}
+
+#app-toolbar.tb-compact-extras #btn-install-pwa {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  justify-content: center;
+}
+
+#app-toolbar.tb-compact-extras #btn-navbar-menu > span {
+  display: none;
+}
+
+#app-toolbar.tb-compact-extras #btn-navbar-menu {
+  padding: 0 6px;
+}
+
+#app-toolbar.tb-compact-extras #btn-open-packet-tracer {
+  padding: 0 7px;
+  font-size: 11px;
+}
+
+#app-toolbar.tb-compact-extras .workspace-switch-btn {
+  padding: 3px 6px;
+  font-size: 11px;
+  gap: 4px;
+}
+
+#app-toolbar.tb-compact-auth #navbar-quest-xp,
+#app-toolbar.tb-compact-auth #navbar-auth-ws-badge {
+  display: none;
+}
+
+#app-toolbar.tb-compact-auth #navbar-auth-label {
+  max-width: 72px;
+}
+
+#app-toolbar.tb-compact-auth #zoom-percentage {
+  min-width: 38px !important;
+  font-size: 11px;
+  padding: 1px 4px;
+}
+
+#app-toolbar.tb-compact-auth #btn-open-packet-tracer span {
+  display: none;
+}
+
+#app-toolbar.tb-compact-auth #btn-open-packet-tracer {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  justify-content: center;
+}
+
 #app-toolbar.tb-wrap {
   height: auto;
   min-height: var(--header-height);

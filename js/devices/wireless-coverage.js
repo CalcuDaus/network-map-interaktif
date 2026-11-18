@@ -213,7 +213,7 @@ export class WirelessCoverageRenderer {
 
     const areaM2 = calculateCoverageArea(radiusMeters);
     const bandLabel = band === 'dual-band' ? 'Dual-Band' : (band === '5ghz' ? '5 GHz' : (band === 'ptp' ? 'PtP' : '2.4 GHz'));
-    const labelTextContent = `📶 ${radiusMeters}m • ${formatCoverageArea(areaM2)} (${bandLabel})`;
+    const labelTextContent = `WiFi ${radiusMeters}m • ${formatCoverageArea(areaM2)} (${bandLabel})`;
 
     const labelBg = new Konva.Tag({
       fill: 'rgba(24, 53, 13, 0.92)',
@@ -294,7 +294,7 @@ export class WirelessCoverageRenderer {
       // Update label
       const curMeters = Math.round(pixelsToMeters(curRadiusPx, this.naturalWidth));
       const curArea = calculateCoverageArea(curMeters);
-      labelText.text(`📶 ${curMeters}m • ${formatCoverageArea(curArea)} (${bandLabel})`);
+      labelText.text(`WiFi ${curMeters}m • ${formatCoverageArea(curArea)} (${bandLabel})`);
       labelLabel.offsetX(labelText.width() / 2);
       labelGroup.y(-curRadiusPx - 14);
 
@@ -370,7 +370,7 @@ export class WirelessCoverageRenderer {
       if (labelText) {
         const areaM2 = calculateCoverageArea(radiusMeters);
         const bandLabel = band === 'dual-band' ? 'Dual-Band' : (band === '5ghz' ? '5 GHz' : (band === 'ptp' ? 'PtP' : '2.4 GHz'));
-        labelText.text(`📶 ${radiusMeters}m • ${formatCoverageArea(areaM2)} (${bandLabel})`);
+        labelText.text(`WiFi ${radiusMeters}m • ${formatCoverageArea(areaM2)} (${bandLabel})`);
         if (labelBubble) {
           labelBubble.offsetX(labelText.width() / 2);
         }

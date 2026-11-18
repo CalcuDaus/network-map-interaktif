@@ -391,7 +391,7 @@ export class CustomDeviceModal {
             <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;">
               <input type="checkbox" id="cd-save-template-check" checked style="accent-color: var(--accent-blue); width: 16px; height: 16px;">
               <span style="font-size: 12px; font-weight: 600; color: var(--text-primary);">
-                ⭐ Simpan ke Library Perangkat Kustom (Sidebar) agar bisa digunakan berulang kali
+                Simpan ke Library Perangkat Kustom (Sidebar) agar bisa digunakan berulang kali
               </span>
             </label>
             <span style="font-size: 10.5px; color: var(--text-muted);">
@@ -600,7 +600,7 @@ export class CustomDeviceModal {
       if (!cdGlbStatus) return;
       if (Array.isArray(ports) && ports.length > 0) {
         cdGlbStatus.style.display = 'block';
-        cdGlbStatus.textContent = `✓ ${ports.length} port fisik terdeteksi dari model .GLB (${ports.slice(0, 4).map((p) => p.name).join(', ')}${ports.length > 4 ? '...' : ''})`;
+        cdGlbStatus.textContent = `${ports.length} port fisik terdeteksi dari model .GLB (${ports.slice(0, 4).map((p) => p.name).join(', ')}${ports.length > 4 ? '...' : ''})`;
       } else {
         cdGlbStatus.style.display = 'none';
         cdGlbStatus.textContent = '';
@@ -883,9 +883,9 @@ export class CustomDeviceModal {
       this.deviceManager.selectDevice(placedDevice.id);
       stateManager.setMode('select');
 
-      this.showToast(`✨ Perangkat kustom "${name}" berhasil ditambahkan ke peta!`);
+      this.showToast(`Perangkat kustom "${name}" berhasil ditambahkan ke peta!`);
     } else {
-      this.showToast(`⭐ Perangkat kustom "${name}" berhasil disimpan ke Library Sidebar!`);
+      this.showToast(`Perangkat kustom "${name}" berhasil disimpan ke Library Sidebar!`);
     }
 
     this.hide();

@@ -8,6 +8,7 @@ import { eventBus } from '../core/event-bus.js';
 import { stateManager } from '../core/state-manager.js';
 import { getDefaultSpatial3d, getDefaultDevicePorts, BUILTIN_GLB_MODELS } from '../devices/device-schema.js';
 import { extractGlbCustomPorts } from '../map/map-3d-models.js';
+import { uiIcon } from '../utils/helpers.js';
 
 export class Device3DModelModal {
   /**
@@ -164,7 +165,7 @@ export class Device3DModelModal {
                 <span style="font-size: 10.5px; color: var(--text-muted);">Deteksi otomatis node <code style="font-size: 10px;">PORT_*</code> dari Blender .GLB atau atur koordinat soket (X, Y, Z)</span>
               </div>
               <button type="button" id="btn-dev3d-scan-glb-ports" class="btn btn-secondary btn-sm" style="font-size: 11px; padding: 4px 10px;">
-                🔍 Deteksi Port dari .GLB
+                ${uiIcon('search', 12)} Deteksi Port dari .GLB
               </button>
             </div>
 
@@ -275,7 +276,7 @@ export class Device3DModelModal {
         this.renderPortsTable();
         const statusEl = this.modalEl.querySelector('#dev3d-port-scan-status');
         if (statusEl) {
-          statusEl.textContent = `✓ ${presetEntry.ports.length} port presisi .GLB dimuat`;
+          statusEl.textContent = `${presetEntry.ports.length} port presisi .GLB dimuat`;
         }
       }
     });
@@ -440,7 +441,7 @@ export class Device3DModelModal {
         </td>
         <td style="padding: 4px 5px; text-align: right;">
           <button type="button" data-p-del="${idx}" title="Hapus Port"
-                  style="border: none; background: transparent; color: var(--status-offline, #ef4444); cursor: pointer; font-weight: 700; font-size: 12px;">✕</button>
+                  style="border: none; background: transparent; color: var(--status-offline, #ef4444); cursor: pointer; font-weight: 700; font-size: 12px;">${uiIcon('x', 12)}</button>
         </td>
       </tr>
     `).join('');
@@ -486,7 +487,7 @@ export class Device3DModelModal {
       if (ports.length > 0) {
         this.editingPorts = ports;
         this.renderPortsTable();
-        if (statusEl) statusEl.textContent = `✅ ${ports.length} node PORT_* ditemukan di .GLB!`;
+        if (statusEl) statusEl.textContent = `${ports.length} node PORT_* ditemukan di .GLB!`;
       } else {
         // Align current ports automatically to the GLB's front bounding face
         const spanX = Math.max(0.24, bounds.width * 0.78);
@@ -501,11 +502,11 @@ export class Device3DModelModal {
         }));
         this.renderPortsTable();
         if (statusEl) {
-          statusEl.textContent = `⚡ ${n} port disejajarkan ke panel depan .GLB (Z=${bounds.frontZ})`;
+          statusEl.textContent = `${n} port disejajarkan ke panel depan .GLB (Z=${bounds.frontZ})`;
         }
       }
     } catch (err) {
-      if (statusEl) statusEl.textContent = '⚠️ Gagal membaca .GLB';
+      if (statusEl) statusEl.textContent = 'Gagal membaca .GLB';
       console.warn('[Device3DModelModal] GLB port scan error:', err);
     }
   }

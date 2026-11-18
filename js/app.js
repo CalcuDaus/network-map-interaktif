@@ -396,6 +396,8 @@ class NetMapApp {
 
     window.addEventListener('resize', runSync);
     eventBus.on('workspace:changed', () => requestAnimationFrame(runSync));
+    eventBus.on('auth:changed', () => requestAnimationFrame(runSync));
+    eventBus.on('quest:completed', () => requestAnimationFrame(runSync));
     if (typeof ResizeObserver !== 'undefined') {
       this._toolbarResizeObserver = new ResizeObserver(() => {
         const w = toolbar.clientWidth;
@@ -416,7 +418,15 @@ class NetMapApp {
     const toolbar = document.getElementById('app-toolbar');
     if (!toolbar) return;
 
-    const stages = ['tb-compact-brand', 'tb-compact-zoom', 'tb-compact-modes', 'tb-compact-view', 'tb-wrap'];
+    const stages = [
+      'tb-compact-brand',
+      'tb-compact-zoom',
+      'tb-compact-modes',
+      'tb-compact-view',
+      'tb-compact-extras',
+      'tb-compact-auth',
+      'tb-wrap'
+    ];
     toolbar.classList.remove(...stages);
 
     const available = toolbar.clientWidth;
@@ -982,7 +992,11 @@ class NetMapApp {
         }
         if (lower === 'r') {
           e.preventDefault();
-          this.map3DEngine?.setNavTool('rotate');
+          if (this.map3DEngine?.carriedObjects?.length > 0 || this.map3DEngine?.navTool === 'move') {
+            this.map3DEngine?.rotateSelectedIn3D({ dY: e.shiftKey ? -45 : 45 });
+          } else {
+            this.map3DEngine?.setNavTool('rotate');
+          }
           return;
         }
         if (e.key === '[' || e.key === '{') {
@@ -1061,7 +1075,7 @@ class NetMapApp {
         }
         if (lower === 'q' && this.map3DEngine?.avatarMode && !e.ctrlKey && !e.metaKey) {
           e.preventDefault();
-          this.map3DEngine.dropCarriedObjectsFromAvatar({ dropAll: Boolean(e.shiftKey) });
+          this.map3DEngine.dropCarriedObjectsFromAvatar({ dropAll: Boolean(e.shiftKey), useAimTarget: true });
           return;
         }
         if ((e.key === ',' || e.key === '<') && this.map3DEngine?.avatarMode && !e.ctrlKey && !e.metaKey) {
@@ -1243,7 +1257,7 @@ class NetMapApp {
     if (selectedDeviceIds.length > 0) {
       const moved = this.deviceManager.nudgeSelectedDevices(dx, dy, { syncRenderer: true });
       if (moved.length === 0) {
-        this.map3DEngine?.showStatusHint?.('🔒 Perangkat yang dipilih terkunci pada Layer.');
+        this.map3DEngine?.showStatusHint?.('Perangkat yang dipilih terkunci pada Layer.');
         return true;
       }
       if (moved.length === 1 && typeof document !== 'undefined') {
@@ -1257,8 +1271,8 @@ class NetMapApp {
         this.map3DEngine?.syncCables?.();
         this.map3DEngine?.flashMoveElevationGuide?.(moved.map((d) => d.id));
         const hint = moved.length === 1
-          ? `↕️ "${moved[0].name}" (X: ${moved[0].position.x.toFixed(4)}, Y: ${moved[0].position.y.toFixed(4)}) — Shift=cepat • Alt=halus`
-          : `↕️ ${moved.length} perangkat digeser (Shift=cepat • Alt=halus)`;
+          ? `Posisi "${moved[0].name}" (X: ${moved[0].position.x.toFixed(4)}, Y: ${moved[0].position.y.toFixed(4)}) — Shift=cepat • Alt=halus`
+          : `Posisi ${moved.length} perangkat digeser (Shift=cepat • Alt=halus)`;
         this.map3DEngine?.showStatusHint?.(hint);
       }
       return true;
@@ -1270,7 +1284,7 @@ class NetMapApp {
         const obj = stateManager.getObject3dById?.(selObjId);
         if (!obj) return false;
         if (this.map3DEngine?.isObject3dLocked?.(obj)) {
-          this.map3DEngine?.showStatusHint?.(`🔒 Objek/Ruangan "${obj.name}" sedang dikunci.`);
+          this.map3DEngine?.showStatusHint?.(`Objek/Ruangan "${obj.name}" sedang dikunci.`);
           return true;
         }
         const prevX = Number(obj.x) || 0;
@@ -1298,7 +1312,7 @@ class NetMapApp {
           this.map3DEngine?.syncDevices?.();
           this.map3DEngine?.syncCables?.();
         }
-        this.map3DEngine?.showStatusHint?.(`↕️ Objek "${obj.name}" (X: ${newX.toFixed(4)}, Y: ${newY.toFixed(4)})`);
+        this.map3DEngine?.showStatusHint?.(`Objek "${obj.name}" (X: ${newX.toFixed(4)}, Y: ${newY.toFixed(4)})`);
         return true;
       }
 
@@ -1307,13 +1321,13 @@ class NetMapApp {
         const room = stateManager.getRoom3dById?.(selRoomId);
         if (!room) return false;
         if (this.map3DEngine?.isRoomLocked?.(room)) {
-          this.map3DEngine?.showStatusHint?.(`🔒 Ruangan "${room.name}" sedang dikunci.`);
+          this.map3DEngine?.showStatusHint?.(`Ruangan "${room.name}" sedang dikunci.`);
           return true;
         }
         const newX = clamp(Number(((Number(room.x) || 0) + dx).toFixed(4)), 0, 1);
         const newY = clamp(Number(((Number(room.y) || 0) + dy).toFixed(4)), 0, 1);
         stateManager.updateRoom3d?.(room.id, { x: newX, y: newY });
-        this.map3DEngine?.showStatusHint?.(`🏠 "${room.name}" (X: ${newX.toFixed(4)}, Y: ${newY.toFixed(4)})`);
+        this.map3DEngine?.showStatusHint?.(`Ruangan "${room.name}" (X: ${newX.toFixed(4)}, Y: ${newY.toFixed(4)})`);
         return true;
       }
 
@@ -1770,7 +1784,7 @@ class NetMapApp {
           { id: 'mob-act-3d-nav', label: 'Buka Bar Navigasi 3D', fn: () => { if (stateManager.getViewMode() !== '3d') stateManager.setViewMode('3d'); this.setMobileDockMinimized(false); this.set3DControlsMinimized?.(false); } },
           { id: 'mob-act-teknisi', label: 'Mode Teknisi (Roblox Mobile)', fn: () => { if (stateManager.getViewMode() !== '3d') stateManager.setViewMode('3d'); setTimeout(() => this.map3DEngine?.setAvatarMode(true, { perspective: 'tpp' }), 40); } },
           { id: 'mob-act-fpp', label: 'Mode FPP (Kamera Orang Pertama)', fn: () => { if (stateManager.getViewMode() !== '3d') stateManager.setViewMode('3d'); setTimeout(() => this.map3DEngine?.setAvatarMode(true, { perspective: 'fpp' }), 40); } },
-          { id: 'mob-act-lock-rooms', label: this.map3DEngine?.roomsLocked ? '🔓 Buka Kunci Ruangan 3D' : '🔒 Kunci Semua Ruangan 3D', fn: () => this.map3DEngine?.toggleRoomsLocked?.() },
+          { id: 'mob-act-lock-rooms', label: this.map3DEngine?.roomsLocked ? 'Buka Kunci Ruangan 3D' : 'Kunci Semua Ruangan 3D', fn: () => this.map3DEngine?.toggleRoomsLocked?.() },
           { id: 'mob-act-rooms3d', label: 'Ruangan & Gedung 3D (.GLB)', fn: () => this.room3DModal?.show() },
           { id: 'mob-act-obj3d', label: 'Studio Objek 3D', fn: () => this.object3DModal?.show() },
           { id: 'mob-act-dev3d', label: 'Model 3D Perangkat', fn: () => this.device3DModelModal?.show() },
@@ -1993,7 +2007,7 @@ class NetMapApp {
     const sampleCables = [
       {
         id: 'cab-uplink-rtr-csw',
-        name: 'Uplink Router ➔ Core Switch',
+        name: 'Uplink Router -> Core Switch',
         source: 'dev-core-router',
         destination: 'dev-core-switch',
         type: 'fiber',
@@ -2012,7 +2026,7 @@ class NetMapApp {
       },
       {
         id: 'cab-bb-csw-gda',
-        name: 'Backbone FO NOC ➔ Gedung A',
+        name: 'Backbone FO NOC -> Gedung A',
         source: 'dev-core-switch',
         destination: 'dev-dist-gda',
         type: 'fiber',
@@ -2034,7 +2048,7 @@ class NetMapApp {
       },
       {
         id: 'cab-bb-csw-gdb',
-        name: 'Backbone FO NOC ➔ Gedung B',
+        name: 'Backbone FO NOC -> Gedung B',
         source: 'dev-core-switch',
         destination: 'dev-dist-gdb',
         type: 'fiber',

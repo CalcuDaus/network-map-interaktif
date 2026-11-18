@@ -453,6 +453,63 @@
   function escapeHtml(str) {
     return String(str ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
+  var UI_ICON_PATHS = {
+    building: '<path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/>',
+    globe: '<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>',
+    network: '<rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/>',
+    help: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',
+    zap: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
+    target: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
+    lock: '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+    unlock: '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>',
+    grid: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/><path d="M15 3v18"/>',
+    box: '<path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
+    shield: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>',
+    magnet: '<path d="m6 15-4-4 6.75-6.77a7.79 7.79 0 0 1 11 11L13 22l-4-4 6.39-6.36a2.14 2.14 0 0 0-3-3L6 15"/><path d="m5 8 4 4"/><path d="m12 15 4 4"/>',
+    move: '<polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/>',
+    copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
+    route: '<circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/>',
+    ruler: '<path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z"/><path d="m14.5 12.5 2-2"/><path d="m11.5 9.5 2-2"/><path d="m8.5 6.5 2-2"/><path d="m17.5 15.5 2-2"/>',
+    check: '<polyline points="20 6 9 17 4 12"/>',
+    x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+    terminal: '<polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>',
+    award: '<circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/>',
+    sliders: '<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>',
+    plug: '<path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/>',
+    search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+    pencil: '<path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>',
+    pin: '<path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/>',
+    "map-pin": '<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/>',
+    layers: '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
+    trees: '<path d="M10 10v.2A3 3 0 0 1 8.9 16H5a3 3 0 0 1-1-5.8V10a3 3 0 0 1 6 0Z"/><path d="M7 16v6"/><path d="M13 19v3"/><path d="M12 19h8.3a1 1 0 0 0 .7-1.7L18 14h.3a1 1 0 0 0 .7-1.7L16 9h.2a1 1 0 0 0 .8-1.7L13 3l-1.4 1.5"/>',
+    radio: '<path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9C23 8.8 23 15.1 19.1 19"/>',
+    server: '<rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/>',
+    play: '<polygon points="6 3 20 12 6 21 6 3"/>',
+    compass: '<circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>',
+    "arrow-up": '<path d="m5 12 7-7 7 7"/><path d="M12 19V5"/>',
+    "arrow-down": '<path d="M12 5v14"/><path d="m19 12-7 7-7-7"/>',
+    user: '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+    alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+    palette: '<circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2Z"/>',
+    star: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
+    undo: '<path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>',
+    "rotate-ccw": '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+    "rotate-cw": '<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>',
+    hand: '<path d="M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2"/><path d="M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2"/><path d="M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/>',
+    settings: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+    trash: '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>',
+    wrench: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
+    tag: '<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/>',
+    "chevron-left": '<path d="m15 18-6-6 6-6"/>',
+    "chevron-right": '<path d="m9 18 6-6-6-6"/>',
+    "layout-grid": '<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>',
+    "columns": '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M12 3v18"/>',
+    "footprints": '<path d="M4 16v-2.38C4 11.5 2.97 10.5 3 8c.03-2.72 1.49-6 4.5-6C9.37 2 10 3.8 10 5.5c0 3.11-2 5.66-2 8.68V16a2 2 0 1 1-4 0Z"/><path d="M20 20v-2.38c0-2.12 1.03-3.12 1-5.62-.03-2.72-1.49-6-4.5-6C14.63 6 14 7.8 14 9.5c0 3.11 2 5.66 2 8.68V20a2 2 0 1 0 4 0Z"/>'
+  };
+  function uiIcon(name, size = 13) {
+    const inner = UI_ICON_PATHS[name] || UI_ICON_PATHS.box;
+    return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0;vertical-align:-0.125em;">${inner}</svg>`;
+  }
   function clamp(val, min, max) {
     return Math.min(Math.max(val, min), max);
   }
@@ -3563,7 +3620,7 @@
       const natW = state.project.map.naturalWidth || 1024;
       const mPerPx = savedScale / natW;
       if (this.scaleText) {
-        this.scaleText.textContent = `\u{1F4D0} Skala: ${savedScale}m (1px = ${mPerPx.toFixed(2)}m)`;
+        this.scaleText.textContent = `Skala: ${savedScale}m (1px = ${mPerPx.toFixed(2)}m)`;
       }
     }
     bindEvents() {
@@ -3589,7 +3646,7 @@
       });
       eventBus.on("map:scale-calibrated", ({ mapWidthMeters, metersPerPixel }) => {
         if (this.scaleText) {
-          this.scaleText.textContent = `\u{1F4D0} Skala: ${mapWidthMeters}m (1px = ${metersPerPixel.toFixed(2)}m)`;
+          this.scaleText.textContent = `Skala: ${mapWidthMeters}m (1px = ${metersPerPixel.toFixed(2)}m)`;
         }
       });
       eventBus.on("viewport:changed", ({ scale }) => {
@@ -3618,7 +3675,7 @@
         }
         if (this.scaleText && width > 0) {
           const mPerPx = savedScale / width;
-          this.scaleText.textContent = `\u{1F4D0} Skala: ${savedScale}m (1px = ${mPerPx.toFixed(2)}m)`;
+          this.scaleText.textContent = `Skala: ${savedScale}m (1px = ${mPerPx.toFixed(2)}m)`;
         }
       });
     }
@@ -6083,7 +6140,7 @@
       });
       const areaM2 = calculateCoverageArea(radiusMeters);
       const bandLabel = band === "dual-band" ? "Dual-Band" : band === "5ghz" ? "5 GHz" : band === "ptp" ? "PtP" : "2.4 GHz";
-      const labelTextContent = `\u{1F4F6} ${radiusMeters}m \u2022 ${formatCoverageArea(areaM2)} (${bandLabel})`;
+      const labelTextContent = `WiFi ${radiusMeters}m \u2022 ${formatCoverageArea(areaM2)} (${bandLabel})`;
       const labelBg = new Konva.Tag({
         fill: "rgba(24, 53, 13, 0.92)",
         stroke: color,
@@ -6148,7 +6205,7 @@
         coverageShape.setAttr("radiusPixels", curRadiusPx);
         const curMeters = Math.round(pixelsToMeters(curRadiusPx, this.naturalWidth));
         const curArea = calculateCoverageArea(curMeters);
-        labelText.text(`\u{1F4F6} ${curMeters}m \u2022 ${formatCoverageArea(curArea)} (${bandLabel})`);
+        labelText.text(`WiFi ${curMeters}m \u2022 ${formatCoverageArea(curArea)} (${bandLabel})`);
         labelLabel.offsetX(labelText.width() / 2);
         labelGroup.y(-curRadiusPx - 14);
         group.getLayer()?.batchDraw();
@@ -6210,7 +6267,7 @@
         if (labelText) {
           const areaM2 = calculateCoverageArea(radiusMeters);
           const bandLabel = band === "dual-band" ? "Dual-Band" : band === "5ghz" ? "5 GHz" : band === "ptp" ? "PtP" : "2.4 GHz";
-          labelText.text(`\u{1F4F6} ${radiusMeters}m \u2022 ${formatCoverageArea(areaM2)} (${bandLabel})`);
+          labelText.text(`WiFi ${radiusMeters}m \u2022 ${formatCoverageArea(areaM2)} (${bandLabel})`);
           if (labelBubble) {
             labelBubble.offsetX(labelText.width() / 2);
           }
@@ -8239,10 +8296,10 @@ ${device.network.ip}`;
                 </label>
               </div>
               <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;">
-                <button type="button" class="btn btn-secondary btn-sm btn-prop-nudge" data-dx="-0.004" data-dy="0" ${device.layerLocked ? "disabled" : ""} style="font-size: 10px; padding: 3px 4px; height: auto;" title="Geser kiri (-X) \u2022 Arrow Left">\u25C0 -X</button>
-                <button type="button" class="btn btn-secondary btn-sm btn-prop-nudge" data-dx="0" data-dy="-0.004" ${device.layerLocked ? "disabled" : ""} style="font-size: 10px; padding: 3px 4px; height: auto;" title="Geser atas (-Y) \u2022 Arrow Up">\u25B2 -Y</button>
-                <button type="button" class="btn btn-secondary btn-sm btn-prop-nudge" data-dx="0" data-dy="0.004" ${device.layerLocked ? "disabled" : ""} style="font-size: 10px; padding: 3px 4px; height: auto;" title="Geser bawah (+Y) \u2022 Arrow Down">\u25BC +Y</button>
-                <button type="button" class="btn btn-secondary btn-sm btn-prop-nudge" data-dx="0.004" data-dy="0" ${device.layerLocked ? "disabled" : ""} style="font-size: 10px; padding: 3px 4px; height: auto;" title="Geser kanan (+X) \u2022 Arrow Right">\u25B6 +X</button>
+                <button type="button" class="btn btn-secondary btn-sm btn-prop-nudge" data-dx="-0.004" data-dy="0" ${device.layerLocked ? "disabled" : ""} style="font-size: 10px; padding: 3px 4px; height: auto;" title="Geser kiri (-X) \u2022 Arrow Left">Kiri (-X)</button>
+                <button type="button" class="btn btn-secondary btn-sm btn-prop-nudge" data-dx="0" data-dy="-0.004" ${device.layerLocked ? "disabled" : ""} style="font-size: 10px; padding: 3px 4px; height: auto;" title="Geser atas (-Y) \u2022 Arrow Up">Atas (-Y)</button>
+                <button type="button" class="btn btn-secondary btn-sm btn-prop-nudge" data-dx="0" data-dy="0.004" ${device.layerLocked ? "disabled" : ""} style="font-size: 10px; padding: 3px 4px; height: auto;" title="Geser bawah (+Y) \u2022 Arrow Down">Bawah (+Y)</button>
+                <button type="button" class="btn btn-secondary btn-sm btn-prop-nudge" data-dx="0.004" data-dy="0" ${device.layerLocked ? "disabled" : ""} style="font-size: 10px; padding: 3px 4px; height: auto;" title="Geser kanan (+X) \u2022 Arrow Right">Kanan (+X)</button>
               </div>
             </div>
             <div style="grid-column: span 2; display: flex; flex-direction: column; gap: 4px;">
@@ -10157,7 +10214,7 @@ ${device.network.ip}`;
       const mediaType = getMediaTypeByCableCategory(cable.cableCategory);
       const cableLen = Number(cable.length) || 0;
       const isOverLimit = mediaType === "twisted-pair" && cableLen > 100;
-      const labelText = isOverLimit ? `\u26A0\uFE0F ${cableLen.toFixed(1)}m` : `${cableLen.toFixed(1)}m`;
+      const labelText = isOverLimit ? `[!] ${cableLen.toFixed(1)}m` : `${cableLen.toFixed(1)}m`;
       let badge = this.labelMap.get(cable.id);
       if (!badge) {
         badge = new Konva.Label({
@@ -10955,7 +11012,7 @@ ${device.network.ip}`;
     `;
       this.penHudEl.innerHTML = `
       <span style="font-weight: 700; color: var(--accent-blue, #2a7c13); display: inline-flex; align-items: center; gap: 4px;">
-        \u2712\uFE0F Pen Tool Kabel:
+        Pen Tool Kabel:
       </span>
       <select id="pen-hud-path-style" style="background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 6px; padding: 3px 7px; font-size: 11px; color: var(--text-primary); font-weight: 600;">
         <option value="curve" selected>Kurva Bezier Halus (Pen Tool)</option>
@@ -10971,10 +11028,10 @@ ${device.network.ip}`;
         <option value="wireless-ptp">Wireless PtP</option>
       </select>
       <button type="button" id="btn-pen-hud-undo" class="btn btn-secondary btn-sm" style="font-size: 10.5px; padding: 3px 8px;" title="Hapus titik belok terakhir (Backspace)">
-        \u21A9 Undo Titik
+        Undo Titik
       </button>
       <button type="button" id="btn-pen-hud-cancel" class="btn btn-secondary btn-sm" style="font-size: 10.5px; padding: 3px 8px;" title="Batalkan tarikan kabel (Esc)">
-        \u2716 Batal
+        Batal
       </button>
       <span style="font-size: 10px; color: var(--text-muted);">
         Klik Kanvas: Titik Anchor \u2022 <strong>Shift</strong>: Kunci 45\xB0/90\xB0 \u2022 <strong>Backspace</strong>: Hapus Titik
@@ -11168,7 +11225,7 @@ ${device.network.ip}`;
       const srcDev = this.deviceManager.getDeviceById(this.sourceDeviceId);
       const destDev = this.deviceManager.getDeviceById(destDeviceId);
       const newCable = this.cableManager.addConnection({
-        name: `Link ${srcDev.name} \u2794 ${destDev.name}`,
+        name: `Link ${srcDev.name} -> ${destDev.name}`,
         source: this.sourceDeviceId,
         destination: destDeviceId,
         cableCategory: this.selectedCategory,
@@ -11275,8 +11332,8 @@ ${device.network.ip}`;
           </div>
 
           <div style="display: flex; align-items: center; justify-content: space-between; font-size: 11px;">
-            <span style="font-family: var(--font-mono); color: var(--text-muted); cursor: pointer;" id="btn-copy-cable-id" title="Klik untuk salin ID">
-              ID: ${cable.id} \u{1F4CB}
+            <span style="font-family: var(--font-mono); color: var(--text-muted); cursor: pointer; display: inline-flex; align-items: center; gap: 4px;" id="btn-copy-cable-id" title="Klik untuk salin ID">
+              ID: ${cable.id} ${uiIcon("copy", 11)}
             </span>
             <div style="display: flex; align-items: center; gap: 6px;">
               <span style="width: 8px; height: 8px; border-radius: 50%; background-color: ${statusDef.color};"></span>
@@ -11295,7 +11352,7 @@ ${device.network.ip}`;
           <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
             <span class="section-label" style="margin-bottom: 0;">Endpoint & Port Koneksi</span>
             <button type="button" id="btn-open-port-picker" class="btn btn-secondary btn-sm" style="font-size: 10.5px; padding: 3px 8px;">
-              \u{1F50C} Pilih Port (3D)
+              ${uiIcon("plug", 12)} Pilih Port (3D)
             </button>
           </div>
           <div class="info-card" style="display: flex; flex-direction: column; gap: 8px;">
@@ -11364,8 +11421,8 @@ ${device.network.ip}`;
                   <span id="cable-color-preview-dot" style="display: inline-block; width: 12px; height: 12px; border-radius: 50%; background-color: ${activeColor}; border: 1px solid rgba(0,0,0,0.25); box-shadow: 0 0 6px ${activeColor}88;"></span>
                   Warna Garis Kabel
                 </label>
-                <span id="prop-cable-color-mode-badge" style="font-size: 10px; padding: 2px 7px; border-radius: 10px; font-weight: 600; ${isCustomColor ? "background: rgba(245, 158, 11, 0.15); color: #b45309; border: 1px solid rgba(245, 158, 11, 0.3);" : "background: rgba(42, 124, 19, 0.15); color: var(--accent-green); border: 1px solid rgba(42, 124, 19, 0.3);"}">
-                  ${isCustomColor ? "\u{1F3A8} Custom" : "\u26A1 Otomatis (Standar Tipe)"}
+                <span id="prop-cable-color-mode-badge" style="font-size: 10px; padding: 2px 7px; border-radius: 10px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; ${isCustomColor ? "background: rgba(245, 158, 11, 0.15); color: #b45309; border: 1px solid rgba(245, 158, 11, 0.3);" : "background: rgba(42, 124, 19, 0.15); color: var(--accent-green); border: 1px solid rgba(42, 124, 19, 0.3);"}">
+                  ${isCustomColor ? `${uiIcon("palette", 11)} Custom` : `${uiIcon("zap", 11)} Otomatis (Standar Tipe)`}
                 </span>
               </div>
 
@@ -11658,7 +11715,7 @@ ${device.network.ip}`;
                   `).join("")}
                   ${segments.map((seg, idx) => `
                     <div style="display: flex; align-items: center; justify-content: space-between; font-size: 10px; padding: 2px 6px; color: var(--text-muted);">
-                      <span>${idx === 0 ? "Sumber \u2794 Titik 1" : idx === segments.length - 1 ? `Titik ${idx} \u2794 Tujuan` : `Titik ${idx} \u2794 Titik ${idx + 1}`}:</span>
+                      <span>${idx === 0 ? "Sumber -> Titik 1" : idx === segments.length - 1 ? `Titik ${idx} -> Tujuan` : `Titik ${idx} -> Titik ${idx + 1}`}:</span>
                       <span style="font-family: var(--font-mono);">${seg.toFixed(1)} m</span>
                     </div>
                   `).join("")}
@@ -12321,12 +12378,12 @@ ${device.network.ip}`;
             <div style="display: flex; flex-direction: column; gap: 2px;">
               <label style="font-size: 10px; color: var(--text-muted);">Warna Tube (TIA-598)</label>
               <select id="detail-fiber-tube" style="background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px; font-size: 11px; padding: 4px 6px;">
-                <option value="Biru (Tube 1)" ${tube.includes("Biru") ? "selected" : ""}>\u{1F535} Biru (Tube 1)</option>
-                <option value="Oranye (Tube 2)" ${tube.includes("Oranye") ? "selected" : ""}>\u{1F7E0} Oranye (Tube 2)</option>
-                <option value="Hijau (Tube 3)" ${tube.includes("Hijau") ? "selected" : ""}>\u{1F7E2} Hijau (Tube 3)</option>
-                <option value="Cokelat (Tube 4)" ${tube.includes("Cokelat") ? "selected" : ""}>\u{1F7E4} Cokelat (Tube 4)</option>
-                <option value="Abu-abu (Tube 5)" ${tube.includes("Abu-abu") ? "selected" : ""}>\u26AA Abu-abu (Tube 5)</option>
-                <option value="Putih (Tube 6)" ${tube.includes("Putih") ? "selected" : ""}>\u26AA Putih (Tube 6)</option>
+                <option value="Biru (Tube 1)" ${tube.includes("Biru") ? "selected" : ""}>Biru (Tube 1)</option>
+                <option value="Oranye (Tube 2)" ${tube.includes("Oranye") ? "selected" : ""}>Oranye (Tube 2)</option>
+                <option value="Hijau (Tube 3)" ${tube.includes("Hijau") ? "selected" : ""}>Hijau (Tube 3)</option>
+                <option value="Cokelat (Tube 4)" ${tube.includes("Cokelat") ? "selected" : ""}>Cokelat (Tube 4)</option>
+                <option value="Abu-abu (Tube 5)" ${tube.includes("Abu-abu") ? "selected" : ""}>Abu-abu (Tube 5)</option>
+                <option value="Putih (Tube 6)" ${tube.includes("Putih") ? "selected" : ""}>Putih (Tube 6)</option>
               </select>
             </div>
 
@@ -12405,7 +12462,7 @@ ${device.network.ip}`;
                       border-radius: 6px; padding: 8px 10px; font-size: 11px; display: flex; flex-direction: column; gap: 5px;">
             <div style="display: flex; align-items: center; justify-content: space-between;">
               <span style="font-weight: 700; color: ${ethComp.badgeColor}; display: flex; align-items: center; gap: 5px;">
-                ${ethComp.status === "exceeded" ? "\u26A0\uFE0F" : ethComp.status === "warning" ? "\u26A0\uFE0F" : "\u2713"}
+                ${ethComp.status === "exceeded" || ethComp.status === "warning" ? uiIcon("alert", 12) : uiIcon("check", 12)}
                 ${ethComp.badgeText}
               </span>
               <span style="font-family: var(--font-mono); font-size: 10px; color: var(--text-muted);">
@@ -12417,7 +12474,7 @@ ${device.network.ip}`;
             </div>
             ${ethComp.status === "exceeded" ? `
               <div style="margin-top: 2px; padding: 4px 6px; background: rgba(239, 68, 68, 0.15); border-radius: 4px; font-size: 10px; color: var(--text-primary);">
-                \u{1F4A1} <strong>Solusi Rekayasa:</strong> Tambahkan PoE Extender, Switch Distribusi perantara di titik &lt;90m, atau ganti link ini ke Fiber Optic Single Mode.
+                <strong>Solusi Rekayasa:</strong> Tambahkan PoE Extender, Switch Distribusi perantara di titik &lt;90m, atau ganti link ini ke Fiber Optic Single Mode.
               </div>
             ` : ""}
           </div>
@@ -66835,7 +66892,7 @@ void main() {
             <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;">
               <input type="checkbox" id="cd-save-template-check" checked style="accent-color: var(--accent-blue); width: 16px; height: 16px;">
               <span style="font-size: 12px; font-weight: 600; color: var(--text-primary);">
-                \u2B50 Simpan ke Library Perangkat Kustom (Sidebar) agar bisa digunakan berulang kali
+                Simpan ke Library Perangkat Kustom (Sidebar) agar bisa digunakan berulang kali
               </span>
             </label>
             <span style="font-size: 10.5px; color: var(--text-muted);">
@@ -67009,7 +67066,7 @@ void main() {
         if (!cdGlbStatus) return;
         if (Array.isArray(ports) && ports.length > 0) {
           cdGlbStatus.style.display = "block";
-          cdGlbStatus.textContent = `\u2713 ${ports.length} port fisik terdeteksi dari model .GLB (${ports.slice(0, 4).map((p) => p.name).join(", ")}${ports.length > 4 ? "..." : ""})`;
+          cdGlbStatus.textContent = `${ports.length} port fisik terdeteksi dari model .GLB (${ports.slice(0, 4).map((p) => p.name).join(", ")}${ports.length > 4 ? "..." : ""})`;
         } else {
           cdGlbStatus.style.display = "none";
           cdGlbStatus.textContent = "";
@@ -67243,9 +67300,9 @@ void main() {
         });
         this.deviceManager.selectDevice(placedDevice.id);
         stateManager.setMode("select");
-        this.showToast(`\u2728 Perangkat kustom "${name}" berhasil ditambahkan ke peta!`);
+        this.showToast(`Perangkat kustom "${name}" berhasil ditambahkan ke peta!`);
       } else {
-        this.showToast(`\u2B50 Perangkat kustom "${name}" berhasil disimpan ke Library Sidebar!`);
+        this.showToast(`Perangkat kustom "${name}" berhasil disimpan ke Library Sidebar!`);
       }
       this.hide();
     }
@@ -67991,7 +68048,7 @@ void main() {
         gap: 8px;
         animation: fadeIn 0.2s ease-out;
       `;
-        toast.innerHTML = `<span>\u{1F4D0} Skala denah berhasil dikalibrasi ke <strong>${val} Meter</strong>!</span>`;
+        toast.innerHTML = `<span>Skala denah berhasil dikalibrasi ke <strong>${val} Meter</strong>!</span>`;
         document.body.appendChild(toast);
         setTimeout(() => toast.remove(), 3500);
       });
@@ -69158,6 +69215,10 @@ void main() {
       this.transformGizmoGroup.name = "TransformGizmo3D";
       this.transformGizmoGroup.visible = false;
       this.transformGizmoDragState = null;
+      this.simplePlacementIndicatorGroup = new Group();
+      this.simplePlacementIndicatorGroup.name = "HouseFlipperPlacementIndicator3D";
+      this.simplePlacementIndicatorGroup.visible = false;
+      this._lastHouseFlipperHudKey = "";
       this.buildPlacementConfig = this._loadSavedBuildPlacementConfig();
       this.mobileJoystickState = {
         active: false,
@@ -69307,9 +69368,9 @@ void main() {
           if (gizmoHit) {
             cancelLongPress();
             this.startObject3dGizmoDrag(e, dom, gizmoHit);
-          } else if (this.navTool === "box" || e.ctrlKey || e.metaKey) {
+          } else if (this.navTool === "box" && !this.avatarMode || e.ctrlKey || e.metaKey) {
             this.startBoxSelect(e, dom);
-          } else if (this.navTool === "draw3d") {
+          } else if (this.navTool === "draw3d" && !this.avatarMode) {
             this.startObject3dCreateDraw(e, dom);
           } else if (this.navTool === "look") {
             this.isLookDragging = true;
@@ -69319,9 +69380,9 @@ void main() {
             this.lookYaw = Math.atan2(dir.x, dir.z);
             this.lookPitch = Math.asin(Math.max(-0.99, Math.min(0.99, dir.y)));
             dom.setPointerCapture?.(e.pointerId);
-          } else if (this.navTool === "move") {
+          } else if (this.navTool === "move" && !this.avatarMode) {
             this.startDeviceDragMove(e, dom);
-          } else if (this.navTool === "rotate") {
+          } else if (this.navTool === "rotate" && !this.avatarMode) {
             this.startRotateDrag(e, dom);
           }
         }
@@ -69361,66 +69422,7 @@ void main() {
           this.updateRoad3dBuildHover(e);
         }
         if (this.avatarMode && !this.simulatorFocusedDeviceId) {
-          if (e.pointerType === "touch") {
-            const prevTouch = this._avatarTouchPointers.get(e.pointerId);
-            this._avatarTouchPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-            if (this._avatarTouchPointers.size >= 2) {
-              const pts = Array.from(this._avatarTouchPointers.values());
-              const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y) || 0;
-              if (this._avatarTouchPinchDist > 0 && dist > 0) {
-                const pinchDelta = this._avatarTouchPinchDist - dist;
-                if (this.avatarPerspective === "fpp" && pinchDelta > 16) {
-                  this.avatarState.camDist = 2.6;
-                  this.setAvatarPerspective("tpp");
-                } else if (this.avatarPerspective === "tpp" && Math.abs(pinchDelta) > 1.5) {
-                  const nextDist = (this.avatarState.camDist || 5.8) + pinchDelta * 0.032;
-                  if (nextDist <= 1.7) {
-                    this.avatarState.camDist = 2;
-                    this.setAvatarPerspective("fpp");
-                  } else {
-                    this.avatarState.camDist = clamp(nextDist, 2, 22);
-                    this.syncAvatarCameraFromAngles();
-                  }
-                }
-              }
-              this._avatarTouchPinchDist = dist;
-              return;
-            }
-            if (prevTouch) {
-              const dx2 = e.clientX - prevTouch.x;
-              const dy2 = e.clientY - prevTouch.y;
-              if (dx2 !== 0 || dy2 !== 0) {
-                this.applyAvatarMouseLookDelta(dx2, dy2);
-              }
-            }
-            return;
-          }
-          const isLocked = typeof document !== "undefined" && document.pointerLockElement === dom;
-          if (isLocked) {
-            this.avatarState._lastMouseClient = null;
-            const dx2 = Math.abs(e.movementX || 0) <= 250 ? e.movementX || 0 : 0;
-            const dy2 = Math.abs(e.movementY || 0) <= 250 ? e.movementY || 0 : 0;
-            if (dx2 !== 0 || dy2 !== 0) {
-              this.applyAvatarMouseLookDelta(dx2, dy2);
-            }
-            return;
-          }
-          const isBuildMode = Boolean(this.buildPlacementConfig?.buildModeEnabled);
-          const allowHoverLook = !isBuildMode && e.buttons === 0 && !e.altKey;
-          const allowBuildOrbitDrag = isBuildMode && ((e.buttons & 2) !== 0 || (e.buttons & 4) !== 0);
-          if (allowHoverLook || allowBuildOrbitDrag) {
-            const prev = this.avatarState._lastMouseClient;
-            this.avatarState._lastMouseClient = { x: e.clientX, y: e.clientY };
-            if (prev) {
-              const dx2 = e.clientX - prev.x;
-              const dy2 = e.clientY - prev.y;
-              if ((dx2 !== 0 || dy2 !== 0) && Math.abs(dx2) <= 200 && Math.abs(dy2) <= 200) {
-                this.applyAvatarMouseLookDelta(dx2, dy2);
-              }
-            }
-            return;
-          }
-          this.avatarState._lastMouseClient = null;
+          this.handleAvatarPointerMove(e, dom);
           return;
         }
         if (!this.isLookDragging) return;
@@ -69782,7 +69784,7 @@ void main() {
         if (!this.roomsGroup.children.includes(roomGroup)) return;
         this._attachRoomFallbackMesh(room, roomGroup);
         this.showStatusHint?.(
-          `\u26A0\uFE0F Model GLB "${room.name || "Ruangan 3D"}" gagal dimuat \u2014 menampilkan bentuk fallback.`
+          `Model GLB "${room.name || "Ruangan 3D"}" gagal dimuat \u2014 menampilkan bentuk fallback.`
         );
       });
     }
@@ -69831,7 +69833,7 @@ void main() {
       eventBus.emit("rooms3d:lock-changed", { locked: this.roomsLocked });
       if (!silent) {
         this.showStatusHint(
-          this.roomsLocked ? "\u{1F512} Semua Ruangan & Struktur 3D dikunci \u2014 aman menggeser perangkat tanpa menggeser ruangan." : "\u{1F513} Kunci Ruangan 3D dibuka \u2014 ruangan dapat dipilih & digeser kembali."
+          this.roomsLocked ? "Semua Ruangan & Struktur 3D dikunci \u2014 aman menggeser perangkat tanpa menggeser ruangan." : "Kunci Ruangan 3D dibuka \u2014 ruangan dapat dipilih & digeser kembali."
         );
       }
       return this.roomsLocked;
@@ -69850,7 +69852,7 @@ void main() {
       eventBus.emit("rooms3d:lock-changed", { roomId: room.id, roomLocked: nextLocked, locked: this.roomsLocked });
       if (!silent) {
         this.showStatusHint(
-          nextLocked ? `\u{1F512} Ruangan "${room.name}" dikunci agar tidak bergeser.` : `\u{1F513} Kunci ruangan "${room.name}" dibuka.`
+          nextLocked ? `Ruangan "${room.name}" dikunci agar tidak bergeser.` : `Kunci ruangan "${room.name}" dibuka.`
         );
       }
       return nextLocked;
@@ -70091,12 +70093,12 @@ void main() {
       const segLen = Math.hypot(snapped.x - anchorWorld.x, snapped.z - anchorWorld.z);
       const deg = (Math.round(Math.atan2(snapped.x - anchorWorld.x, snapped.z - anchorWorld.z) * 180 / Math.PI) % 360 + 360) % 360;
       this.showStatusHint(
-        `\u{1F6E3}\uFE0F Jalan 3D: ${segLen.toFixed(1)}m (${deg}\xB0) \u2014 Klik untuk sambung belokan \u2022 Klik kanan / Enter untuk selesai \u2022 Shift = kunci sudut 15\xB0${snapped.nodeSnapped ? " \u2022 \u{1F9F2} Simpul Tertaut" : ""}`
+        `Jalan 3D: ${segLen.toFixed(1)}m (${deg}\xB0) \u2014 Klik untuk sambung belokan \u2022 Klik kanan / Enter untuk selesai \u2022 Shift = kunci sudut 15\xB0${snapped.nodeSnapped ? " \u2022 Simpul Tertaut" : ""}`
       );
     }
     handleRoad3dBuildClick(e, explicitWorld = null) {
       if (authManager?.isAuthenticated?.() && authManager.getActiveWorkspaceKey?.() === "main" && authManager.isMainWorkspaceUnlocked?.() === false) {
-        this.showStatusHint("\u{1F512} Server Utama terkunci (hanya lihat). Buka kunci terlebih dahulu untuk membangun jalan.");
+        this.showStatusHint("Server Utama terkunci (hanya lihat). Buka kunci terlebih dahulu untuk membangun jalan.");
         return null;
       }
       const raw = explicitWorld || this._resolveRoadGroundWorldFromEvent(e);
@@ -70117,7 +70119,7 @@ void main() {
         };
         this.syncRoadBuildPreview();
         this.renderRoad3dHudBar?.();
-        this.showStatusHint("\u{1F6E3}\uFE0F Titik awal Jalan 3D diletakkan \u2014 Klik titik berikutnya untuk membangun & belokkan jalur (Klik kanan / Enter = selesai).");
+        this.showStatusHint("Titik awal Jalan 3D diletakkan \u2014 Klik titik berikutnya untuk membangun & belokkan jalur (Klik kanan / Enter = selesai).");
         return { started: true, point: ptNorm };
       }
       if (anchorWorld && Math.hypot(snapped.x - anchorWorld.x, snapped.z - anchorWorld.z) < 0.25) {
@@ -70138,10 +70140,10 @@ void main() {
           points: nextPoints
         });
         this.roadBuildState.roadId = newRoad?.id || null;
-        this.showStatusHint(`\u2705 Segmen jalan #${count} dibangun (${nextPoints.length} titik) \u2014 Klik lagi untuk belokkan, atau Klik Kanan / Enter untuk selesai.`);
+        this.showStatusHint(`Segmen jalan #${count} dibangun (${nextPoints.length} titik) \u2014 Klik lagi untuk belokkan, atau Klik Kanan / Enter untuk selesai.`);
       } else {
         stateManager.updateRoad3d?.(this.roadBuildState.roadId, { points: nextPoints });
-        this.showStatusHint(`\u{1F6E3}\uFE0F Jalan diperpanjang (${nextPoints.length} titik) \u2014 Klik lanjut belok, Backspace undo titik, Klik Kanan / Enter selesai.`);
+        this.showStatusHint(`Jalan diperpanjang (${nextPoints.length} titik) \u2014 Klik lanjut belok, Backspace undo titik, Klik Kanan / Enter selesai.`);
       }
       this.syncRoadBuildPreview();
       this.renderRoad3dHudBar?.();
@@ -70185,7 +70187,7 @@ void main() {
       }
       this.renderRoad3dHudBar?.();
       if (!silent && hadBuild) {
-        this.showStatusHint("\u2705 Pembangunan jalur jalan selesai \u2014 Seret titik kuning untuk menggeser sudut belokan, atau klik tanah untuk membuat jalur baru.");
+        this.showStatusHint("Pembangunan jalur jalan selesai \u2014 Seret titik kuning untuk menggeser sudut belokan, atau klik tanah untuk membuat jalur baru.");
       }
       return hadBuild;
     }
@@ -70272,7 +70274,7 @@ void main() {
         return { x: Number(n.normX.toFixed(5)), y: Number(n.normY.toFixed(5)) };
       });
       stateManager.updateRoad3d?.(road.id, { points: nextPts });
-      this.showStatusHint(`\u{1F6E3}\uFE0F "${road.name || "Jalan 3D"}" digeser`);
+      this.showStatusHint(`"${road.name || "Jalan 3D"}" digeser`);
       return true;
     }
     bindRoad3dHudControls() {
@@ -71254,6 +71256,13 @@ void main() {
         this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
       }
       this.raycaster.setFromCamera(this.pointer, this.camera);
+      if (this.avatarMode && !this.simulatorFocusedDeviceId && this.navTool === "move" && stateManager.getMode() !== "draw-cable" && Array.isArray(this.carriedObjects) && this.carriedObjects.length > 0 && !e.ctrlKey && !e.metaKey) {
+        this.dropCarriedObjectsFromAvatar({ dropAll: Boolean(e.shiftKey), useAimTarget: true });
+        if (e.pointerType !== "touch") {
+          this.tryLockAvatarPointer?.();
+        }
+        return;
+      }
       const devHits = !this.workspaceGhostDevices ? this.raycaster.intersectObjects(this.devicesGroup.children, true) : [];
       const cableHitsPre = !this.workspaceGhostDevices && stateManager.getMode() !== "draw-cable" ? this.raycaster.intersectObjects(this.cablesGroup.children, true) : [];
       if (cableHitsPre.length > 0 && (devHits.length === 0 || cableHitsPre[0].distance <= devHits[0].distance + 0.25 || Boolean(cableHitsPre[0].object?.userData?.cableHandleType))) {
@@ -71327,6 +71336,14 @@ void main() {
             this.handleSimulatorPortClick(devId, hitPortName);
             return;
           }
+          if (this.avatarMode && !this.simulatorFocusedDeviceId && this.navTool === "move" && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+            if (this.pickupDeviceFromAvatar(devId)) {
+              if (e.pointerType !== "touch") {
+                this.tryLockAvatarPointer?.();
+              }
+              return;
+            }
+          }
           stateManager.deselectObject3d?.();
           stateManager.deselectRoom3d?.();
           this.deviceManager.selectDevice(devId, {
@@ -71334,15 +71351,20 @@ void main() {
             additive: Boolean(e.shiftKey)
           });
           if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
-            if (["move", "rotate", "box"].includes(this.navTool)) {
+            if (this.navTool === "move") {
               const devObj = this.deviceManager.getDeviceById?.(devId);
               this.showStatusHint(
-                `\u2195\uFE0F "${devObj?.name || devId}" dipilih \u2014 Gunakan tombol Panah (Arrow) keyboard atau seret untuk menggeser X/Y.`
+                `"${devObj?.name || devId}" dipilih \u2014 Seret langsung di lantai/meja untuk pindah \u2022 Panah : Geser \u2022 R : Putar 45\xB0`
               );
-            } else if (this.buildPlacementConfig?.buildModeEnabled) {
+            } else if (["rotate", "box"].includes(this.navTool)) {
               const devObj = this.deviceManager.getDeviceById?.(devId);
               this.showStatusHint(
-                `\u{1F6E0}\uFE0F "${devObj?.name || devId}" dipilih \u2014 Seret panah/lingkaran Gizmo RGB (X Merah, Y Hijau, Z Biru) untuk geser & putar presisi.`
+                `"${devObj?.name || devId}" dipilih \u2014 Gunakan tombol Panah (Arrow) atau R untuk memutar/geser.`
+              );
+            } else if (this.buildPlacementConfig?.buildModeEnabled && this.buildPlacementConfig?.gizmoEnabled) {
+              const devObj = this.deviceManager.getDeviceById?.(devId);
+              this.showStatusHint(
+                `"${devObj?.name || devId}" dipilih \u2014 Seret panah/lingkaran Gizmo RGB (X Merah, Y Hijau, Z Biru) untuk geser & putar presisi.`
               );
             } else if (this.autoFocusOnClick || this.simulatorFocusedDeviceId) {
               this.focusOnDevice(devId, { viewAngle: this.simulatorViewAngle || "front" });
@@ -71382,7 +71404,7 @@ void main() {
           }
           this.pending3dWaypoints.push({ x: normX, y: normY });
           this.syncCables();
-          this.showStatusHint(`\u2712\uFE0F Titik belok #${this.pending3dWaypoints.length} ditambahkan. Klik lantai lagi atau klik perangkat tujuan.`);
+          this.showStatusHint(`Titik belok #${this.pending3dWaypoints.length} ditambahkan. Klik lantai lagi atau klik perangkat tujuan.`);
           return;
         }
       }
@@ -71418,6 +71440,14 @@ void main() {
       if (stateManager.getMode() !== "draw-cable") {
         const objHit = this.findObject3dHit(this.raycaster);
         if (objHit?.object3dId) {
+          if (this.avatarMode && !this.simulatorFocusedDeviceId && this.navTool === "move" && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+            if (this.pickupObjectFromAvatar(objHit.object3dId)) {
+              if (e.pointerType !== "touch") {
+                this.tryLockAvatarPointer?.();
+              }
+              return;
+            }
+          }
           this.deviceManager.deselectDevice();
           this.cableManager.deselectConnection();
           stateManager.deselectRoom3d?.();
@@ -71447,7 +71477,7 @@ void main() {
           stateManager.selectRoad3d?.(roadHit.roadId);
           const road = stateManager.getRoad3dById?.(roadHit.roadId);
           this.showStatusHint(
-            `\u{1F6E3}\uFE0F Jalan "${road?.name || "Jalan 3D"}" dipilih \u2014 Tarik titik kuning untuk belok/panjang \u2022 Tarik titik biru (+) untuk tambah tekukan \u2022 Delete untuk hapus`
+            `Jalan "${road?.name || "Jalan 3D"}" dipilih \u2014 Tarik titik kuning untuk belok/panjang \u2022 Tarik titik biru (+) untuk tambah tekukan \u2022 Delete untuk hapus`
           );
           return;
         }
@@ -71462,7 +71492,7 @@ void main() {
           stateManager.selectRoom3d?.(roomHit.roomId);
           const room = stateManager.getRoom3dById?.(roomHit.roomId);
           this.showStatusHint(
-            `\u{1F3E0} Ruangan "${room?.name || "Ruangan 3D"}" dipilih \u2014 Drag handle oranye / Move (M) geser \u2022 Rotate (R) / [ ] putar \u2022 Kuning / + - ubah skala`
+            `Ruangan "${room?.name || "Ruangan 3D"}" dipilih \u2014 Drag handle oranye / Move (M) geser \u2022 Rotate (R) / [ ] putar \u2022 Kuning / + - ubah skala`
           );
           return;
         }
@@ -71807,7 +71837,7 @@ void main() {
         this.cableManager?.deselectConnection();
         this.deviceManager.selectMultipleDevices(matchedIds, { additive });
         const totalSel = this.deviceManager.getSelectedDeviceIds().length;
-        this.showStatusHint(`\u2705 ${totalSel} perangkat terpilih \u2014 Aktifkan Move (M) untuk geser bersamaan.`);
+        this.showStatusHint(`${totalSel} perangkat terpilih \u2014 Aktifkan Move (M) untuk geser bersamaan.`);
       } else if (!additive) {
         this.deviceManager.deselectDevice();
         this.cableManager?.deselectConnection();
@@ -71934,7 +71964,7 @@ void main() {
       const obj = stateManager.getObject3dById(gizmoHit.object3dId);
       if (!obj) return;
       if (this.isObject3dLocked(obj)) {
-        this.showStatusHint(`\u{1F512} Ruangan / Objek "${obj.name}" sedang dikunci.`);
+        this.showStatusHint(`Ruangan / Objek "${obj.name}" sedang dikunci.`);
         return;
       }
       if (gizmoHit.gizmoType === "pushpull") {
@@ -72080,7 +72110,7 @@ void main() {
       const obj = stateManager.getObject3dById(objHit.object3dId);
       if (!obj) return;
       if (this.isObject3dLocked(obj)) {
-        this.showStatusHint(`\u{1F512} Ruangan / Objek "${obj.name}" sedang dikunci.`);
+        this.showStatusHint(`Ruangan / Objek "${obj.name}" sedang dikunci.`);
         return;
       }
       stateManager.selectObject3d(obj.id);
@@ -72109,7 +72139,7 @@ void main() {
       const room = stateManager.getRoom3dById?.(gizmoHit.roomId);
       if (!room) return;
       if (this.isRoomLocked(room)) {
-        this.showStatusHint(`\u{1F512} Ruangan "${room.name}" sedang dikunci.`);
+        this.showStatusHint(`Ruangan "${room.name}" sedang dikunci.`);
         return;
       }
       if (gizmoHit.gizmoType === "room-move") {
@@ -72178,7 +72208,7 @@ void main() {
       const room = stateManager.getRoom3dById?.(roomHit?.roomId);
       if (!room) return;
       if (this.isRoomLocked(room)) {
-        this.showStatusHint(`\u{1F512} Ruangan "${room.name}" sedang dikunci.`);
+        this.showStatusHint(`Ruangan "${room.name}" sedang dikunci.`);
         return;
       }
       stateManager.selectRoom3d?.(room.id);
@@ -72216,7 +72246,7 @@ void main() {
         state.latestHeight = nextH;
         state.draftObj = { ...state.draftObj, heightMeters: nextH };
         this.rebuildSingleObject3dMesh(state.draftObj, true);
-        this.showStatusHint(`\u{1F4D0} Push/Pull Tinggi "${state.draftObj.name}": ${nextH.toFixed(2)}m`);
+        this.showStatusHint(`Push/Pull Tinggi "${state.draftObj.name}": ${nextH.toFixed(2)}m`);
         return;
       }
       if (state.kind === "room-pushpull") {
@@ -72227,7 +72257,7 @@ void main() {
         state.latestHeight = nextH;
         state.draftRoom = { ...state.draftRoom, heightMeters: nextH };
         this.rebuildSingleRoom3dMesh(state.draftRoom, true);
-        this.showStatusHint(`\u{1F4D0} Tinggi Ruangan "${state.draftRoom.name}": ${nextH.toFixed(2)}m`);
+        this.showStatusHint(`Tinggi Ruangan "${state.draftRoom.name}": ${nextH.toFixed(2)}m`);
         return;
       }
       this.pointer.x = (e.clientX - rect.left) / rect.width * 2 - 1;
@@ -72247,7 +72277,7 @@ void main() {
         state.latestDepth = nextD;
         state.draftObj = { ...state.draftObj, widthMeters: nextW, depthMeters: nextD };
         this.rebuildSingleObject3dMesh(state.draftObj, true);
-        this.showStatusHint(`\u{1F4D0} Ukuran "${state.draftObj.name}": ${nextW.toFixed(2)}m \xD7 ${nextD.toFixed(2)}m`);
+        this.showStatusHint(`Ukuran "${state.draftObj.name}": ${nextW.toFixed(2)}m \xD7 ${nextD.toFixed(2)}m`);
         return;
       }
       if (state.kind === "room-scale") {
@@ -72280,7 +72310,7 @@ void main() {
         this.rebuildSingleRoom3dMesh(state.draftRoom, true);
         const pct = state.startWidth > 0 ? Math.round(nextW / (state.draftRoom.baseWidthMeters || state.startWidth) * 100) : 100;
         this.showStatusHint(
-          `\u{1F4D0} Skala Ruangan "${state.draftRoom.name}": ${nextW.toFixed(1)}\xD7${nextD.toFixed(1)}\xD7${nextH.toFixed(1)}m (${pct}%) \u2022 Tahan Shift untuk ubah Lebar/Panjang bebas`
+          `Skala Ruangan "${state.draftRoom.name}": ${nextW.toFixed(1)}\xD7${nextD.toFixed(1)}\xD7${nextH.toFixed(1)}m (${pct}%) \u2022 Tahan Shift untuk ubah Lebar/Panjang bebas`
         );
         return;
       }
@@ -72310,7 +72340,7 @@ void main() {
           );
         }
         this.showStatusHint(
-          `\u{1F504} Rotasi "${state.draftObj.name}": X:${rx}\xB0 Y:${ry}\xB0 Z:${rz}\xB0 (Drag=Y \u2022 Shift=Miring X/Dinding \u2022 Alt=Roll Z \u2022 Ctrl=Snap 15\xB0)`
+          `Rotasi "${state.draftObj.name}": X:${rx}\xB0 Y:${ry}\xB0 Z:${rz}\xB0 (Drag=Y \u2022 Shift=Miring X/Dinding \u2022 Alt=Roll Z \u2022 Ctrl=Snap 15\xB0)`
         );
         return;
       }
@@ -72340,7 +72370,7 @@ void main() {
           );
         }
         this.showStatusHint(
-          `\u{1F504} Rotasi Ruangan "${state.draftRoom.name}": Y:${ry}\xB0 (Ctrl=Snap 15\xB0)`
+          `Rotasi Ruangan "${state.draftRoom.name}": Y:${ry}\xB0 (Ctrl=Snap 15\xB0)`
         );
         return;
       }
@@ -72363,7 +72393,7 @@ void main() {
           }
           state.draftObj = { ...state.draftObj, x: normX, y: normY, widthMeters: w, depthMeters: d };
           this.rebuildSingleObject3dMesh(state.draftObj, true);
-          this.showStatusHint(`\u{1F4D0} Menggambar "${state.draftObj.name}": ${w.toFixed(1)}m \xD7 ${d.toFixed(1)}m`);
+          this.showStatusHint(`Menggambar "${state.draftObj.name}": ${w.toFixed(1)}m \xD7 ${d.toFixed(1)}m`);
         }
         return;
       }
@@ -72386,7 +72416,7 @@ void main() {
         state.latestPoints = pts;
         this.rebuildSingleRoad3dMesh(state.draftRoad, true);
         this.showStatusHint(
-          `\u{1F6E3}\uFE0F Titik #${state.nodeIndex + 1} "${state.draftRoad.name || "Jalan 3D"}": X:${snapped.x.toFixed(1)}m Z:${snapped.z.toFixed(1)}m${snapped.nodeSnapped ? " (Tertaut Simpul)" : ""}`
+          `Titik #${state.nodeIndex + 1} "${state.draftRoad.name || "Jalan 3D"}": X:${snapped.x.toFixed(1)}m Z:${snapped.z.toFixed(1)}m${snapped.nodeSnapped ? " (Tertaut Simpul)" : ""}`
         );
         return;
       }
@@ -72411,7 +72441,7 @@ void main() {
         state.draftRoad = { ...state.draftRoad, points: pts };
         state.latestPoints = pts;
         this.rebuildSingleRoad3dMesh(state.draftRoad, true);
-        this.showStatusHint(`\u{1F6E3}\uFE0F Geser "${state.draftRoad.name || "Jalan 3D"}"`);
+        this.showStatusHint(`Geser "${state.draftRoad.name || "Jalan 3D"}"`);
         return;
       }
       if (state.kind === "move-room3d") {
@@ -72429,7 +72459,7 @@ void main() {
         }
         state.latestNorm = { x: Number(normX.toFixed(4)), y: Number(normY.toFixed(4)) };
         this.showStatusHint(
-          `\u{1F3E0} Geser Ruangan "${state.room?.name || "Ruangan 3D"}": X=${state.latestNorm.x.toFixed(3)}, Y=${state.latestNorm.y.toFixed(3)}`
+          `Geser Ruangan "${state.room?.name || "Ruangan 3D"}": X=${state.latestNorm.x.toFixed(3)}, Y=${state.latestNorm.y.toFixed(3)}`
         );
         return;
       }
@@ -72553,7 +72583,7 @@ void main() {
       if (state.kind === "create-draw") {
         this._suppressNextClick = true;
         stateManager.addObject3d(state.draftObj);
-        this.showStatusHint(`\u2705 "${state.draftObj.name}" dibuat! Tarik panah biru di atas untuk Push/Pull tinggi.`);
+        this.showStatusHint(`"${state.draftObj.name}" dibuat! Tarik panah biru di atas untuk Push/Pull tinggi.`);
         return;
       }
       if (state.kind === "move-obj3d" && state.latestNorm) {
@@ -72725,7 +72755,7 @@ void main() {
           additive: Boolean(e.shiftKey),
           preserveMultiOnDrag: preserveMulti
         });
-        this.showStatusHint(`\u{1F512} Perangkat "${device.name}" dikunci pada Layer.`);
+        this.showStatusHint(`Perangkat "${device.name}" dikunci pada Layer.`);
         return;
       }
       this.deviceManager.selectDevice(devId, {
@@ -72809,6 +72839,11 @@ void main() {
       const visit = (node) => {
         if (!node || node.visible === false) return;
         if (node.userData?.gizmoType || node.userData?.isSelectionRing || node.userData?.isCarriedByAvatar) return;
+        if (node.userData?.object3dId) {
+          const objRec = stateManager?.getObject3dById?.(node.userData.object3dId);
+          const shp = String(objRec?.shape || "").toLowerCase();
+          if (shp === "table" || shp === "floor") return;
+        }
         if (node.isMesh) {
           const meshName = String(node.name || "");
           if (!/atap|plafon|kanopi|lisplang|roof|ceiling/i.test(meshName) || /tangga|stair/i.test(meshName)) {
@@ -72914,7 +72949,7 @@ void main() {
             mountType: "wall"
           };
           this.syncCables();
-          this.showStatusHint(`\u{1F4CC} Menempel ke dinding 3D (Tinggi: ${mountY.toFixed(2)}m \u2022 Hadap: ${wallHit.rotationY}\xB0)`);
+          this.showStatusHint(`Menempel ke dinding 3D (Tinggi: ${mountY.toFixed(2)}m \u2022 Hadap: ${wallHit.rotationY}\xB0)`);
           return;
         }
         if (state.wallMountSnap) {
@@ -73014,12 +73049,12 @@ void main() {
       this.syncCables();
       this.syncTransformGizmo?.();
       if (collisionBlocker) {
-        this.showStatusHint(`\u{1F9F1} Anti-Tabrakan aktif: digeser menghindari "${collisionBlocker}" (aktifkan MoveObjects untuk tumpuk bebas)`);
+        this.showStatusHint(`Anti-Tabrakan aktif: digeser menghindari "${collisionBlocker}" (aktifkan MoveObjects untuk tumpuk bebas)`);
       } else if (surfaceSnapped) {
-        this.showStatusHint(`\u{1F9F2} Surface Snap: menempel rata pada elevasi Z:${activeElevY.toFixed(2)}m`);
+        this.showStatusHint(`Surface Snap: menempel rata pada elevasi Z:${activeElevY.toFixed(2)}m`);
       } else if (snappedToGrid) {
         const step = this.buildPlacementConfig?.gridSnapMeters || 0.5;
-        this.showStatusHint(`\u229E Snap Grid (${step}m): X:${clampedWorld.x.toFixed(1)}m \u2022 Y:${clampedWorld.z.toFixed(1)}m`);
+        this.showStatusHint(`Snap Grid (${step}m): X:${clampedWorld.x.toFixed(1)}m \u2022 Y:${clampedWorld.z.toFixed(1)}m`);
       }
     }
     finishDeviceDragMove(e, dom) {
@@ -73052,7 +73087,7 @@ void main() {
         this.syncDevices();
         this.syncCables();
         this.showStatusHint(
-          `\u{1F4CC} Perangkat ditempelkan ke dinding 3D (Tinggi: ${state.wallMountSnap.elevationMeters.toFixed(2)}m \u2022 Hadap: ${state.wallMountSnap.rotationY}\xB0)`
+          `Perangkat ditempelkan ke dinding 3D (Tinggi: ${state.wallMountSnap.elevationMeters.toFixed(2)}m \u2022 Hadap: ${state.wallMountSnap.rotationY}\xB0)`
         );
         return;
       }
@@ -73199,7 +73234,7 @@ void main() {
       if (firstAngles) {
         const suffix = state.items.length > 1 ? ` (${state.items.length} perangkat)` : "";
         this.showStatusHint(
-          `\u{1F504} Rotasi "${state.primaryName}"${suffix}: X:${firstAngles.rx}\xB0 Y:${firstAngles.ry}\xB0 Z:${firstAngles.rz}\xB0 (Drag=Y \u2022 Shift=Miring X/Dinding \u2022 Alt=Roll Z \u2022 Ctrl=Snap 15\xB0)`
+          `Rotasi "${state.primaryName}"${suffix}: X:${firstAngles.rx}\xB0 Y:${firstAngles.ry}\xB0 Z:${firstAngles.rz}\xB0 (Drag=Y \u2022 Shift=Miring X/Dinding \u2022 Alt=Roll Z \u2022 Ctrl=Snap 15\xB0)`
         );
       }
     }
@@ -73249,7 +73284,7 @@ void main() {
           topItem.relativeYawOffset = angleSnap > 0 ? targetWorldYaw - avatarDeg : (Number(topItem.relativeYawOffset) || 0) + delta;
         }
         this.updateCarriedObjectsTransform?.();
-        this.showStatusHint(`\u{1F504} Putar "${topItem.name}"${angleSnap > 0 ? ` (Snap ${angleSnap}\xB0)` : ""} sebelum ditaruh (${this.carriedObjects.length} objek dibawa)`);
+        this.showStatusHint(`Putar "${topItem.name}"${angleSnap > 0 ? ` (Snap ${angleSnap}\xB0)` : ""} sebelum ditaruh (${this.carriedObjects.length} objek dibawa)`);
         return true;
       }
       const selectedIds = this.deviceManager?.getSelectedDeviceIds?.() || [];
@@ -73268,7 +73303,7 @@ void main() {
           if (!summary) summary = { name: dev.name, rx, ry, rz };
         });
         if (summary) {
-          this.showStatusHint(`\u{1F504} Rotasi "${summary.name}": X:${summary.rx}\xB0 Y:${summary.ry}\xB0 Z:${summary.rz}\xB0`);
+          this.showStatusHint(`Rotasi "${summary.name}": X:${summary.rx}\xB0 Y:${summary.ry}\xB0 Z:${summary.rz}\xB0`);
         }
         return true;
       }
@@ -73276,28 +73311,28 @@ void main() {
       if (selObjId) {
         const obj = stateManager.getObject3dById(selObjId);
         if (!obj || this.isObject3dLocked(obj)) {
-          if (obj) this.showStatusHint(`\u{1F512} Ruangan / Objek "${obj.name}" sedang dikunci.`);
+          if (obj) this.showStatusHint(`Ruangan / Objek "${obj.name}" sedang dikunci.`);
           return false;
         }
         const rx = reset ? 0 : snapSigned((Number(obj.rotationX) || 0) + stepX);
         const ry = reset ? 0 : snapYaw((Number(obj.rotationY ?? obj.rotationDeg) || 0) + stepY);
         const rz = reset ? 0 : snapSigned((Number(obj.rotationZ) || 0) + stepZ);
         stateManager.updateObject3d(selObjId, { rotationX: rx, rotationY: ry, rotationZ: rz });
-        this.showStatusHint(`\u{1F504} Rotasi "${obj.name}": X:${rx}\xB0 Y:${ry}\xB0 Z:${rz}\xB0`);
+        this.showStatusHint(`Rotasi "${obj.name}": X:${rx}\xB0 Y:${ry}\xB0 Z:${rz}\xB0`);
         return true;
       }
       const selRoomId = stateManager.getSelectedRoom3dId?.();
       if (selRoomId) {
         const room = stateManager.getRoom3dById?.(selRoomId);
         if (!room || this.isRoomLocked(room)) {
-          if (room) this.showStatusHint(`\u{1F512} Ruangan "${room.name}" sedang dikunci.`);
+          if (room) this.showStatusHint(`Ruangan "${room.name}" sedang dikunci.`);
           return false;
         }
         const rx = reset ? 0 : snapSigned((Number(room.rotationX) || 0) + stepX);
         const ry = reset ? 0 : snapYaw((Number(room.rotationY ?? room.rotationDeg) || 0) + stepY);
         const rz = reset ? 0 : snapSigned((Number(room.rotationZ) || 0) + stepZ);
         stateManager.updateRoom3d?.(selRoomId, { rotationX: rx, rotationY: ry, rotationZ: rz });
-        this.showStatusHint(`\u{1F504} Rotasi Ruangan "${room.name}": X:${rx}\xB0 Y:${ry}\xB0 Z:${rz}\xB0`);
+        this.showStatusHint(`Rotasi Ruangan "${room.name}": X:${rx}\xB0 Y:${ry}\xB0 Z:${rz}\xB0`);
         return true;
       }
       return false;
@@ -73307,7 +73342,7 @@ void main() {
       if (!selRoomId) return false;
       const room = stateManager.getRoom3dById?.(selRoomId);
       if (!room || this.isRoomLocked(room)) {
-        if (room) this.showStatusHint(`\u{1F512} Ruangan "${room.name}" sedang dikunci.`);
+        if (room) this.showStatusHint(`Ruangan "${room.name}" sedang dikunci.`);
         return false;
       }
       const mul = Math.max(0.25, Math.min(4, Number(factor) || 1));
@@ -73328,7 +73363,7 @@ void main() {
       });
       const pct = Math.round(nextScale * 100);
       this.showStatusHint(
-        `\u{1F4D0} Skala Ruangan "${room.name}": ${nextW.toFixed(1)}\xD7${nextD.toFixed(1)}\xD7${nextH.toFixed(1)}m (${pct}%)`
+        `Skala Ruangan "${room.name}": ${nextW.toFixed(1)}\xD7${nextD.toFixed(1)}\xD7${nextH.toFixed(1)}m (${pct}%)`
       );
       return true;
     }
@@ -73445,7 +73480,6 @@ void main() {
       this.controls.target.add(moveVec);
     }
     tryLockAvatarPointer() {
-      if (this.buildPlacementConfig?.buildModeEnabled) return;
       if (this._touchActiveInSession || isMobileTouchDevice()) return;
       if (typeof document === "undefined" || !this.renderer?.domElement) return;
       if (document.pointerLockElement === this.renderer.domElement) return;
@@ -73765,6 +73799,74 @@ void main() {
       const { endPos, target } = this.getAvatarFollowCameraPose(this.avatarState.camDist);
       this.controls.target.copy(target);
       this.camera.position.copy(endPos);
+      this.syncSimplePlacementIndicator?.();
+      this.renderHouseFlipperPromptHud?.();
+    }
+    /** Handle touch pinch/swipe and desktop mouse cursor-follow or drag-look while in Mode Teknisi. */
+    handleAvatarPointerMove(e, dom = this.renderer?.domElement) {
+      if (!this.avatarMode || this.simulatorFocusedDeviceId || !e) return false;
+      if (e.pointerType === "touch") {
+        const prevTouch = this._avatarTouchPointers.get(e.pointerId);
+        this._avatarTouchPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (this._avatarTouchPointers.size >= 2) {
+          const pts = Array.from(this._avatarTouchPointers.values());
+          const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y) || 0;
+          if (this._avatarTouchPinchDist > 0 && dist > 0) {
+            const pinchDelta = this._avatarTouchPinchDist - dist;
+            if (this.avatarPerspective === "fpp" && pinchDelta > 16) {
+              this.avatarState.camDist = 2.6;
+              this.setAvatarPerspective("tpp");
+            } else if (this.avatarPerspective === "tpp" && Math.abs(pinchDelta) > 1.5) {
+              const nextDist = (this.avatarState.camDist || 5.8) + pinchDelta * 0.032;
+              if (nextDist <= 1.7) {
+                this.avatarState.camDist = 2;
+                this.setAvatarPerspective("fpp");
+              } else {
+                this.avatarState.camDist = clamp(nextDist, 2, 22);
+                this.syncAvatarCameraFromAngles();
+              }
+            }
+          }
+          this._avatarTouchPinchDist = dist;
+          return true;
+        }
+        if (prevTouch) {
+          const dx = e.clientX - prevTouch.x;
+          const dy = e.clientY - prevTouch.y;
+          if (dx !== 0 || dy !== 0) {
+            this.applyAvatarMouseLookDelta(dx, dy);
+          }
+        }
+        return true;
+      }
+      const isLocked = typeof document !== "undefined" && dom && document.pointerLockElement === dom;
+      if (isLocked) {
+        this.avatarState._lastMouseClient = null;
+        const dx = Math.abs(e.movementX || 0) <= 250 ? e.movementX || 0 : 0;
+        const dy = Math.abs(e.movementY || 0) <= 250 ? e.movementY || 0 : 0;
+        if (dx !== 0 || dy !== 0) {
+          this.applyAvatarMouseLookDelta(dx, dy);
+        }
+        return true;
+      }
+      const buttons = Number(e.buttons) || 0;
+      const allowHoverLook = buttons === 0 && !e.altKey;
+      const allowDragLook = (buttons & 1) !== 0 || (buttons & 2) !== 0 || (buttons & 4) !== 0;
+      if (allowHoverLook || allowDragLook) {
+        const prev = this.avatarState._lastMouseClient;
+        this.avatarState._lastMouseClient = { x: e.clientX, y: e.clientY };
+        if (prev) {
+          const dx = e.clientX - prev.x;
+          const dy = e.clientY - prev.y;
+          if ((dx !== 0 || dy !== 0) && Math.abs(dx) <= 200 && Math.abs(dy) <= 200) {
+            this.applyAvatarMouseLookDelta(dx, dy);
+            return true;
+          }
+        }
+        return false;
+      }
+      this.avatarState._lastMouseClient = null;
+      return false;
     }
     applyAvatarMouseLookDelta(dx, dy) {
       if (!this.avatarMode || this.simulatorFocusedDeviceId) return;
@@ -74149,7 +74251,7 @@ void main() {
       this.updateAvatarProximityHud();
       this.publishLocalPresence?.(true);
       this.showStatusHint(
-        `\u{1F4E6} Mengangkat "${obj.name || "Objek 3D"}" (${this.carriedObjects.length} dibawa) \u2014 E tambah lagi \u2022 Q taruh \u2022 Shift+Q taruh semua \u2022 [ / ] putar`
+        `Mengangkat "${obj.name || "Objek 3D"}" (${this.carriedObjects.length} dibawa) \u2014 E tambah lagi \u2022 Q taruh \u2022 Shift+Q taruh semua \u2022 [ / ] putar`
       );
       return true;
     }
@@ -74204,19 +74306,21 @@ void main() {
       this.updateAvatarProximityHud();
       this.publishLocalPresence?.(true);
       this.showStatusHint(
-        `\u{1F4E6} Mengangkat "${dev.name}" (${this.carriedObjects.length} dibawa) \u2014 E tambah lagi \u2022 Q taruh \u2022 Shift+Q taruh semua \u2022 [ / ] putar`
+        `Mengangkat "${dev.name}" (${this.carriedObjects.length} dibawa) \u2014 E tambah lagi \u2022 Q taruh \u2022 Shift+Q taruh semua \u2022 [ / ] putar`
       );
       return true;
     }
-    _getAvatarWallAimRay() {
+    _getAvatarWallAimRay(maxDistOverride = null) {
       const ax = Number(this.avatarState?.x) || 0;
       const ay = Number(this.avatarState?.y) || 0;
       const az = Number(this.avatarState?.z) || 0;
       const scale = resolveEngineAvatarScale(this);
-      if (this.avatarPerspective === "fpp" && typeof this.getAvatarFollowCameraPose === "function") {
+      if ((this.avatarPerspective === "fpp" || maxDistOverride !== null) && typeof this.getAvatarFollowCameraPose === "function") {
         const pose = this.getAvatarFollowCameraPose(this.avatarState?.camDist);
         const dir = pose.target.clone().sub(pose.endPos).normalize();
-        return { origin: pose.endPos.clone(), dir, maxDist: Number((4.2 + Math.max(0, scale - 1) * 0.8).toFixed(2)) };
+        const origin = this.avatarPerspective === "fpp" ? pose.endPos.clone() : new Vector3(ax, ay + 1.42 * scale, az);
+        const fallbackMax = Number((4.2 + Math.max(0, scale - 1) * 0.8).toFixed(2));
+        return { origin, dir, maxDist: Number(maxDistOverride) || fallbackMax };
       }
       const yaw = Number(this.avatarState?.yaw) || 0;
       return {
@@ -74347,8 +74451,10 @@ void main() {
       if (anyMovedDevices) {
         this.syncCables?.();
       }
+      this.syncSimplePlacementIndicator?.();
+      this.renderHouseFlipperPromptHud?.();
     }
-    dropCarriedObjectsFromAvatar({ dropAll = false, silent = false } = {}) {
+    dropCarriedObjectsFromAvatar({ dropAll = false, silent = false, useAimTarget = false } = {}) {
       if (!Array.isArray(this.carriedObjects) || this.carriedObjects.length === 0) return 0;
       const toDrop = dropAll ? [...this.carriedObjects] : [this.carriedObjects.pop()];
       if (dropAll) {
@@ -74381,9 +74487,10 @@ void main() {
       let mountedOnWallCount = 0;
       const surfaceSnapOn = this.buildPlacementConfig?.surfaceSnapEnabled !== false;
       const firstDevItem = placements.find((p) => p.item.kind === "device");
-      const aimRay = !silent && surfaceSnapOn && firstDevItem ? this._getAvatarWallAimRay() : null;
+      const aimRay = !silent && surfaceSnapOn && firstDevItem ? this._getAvatarWallAimRay(useAimTarget ? 6.8 : null) : null;
       const sampleDev = firstDevItem ? this.deviceManager?.getDeviceById?.(firstDevItem.item.devId) : null;
       const wallMountHit = aimRay && sampleDev ? this.find3DWallMountTarget(aimRay.origin, aimRay.dir, aimRay.maxDist, { device: sampleDev, minHitY: 0.25, maxHitY: 12 }) : null;
+      const floorAimTarget = useAimTarget && !wallMountHit ? this.computeAvatarAimPlacementTarget?.({ item: placements[0]?.item || null }) : null;
       for (let i = 0; i < placements.length; i++) {
         const { item, normRotY, projFwd, projLat } = placements[i];
         const latOffset = placements.length === 1 ? 0 : latCursor + projLat;
@@ -74406,14 +74513,19 @@ void main() {
           dropWorld = this.normToWorld ? this.normToWorld(dropNorm.normX, dropNorm.normY) : { x: rawDropX, z: rawDropZ };
           const defaultElev = Number(getDefaultSpatial3d(dev?.type)?.elevationMeters) || 1.65;
           const avatarBaseY = Math.max(0, Number(this.avatarState?.y) || 0);
-          dropElev = this.avatarPerspective === "fpp" ? clamp(devHit.elevationMeters, 0.25, 11.5) : Number(clamp(avatarBaseY + Math.max(1.35, defaultElev), 0.35, 11.5).toFixed(2));
+          dropElev = this.avatarPerspective === "fpp" || useAimTarget ? clamp(devHit.elevationMeters, 0.25, 11.5) : Number(clamp(avatarBaseY + Math.max(1.35, defaultElev), 0.35, 11.5).toFixed(2));
           targetRotY = devHit.rotationY;
           wallMountedThisItem = true;
           mountedOnWallCount += 1;
         } else {
-          const fwdDist = placements.length === 1 ? Math.max(1.35, avatarRadius + projFwd + 0.35) : Math.max(1.5, avatarRadius + maxProjFwd + 0.4);
-          rawDropX = ax + fwdX * fwdDist + rightX * latOffset;
-          rawDropZ = az + fwdZ * fwdDist + rightZ * latOffset;
+          if (floorAimTarget && Number.isFinite(floorAimTarget.worldX) && Number.isFinite(floorAimTarget.worldZ)) {
+            rawDropX = floorAimTarget.worldX + rightX * latOffset;
+            rawDropZ = floorAimTarget.worldZ + rightZ * latOffset;
+          } else {
+            const fwdDist = placements.length === 1 ? Math.max(1.35, avatarRadius + projFwd + 0.35) : Math.max(1.5, avatarRadius + maxProjFwd + 0.4);
+            rawDropX = ax + fwdX * fwdDist + rightX * latOffset;
+            rawDropZ = az + fwdZ * fwdDist + rightZ * latOffset;
+          }
           if (this.applyBuildGridSnapWorld) {
             const snappedXZ = this.applyBuildGridSnapWorld(rawDropX, rawDropZ);
             rawDropX = snappedXZ.x;
@@ -74522,13 +74634,15 @@ void main() {
         this.updateCarriedObjectsTransform();
       }
       this.updateAvatarProximityHud();
+      this.syncSimplePlacementIndicator?.();
+      this.renderHouseFlipperPromptHud?.();
       this.publishLocalPresence?.(true);
       if (!silent) {
         let msg;
         if (mountedOnWallCount > 0) {
-          msg = mountedOnWallCount === 1 && toDrop.length === 1 ? `\u{1F4CC} Menempelkan "${toDrop[0].name}" langsung ke dinding 3D ruangan${this.carriedObjects.length > 0 ? ` (sisa dibawa: ${this.carriedObjects.length})` : ""}` : `\u{1F4CC} Menempelkan ${mountedOnWallCount} perangkat ke dinding 3D ruangan`;
+          msg = mountedOnWallCount === 1 && toDrop.length === 1 ? `Menempelkan "${toDrop[0].name}" langsung ke dinding 3D ruangan${this.carriedObjects.length > 0 ? ` (sisa dibawa: ${this.carriedObjects.length})` : ""}` : `Menempelkan ${mountedOnWallCount} perangkat ke dinding 3D ruangan`;
         } else {
-          msg = toDrop.length === 1 ? `\u2705 Menaruh "${toDrop[0].name}"${this.carriedObjects.length > 0 ? ` (sisa dibawa: ${this.carriedObjects.length})` : ""}` : `\u2705 Menaruh ${toDrop.length} item sekaligus ke posisi teknisi`;
+          msg = toDrop.length === 1 ? `Menaruh "${toDrop[0].name}"${this.carriedObjects.length > 0 ? ` (sisa dibawa: ${this.carriedObjects.length})` : ""}` : `Menaruh ${toDrop.length} item sekaligus ke posisi teknisi`;
         }
         this.showStatusHint(msg);
       }
@@ -74545,7 +74659,7 @@ void main() {
       }
       this.updateAvatarDeviceLabelsVisibility();
       this.showStatusHint(
-        this.avatarLabelMode === "proximity" ? "\u{1F3F7}\uFE0F Label 3D: Hanya tampilkan perangkat terdekat agar pandangan bersih." : this.avatarLabelMode === "off" ? "\u{1F3F7}\uFE0F Label 3D: Disembunyikan di Mode Teknisi." : "\u{1F3F7}\uFE0F Label 3D: Tampilkan semua perangkat."
+        this.avatarLabelMode === "proximity" ? "Label 3D: Hanya tampilkan perangkat terdekat agar pandangan bersih." : this.avatarLabelMode === "off" ? "Label 3D: Disembunyikan di Mode Teknisi." : "Label 3D: Tampilkan semua perangkat."
       );
       return this.avatarLabelMode;
     }
@@ -74607,7 +74721,7 @@ void main() {
       }
       this.updateAvatarDeviceLabelsVisibility();
       this.renderAvatarSimDeckList?.();
-      this.showStatusHint(`\u{1F6B6} Fokus ke "${nextDev.name}" (${nextIdx + 1}/${devs.length})`);
+      this.showStatusHint(`Fokus ke "${nextDev.name}" (${nextIdx + 1}/${devs.length})`);
       return nextDev;
     }
     _resolveAvatarTargetDevices({ radiusMeters = 12, fallbackCluster = true } = {}) {
@@ -74669,7 +74783,7 @@ void main() {
       this.updateAvatarProximityHud();
       this.renderAvatarSimDeckList?.();
       this.showStatusHint(
-        targets.length === 1 ? `\u2195\uFE0F Ketinggian "${targets[0].name}": ${lastElev.toFixed(2)}m` : `\u2195\uFE0F Ketinggian ${targets.length} perangkat diubah (${lastElev.toFixed(2)}m)`
+        targets.length === 1 ? `Ketinggian "${targets[0].name}": ${lastElev.toFixed(2)}m` : `Ketinggian ${targets.length} perangkat diubah (${lastElev.toFixed(2)}m)`
       );
       return true;
     }
@@ -74791,7 +74905,7 @@ void main() {
       this.updateAvatarProximityHud();
       this.renderAvatarSimDeckList?.();
       const modeName = layout === "rack" ? "Susun Rak Vertikal" : layout === "grid" ? "Grid Rapi" : "Baris Rapi";
-      this.showStatusHint(`\u2705 ${moves.length} perangkat dirapikan (${modeName}) tepat di depan teknisi!`);
+      this.showStatusHint(`${moves.length} perangkat dirapikan (${modeName}) tepat di depan teknisi!`);
       return { count: moves.length, layout, moves };
     }
     resetMobileJoystick() {
@@ -74912,8 +75026,8 @@ void main() {
       });
       bindTap("btn-mob-inspect", () => this.inspectNearestDeviceFromAvatar());
       bindTap("btn-mob-pickup", () => this.pickupNearestObjectFromAvatar());
-      bindTap("btn-mob-drop", () => this.dropCarriedObjectsFromAvatar({ dropAll: false }));
-      bindTap("btn-mob-drop-all", () => this.dropCarriedObjectsFromAvatar({ dropAll: true }));
+      bindTap("btn-mob-drop", () => this.dropCarriedObjectsFromAvatar({ dropAll: false, useAimTarget: true }));
+      bindTap("btn-mob-drop-all", () => this.dropCarriedObjectsFromAvatar({ dropAll: true, useAimTarget: true }));
       bindTap("btn-mob-rot-left", () => this.rotateSelectedIn3D({ dY: -15 }));
       bindTap("btn-mob-rot-right", () => this.rotateSelectedIn3D({ dY: 15 }));
     }
@@ -75964,22 +76078,22 @@ void main() {
           <span id="avatar-compact-nearest" class="avatar-compact-nearest">Siap</span>
         </span>
         <div class="avatar-hud-top-tools">
-          <button type="button" id="btn-avatar-build-mode" class="avatar-hud-pill-btn ${buildCfg.buildModeEnabled ? "active" : ""}" title="Build / Placement Mode (B): Grid Snap, Angle Snap, Collision/MoveObjects, Gizmo RGB, Surface Snap">\u{1F6E0}\uFE0F Build Mode</button>
-          <button type="button" id="btn-avatar-sim-devices" class="avatar-hud-pill-btn ${isDeckOpen ? "active" : ""}" title="Buka Pengatur Perangkat &amp; Tata Letak Simulator">\u{1F4E6} Layout (${allDevs.length})</button>
-          <button type="button" id="btn-avatar-sim-settings" class="avatar-hud-pill-btn ${isSettingsOpen ? "active" : ""}" title="Atur Ukuran Avatar, Sensitivitas &amp; Label 3D">\u2699 Setelan</button>
-          <button type="button" id="btn-avatar-hud-minimize" class="avatar-hud-min-btn" aria-expanded="${!isMin}" title="Minimize / Tampilkan Panel Mode Teknisi">${isMin ? "\u25B4 Panel" : "\u25BE Minimize"}</button>
-          <button type="button" id="btn-avatar-compact-exit" class="avatar-hud-min-btn is-exit" title="Keluar dari Mode Teknisi">\u2715 Keluar</button>
+          <button type="button" id="btn-avatar-build-mode" class="avatar-hud-pill-btn ${buildCfg.buildModeEnabled ? "active" : ""}" title="Build / Placement Mode (B): Grid Snap, Angle Snap, Collision/MoveObjects, Gizmo RGB, Surface Snap">${uiIcon("wrench", 12)} Build Mode</button>
+          <button type="button" id="btn-avatar-sim-devices" class="avatar-hud-pill-btn ${isDeckOpen ? "active" : ""}" title="Buka Pengatur Perangkat &amp; Tata Letak Simulator">${uiIcon("box", 12)} Layout (${allDevs.length})</button>
+          <button type="button" id="btn-avatar-sim-settings" class="avatar-hud-pill-btn ${isSettingsOpen ? "active" : ""}" title="Atur Ukuran Avatar, Sensitivitas &amp; Label 3D">${uiIcon("settings", 12)} Setelan</button>
+          <button type="button" id="btn-avatar-hud-minimize" class="avatar-hud-min-btn" aria-expanded="${!isMin}" title="Minimize / Tampilkan Panel Mode Teknisi">${isMin ? "Panel" : "Minimize"}</button>
+          <button type="button" id="btn-avatar-compact-exit" class="avatar-hud-min-btn is-exit" title="Keluar dari Mode Teknisi">${uiIcon("x", 11)} Keluar</button>
         </div>
       </div>
       <div id="avatar-sim-build-panel" class="avatar-sim-build-panel ${isBuildOpen ? "" : "hidden"}">
         <div class="build-mode-header">
-          <span class="avatar-sim-strip-label">\u{1F6E0}\uFE0F Build / Placement Mode (Klik kanan+seret untuk putar kamera)</span>
+          <span class="avatar-sim-strip-label">${uiIcon("wrench", 12)} Build / Placement Mode (Gerak/seret mouse putar kamera \u2022 Alt jeda kursor)</span>
           <span id="build-mode-target-badge" class="sim-inspector-badge">Target: --</span>
         </div>
         <div class="build-mode-grid">
           <div class="build-mode-row" title="Grid Snapping: sejajarkan posisi objek ke kotak grid lantai, atau Free Placement untuk geser bebas">
             <span class="build-mode-key">Grid Snap</span>
-            <button type="button" id="btn-build-grid-snap" class="avatar-sim-chip ${buildCfg.gridSnapEnabled ? "active" : ""}">${buildCfg.gridSnapEnabled ? "\u229E Snap Grid: ON" : "\u22A1 Free Placement"}</button>
+            <button type="button" id="btn-build-grid-snap" class="avatar-sim-chip ${buildCfg.gridSnapEnabled ? "active" : ""}">${buildCfg.gridSnapEnabled ? `${uiIcon("grid", 11)} Snap Grid: ON` : `${uiIcon("move", 11)} Free Placement`}</button>
             <select id="select-build-grid-size" class="avatar-teleport-select build-mini-select" title="Ukuran kotak Grid (meter)">
               <option value="0.25" ${Math.abs(buildCfg.gridSnapMeters - 0.25) < 0.02 ? "selected" : ""}>0.25m</option>
               <option value="0.5" ${Math.abs(buildCfg.gridSnapMeters - 0.5) < 0.02 ? "selected" : ""}>0.50m</option>
@@ -75995,36 +76109,36 @@ void main() {
               <option value="45" ${buildCfg.angleSnapDeg === 45 ? "selected" : ""}>Snap 45\xB0</option>
               <option value="90" ${buildCfg.angleSnapDeg === 90 ? "selected" : ""}>Snap 90\xB0</option>
             </select>
-            <button type="button" id="btn-build-rot-ccw" class="avatar-sim-mini-btn" title="Putar kiri ([)">\u21BA</button>
-            <button type="button" id="btn-build-rot-cw" class="avatar-sim-mini-btn" title="Putar kanan (])">\u21BB</button>
+            <button type="button" id="btn-build-rot-ccw" class="avatar-sim-mini-btn" title="Putar kiri ([)">${uiIcon("rotate-ccw", 11)}</button>
+            <button type="button" id="btn-build-rot-cw" class="avatar-sim-mini-btn" title="Putar kanan (])">${uiIcon("rotate-cw", 11)}</button>
           </div>
           <div class="build-mode-row" title="Collision / Clipping: Anti-Tabrakan mencegah objek menembus; MoveObjects mengizinkan tumpuk bebas">
             <span class="build-mode-key">Collision</span>
-            <button type="button" id="btn-build-collision" class="avatar-sim-chip ${buildCfg.allowClipping ? "is-moveobjects active" : ""}">${buildCfg.allowClipping ? "\u{1F47B} MoveObjects (Bebas)" : "\u{1F9F1} Anti-Tabrakan"}</button>
+            <button type="button" id="btn-build-collision" class="avatar-sim-chip ${buildCfg.allowClipping ? "is-moveobjects active" : ""}">${buildCfg.allowClipping ? `${uiIcon("layers", 11)} MoveObjects (Bebas)` : `${uiIcon("shield", 11)} Anti-Tabrakan`}</button>
           </div>
           <div class="build-mode-row" title="Surface Snapping / Object Alignment: tempelkan objek rata di atas permukaan meja, rak, lantai, atau dinding 3D">
             <span class="build-mode-key">Surface Snap</span>
-            <button type="button" id="btn-build-surface-snap" class="avatar-sim-chip ${buildCfg.surfaceSnapEnabled ? "active" : ""}">${buildCfg.surfaceSnapEnabled ? "\u{1F9F2} Tempel Meja/Rak: ON" : "\u{1F9F2} Surface Snap: OFF"}</button>
+            <button type="button" id="btn-build-surface-snap" class="avatar-sim-chip ${buildCfg.surfaceSnapEnabled ? "active" : ""}">${buildCfg.surfaceSnapEnabled ? `${uiIcon("magnet", 11)} Tempel Meja/Rak: ON` : `${uiIcon("magnet", 11)} Surface Snap: OFF`}</button>
           </div>
           <div class="build-mode-row is-gizmo-row" title="Gizmo / Transform Controls: seret panah atau lingkaran merah (X), hijau (Y/Tinggi), biru (Z) pada objek">
             <span class="build-mode-key">Gizmo RGB</span>
-            <button type="button" id="btn-build-gizmo" class="avatar-sim-chip ${buildCfg.gizmoEnabled ? "active" : ""}">${buildCfg.gizmoEnabled ? "\u{1F3AF} Gizmo: ON" : "\u{1F3AF} Gizmo: OFF"}</button>
+            <button type="button" id="btn-build-gizmo" class="avatar-sim-chip ${buildCfg.gizmoEnabled ? "active" : ""}">${buildCfg.gizmoEnabled ? `${uiIcon("target", 11)} Gizmo: ON` : `${uiIcon("target", 11)} Gizmo: OFF`}</button>
             <select id="select-build-gizmo-mode" class="avatar-teleport-select build-mini-select" title="Jenis sumbu Gizmo">
               <option value="both" ${buildCfg.gizmoMode === "both" ? "selected" : ""}>Panah + Putar</option>
               <option value="translate" ${buildCfg.gizmoMode === "translate" ? "selected" : ""}>Panah Geser</option>
               <option value="rotate" ${buildCfg.gizmoMode === "rotate" ? "selected" : ""}>Lingkaran Putar</option>
             </select>
             <div class="gizmo-nudge-group">
-              <button type="button" class="gizmo-axis-btn is-x" data-gizmo-nudge="x:-1" title="Geser X-">\u2212X</button>
+              <button type="button" class="gizmo-axis-btn is-x" data-gizmo-nudge="x:-1" title="Geser X-">-X</button>
               <button type="button" class="gizmo-axis-btn is-x" data-gizmo-nudge="x:1" title="Geser X+">+X</button>
-              <button type="button" class="gizmo-axis-btn is-y" data-gizmo-nudge="y:-1" title="Turun Y/Tinggi-">\u2212Y</button>
+              <button type="button" class="gizmo-axis-btn is-y" data-gizmo-nudge="y:-1" title="Turun Y/Tinggi-">-Y</button>
               <button type="button" class="gizmo-axis-btn is-y" data-gizmo-nudge="y:1" title="Naik Y/Tinggi+">+Y</button>
-              <button type="button" class="gizmo-axis-btn is-z" data-gizmo-nudge="z:-1" title="Geser Z-">\u2212Z</button>
+              <button type="button" class="gizmo-axis-btn is-z" data-gizmo-nudge="z:-1" title="Geser Z-">-Z</button>
               <button type="button" class="gizmo-axis-btn is-z" data-gizmo-nudge="z:1" title="Geser Z+">+Z</button>
             </div>
           </div>
           <div class="build-mode-row" title="Buka Alat Bangun Jalan / Trotoar 3D ala City-Builder">
-            <button type="button" id="btn-build-road-tool" class="avatar-sim-chip">\u{1F6E3}\uFE0F Bangun Jalan 3D</button>
+            <button type="button" id="btn-build-road-tool" class="avatar-sim-chip">${uiIcon("route", 11)} Bangun Jalan 3D</button>
           </div>
         </div>
       </div>
@@ -76064,12 +76178,12 @@ void main() {
         </div>
         <div class="avatar-sim-layout-strip">
           <span class="avatar-sim-strip-label">Tata Letak Simulator:</span>
-          <button type="button" id="btn-avatar-layout-row" class="sim-action-btn" title="Susun perangkat terdekat/dibawa dalam 1 baris rapi menghadap teknisi">\u{1F4CF} Baris Rapi</button>
-          <button type="button" id="btn-avatar-layout-rack" class="sim-action-btn" title="Susun vertikal seperti slot rak server">\u{1F5C4}\uFE0F Susun Rak</button>
-          <button type="button" id="btn-avatar-layout-grid" class="sim-action-btn" title="Susun menjadi grid rapi agar tidak bertumpuk">\u229E Grid Rapi</button>
-          <button type="button" id="btn-avatar-elev-down" class="sim-action-btn" title="Turunkan Z perangkat target/dibawa (-0.25m)">\u2B07 Z-</button>
-          <button type="button" id="btn-avatar-elev-up" class="sim-action-btn" title="Naikkan Z perangkat target/dibawa (+0.25m)">\u2B06 Z+</button>
-          <button type="button" id="btn-avatar-rot-face" class="sim-action-btn" title="Putar panel port perangkat menghadap ke teknisi">\u27F3 Hadap</button>
+          <button type="button" id="btn-avatar-layout-row" class="sim-action-btn" title="Susun perangkat terdekat/dibawa dalam 1 baris rapi menghadap teknisi">${uiIcon("ruler", 11)} Baris Rapi</button>
+          <button type="button" id="btn-avatar-layout-rack" class="sim-action-btn" title="Susun vertikal seperti slot rak server">${uiIcon("server", 11)} Susun Rak</button>
+          <button type="button" id="btn-avatar-layout-grid" class="sim-action-btn" title="Susun menjadi grid rapi agar tidak bertumpuk">${uiIcon("grid", 11)} Grid Rapi</button>
+          <button type="button" id="btn-avatar-elev-down" class="sim-action-btn" title="Turunkan Z perangkat target/dibawa (-0.25m)">${uiIcon("arrow-down", 11)} Z-</button>
+          <button type="button" id="btn-avatar-elev-up" class="sim-action-btn" title="Naikkan Z perangkat target/dibawa (+0.25m)">${uiIcon("arrow-up", 11)} Z+</button>
+          <button type="button" id="btn-avatar-rot-face" class="sim-action-btn" title="Putar panel port perangkat menghadap ke teknisi">${uiIcon("rotate-cw", 11)} Hadap</button>
         </div>
         <div id="avatar-sim-deck-list" class="avatar-sim-deck-list"></div>
       </div>
@@ -76089,12 +76203,12 @@ void main() {
           <span id="avatar-sens-value" class="avatar-scale-value">${curSens.toFixed(2)}x</span>
         </div>
         <div class="avatar-nav-step-group" title="Berpindah antar perangkat dengan cepat">
-          <button type="button" id="btn-avatar-prev-device" class="avatar-step-btn" title="Teleport ke perangkat sebelumnya">\u25C0</button>
+          <button type="button" id="btn-avatar-prev-device" class="avatar-step-btn" title="Teleport ke perangkat sebelumnya">${uiIcon("chevron-left", 12)}</button>
           <select id="select-avatar-teleport" class="avatar-teleport-select" title="Teleport karakter ke depan perangkat">
             <option value="">Ke Perangkat...</option>
             ${optionsHtml}
           </select>
-          <button type="button" id="btn-avatar-next-device" class="avatar-step-btn" title="Teleport ke perangkat berikutnya">\u25B6</button>
+          <button type="button" id="btn-avatar-next-device" class="avatar-step-btn" title="Teleport ke perangkat berikutnya">${uiIcon("chevron-right", 12)}</button>
         </div>
         <button type="button" id="btn-avatar-carry-pickup" class="sim-action-btn is-carry" title="Angkat / tambah objek 3D terdekat agar mudah dipindahkan (E)">Angkat (E)</button>
         <button type="button" id="btn-avatar-carry-drop" class="sim-action-btn is-drop hidden" title="Taruh 1 objek (Q) \u2022 Taruh Semua (Shift+Q)">Taruh (Q)</button>
@@ -76178,7 +76292,7 @@ void main() {
       });
       hudEl.querySelector("#btn-avatar-carry-drop")?.addEventListener("click", (ev) => {
         ev.stopPropagation();
-        this.dropCarriedObjectsFromAvatar({ dropAll: Boolean(ev.shiftKey) });
+        this.dropCarriedObjectsFromAvatar({ dropAll: Boolean(ev.shiftKey), useAimTarget: true });
       });
       hudEl.querySelector("#btn-avatar-inspect-nearest")?.addEventListener("click", (ev) => {
         ev.stopPropagation();
@@ -76240,7 +76354,7 @@ void main() {
         ev.stopPropagation();
         this.setAvatarMode(false);
         this.setNavTool("road3d");
-        this.showStatusHint("\u{1F6E3}\uFE0F Mode Bangun Jalan 3D aktif \u2014 Klik pada lantai denah untuk meletakkan jalur batu pijakan & kerikil sekolah.");
+        this.showStatusHint("Mode Bangun Jalan 3D aktif \u2014 Klik pada lantai denah untuk meletakkan jalur batu pijakan & kerikil sekolah.");
       });
       hudEl.querySelectorAll("[data-gizmo-nudge]")?.forEach((btn) => {
         btn.addEventListener("click", (ev) => {
@@ -76371,10 +76485,10 @@ void main() {
             <div class="avatar-sim-dev-meta">${ipBadge}<span>${dist.toFixed(1)}m \u2022 Z:${elev}m</span></div>
           </div>
           <div class="avatar-sim-dev-btns">
-            <button type="button" class="avatar-sim-mini-btn" data-sim-card-go="${this.escapeHudHtml(dev.id)}" title="Teleport tepat di depan perangkat">\u{1F6B6}</button>
-            <button type="button" class="avatar-sim-mini-btn" data-sim-card-port="${this.escapeHudHtml(dev.id)}" title="Buka &amp; inspeksi port perangkat">\u{1F50C}</button>
-            <button type="button" class="avatar-sim-mini-btn" data-sim-card-face="${this.escapeHudHtml(dev.id)}" title="Putar panel port perangkat menghadap teknisi">\u27F3</button>
-            <button type="button" class="avatar-sim-mini-btn is-carry" data-sim-card-pick="${this.escapeHudHtml(dev.id)}" ${dev.layerLocked || isCarried ? "disabled" : ""} title="${isCarried ? "Sedang dibawa" : "Angkat perangkat untuk dipindahkan"}">\u270B</button>
+            <button type="button" class="avatar-sim-mini-btn" data-sim-card-go="${this.escapeHudHtml(dev.id)}" title="Teleport tepat di depan perangkat">${uiIcon("footprints", 11)}</button>
+            <button type="button" class="avatar-sim-mini-btn" data-sim-card-port="${this.escapeHudHtml(dev.id)}" title="Buka &amp; inspeksi port perangkat">${uiIcon("plug", 11)}</button>
+            <button type="button" class="avatar-sim-mini-btn" data-sim-card-face="${this.escapeHudHtml(dev.id)}" title="Putar panel port perangkat menghadap teknisi">${uiIcon("rotate-cw", 11)}</button>
+            <button type="button" class="avatar-sim-mini-btn is-carry" data-sim-card-pick="${this.escapeHudHtml(dev.id)}" ${dev.layerLocked || isCarried ? "disabled" : ""} title="${isCarried ? "Sedang dibawa" : "Angkat perangkat untuk dipindahkan"}">${uiIcon("hand", 11)}</button>
           </div>
         </div>
       `;
@@ -76529,7 +76643,8 @@ void main() {
         gridSnapMeters: 0.5,
         angleSnapDeg: 45,
         allowClipping: false,
-        gizmoEnabled: true,
+        gizmoEnabled: false,
+        gizmoOptIn: false,
         gizmoMode: "both",
         surfaceSnapEnabled: true
       };
@@ -76538,13 +76653,15 @@ void main() {
         const raw = localStorage.getItem("netmap_build_placement_cfg_v1");
         if (!raw) return defaults;
         const parsed = JSON.parse(raw);
+        const gizmoOptIn = Boolean(parsed?.gizmoOptIn);
         return {
           buildModeEnabled: Boolean(parsed?.buildModeEnabled),
           gridSnapEnabled: Boolean(parsed?.gridSnapEnabled),
           gridSnapMeters: clamp(Number(parsed?.gridSnapMeters) || 0.5, 0.1, 5),
           angleSnapDeg: [0, 15, 45, 90].includes(Number(parsed?.angleSnapDeg)) ? Number(parsed.angleSnapDeg) : 45,
           allowClipping: Boolean(parsed?.allowClipping),
-          gizmoEnabled: parsed?.gizmoEnabled !== false,
+          gizmoOptIn,
+          gizmoEnabled: Boolean(gizmoOptIn && parsed?.gizmoEnabled),
           gizmoMode: ["both", "translate", "rotate"].includes(parsed?.gizmoMode) ? parsed.gizmoMode : "both",
           surfaceSnapEnabled: parsed?.surfaceSnapEnabled !== false
         };
@@ -76557,13 +76674,15 @@ void main() {
     }
     setBuildPlacementConfig(patch = {}, { silent = false } = {}) {
       const prev = this.getBuildPlacementConfig();
+      const nextGizmoEnabled = patch.gizmoEnabled !== void 0 ? Boolean(patch.gizmoEnabled) : prev.gizmoEnabled;
       const next = {
         buildModeEnabled: patch.buildModeEnabled !== void 0 ? Boolean(patch.buildModeEnabled) : prev.buildModeEnabled,
         gridSnapEnabled: patch.gridSnapEnabled !== void 0 ? Boolean(patch.gridSnapEnabled) : prev.gridSnapEnabled,
         gridSnapMeters: patch.gridSnapMeters !== void 0 ? clamp(Number(patch.gridSnapMeters) || 0.5, 0.1, 5) : prev.gridSnapMeters,
         angleSnapDeg: patch.angleSnapDeg !== void 0 ? [0, 15, 45, 90].includes(Number(patch.angleSnapDeg)) ? Number(patch.angleSnapDeg) : 0 : prev.angleSnapDeg,
         allowClipping: patch.allowClipping !== void 0 ? Boolean(patch.allowClipping) : prev.allowClipping,
-        gizmoEnabled: patch.gizmoEnabled !== void 0 ? Boolean(patch.gizmoEnabled) : prev.gizmoEnabled,
+        gizmoEnabled: nextGizmoEnabled,
+        gizmoOptIn: patch.gizmoEnabled !== void 0 ? nextGizmoEnabled : Boolean(prev.gizmoOptIn || nextGizmoEnabled),
         gizmoMode: patch.gizmoMode && ["both", "translate", "rotate"].includes(patch.gizmoMode) ? patch.gizmoMode : prev.gizmoMode,
         surfaceSnapEnabled: patch.surfaceSnapEnabled !== void 0 ? Boolean(patch.surfaceSnapEnabled) : prev.surfaceSnapEnabled
       };
@@ -76587,27 +76706,27 @@ void main() {
       if (!silent) {
         if (patch.buildModeEnabled !== void 0) {
           this.showStatusHint(
-            next.buildModeEnabled ? "\u{1F6E0}\uFE0F Build / Placement Mode AKTIF \u2014 Gunakan Gizmo RGB (X/Y/Z), Grid Snap, Angle Snap, MoveObjects & Surface Snap." : "\u{1F6E0}\uFE0F Build / Placement Mode dimatikan."
+            next.buildModeEnabled ? "Build / Placement Mode AKTIF \u2014 Gunakan Gizmo RGB (X/Y/Z), Grid Snap, Angle Snap, MoveObjects & Surface Snap." : "Build / Placement Mode dimatikan."
           );
         } else if (patch.gridSnapEnabled !== void 0 || patch.gridSnapMeters !== void 0) {
           this.showStatusHint(
-            next.gridSnapEnabled ? `\u229E Grid Snapping AKTIF (${next.gridSnapMeters}m)` : "\u22A1 Free Placement AKTIF (geser bebas tanpa snap grid)"
+            next.gridSnapEnabled ? `Grid Snapping AKTIF (${next.gridSnapMeters}m)` : "Free Placement AKTIF (geser bebas tanpa snap grid)"
           );
         } else if (patch.angleSnapDeg !== void 0) {
           this.showStatusHint(
-            next.angleSnapDeg > 0 ? `\u{1F9ED} Rotation Angle Snap: ${next.angleSnapDeg}\xB0` : "\u{1F9ED} Rotasi Bebas (360\xB0 tanpa snap sudut)"
+            next.angleSnapDeg > 0 ? `Rotation Angle Snap: ${next.angleSnapDeg}\xB0` : "Rotasi Bebas (360\xB0 tanpa snap sudut)"
           );
         } else if (patch.allowClipping !== void 0) {
           this.showStatusHint(
-            next.allowClipping ? "\u{1F47B} MoveObjects AKTIF: Objek boleh saling menumpuk / tembus" : "\u{1F9F1} Collision / Anti-Tabrakan AKTIF: Objek tidak saling menembus"
+            next.allowClipping ? "MoveObjects AKTIF: Objek boleh saling menumpuk / tembus" : "Collision / Anti-Tabrakan AKTIF: Objek tidak saling menembus"
           );
         } else if (patch.surfaceSnapEnabled !== void 0) {
           this.showStatusHint(
-            next.surfaceSnapEnabled ? "\u{1F9F2} Surface Snapping AKTIF: Objek otomatis menempel rata di atas meja/rak/dinding" : "\u{1F9F2} Surface Snapping dimatikan: Pertahankan elevasi manual"
+            next.surfaceSnapEnabled ? "Surface Snapping AKTIF: Objek otomatis menempel rata di atas meja/rak/dinding" : "Surface Snapping dimatikan: Pertahankan elevasi manual"
           );
         } else if (patch.gizmoEnabled !== void 0 || patch.gizmoMode !== void 0) {
           this.showStatusHint(
-            next.gizmoEnabled ? `\u{1F3AF} Gizmo RGB Transform Controls AKTIF (${next.gizmoMode})` : "\u{1F3AF} Gizmo RGB disembunyikan"
+            next.gizmoEnabled ? `Gizmo RGB Transform Controls AKTIF (${next.gizmoMode})` : "Gizmo RGB disembunyikan"
           );
         }
       }
@@ -76632,7 +76751,7 @@ void main() {
         const gridBtn = hudEl.querySelector("#btn-build-grid-snap");
         if (gridBtn) {
           gridBtn.classList.toggle("active", cfg.gridSnapEnabled);
-          gridBtn.textContent = cfg.gridSnapEnabled ? "\u229E Snap Grid: ON" : "\u22A1 Free Placement";
+          gridBtn.innerHTML = cfg.gridSnapEnabled ? `${uiIcon("grid", 11)} Snap Grid: ON` : `${uiIcon("move", 11)} Free Placement`;
         }
         const gridSel = hudEl.querySelector("#select-build-grid-size");
         if (gridSel) gridSel.value = String(cfg.gridSnapMeters);
@@ -76642,17 +76761,17 @@ void main() {
         if (colBtn) {
           colBtn.classList.toggle("active", cfg.allowClipping);
           colBtn.classList.toggle("is-moveobjects", cfg.allowClipping);
-          colBtn.textContent = cfg.allowClipping ? "\u{1F47B} MoveObjects (Bebas)" : "\u{1F9F1} Anti-Tabrakan";
+          colBtn.innerHTML = cfg.allowClipping ? `${uiIcon("layers", 11)} MoveObjects (Bebas)` : `${uiIcon("shield", 11)} Anti-Tabrakan`;
         }
         const surfBtn = hudEl.querySelector("#btn-build-surface-snap");
         if (surfBtn) {
           surfBtn.classList.toggle("active", cfg.surfaceSnapEnabled);
-          surfBtn.textContent = cfg.surfaceSnapEnabled ? "\u{1F9F2} Tempel Meja/Rak: ON" : "\u{1F9F2} Surface Snap: OFF";
+          surfBtn.innerHTML = cfg.surfaceSnapEnabled ? `${uiIcon("magnet", 11)} Tempel Meja/Rak: ON` : `${uiIcon("magnet", 11)} Surface Snap: OFF`;
         }
         const gizBtn = hudEl.querySelector("#btn-build-gizmo");
         if (gizBtn) {
           gizBtn.classList.toggle("active", cfg.gizmoEnabled);
-          gizBtn.textContent = cfg.gizmoEnabled ? "\u{1F3AF} Gizmo: ON" : "\u{1F3AF} Gizmo: OFF";
+          gizBtn.innerHTML = cfg.gizmoEnabled ? `${uiIcon("target", 11)} Gizmo: ON` : `${uiIcon("target", 11)} Gizmo: OFF`;
         }
         const gizSel = hudEl.querySelector("#select-build-gizmo-mode");
         if (gizSel) gizSel.value = cfg.gizmoMode;
@@ -76667,7 +76786,7 @@ void main() {
         const sGrid = studioBar.querySelector("#btn-studio-grid-snap");
         if (sGrid) {
           sGrid.classList.toggle("active", cfg.gridSnapEnabled);
-          sGrid.textContent = cfg.gridSnapEnabled ? "\u229E Snap: ON" : "\u22A1 Bebas";
+          sGrid.innerHTML = `${uiIcon("grid", 12)} <span>${cfg.gridSnapEnabled ? "Snap: ON" : "Bebas"}</span>`;
         }
         const sGridSz = studioBar.querySelector("#select-studio-grid-size");
         if (sGridSz) sGridSz.value = String(cfg.gridSnapMeters);
@@ -76676,7 +76795,7 @@ void main() {
         const sCol = studioBar.querySelector("#btn-studio-collision");
         if (sCol) {
           sCol.classList.toggle("active", cfg.allowClipping);
-          sCol.textContent = cfg.allowClipping ? "\u{1F47B} Tembus" : "\u{1F9F1} Anti-Tabrakan";
+          sCol.innerHTML = `${uiIcon(cfg.allowClipping ? "layers" : "shield", 12)} <span>${cfg.allowClipping ? "Tembus" : "Anti-Tabrakan"}</span>`;
         }
         const sSurf = studioBar.querySelector("#btn-studio-surface-snap");
         if (sSurf) {
@@ -76685,7 +76804,7 @@ void main() {
         const sGiz = studioBar.querySelector("#btn-studio-gizmo");
         if (sGiz) {
           sGiz.classList.toggle("active", cfg.gizmoEnabled);
-          sGiz.textContent = cfg.gizmoEnabled ? "\u{1F3AF} Gizmo: ON" : "\u{1F3AF} Gizmo: OFF";
+          sGiz.innerHTML = `${uiIcon("move", 12)} <span>${cfg.gizmoEnabled ? "Gizmo: ON" : "Gizmo: OFF"}</span>`;
         }
         const sGizMode = studioBar.querySelector("#select-studio-gizmo-mode");
         if (sGizMode) sGizMode.value = cfg.gizmoMode;
@@ -76789,15 +76908,16 @@ void main() {
     }
     getTransformGizmoTargetDevice() {
       if (!this.isInitialized || this.simulatorFocusedDeviceId) return null;
-      if (this.buildPlacementConfig?.gizmoEnabled === false) return null;
+      if (!this.buildPlacementConfig?.buildModeEnabled || this.buildPlacementConfig?.gizmoEnabled !== true) {
+        return null;
+      }
       const carriedIds = new Set((this.carriedObjects || []).map((c) => c?.devId).filter(Boolean));
       const selId = this.deviceManager?.selectedDeviceId || null;
-      const allowFor3dTool = Boolean(this.buildPlacementConfig?.buildModeEnabled || this.navTool === "move" || this.navTool === "rotate");
-      if (selId && !carriedIds.has(selId) && allowFor3dTool) {
+      if (selId && !carriedIds.has(selId)) {
         const dev = this.deviceManager?.getDeviceById?.(selId);
         if (dev && dev.layerVisible !== false) return dev;
       }
-      if (this.avatarMode && this.buildPlacementConfig?.buildModeEnabled) {
+      if (this.avatarMode) {
         const nearId = this.avatarState?.nearestDeviceId || null;
         const nearDist = Number(this.avatarState?.nearestDist ?? Infinity);
         if (nearId && nearDist <= 15 && !carriedIds.has(nearId)) {
@@ -76876,7 +76996,315 @@ void main() {
       });
       this.transformGizmoGroup.userData = { deviceId, scaleBase, gizmoMode };
     }
+    /** Compute where the held object will land along the crosshair/camera ray (House-Flipper aim target). */
+    computeAvatarAimPlacementTarget({ item = null } = {}) {
+      const ax = Number(this.avatarState?.x) || 0;
+      const ay = Math.max(0, Number(this.avatarState?.y) || 0);
+      const az = Number(this.avatarState?.z) || 0;
+      const yaw = Number(this.avatarState?.yaw) || 0;
+      const scale = resolveEngineAvatarScale(this);
+      const surfaceSnapOn = this.buildPlacementConfig?.surfaceSnapEnabled !== false;
+      const pose = typeof this.getAvatarFollowCameraPose === "function" ? this.getAvatarFollowCameraPose(this.avatarState?.camDist) : null;
+      const rayOrigin = pose?.endPos ? pose.endPos.clone() : new Vector3(ax, ay + 1.5 * scale, az);
+      const rayDir = pose?.target && pose?.endPos ? pose.target.clone().sub(pose.endPos).normalize() : new Vector3(Math.sin(this.avatarState?.camYaw ?? yaw), -0.25, Math.cos(this.avatarState?.camYaw ?? yaw)).normalize();
+      const activeItem = item || (Array.isArray(this.carriedObjects) && this.carriedObjects.length > 0 ? this.carriedObjects[this.carriedObjects.length - 1] : null);
+      if (activeItem?.kind === "device" && surfaceSnapOn && this.find3DWallMountTarget) {
+        const dev = this.deviceManager?.getDeviceById?.(activeItem.devId);
+        const wallOrigin = this.avatarPerspective === "fpp" ? rayOrigin.clone() : new Vector3(ax, ay + 1.42 * scale, az);
+        const wallHit = dev ? this.find3DWallMountTarget(wallOrigin, rayDir, 6.8, { device: dev, minHitY: 0.25, maxHitY: 12 }) : null;
+        if (wallHit) {
+          return {
+            mode: "wall",
+            worldX: wallHit.worldPos.x,
+            worldZ: wallHit.worldPos.z,
+            elevationMeters: clamp(wallHit.elevationMeters, 0.25, 11.5),
+            rotationY: wallHit.rotationY,
+            worldNormal: wallHit.worldNormal,
+            hitPoint: wallHit.point
+          };
+        }
+      }
+      let hitWorldX = null;
+      let hitWorldZ = null;
+      if (this.raycaster && this.scene) {
+        const carriedIds = new Set((this.carriedObjects || []).map((c) => c.objId || c.devId));
+        const surfaceRoots = [];
+        this.object3dMeshMap?.forEach((grp, id) => {
+          if (grp && !carriedIds.has(id)) surfaceRoots.push(grp);
+        });
+        if (this.roomsGroup?.children?.length > 0) {
+          surfaceRoots.push(...this.roomsGroup.children);
+        }
+        if (surfaceRoots.length > 0) {
+          this.raycaster.set(rayOrigin, rayDir);
+          const hits = this.raycaster.intersectObjects(surfaceRoots, true);
+          const nMat = new Matrix3();
+          const wNorm = new Vector3();
+          for (const h of hits) {
+            if (!h?.object?.isMesh || !h.face) continue;
+            if (h.object.userData?.isRoomGizmo || h.object.userData?.isObject3dGizmo) continue;
+            nMat.getNormalMatrix(h.object.matrixWorld);
+            wNorm.copy(h.face.normal).applyMatrix3(nMat).normalize();
+            if (wNorm.y < 0.65) continue;
+            const dAvatar = Math.hypot(h.point.x - ax, h.point.z - az);
+            if (dAvatar >= 1 && dAvatar <= 9.5) {
+              hitWorldX = h.point.x;
+              hitWorldZ = h.point.z;
+              break;
+            }
+          }
+        }
+        if (hitWorldX === null && rayDir.y < -0.04) {
+          const floorPlane = new Plane(new Vector3(0, 1, 0), -ay);
+          const pt = new Vector3();
+          if (this.raycaster.ray.intersectPlane(floorPlane, pt)) {
+            const dAvatar = Math.hypot(pt.x - ax, pt.z - az);
+            if (dAvatar <= 14) {
+              const clampedD = clamp(dAvatar, 1.3, 9);
+              const ratio = dAvatar > 1e-3 ? clampedD / dAvatar : 1;
+              hitWorldX = ax + (pt.x - ax) * ratio;
+              hitWorldZ = az + (pt.z - az) * ratio;
+            }
+          }
+        }
+      }
+      if (hitWorldX === null || hitWorldZ === null) {
+        const hLen = Math.hypot(rayDir.x, rayDir.z) || 1;
+        const hx = rayDir.x / hLen;
+        const hz = rayDir.z / hLen;
+        const distAhead = 3.2;
+        hitWorldX = ax + hx * distAhead;
+        hitWorldZ = az + hz * distAhead;
+      }
+      if (this.applyBuildGridSnapWorld) {
+        const snappedXZ = this.applyBuildGridSnapWorld(hitWorldX, hitWorldZ);
+        hitWorldX = snappedXZ.x;
+        hitWorldZ = snappedXZ.z;
+      }
+      const { worldW, worldD } = this.getWorldDimensions ? this.getWorldDimensions() : { worldW: 100, worldD: 80 };
+      hitWorldX = clamp(hitWorldX, -worldW * 0.49, worldW * 0.49);
+      hitWorldZ = clamp(hitWorldZ, -worldD * 0.49, worldD * 0.49);
+      const dropElev = surfaceSnapOn && this.getCarriedDropSupportElevation ? this.getCarriedDropSupportElevation(hitWorldX, hitWorldZ, activeItem?.objId || activeItem?.devId || "") : ay;
+      const worldRotY = yaw * 180 / Math.PI + (Number(activeItem?.relativeYawOffset) || 0);
+      const normRotY = this.applyBuildAngleSnap ? this.applyBuildAngleSnap(worldRotY) : (Math.round(worldRotY) % 360 + 360) % 360;
+      return {
+        mode: "surface",
+        worldX: Number(hitWorldX.toFixed(3)),
+        worldZ: Number(hitWorldZ.toFixed(3)),
+        elevationMeters: Number(Math.max(0, dropElev).toFixed(2)),
+        rotationY: normRotY
+      };
+    }
+    _ensureSimplePlacementIndicatorGroup() {
+      if (!this.simplePlacementIndicatorGroup) {
+        this.simplePlacementIndicatorGroup = new Group();
+        this.simplePlacementIndicatorGroup.name = "HouseFlipperPlacementIndicator3D";
+      }
+      if (this.simplePlacementIndicatorGroup.children.length > 0) return this.simplePlacementIndicatorGroup;
+      const ringMat = new MeshBasicMaterial({
+        color: 2278750,
+        transparent: true,
+        opacity: 0.9,
+        side: DoubleSide,
+        depthWrite: false
+      });
+      const outerRing = new Mesh(new RingGeometry(0.42, 0.5, 36), ringMat);
+      outerRing.rotation.x = -Math.PI / 2;
+      outerRing.renderOrder = 950;
+      outerRing.userData = { isSimplePlacementIndicator: true, part: "ring" };
+      const innerMat = new MeshBasicMaterial({
+        color: 2278750,
+        transparent: true,
+        opacity: 0.16,
+        side: DoubleSide,
+        depthWrite: false
+      });
+      const innerDisc = new Mesh(new CircleGeometry(0.42, 36), innerMat);
+      innerDisc.rotation.x = -Math.PI / 2;
+      innerDisc.renderOrder = 949;
+      innerDisc.userData = { isSimplePlacementIndicator: true, part: "disc" };
+      const arrowMat = new MeshBasicMaterial({
+        color: 4906624,
+        transparent: true,
+        opacity: 0.95,
+        depthWrite: false
+      });
+      const arrow = new Mesh(new ConeGeometry(0.11, 0.24, 3), arrowMat);
+      arrow.rotation.x = Math.PI / 2;
+      arrow.position.set(0, 0.02, 0.59);
+      arrow.renderOrder = 951;
+      arrow.userData = { isSimplePlacementIndicator: true, part: "arrow" };
+      this.simplePlacementIndicatorGroup.add(innerDisc, outerRing, arrow);
+      return this.simplePlacementIndicatorGroup;
+    }
+    /** Renders a subtle green House-Flipper footprint indicator instead of overwhelming RGB rings. */
+    syncSimplePlacementIndicator() {
+      if (!this.scene || !this.isActive || !this.isInitialized) {
+        if (this.simplePlacementIndicatorGroup) this.simplePlacementIndicatorGroup.visible = false;
+        return;
+      }
+      const group = this._ensureSimplePlacementIndicatorGroup();
+      if (!this.scene.children.includes(group)) {
+        this.scene.add(group);
+      }
+      if (this.avatarMode && !this.simulatorFocusedDeviceId && Array.isArray(this.carriedObjects) && this.carriedObjects.length > 0) {
+        const topItem = this.carriedObjects[this.carriedObjects.length - 1];
+        const aim = this.computeAvatarAimPlacementTarget({ item: topItem });
+        const radiusScale = clamp(Math.max(Number(topItem.widthMeters) || 1, Number(topItem.depthMeters) || 1) * 0.72, 0.65, 2.8);
+        group.scale.setScalar(radiusScale);
+        if (aim.mode === "wall" && aim.worldNormal) {
+          group.position.set(aim.worldX, aim.elevationMeters, aim.worldZ);
+          group.rotation.set(Math.PI / 2, aim.rotationY * Math.PI / 180, 0, "YXZ");
+        } else {
+          group.position.set(aim.worldX, aim.elevationMeters + 0.03, aim.worldZ);
+          group.rotation.set(0, aim.rotationY * Math.PI / 180, 0, "YXZ");
+        }
+        group.visible = true;
+        return;
+      }
+      if (this.avatarMode && !this.simulatorFocusedDeviceId && this.navTool === "move") {
+        const nearestPick = this.findNearestPickableObjectToAvatar?.();
+        if (nearestPick?.obj) {
+          let px2 = 0;
+          let py2 = 0;
+          let pz2 = 0;
+          let rotY = 0;
+          let radius = 0.85;
+          if (nearestPick.kind === "device") {
+            const holder = this.deviceMeshMap?.get(nearestPick.id);
+            const w = holder ? holder.position : this.normToWorld?.(nearestPick.obj.position?.x ?? 0.5, nearestPick.obj.position?.y ?? 0.5);
+            px2 = w?.x ?? 0;
+            py2 = holder ? holder.position.y : Math.max(0, Number(nearestPick.obj.spatial3d?.elevationMeters) || 0);
+            pz2 = w?.z ?? 0;
+            rotY = Number(nearestPick.obj.spatial3d?.rotationY) || 0;
+            radius = clamp(0.45 * (this.deviceScaleMultiplier || 3), 0.7, 2.2);
+          } else {
+            const w = this.normToWorld?.(nearestPick.obj.x ?? 0.5, nearestPick.obj.y ?? 0.5);
+            px2 = w?.x ?? 0;
+            py2 = Math.max(0, Number(nearestPick.obj.elevationMeters) || 0);
+            pz2 = w?.z ?? 0;
+            rotY = Number(nearestPick.obj.rotationY ?? nearestPick.obj.rotationDeg) || 0;
+            radius = clamp(Math.max(Number(nearestPick.obj.widthMeters) || 1, Number(nearestPick.obj.depthMeters) || 1) * 0.65, 0.7, 2.8);
+          }
+          group.position.set(px2, py2 + 0.025, pz2);
+          group.rotation.set(0, rotY * Math.PI / 180, 0, "YXZ");
+          group.scale.setScalar(radius);
+          group.visible = true;
+          return;
+        }
+      }
+      if (!this.avatarMode && (this.navTool === "move" || this.dragMoveState) && !this.transformGizmoGroup?.visible) {
+        const targetId = this.dragMoveState?.deviceId || this.deviceManager?.selectedDeviceId || null;
+        const dev = targetId ? this.deviceManager?.getDeviceById?.(targetId) : null;
+        if (dev && dev.layerVisible !== false) {
+          const holder = this.deviceMeshMap?.get(dev.id);
+          const w = holder ? holder.position : this.normToWorld?.(dev.position?.x ?? 0.5, dev.position?.y ?? 0.5);
+          const py2 = holder ? holder.position.y : Math.max(0, Number(dev.spatial3d?.elevationMeters) || 0);
+          const rotY = Number(dev.spatial3d?.rotationY) || 0;
+          const radius = clamp(0.45 * (this.deviceScaleMultiplier || 3), 0.7, 2.2);
+          group.position.set(w?.x ?? 0, py2 + 0.025, w?.z ?? 0);
+          group.rotation.set(0, rotY * Math.PI / 180, 0, "YXZ");
+          group.scale.setScalar(radius);
+          group.visible = true;
+          return;
+        }
+      }
+      group.visible = false;
+    }
+    /** Renders concise 1-line House-Flipper style controls below center crosshair or during Move mode. */
+    renderHouseFlipperPromptHud() {
+      if (typeof document === "undefined") return;
+      const tipEl = document.getElementById("hud-3d-houseflipper-tip");
+      if (!tipEl) return;
+      if (!tipEl.dataset.hfBound) {
+        tipEl.dataset.hfBound = "1";
+        tipEl.addEventListener("click", (ev) => {
+          const btn = ev.target?.closest?.("[data-hf-action]");
+          if (!btn) return;
+          ev.stopPropagation();
+          const act = btn.dataset.hfAction;
+          if (act === "rotate") {
+            this.rotateSelectedIn3D({ dY: 45 });
+          } else if (act === "drop") {
+            this.dropCarriedObjectsFromAvatar({ dropAll: Boolean(ev.shiftKey), useAimTarget: true });
+          } else if (act === "pickup") {
+            this.pickupNearestObjectFromAvatar();
+          }
+        });
+      }
+      if (!this.isActive || this.simulatorFocusedDeviceId) {
+        if (this._lastHouseFlipperHudKey !== "hidden") {
+          this._lastHouseFlipperHudKey = "hidden";
+          tipEl.className = "hud-3d-houseflipper-tip hidden";
+          tipEl.style.display = "none";
+          tipEl.innerHTML = "";
+        }
+        return;
+      }
+      if (this.avatarMode && Array.isArray(this.carriedObjects) && this.carriedObjects.length > 0) {
+        const topItem = this.carriedObjects[this.carriedObjects.length - 1];
+        const aim = this.computeAvatarAimPlacementTarget({ item: topItem });
+        const dropLabel = aim?.mode === "wall" ? "Tempel Dinding (Klik / Q)" : "Taruh di Sini (Klik / Q)";
+        const key = `carry:${topItem.name}:${this.carriedObjects.length}:${aim?.mode || "surface"}`;
+        if (this._lastHouseFlipperHudKey !== key) {
+          this._lastHouseFlipperHudKey = key;
+          const escName = this.escapeHudHtml(topItem.name || "Alat");
+          tipEl.className = "hud-3d-houseflipper-tip is-carrying";
+          tipEl.style.display = "inline-flex";
+          tipEl.innerHTML = `
+          <span class="hf-tip-name">${escName}${this.carriedObjects.length > 1 ? ` (+${this.carriedObjects.length - 1})` : ""}</span>
+          <span class="hf-tip-keys">Arahkan ke meja / lantai / dinding</span>
+          <button type="button" class="hf-tip-btn" data-hf-action="rotate">Putar 45\xB0 (R)</button>
+          <button type="button" class="hf-tip-btn is-primary" data-hf-action="drop">${dropLabel}</button>
+        `;
+        }
+        return;
+      }
+      if (this.avatarMode && this.navTool === "move") {
+        const nearestPick = this.findNearestPickableObjectToAvatar?.();
+        if (nearestPick?.id) {
+          const key = `pick:${nearestPick.id}`;
+          if (this._lastHouseFlipperHudKey !== key) {
+            this._lastHouseFlipperHudKey = key;
+            const escName = this.escapeHudHtml(nearestPick.name || "Alat");
+            tipEl.className = "hud-3d-houseflipper-tip";
+            tipEl.style.display = "inline-flex";
+            tipEl.innerHTML = `
+            <span class="hf-tip-name">${escName}</span>
+            <button type="button" class="hf-tip-btn is-primary" data-hf-action="pickup">Angkat &amp; Pindah (Klik / E)</button>
+          `;
+          }
+          return;
+        }
+      }
+      if (!this.avatarMode && this.navTool === "move" && !this.transformGizmoGroup?.visible) {
+        const selId = this.deviceManager?.selectedDeviceId;
+        const dev = selId ? this.deviceManager?.getDeviceById?.(selId) : null;
+        if (dev && dev.layerVisible !== false) {
+          const key = `orbitmove:${dev.id}`;
+          if (this._lastHouseFlipperHudKey !== key) {
+            this._lastHouseFlipperHudKey = key;
+            tipEl.className = "hud-3d-houseflipper-tip is-orbit-move";
+            tipEl.style.display = "inline-flex";
+            tipEl.innerHTML = `
+            <span class="hf-tip-name">${this.escapeHudHtml(dev.name || "Alat")}</span>
+            <span class="hf-tip-keys">Seret langsung untuk memindah \u2022 Panah : Geser</span>
+            <button type="button" class="hf-tip-btn" data-hf-action="rotate">Putar 45\xB0 (R)</button>
+          `;
+          }
+          return;
+        }
+      }
+      if (this._lastHouseFlipperHudKey !== "hidden") {
+        this._lastHouseFlipperHudKey = "hidden";
+        tipEl.className = "hud-3d-houseflipper-tip hidden";
+        tipEl.style.display = "none";
+        tipEl.innerHTML = "";
+      }
+    }
     syncTransformGizmo() {
+      this.syncSimplePlacementIndicator?.();
+      this.renderHouseFlipperPromptHud?.();
       if (!this.transformGizmoGroup || !this.scene) return;
       const targetDev = this.getTransformGizmoTargetDevice();
       if (!this.isActive || !targetDev) {
@@ -76944,11 +77372,11 @@ void main() {
       const dev = this.deviceManager?.getDeviceById?.(hit?.deviceId);
       if (!dev) return false;
       if (dev.layerLocked) {
-        this.showStatusHint(`\u{1F512} Perangkat "${dev.name}" dikunci pada Layer.`);
+        this.showStatusHint(`Perangkat "${dev.name}" dikunci pada Layer.`);
         return false;
       }
       if (authManager?.isAuthenticated?.() && authManager.getActiveWorkspaceKey?.() === "main" && authManager.isMainWorkspaceUnlocked?.() === false) {
-        this.showStatusHint("\u{1F512} Server Utama terkunci (hanya lihat).");
+        this.showStatusHint("Server Utama terkunci (hanya lihat).");
         return false;
       }
       this.deviceManager?.selectDevice?.(dev.id);
@@ -77032,7 +77460,7 @@ void main() {
         const wz = meshGroup ? meshGroup.position.z : state.startWorldZ;
         this.registerDevicePortTransforms(state.dev, holderPorts, wx, wy, wz, userScale, euler);
         this.syncCables();
-        const axisBadge = state.gizmoAxis === "x" ? "\u{1F7E5} Rotasi X" : state.gizmoAxis === "z" ? "\u{1F7E6} Rotasi Z" : "\u{1F7E9} Rotasi Y";
+        const axisBadge = state.gizmoAxis === "x" ? "[X] Rotasi X" : state.gizmoAxis === "z" ? "[Z] Rotasi Z" : "[Y] Rotasi Y";
         this.showStatusHint(`${axisBadge}: "${state.dev.name}" -> X:${rx}\xB0 Y:${ry}\xB0 Z:${rz}\xB0`);
         return;
       }
@@ -77057,7 +77485,7 @@ void main() {
         this.syncTransformGizmo();
         this.flashMoveElevationGuide?.(state.deviceId, 800);
         this.syncCables();
-        this.showStatusHint(`\u{1F7E9} Geser Sumbu Y (Elevasi): "${state.dev.name}" -> Z:${finalElev.toFixed(2)}m`);
+        this.showStatusHint(`[Y] Geser Sumbu Y (Elevasi): "${state.dev.name}" -> Z:${finalElev.toFixed(2)}m`);
         return;
       }
       const rect = this.renderer.domElement.getBoundingClientRect();
@@ -77091,7 +77519,7 @@ void main() {
         if (state.gizmoAxis === "x") targetX = col.x;
         if (state.gizmoAxis === "z") targetZ = col.z;
         if (col.collided) {
-          collisionMsg = ` \u2022 \u{1F9F1} Tertahan "${col.blockerName}"`;
+          collisionMsg = ` \u2022 Tertahan "${col.blockerName}"`;
         }
       }
       const { normX, normY } = this.worldToNorm(targetX, targetZ);
@@ -77113,7 +77541,7 @@ void main() {
       });
       this.syncTransformGizmo();
       this.syncCables();
-      const axisTag = state.gizmoAxis === "x" ? "\u{1F7E5} Geser Sumbu X" : "\u{1F7E6} Geser Sumbu Z";
+      const axisTag = state.gizmoAxis === "x" ? "[X] Geser Sumbu X" : "[Z] Geser Sumbu Z";
       this.showStatusHint(`${axisTag}: "${state.dev.name}" -> X:${clamped.x.toFixed(1)}m Z:${clamped.z.toFixed(1)}m${collisionMsg}`);
     }
     finishTransformGizmoDrag(e, dom) {
@@ -77147,7 +77575,7 @@ void main() {
     nudgeDeviceAlongGizmoAxis(axis = "x", dir = 1, kind = "translate") {
       const targetDev = this.getTransformGizmoTargetDevice() || (this.deviceManager?.selectedDeviceId ? this.deviceManager.getDeviceById(this.deviceManager.selectedDeviceId) : null);
       if (!targetDev || targetDev.layerLocked) {
-        this.showStatusHint(targetDev ? `\u{1F512} Perangkat "${targetDev.name}" dikunci.` : "Pilih atau dekati perangkat untuk digeser.");
+        this.showStatusHint(targetDev ? `Perangkat "${targetDev.name}" dikunci.` : "Pilih atau dekati perangkat untuk digeser.");
         return false;
       }
       const ax = String(axis || "x").toLowerCase();
@@ -77170,7 +77598,7 @@ void main() {
         this.syncDevices();
         this.syncCables();
         this.syncTransformGizmo();
-        this.showStatusHint(`\u{1F7E9} Sumbu Y (Elevasi) "${targetDev.name}": Z:${nextElev2.toFixed(2)}m`);
+        this.showStatusHint(`[Y] Sumbu Y (Elevasi) "${targetDev.name}": Z:${nextElev2.toFixed(2)}m`);
         return true;
       }
       const curW = this.normToWorld(targetDev.position.x, targetDev.position.y);
@@ -77210,7 +77638,7 @@ void main() {
       this.syncDevices();
       this.syncCables();
       this.syncTransformGizmo();
-      const label = ax === "x" ? "\u{1F7E5} X" : "\u{1F7E6} Z";
+      const label = ax === "x" ? "[X] X" : "[Z] Z";
       this.showStatusHint(`${label} "${targetDev.name}": (${nextX.toFixed(2)}m, ${nextZ.toFixed(2)}m \u2022 Z:${nextElev.toFixed(2)}m)`);
       return true;
     }
@@ -78226,7 +78654,7 @@ void main() {
 
             <label style="display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; color: var(--text-primary); cursor: pointer;">
               <input type="checkbox" id="r3d-locked">
-              <span>\u{1F512} Kunci posisi ruangan ini (tidak ikut tergeser saat klik perangkat)</span>
+              <span>Kunci posisi ruangan ini (tidak ikut tergeser saat klik perangkat)</span>
             </label>
 
             <!-- Custom .GLB/.GLTF Room Model Upload -->
@@ -78288,7 +78716,7 @@ void main() {
             <div style="background: var(--bg-primary, #fff8cf); border: 1px solid var(--border-color, #e5cca0); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px; flex: 1;">
               <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap;">
                 <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--accent-blue, #2a7c13);">Daftar Ruangan 3D Tersimpan</span>
-                <button type="button" id="btn-r3d-lock-all" class="btn btn-secondary btn-sm" style="font-size: 10.5px; padding: 3px 8px;" title="Kunci atau buka kunci posisi semua ruangan 3D">\u{1F513} Kunci Semua</button>
+                <button type="button" id="btn-r3d-lock-all" class="btn btn-secondary btn-sm" style="font-size: 10.5px; padding: 3px 8px;" title="Kunci atau buka kunci posisi semua ruangan 3D">${uiIcon("unlock", 12)} Kunci Semua</button>
               </div>
               <div id="r3d-list-container" style="display: flex; flex-direction: column; gap: 6px; max-height: 190px; overflow-y: auto;"></div>
             </div>
@@ -78439,7 +78867,7 @@ void main() {
       if (!btn) return;
       const locked = Boolean(this.map3DEngine?.roomsLocked);
       btn.className = `btn btn-sm ${locked ? "btn-primary" : "btn-secondary"}`;
-      btn.textContent = locked ? "\u{1F512} Semua Terkunci (Klik Buka)" : "\u{1F513} Kunci Semua Ruangan";
+      btn.innerHTML = locked ? `${uiIcon("lock", 12)} Semua Terkunci (Klik Buka)` : `${uiIcon("unlock", 12)} Kunci Semua Ruangan`;
     }
     getViewportCenterNorm() {
       if (this.map3DEngine?.controls?.target && typeof this.map3DEngine?.worldToNorm === "function") {
@@ -78613,7 +79041,7 @@ void main() {
       stateManager.setRooms3d(existing);
       stateManager.selectRoom3d?.(roomData.id);
       this.map3DEngine?.showStatusHint?.(
-        `\u{1F3E0} Ruangan "${roomData.name}" tersimpan \u2014 Klik "Geser" atau pakai tool Move (M) / handle oranye di kanvas 3D untuk memindahkannya.`
+        `Ruangan "${roomData.name}" tersimpan \u2014 Klik "Geser" atau pakai tool Move (M) / handle oranye di kanvas 3D untuk memindahkannya.`
       );
       this.renderRoomList();
       this.resetForm();
@@ -78641,15 +79069,15 @@ void main() {
         return `
       <div style="background: var(--bg-secondary, #fbe6c2); border: 1px solid ${isLocked ? "#d97706" : "var(--border-color)"}; border-radius: 6px; padding: 8px 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
         <div style="min-width: 0;">
-          <div style="font-size: 12px; font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-            ${isLocked ? "\u{1F512} " : ""}${r.name}
+          <div style="font-size: 12px; font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 4px;">
+            ${isLocked ? uiIcon("lock", 11) : ""}${r.name}
           </div>
           <div style="font-size: 10px; color: var(--text-muted); font-family: var(--font-mono);">
             ${r.widthMeters}x${r.depthMeters}x${r.heightMeters}m \u2022 ${scalePct}% \u2022 ${rotDeg}\xB0${r.customModelUrl ? " \u2022 GLB" : ""}${isLocked ? " \u2022 Terkunci" : ""}
           </div>
         </div>
         <div style="display: flex; gap: 4px; flex-shrink: 0; flex-wrap: wrap;">
-          <button type="button" class="btn ${roomSelfLocked ? "btn-primary" : "btn-secondary"} btn-sm btn-r3d-lock" data-id="${r.id}" style="font-size: 10px; padding: 2px 6px;" title="${roomSelfLocked ? "Buka kunci ruangan ini" : "Kunci ruangan ini agar tidak tergeser"}">${roomSelfLocked ? "\u{1F512}" : "\u{1F513}"}</button>
+          <button type="button" class="btn ${roomSelfLocked ? "btn-primary" : "btn-secondary"} btn-sm btn-r3d-lock" data-id="${r.id}" style="font-size: 10px; padding: 2px 6px;" title="${roomSelfLocked ? "Buka kunci ruangan ini" : "Kunci ruangan ini agar tidak tergeser"}">${uiIcon(roomSelfLocked ? "lock" : "unlock", 11)}</button>
           <button type="button" class="btn btn-secondary btn-sm btn-r3d-scale-step" data-id="${r.id}" data-factor="0.9" ${disabledAttr} title="Perkecil skala -10%">-</button>
           <button type="button" class="btn btn-secondary btn-sm btn-r3d-scale-step" data-id="${r.id}" data-factor="1.1" ${disabledAttr} title="Perbesar skala +10%">+</button>
           <button type="button" class="btn btn-primary btn-sm btn-r3d-move" data-id="${r.id}" ${moveDisabledAttr} title="Tutup modal dan langsung geser ruangan di kanvas 3D">Geser</button>
@@ -78693,7 +79121,7 @@ void main() {
           this.map3DEngine?.setNavTool?.("move");
           this.map3DEngine?.focusOnRoom3d?.(room.id);
           this.map3DEngine?.showStatusHint?.(
-            `\u{1F3E0} Seret ruangan "${room.name}" langsung di kanvas 3D untuk memindahkannya (M = Geser, R = Putar, [ / ] = Putar 15\xB0).`
+            `Seret ruangan "${room.name}" langsung di kanvas 3D untuk memindahkannya (M = Geser, R = Putar, [ / ] = Putar 15\xB0).`
           );
         });
       });
@@ -78858,7 +79286,7 @@ void main() {
         <!-- Section 1: Draw Mode & 8 Preset Library -->
         <div style="background: var(--bg-primary, #fff8cf); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 8px;">
           <button type="button" id="btn-o3d-toggle-draw" class="btn btn-secondary btn-sm" style="width: 100%; justify-content: center; font-weight: 700; font-size: 11.5px;">
-            \u270F\uFE0F Mode Tarik / Taruh di Lantai 3D (Nonaktif)
+            ${uiIcon("pencil", 12)} Mode Tarik / Taruh di Lantai 3D (Nonaktif)
           </button>
 
           <div style="font-size: 10.5px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.03em;">
@@ -78934,7 +79362,7 @@ void main() {
           </div>
 
           <button type="button" id="btn-o3d-pick-device-pos" class="btn btn-secondary btn-sm" style="font-size: 10.5px;">
-            \u{1F4CD} Ambil Posisi Perangkat Terpilih
+            ${uiIcon("map-pin", 12)} Ambil Posisi Perangkat Terpilih
           </button>
 
           <!-- Dimension Sliders -->
@@ -79003,7 +79431,7 @@ void main() {
             Otomatis memindahkan perangkat terpilih ke atas Tiang CCTV / ke dalam Rak Server Custom dengan elevasi Z yang pas.
           </div>
           <button type="button" id="btn-o3d-mount-devices" class="btn btn-primary btn-sm" style="width: 100%; font-weight: 700; font-size: 11px;">
-            \u{1F4CC} Pasang Perangkat Terpilih di Objek Ini
+            ${uiIcon("pin", 12)} Pasang Perangkat Terpilih di Objek Ini
           </button>
         </div>
 
@@ -79281,7 +79709,7 @@ void main() {
         if (this.map3DEngine?.isActive) {
           this.map3DEngine.syncAll();
           this.map3DEngine.showStatusHint(
-            `\u{1F4CC} ${updated.length} perangkat dipasang pada "${obj.name}".`
+            `${updated.length} perangkat dipasang pada "${obj.name}".`
           );
         }
       }
@@ -79368,7 +79796,7 @@ void main() {
       if (btn) {
         btn.classList.toggle("btn-primary", isDrawActive);
         btn.classList.toggle("btn-secondary", !isDrawActive);
-        btn.textContent = isDrawActive ? "\u270F\uFE0F Mode Gambar 3D AKTIF (Klik/Drag di Lantai)" : "\u270F\uFE0F Mode Tarik / Taruh di Lantai 3D (Nonaktif)";
+        btn.innerHTML = isDrawActive ? `${uiIcon("pencil", 12)} Mode Gambar 3D AKTIF (Klik/Drag di Lantai)` : `${uiIcon("pencil", 12)} Mode Tarik / Taruh di Lantai 3D (Nonaktif)`;
       }
       if (badge) {
         badge.textContent = isDrawActive ? "Klik lantai 3D untuk taruh objek" : "Tarik panah biru di 3D untuk Push/Pull tinggi";
@@ -79380,11 +79808,11 @@ void main() {
       const count = this.deviceManager?.getSelectedDeviceIds?.().length || 0;
       const selObj = stateManager.getObject3dById(stateManager.getSelectedObject3dId());
       if (count > 0 && selObj) {
-        btn.textContent = `\u{1F4CC} Pasang ${count} Perangkat ke "${selObj.name}"`;
+        btn.innerHTML = `${uiIcon("pin", 12)} Pasang ${count} Perangkat ke "${selObj.name}"`;
       } else if (count > 0) {
-        btn.textContent = `\u{1F4CC} Pasang ${count} Perangkat ke Objek 3D`;
+        btn.innerHTML = `${uiIcon("pin", 12)} Pasang ${count} Perangkat ke Objek 3D`;
       } else {
-        btn.textContent = "\u{1F4CC} Pasang Perangkat Terpilih di Objek Ini";
+        btn.innerHTML = `${uiIcon("pin", 12)} Pasang Perangkat Terpilih di Objek Ini`;
       }
     }
     renderObjectList() {
@@ -79636,7 +80064,7 @@ void main() {
                 <span style="font-size: 10.5px; color: var(--text-muted);">Deteksi otomatis node <code style="font-size: 10px;">PORT_*</code> dari Blender .GLB atau atur koordinat soket (X, Y, Z)</span>
               </div>
               <button type="button" id="btn-dev3d-scan-glb-ports" class="btn btn-secondary btn-sm" style="font-size: 11px; padding: 4px 10px;">
-                \u{1F50D} Deteksi Port dari .GLB
+                ${uiIcon("search", 12)} Deteksi Port dari .GLB
               </button>
             </div>
 
@@ -79739,7 +80167,7 @@ void main() {
           this.renderPortsTable();
           const statusEl = this.modalEl.querySelector("#dev3d-port-scan-status");
           if (statusEl) {
-            statusEl.textContent = `\u2713 ${presetEntry.ports.length} port presisi .GLB dimuat`;
+            statusEl.textContent = `${presetEntry.ports.length} port presisi .GLB dimuat`;
           }
         }
       });
@@ -79887,7 +80315,7 @@ void main() {
         </td>
         <td style="padding: 4px 5px; text-align: right;">
           <button type="button" data-p-del="${idx}" title="Hapus Port"
-                  style="border: none; background: transparent; color: var(--status-offline, #ef4444); cursor: pointer; font-weight: 700; font-size: 12px;">\u2715</button>
+                  style="border: none; background: transparent; color: var(--status-offline, #ef4444); cursor: pointer; font-weight: 700; font-size: 12px;">${uiIcon("x", 12)}</button>
         </td>
       </tr>
     `).join("");
@@ -79929,7 +80357,7 @@ void main() {
         if (ports.length > 0) {
           this.editingPorts = ports;
           this.renderPortsTable();
-          if (statusEl) statusEl.textContent = `\u2705 ${ports.length} node PORT_* ditemukan di .GLB!`;
+          if (statusEl) statusEl.textContent = `${ports.length} node PORT_* ditemukan di .GLB!`;
         } else {
           const spanX = Math.max(0.24, bounds.width * 0.78);
           const n = this.editingPorts.length;
@@ -79943,11 +80371,11 @@ void main() {
           }));
           this.renderPortsTable();
           if (statusEl) {
-            statusEl.textContent = `\u26A1 ${n} port disejajarkan ke panel depan .GLB (Z=${bounds.frontZ})`;
+            statusEl.textContent = `${n} port disejajarkan ke panel depan .GLB (Z=${bounds.frontZ})`;
           }
         }
       } catch (err) {
-        if (statusEl) statusEl.textContent = "\u26A0\uFE0F Gagal membaca .GLB";
+        if (statusEl) statusEl.textContent = "Gagal membaca .GLB";
         console.warn("[Device3DModelModal] GLB port scan error:", err);
       }
     }
@@ -80131,7 +80559,7 @@ void main() {
         <!-- Footer -->
         <div style="height: 54px; border-top: 1px solid var(--border-color, #e5cca0); background: var(--bg-tertiary, #f2dac8); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; flex-shrink: 0;">
           <button type="button" id="btn-ppm-auto" class="btn btn-secondary btn-sm" title="Pilih otomatis port kosong pertama di kedua perangkat">
-            <span>\u26A1 Auto-Pilih Port Kosong</span>
+            ${uiIcon("zap", 12)} <span>Auto-Pilih Port Kosong</span>
           </button>
           <div style="display: flex; align-items: center; gap: 8px;">
             <button type="button" id="btn-ppm-skip" class="btn btn-secondary btn-sm">Simpan Tanpa Ganti</button>
@@ -80270,7 +80698,7 @@ void main() {
             <span style="font-size: 9.5px; font-weight: 700; text-transform: uppercase; padding: 1px 5px; border-radius: 4px; background: ${badgeColor}22; color: ${badgeColor};">${p.type || "rj45"} \u2022 ${p.speed || "1G"}</span>
           </div>
           <div style="font-size: 10px; color: var(--text-muted); font-family: var(--font-mono); white-space: nowrap; margin-left: 6px;">
-            ${isOccupied ? `Terpakai \u2794 ${occ.peerName}` : coordText}
+            ${isOccupied ? `Terpakai -> ${occ.peerName}` : coordText}
           </div>
         </button>
       `;
@@ -80341,7 +80769,7 @@ void main() {
         updates.cableCategory = "fiber-sm";
       }
       if (portSource && portDestination && srcDev && dstDev) {
-        updates.name = `${srcDev.name} [${portSource}] \u2794 ${dstDev.name} [${portDestination}]`;
+        updates.name = `${srcDev.name} [${portSource}] -> ${dstDev.name} [${portDestination}]`;
       }
       this.cableManager.updateConnection(cable.id, updates);
       this.cableManager.selectConnection(cable.id);
@@ -81525,14 +81953,14 @@ void main() {
     "kandang-burung-2"
   ]);
   var OBJECT_ICON_MAP = {
-    pole: "\u{1F5FC}",
-    "server-rack": "\u{1F5C4}\uFE0F",
-    "tower-lattice": "\u{1F4E1}",
-    box: "\u{1F4E6}",
-    cylinder: "\u{1F6E2}\uFE0F",
-    wall: "\u{1F9F1}",
-    table: "\u{1FA91}",
-    cabinet: "\u{1F5C3}\uFE0F"
+    pole: "radio",
+    "server-rack": "server",
+    "tower-lattice": "radio",
+    box: "box",
+    cylinder: "box",
+    wall: "layers",
+    table: "columns",
+    cabinet: "sliders"
   };
   var BuildStudioPalette = class {
     /**
@@ -81568,7 +81996,7 @@ void main() {
           id: preset.id,
           category,
           badge,
-          icon: isFacility ? "\u{1F333}" : preset.isCutaway ? "\u{1F3D7}\uFE0F" : "\u{1F3EB}",
+          icon: uiIcon(isFacility ? "trees" : "building", 15),
           color: preset.wallColor || "#2a7c13",
           name: preset.name,
           subtitle: preset.subtitle || `${preset.widthMeters}\xD7${preset.depthMeters}\xD7${preset.heightMeters}m`,
@@ -81582,7 +82010,7 @@ void main() {
           id: shape,
           category: "structure",
           badge: "Struktur",
-          icon: OBJECT_ICON_MAP[shape] || "\u{1F4D0}",
+          icon: uiIcon(OBJECT_ICON_MAP[shape] || "box", 15),
           color: preset.accentColor || preset.color || "#64748b",
           name: preset.name || shape,
           subtitle: `Bentuk 3D modular (${preset.widthMeters}\xD7${preset.depthMeters}\xD7${preset.heightMeters}m)`,
@@ -81596,7 +82024,7 @@ void main() {
           id: style,
           category: "road",
           badge: "Jalan 3D",
-          icon: "\u{1F6E3}\uFE0F",
+          icon: uiIcon("route", 15),
           color: preset.slabColor || "#94a3b8",
           name: preset.name || style,
           subtitle: `Lebar ${preset.widthMeters}m \u2022 Jalur ${preset.pathMode === "smooth" ? "Lengkung" : "Lurus"}`,
@@ -81648,7 +82076,7 @@ void main() {
       this.map3DEngine?.setNavTool?.("move");
       this.map3DEngine?.focusOnRoom3d?.(roomData.id);
       this.map3DEngine?.showStatusHint?.(
-        `\u{1F3D7}\uFE0F "${roomData.name}" dipasang \u2014 Geser di lantai (M), Putar [ / ] atau gunakan Gizmo.`
+        `"${roomData.name}" dipasang \u2014 Geser di lantai (M), Putar [ / ] atau gunakan Gizmo.`
       );
       return roomData;
     }
@@ -81671,7 +82099,7 @@ void main() {
       this.map3DEngine?.setRoomsLocked?.(false, { silent: true });
       this.map3DEngine?.setNavTool?.("move");
       this.map3DEngine?.showStatusHint?.(
-        `\u{1F4D0} Objek "${objData.name}" ditempatkan \u2014 Gunakan Move (M) atau Rotate (R) untuk menata.`
+        `Objek "${objData.name}" ditempatkan \u2014 Gunakan Move (M) atau Rotate (R) untuk menata.`
       );
       return objData;
     }
@@ -81691,7 +82119,7 @@ void main() {
       }
       this.map3DEngine?.setNavTool?.("road3d");
       this.map3DEngine?.showStatusHint?.(
-        `\u{1F6E3}\uFE0F Alat Jalan "${preset.name}" siap \u2014 Klik titik-titik jalur di permukaan kampus.`
+        `Alat Jalan "${preset.name}" siap \u2014 Klik titik-titik jalur di permukaan kampus.`
       );
       return true;
     }
@@ -81710,13 +82138,13 @@ void main() {
       <div class="build-studio-palette">
         <div class="build-studio-actions">
           <button type="button" id="btn-bsp-quick-road" class="btn btn-primary btn-sm" title="Aktifkan Alat Gambar Jalan 3D">
-            \u{1F6E3}\uFE0F Jalan 3D
+            ${uiIcon("route", 12)} Jalan 3D
           </button>
           <button type="button" id="btn-bsp-room-mgr" class="btn btn-secondary btn-sm" title="Kelola Ruangan 3D / Upload Model .GLB">
-            \u{1F3E2} Kelola .GLB
+            ${uiIcon("building", 12)} Kelola .GLB
           </button>
           <button type="button" id="btn-bsp-obj-mgr" class="btn btn-secondary btn-sm" title="Buka Studio Objek 3D Custom">
-            \u{1F4D0} Objek Custom
+            ${uiIcon("box", 12)} Objek Custom
           </button>
         </div>
 
@@ -81917,7 +82345,7 @@ void main() {
         const src = this.deviceManager?.getDeviceById?.(cab.source);
         const dst = this.deviceManager?.getDeviceById?.(cab.destination);
         if (!src || !dst || src.status === "offline" || dst.status === "offline") return;
-        const label = cab.name || `${cab.details?.portSource || "port"} \u2194 ${cab.details?.portDestination || "port"}`;
+        const label = cab.name || `${cab.details?.portSource || "port"} <-> ${cab.details?.portDestination || "port"}`;
         graph.get(src.id)?.push({
           neighborId: dst.id,
           medium: cab.type || "utp",
@@ -82137,7 +82565,7 @@ void main() {
         ttl,
         osiLayers: {
           l1: `UP \u2014 ${pathRes.edges.length} segmen (${hopMedia})`,
-          l2: `FORWARDED \u2014 VLAN ${srcVlan}${dstVlan !== srcVlan ? ` \u2192 Routed \u2192 VLAN ${dstVlan}` : ""} (${hopDevices.map((d) => d.network?.mac || d.name).join(" \u2794 ")})`,
+          l2: `FORWARDED \u2014 VLAN ${srcVlan}${dstVlan !== srcVlan ? ` -> Routed -> VLAN ${dstVlan}` : ""} (${hopDevices.map((d) => d.network?.mac || d.name).join(" -> ")})`,
           l3: `ICMP Echo Reply from ${dstNet.ip}: bytes=32 time=${latencyMs}ms TTL=${ttl}`
         },
         summary: `Reply from ${dstNet.ip}: time=${latencyMs}ms TTL=${ttl} (${pathRes.nodeIds.length} node)`
@@ -82404,18 +82832,18 @@ ${lines.join("\n") || "(tabel ARP kosong)"}`
       <div class="modal-card packet-tracer-card">
         <div class="modal-header">
           <div style="display:flex;align-items:center;gap:8px;">
-            <span>\u26A1</span>
+            ${uiIcon("zap", 18)}
             <div>
               <div style="font-size:14px;font-weight:700;color:var(--text-primary);">Simulasi Jaringan &amp; Terminal CLI (Packet Tracer)</div>
               <div style="font-size:11px;color:var(--text-muted);">Uji Ping/Traceroute, inspeksi OSI Layer 1\u20133, &amp; konfigurasi Cisco IOS / MikroTik RouterOS</div>
             </div>
           </div>
-          <button type="button" id="btn-pt-close" class="btn btn-icon btn-sm" title="Tutup">\u2715</button>
+          <button type="button" id="btn-pt-close" class="btn btn-icon btn-sm" title="Tutup">${uiIcon("x", 14)}</button>
         </div>
 
         <div class="pt-tab-bar" role="tablist">
-          <button type="button" class="pt-tab-btn active" data-pt-tab="sim">\u26A1 Simulasi Paket &amp; PDU (OSI L1\u2013L3)</button>
-          <button type="button" class="pt-tab-btn" data-pt-tab="cli">\u{1F4BB} Terminal CLI (Cisco IOS &amp; MikroTik)</button>
+          <button type="button" class="pt-tab-btn active" data-pt-tab="sim">${uiIcon("zap", 13)} Simulasi Paket &amp; PDU (OSI L1\u2013L3)</button>
+          <button type="button" class="pt-tab-btn" data-pt-tab="cli">${uiIcon("terminal", 13)} Terminal CLI (Cisco IOS &amp; MikroTik)</button>
         </div>
 
         <div id="pt-panel-sim" class="pt-tab-panel">
@@ -82430,8 +82858,8 @@ ${lines.join("\n") || "(tabel ARP kosong)"}`
             </label>
           </div>
           <div class="pt-sim-actions">
-            <button type="button" id="btn-pt-run-ping" class="btn btn-primary btn-sm">\u25B6 Kirim Paket Ping (Animasi 3D)</button>
-            <button type="button" id="btn-pt-run-trace" class="btn btn-secondary btn-sm">\u{1F9ED} Traceroute</button>
+            <button type="button" id="btn-pt-run-ping" class="btn btn-primary btn-sm">${uiIcon("play", 12)} Kirim Paket Ping (Animasi 3D)</button>
+            <button type="button" id="btn-pt-run-trace" class="btn btn-secondary btn-sm">${uiIcon("compass", 12)} Traceroute</button>
           </div>
           <div id="pt-sim-result" class="pt-sim-result">
             Pilih perangkat sumber &amp; tujuan lalu klik <strong>Kirim Paket Ping</strong> untuk melihat rute fisik &amp; PDU OSI Layer 1\u20133.
@@ -82592,11 +83020,11 @@ Ketik "help" atau klik pintasan perintah di atas.</pre>
       const hopNames = (res.hops || []).map((id) => {
         const d = this.deviceManager?.getDeviceById?.(id);
         return `<span class="pt-hop-pill">${escapeHtml(d?.name || id)}</span>`;
-      }).join(" \u2794 ");
+      }).join(" -&gt; ");
       const traceHtml = showTrace && res.traceHops?.length ? `<div class="pt-pdu-row"><strong>Hops Traceroute:</strong><br>${res.traceHops.map((h) => `#${h.hopIndex} ${escapeHtml(h.deviceName)} (${escapeHtml(h.ip)}) \u2014 ${h.rttMs} ms`).join("<br>")}</div>` : "";
       box.innerHTML = `
       <div class="pt-status-banner ${res.success ? "is-ok" : "is-fail"}">
-        <span>${res.success ? "\u2705 PING BERHASIL" : "\u274C PING GAGAL"}</span>
+        <span style="display:inline-flex;align-items:center;gap:5px;">${res.success ? `${uiIcon("check", 13)} PING BERHASIL` : `${uiIcon("x", 13)} PING GAGAL`}</span>
         <span>${escapeHtml(res.summary || res.reason || "")}</span>
       </div>
       ${hopNames ? `<div class="pt-hops-row">${hopNames}</div>` : ""}
@@ -82638,7 +83066,7 @@ ${result.output}`);
       description: "Buka Studio Bangunan, pasang minimal 2 gedung/properti 3D dan bangun 1 jalur jalan 3D kampus.",
       workspace: "build",
       xp: 150,
-      badge: "\u{1F3D7}\uFE0F Arsitek Kampus",
+      badge: "Arsitek Kampus",
       check: ({ stateManager: sm }) => {
         const rooms = sm.getRooms3d().length;
         const roads = sm.getRoads3d().length;
@@ -82654,7 +83082,7 @@ ${result.output}`);
       description: "Di Lab Jaringan, pasang minimal 3 perangkat jaringan dan hubungkan minimal 2 segmen kabel.",
       workspace: "network",
       xp: 200,
-      badge: "\u{1F50C} Teknisi Backbone",
+      badge: "Teknisi Backbone",
       check: ({ deviceManager: dm, cableManager: cm }) => {
         const devs = dm?.getAllDevices?.().length || 0;
         const cables = cm?.getAllConnections?.().length || 0;
@@ -82670,7 +83098,7 @@ ${result.output}`);
       description: "Gunakan Simulasi & CLI untuk mengirim paket Ping antar perangkat hingga status REPLY berhasil.",
       workspace: "network",
       xp: 250,
-      badge: "\u{1F4E1} Master Packet Tracer",
+      badge: "Master Packet Tracer",
       check: ({ progress }) => {
         const ok = Boolean(progress.pingSucceeded);
         return {
@@ -82685,7 +83113,7 @@ ${result.output}`);
       description: "Aktifkan karakter avatar 3D (TPP/FPP) untuk menjelajahi kampus atau memeriksa port perangkat.",
       workspace: "any",
       xp: 150,
-      badge: "\u{1F576}\uFE0F Explorer Roblox",
+      badge: "Explorer Roblox",
       check: ({ progress }) => {
         const ok = Boolean(progress.avatarVisited);
         return {
@@ -82824,7 +83252,7 @@ ${result.output}`);
         });
         const top = newlyCompleted[0];
         this.map3DEngine?.showStatusHint?.(
-          `\u{1F3C6} Misi Selesai: "${top.title}" (+${top.xp} XP, Lencana ${top.badge})!`
+          `Misi Selesai: "${top.title}" (+${top.xp} XP, Lencana ${top.badge})!`
         );
       }
       this.syncNavbarUI();
@@ -82854,13 +83282,13 @@ ${result.output}`);
       <div class="modal-card quest-modal-card">
         <div class="modal-header">
           <div style="display:flex;align-items:center;gap:8px;">
-            <span>\u{1F3AF}</span>
+            ${uiIcon("award", 18)}
             <div>
               <div style="font-size:14px;font-weight:700;color:var(--text-primary);">Misi Belajar, XP &amp; Lencana Roblox</div>
               <div style="font-size:11px;color:var(--text-muted);">Selesaikan misi Studio Bangunan &amp; Lab Jaringan untuk menaikkan Level Teknisi</div>
             </div>
           </div>
-          <button type="button" id="btn-quest-close" class="btn btn-icon btn-sm" title="Tutup">\u2715</button>
+          <button type="button" id="btn-quest-close" class="btn btn-icon btn-sm" title="Tutup">${uiIcon("x", 14)}</button>
         </div>
         <div id="quest-summary-banner" class="quest-summary-banner"></div>
         <div id="quest-badges-strip" class="quest-badges-strip"></div>
@@ -82893,14 +83321,14 @@ ${result.output}`);
       }
       const badgeStrip = this.modalEl.querySelector("#quest-badges-strip");
       if (badgeStrip) {
-        badgeStrip.innerHTML = this.profile.badges.length === 0 ? '<span style="font-size:11px;color:var(--text-muted);">Belum ada lencana terbuka \u2014 selesaikan misi pertamamu!</span>' : this.profile.badges.map((b) => `<span class="quest-badge-chip">${escapeHtml(b)}</span>`).join("");
+        badgeStrip.innerHTML = this.profile.badges.length === 0 ? '<span style="font-size:11px;color:var(--text-muted);">Belum ada lencana terbuka \u2014 selesaikan misi pertamamu!</span>' : this.profile.badges.map((b) => `<span class="quest-badge-chip">${uiIcon("award", 11)} ${escapeHtml(b)}</span>`).join("");
       }
       const listEl = this.modalEl.querySelector("#quest-cards-list");
       if (listEl) {
         listEl.innerHTML = evaluated.map((q) => `
         <div class="quest-item-card ${q.completed ? "is-done" : ""}">
           <div class="quest-item-head">
-            <span class="quest-item-title">${q.completed ? "\u2705" : "\u{1F3AF}"} ${escapeHtml(q.title)}</span>
+            <span class="quest-item-title">${q.completed ? uiIcon("check", 13) : uiIcon("target", 13)} ${escapeHtml(q.title)}</span>
             <span class="quest-item-xp">+${q.xp} XP</span>
           </div>
           <div class="quest-item-desc">${escapeHtml(q.description)}</div>
@@ -83032,7 +83460,7 @@ ${result.output}`);
         this.map3DEngine?.setWorkspaceGhostDevices?.(true);
         if (!silent) {
           this.map3DEngine?.showStatusHint?.(
-            "\u{1F3D7}\uFE0F Studio Bangunan 3D aktif \u2014 Tambah/geser/putar gedung, fasilitas & jalan sekolah. Perangkat jaringan digelapkan."
+            "Studio Bangunan 3D aktif \u2014 Tambah/geser/putar gedung, fasilitas & jalan sekolah. Perangkat jaringan digelapkan."
           );
         }
       } else {
@@ -83041,7 +83469,7 @@ ${result.output}`);
         this.map3DEngine?.setWorkspaceGhostDevices?.(false);
         if (!silent) {
           this.map3DEngine?.showStatusHint?.(
-            "\u{1F310} Lab Jaringan (Packet Tracer) aktif \u2014 Bangunan terkunci otomatis; fokus pasang perangkat, kabel, CLI & Ping."
+            "Lab Jaringan (Packet Tracer) aktif \u2014 Bangunan terkunci otomatis; fokus pasang perangkat, kabel, CLI & Ping."
           );
         }
       }
@@ -83069,6 +83497,8 @@ ${result.output}`);
       const buildPalette = document.getElementById("build-studio-palette-container");
       if (devPalette) devPalette.style.display = isBuild ? "none" : "";
       if (buildPalette) buildPalette.style.display = isBuild ? "block" : "none";
+      const leftScroll = document.querySelector?.(".sidebar-left .sidebar-content");
+      if (leftScroll) leftScroll.scrollTop = 0;
       const buildBar = document.getElementById("hud-3d-build-studio");
       if (buildBar) {
         const showBar = isBuild && is3d;
@@ -83091,7 +83521,7 @@ ${result.output}`);
           };
           stateManager.setRooms3d([...stateManager.getRooms3d(), clone2]);
           stateManager.selectRoom3d?.(clone2.id);
-          this.map3DEngine?.showStatusHint?.(`\u{1F4CB} Duplikat "${clone2.name}" dibuat.`);
+          this.map3DEngine?.showStatusHint?.(`Duplikat "${clone2.name}" dibuat.`);
           return clone2;
         }
       }
@@ -83107,7 +83537,7 @@ ${result.output}`);
             y: Math.min(0.95, (Number(obj.y) || 0.5) + 0.03),
             locked: false
           });
-          this.map3DEngine?.showStatusHint?.(`\u{1F4CB} Duplikat "${clone2.name}" dibuat.`);
+          this.map3DEngine?.showStatusHint?.(`Duplikat "${clone2.name}" dibuat.`);
           return clone2;
         }
       }
@@ -83198,28 +83628,28 @@ ${result.output}`);
             <h2 class="launcher-title">Pilih Mode Belajar Hari Ini</h2>
             <p class="launcher-subtitle">Dua lingkungan terpisah agar lebih fokus &amp; mudah dipahami \u2014 dilengkapi Avatar Jelajah Roblox &amp; Misi XP.</p>
           </div>
-          <button type="button" id="btn-launcher-close" class="btn btn-icon btn-sm" title="Tutup">\u2715</button>
+          <button type="button" id="btn-launcher-close" class="btn btn-icon btn-sm" title="Tutup">${uiIcon("x", 14)}</button>
         </div>
 
         <div class="launcher-cards">
           <button type="button" class="launcher-choice-card is-build" data-pick-workspace="build">
-            <div class="launcher-choice-icon">\u{1F3D7}\uFE0F</div>
+            <div class="launcher-choice-icon">${uiIcon("building", 26)}</div>
             <div class="launcher-choice-name">Studio Bangunan 3D</div>
             <div class="launcher-choice-desc">Susun gedung kelas PPLG, perpustakaan, taman, tandon air, tiang &amp; jalan kampus dengan Snap Grid, Gizmo RGB, serta jelajahi dengan Avatar.</div>
-            <span class="launcher-choice-cta">Mulai Membangun \u2192</span>
+            <span class="launcher-choice-cta">Mulai Membangun -></span>
           </button>
 
           <button type="button" class="launcher-choice-card is-network" data-pick-workspace="network">
-            <div class="launcher-choice-icon">\u{1F310}</div>
+            <div class="launcher-choice-icon">${uiIcon("network", 26)}</div>
             <div class="launcher-choice-name">Lab Engineering Jaringan</div>
             <div class="launcher-choice-desc">Ala Cisco Packet Tracer 3D: pasang Router/Switch/AP, sambungkan kabel antar port, konfigurasi CLI Cisco &amp; MikroTik, serta animasi paket Ping.</div>
-            <span class="launcher-choice-cta">Masuk Lab Jaringan \u2192</span>
+            <span class="launcher-choice-cta">Masuk Lab Jaringan -></span>
           </button>
         </div>
 
         <div class="launcher-footer">
-          <span>\u{1F4A1} Gedung terkunci otomatis saat berada di Lab Jaringan agar tidak tergeser.</span>
-          <button type="button" id="btn-launcher-quests" class="btn btn-secondary btn-sm">\u{1F3AF} Lihat Misi Belajar</button>
+          <span>Gedung terkunci otomatis saat berada di Lab Jaringan agar tidak tergeser.</span>
+          <button type="button" id="btn-launcher-quests" class="btn btn-secondary btn-sm">${uiIcon("award", 13)} Lihat Misi Belajar</button>
         </div>
       </div>
     `;
@@ -83543,6 +83973,8 @@ ${result.output}`);
       const runSync = () => this.syncToolbarLayoutFit();
       window.addEventListener("resize", runSync);
       eventBus.on("workspace:changed", () => requestAnimationFrame(runSync));
+      eventBus.on("auth:changed", () => requestAnimationFrame(runSync));
+      eventBus.on("quest:completed", () => requestAnimationFrame(runSync));
       if (typeof ResizeObserver !== "undefined") {
         this._toolbarResizeObserver = new ResizeObserver(() => {
           const w = toolbar.clientWidth;
@@ -83562,7 +83994,15 @@ ${result.output}`);
     syncToolbarLayoutFit() {
       const toolbar = document.getElementById("app-toolbar");
       if (!toolbar) return;
-      const stages = ["tb-compact-brand", "tb-compact-zoom", "tb-compact-modes", "tb-compact-view", "tb-wrap"];
+      const stages = [
+        "tb-compact-brand",
+        "tb-compact-zoom",
+        "tb-compact-modes",
+        "tb-compact-view",
+        "tb-compact-extras",
+        "tb-compact-auth",
+        "tb-wrap"
+      ];
       toolbar.classList.remove(...stages);
       const available = toolbar.clientWidth;
       if (!available) return;
@@ -84025,7 +84465,11 @@ ${result.output}`);
           }
           if (lower === "r") {
             e.preventDefault();
-            this.map3DEngine?.setNavTool("rotate");
+            if (this.map3DEngine?.carriedObjects?.length > 0 || this.map3DEngine?.navTool === "move") {
+              this.map3DEngine?.rotateSelectedIn3D({ dY: e.shiftKey ? -45 : 45 });
+            } else {
+              this.map3DEngine?.setNavTool("rotate");
+            }
             return;
           }
           if (e.key === "[" || e.key === "{") {
@@ -84104,7 +84548,7 @@ ${result.output}`);
           }
           if (lower === "q" && this.map3DEngine?.avatarMode && !e.ctrlKey && !e.metaKey) {
             e.preventDefault();
-            this.map3DEngine.dropCarriedObjectsFromAvatar({ dropAll: Boolean(e.shiftKey) });
+            this.map3DEngine.dropCarriedObjectsFromAvatar({ dropAll: Boolean(e.shiftKey), useAimTarget: true });
             return;
           }
           if ((e.key === "," || e.key === "<") && this.map3DEngine?.avatarMode && !e.ctrlKey && !e.metaKey) {
@@ -84268,7 +84712,7 @@ ${result.output}`);
       if (selectedDeviceIds.length > 0) {
         const moved = this.deviceManager.nudgeSelectedDevices(dx, dy, { syncRenderer: true });
         if (moved.length === 0) {
-          this.map3DEngine?.showStatusHint?.("\u{1F512} Perangkat yang dipilih terkunci pada Layer.");
+          this.map3DEngine?.showStatusHint?.("Perangkat yang dipilih terkunci pada Layer.");
           return true;
         }
         if (moved.length === 1 && typeof document !== "undefined") {
@@ -84281,7 +84725,7 @@ ${result.output}`);
           this.map3DEngine?.syncDevices?.();
           this.map3DEngine?.syncCables?.();
           this.map3DEngine?.flashMoveElevationGuide?.(moved.map((d) => d.id));
-          const hint = moved.length === 1 ? `\u2195\uFE0F "${moved[0].name}" (X: ${moved[0].position.x.toFixed(4)}, Y: ${moved[0].position.y.toFixed(4)}) \u2014 Shift=cepat \u2022 Alt=halus` : `\u2195\uFE0F ${moved.length} perangkat digeser (Shift=cepat \u2022 Alt=halus)`;
+          const hint = moved.length === 1 ? `Posisi "${moved[0].name}" (X: ${moved[0].position.x.toFixed(4)}, Y: ${moved[0].position.y.toFixed(4)}) \u2014 Shift=cepat \u2022 Alt=halus` : `Posisi ${moved.length} perangkat digeser (Shift=cepat \u2022 Alt=halus)`;
           this.map3DEngine?.showStatusHint?.(hint);
         }
         return true;
@@ -84292,7 +84736,7 @@ ${result.output}`);
           const obj = stateManager.getObject3dById?.(selObjId);
           if (!obj) return false;
           if (this.map3DEngine?.isObject3dLocked?.(obj)) {
-            this.map3DEngine?.showStatusHint?.(`\u{1F512} Objek/Ruangan "${obj.name}" sedang dikunci.`);
+            this.map3DEngine?.showStatusHint?.(`Objek/Ruangan "${obj.name}" sedang dikunci.`);
             return true;
           }
           const prevX = Number(obj.x) || 0;
@@ -84319,7 +84763,7 @@ ${result.output}`);
             this.map3DEngine?.syncDevices?.();
             this.map3DEngine?.syncCables?.();
           }
-          this.map3DEngine?.showStatusHint?.(`\u2195\uFE0F Objek "${obj.name}" (X: ${newX.toFixed(4)}, Y: ${newY.toFixed(4)})`);
+          this.map3DEngine?.showStatusHint?.(`Objek "${obj.name}" (X: ${newX.toFixed(4)}, Y: ${newY.toFixed(4)})`);
           return true;
         }
         const selRoomId = stateManager.getSelectedRoom3dId?.();
@@ -84327,13 +84771,13 @@ ${result.output}`);
           const room = stateManager.getRoom3dById?.(selRoomId);
           if (!room) return false;
           if (this.map3DEngine?.isRoomLocked?.(room)) {
-            this.map3DEngine?.showStatusHint?.(`\u{1F512} Ruangan "${room.name}" sedang dikunci.`);
+            this.map3DEngine?.showStatusHint?.(`Ruangan "${room.name}" sedang dikunci.`);
             return true;
           }
           const newX = clamp(Number(((Number(room.x) || 0) + dx).toFixed(4)), 0, 1);
           const newY = clamp(Number(((Number(room.y) || 0) + dy).toFixed(4)), 0, 1);
           stateManager.updateRoom3d?.(room.id, { x: newX, y: newY });
-          this.map3DEngine?.showStatusHint?.(`\u{1F3E0} "${room.name}" (X: ${newX.toFixed(4)}, Y: ${newY.toFixed(4)})`);
+          this.map3DEngine?.showStatusHint?.(`Ruangan "${room.name}" (X: ${newX.toFixed(4)}, Y: ${newY.toFixed(4)})`);
           return true;
         }
         const selRoadId = stateManager.getSelectedRoad3dId?.();
@@ -84750,7 +85194,7 @@ ${result.output}`);
               if (stateManager.getViewMode() !== "3d") stateManager.setViewMode("3d");
               setTimeout(() => this.map3DEngine?.setAvatarMode(true, { perspective: "fpp" }), 40);
             } },
-            { id: "mob-act-lock-rooms", label: this.map3DEngine?.roomsLocked ? "\u{1F513} Buka Kunci Ruangan 3D" : "\u{1F512} Kunci Semua Ruangan 3D", fn: () => this.map3DEngine?.toggleRoomsLocked?.() },
+            { id: "mob-act-lock-rooms", label: this.map3DEngine?.roomsLocked ? "Buka Kunci Ruangan 3D" : "Kunci Semua Ruangan 3D", fn: () => this.map3DEngine?.toggleRoomsLocked?.() },
             { id: "mob-act-rooms3d", label: "Ruangan & Gedung 3D (.GLB)", fn: () => this.room3DModal?.show() },
             { id: "mob-act-obj3d", label: "Studio Objek 3D", fn: () => this.object3DModal?.show() },
             { id: "mob-act-dev3d", label: "Model 3D Perangkat", fn: () => this.device3DModelModal?.show() },
@@ -84966,7 +85410,7 @@ ${result.output}`);
       const sampleCables = [
         {
           id: "cab-uplink-rtr-csw",
-          name: "Uplink Router \u2794 Core Switch",
+          name: "Uplink Router -> Core Switch",
           source: "dev-core-router",
           destination: "dev-core-switch",
           type: "fiber",
@@ -84985,7 +85429,7 @@ ${result.output}`);
         },
         {
           id: "cab-bb-csw-gda",
-          name: "Backbone FO NOC \u2794 Gedung A",
+          name: "Backbone FO NOC -> Gedung A",
           source: "dev-core-switch",
           destination: "dev-dist-gda",
           type: "fiber",
@@ -85007,7 +85451,7 @@ ${result.output}`);
         },
         {
           id: "cab-bb-csw-gdb",
-          name: "Backbone FO NOC \u2794 Gedung B",
+          name: "Backbone FO NOC -> Gedung B",
           source: "dev-core-switch",
           destination: "dev-dist-gdb",
           type: "fiber",

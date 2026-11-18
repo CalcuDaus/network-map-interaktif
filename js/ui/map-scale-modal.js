@@ -221,7 +221,7 @@ export class MapScaleModal {
         gap: 8px;
         animation: fadeIn 0.2s ease-out;
       `;
-      toast.innerHTML = `<span>📐 Skala denah berhasil dikalibrasi ke <strong>${val} Meter</strong>!</span>`;
+      toast.innerHTML = `<span>Skala denah berhasil dikalibrasi ke <strong>${val} Meter</strong>!</span>`;
       document.body.appendChild(toast);
       setTimeout(() => toast.remove(), 3500);
     });

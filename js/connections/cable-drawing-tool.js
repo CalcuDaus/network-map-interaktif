@@ -76,7 +76,7 @@ export class CableDrawingTool {
 
     this.penHudEl.innerHTML = `
       <span style="font-weight: 700; color: var(--accent-blue, #2a7c13); display: inline-flex; align-items: center; gap: 4px;">
-        ✒️ Pen Tool Kabel:
+        Pen Tool Kabel:
       </span>
       <select id="pen-hud-path-style" style="background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 6px; padding: 3px 7px; font-size: 11px; color: var(--text-primary); font-weight: 600;">
         <option value="curve" selected>Kurva Bezier Halus (Pen Tool)</option>
@@ -92,10 +92,10 @@ export class CableDrawingTool {
         <option value="wireless-ptp">Wireless PtP</option>
       </select>
       <button type="button" id="btn-pen-hud-undo" class="btn btn-secondary btn-sm" style="font-size: 10.5px; padding: 3px 8px;" title="Hapus titik belok terakhir (Backspace)">
-        ↩ Undo Titik
+        Undo Titik
       </button>
       <button type="button" id="btn-pen-hud-cancel" class="btn btn-secondary btn-sm" style="font-size: 10.5px; padding: 3px 8px;" title="Batalkan tarikan kabel (Esc)">
-        ✖ Batal
+        Batal
       </button>
       <span style="font-size: 10px; color: var(--text-muted);">
         Klik Kanvas: Titik Anchor • <strong>Shift</strong>: Kunci 45°/90° • <strong>Backspace</strong>: Hapus Titik
@@ -333,7 +333,7 @@ export class CableDrawingTool {
 
     // Create the connection with Pen Tool pathStyle & curveTension
     const newCable = this.cableManager.addConnection({
-      name: `Link ${srcDev.name} ➔ ${destDev.name}`,
+      name: `Link ${srcDev.name} -> ${destDev.name}`,
       source: this.sourceDeviceId,
       destination: destDeviceId,
       cableCategory: this.selectedCategory,

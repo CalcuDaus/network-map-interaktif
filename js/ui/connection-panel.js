@@ -5,6 +5,7 @@
 
 import { eventBus } from '../core/event-bus.js';
 import { stateManager } from '../core/state-manager.js';
+import { uiIcon } from '../utils/helpers.js';
 import { 
   CABLE_CATEGORIES, 
   CABLE_STATUSES, 
@@ -85,8 +86,8 @@ export class ConnectionPanel {
           </div>
 
           <div style="display: flex; align-items: center; justify-content: space-between; font-size: 11px;">
-            <span style="font-family: var(--font-mono); color: var(--text-muted); cursor: pointer;" id="btn-copy-cable-id" title="Klik untuk salin ID">
-              ID: ${cable.id} 📋
+            <span style="font-family: var(--font-mono); color: var(--text-muted); cursor: pointer; display: inline-flex; align-items: center; gap: 4px;" id="btn-copy-cable-id" title="Klik untuk salin ID">
+              ID: ${cable.id} ${uiIcon('copy', 11)}
             </span>
             <div style="display: flex; align-items: center; gap: 6px;">
               <span style="width: 8px; height: 8px; border-radius: 50%; background-color: ${statusDef.color};"></span>
@@ -105,7 +106,7 @@ export class ConnectionPanel {
           <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
             <span class="section-label" style="margin-bottom: 0;">Endpoint & Port Koneksi</span>
             <button type="button" id="btn-open-port-picker" class="btn btn-secondary btn-sm" style="font-size: 10.5px; padding: 3px 8px;">
-              🔌 Pilih Port (3D)
+              ${uiIcon('plug', 12)} Pilih Port (3D)
             </button>
           </div>
           <div class="info-card" style="display: flex; flex-direction: column; gap: 8px;">
@@ -174,8 +175,8 @@ export class ConnectionPanel {
                   <span id="cable-color-preview-dot" style="display: inline-block; width: 12px; height: 12px; border-radius: 50%; background-color: ${activeColor}; border: 1px solid rgba(0,0,0,0.25); box-shadow: 0 0 6px ${activeColor}88;"></span>
                   Warna Garis Kabel
                 </label>
-                <span id="prop-cable-color-mode-badge" style="font-size: 10px; padding: 2px 7px; border-radius: 10px; font-weight: 600; ${isCustomColor ? 'background: rgba(245, 158, 11, 0.15); color: #b45309; border: 1px solid rgba(245, 158, 11, 0.3);' : 'background: rgba(42, 124, 19, 0.15); color: var(--accent-green); border: 1px solid rgba(42, 124, 19, 0.3);'}">
-                  ${isCustomColor ? '🎨 Custom' : '⚡ Otomatis (Standar Tipe)'}
+                <span id="prop-cable-color-mode-badge" style="font-size: 10px; padding: 2px 7px; border-radius: 10px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; ${isCustomColor ? 'background: rgba(245, 158, 11, 0.15); color: #b45309; border: 1px solid rgba(245, 158, 11, 0.3);' : 'background: rgba(42, 124, 19, 0.15); color: var(--accent-green); border: 1px solid rgba(42, 124, 19, 0.3);'}">
+                  ${isCustomColor ? `${uiIcon('palette', 11)} Custom` : `${uiIcon('zap', 11)} Otomatis (Standar Tipe)`}
                 </span>
               </div>
 
@@ -468,7 +469,7 @@ export class ConnectionPanel {
                   `).join('')}
                   ${segments.map((seg, idx) => `
                     <div style="display: flex; align-items: center; justify-content: space-between; font-size: 10px; padding: 2px 6px; color: var(--text-muted);">
-                      <span>${idx === 0 ? 'Sumber ➔ Titik 1' : (idx === segments.length - 1 ? `Titik ${idx} ➔ Tujuan` : `Titik ${idx} ➔ Titik ${idx + 1}`)}:</span>
+                      <span>${idx === 0 ? 'Sumber -> Titik 1' : (idx === segments.length - 1 ? `Titik ${idx} -> Tujuan` : `Titik ${idx} -> Titik ${idx + 1}`)}:</span>
                       <span style="font-family: var(--font-mono);">${seg.toFixed(1)} m</span>
                     </div>
                   `).join('')}
@@ -1235,12 +1236,12 @@ export class ConnectionPanel {
             <div style="display: flex; flex-direction: column; gap: 2px;">
               <label style="font-size: 10px; color: var(--text-muted);">Warna Tube (TIA-598)</label>
               <select id="detail-fiber-tube" style="background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px; font-size: 11px; padding: 4px 6px;">
-                <option value="Biru (Tube 1)" ${tube.includes('Biru') ? 'selected' : ''}>🔵 Biru (Tube 1)</option>
-                <option value="Oranye (Tube 2)" ${tube.includes('Oranye') ? 'selected' : ''}>🟠 Oranye (Tube 2)</option>
-                <option value="Hijau (Tube 3)" ${tube.includes('Hijau') ? 'selected' : ''}>🟢 Hijau (Tube 3)</option>
-                <option value="Cokelat (Tube 4)" ${tube.includes('Cokelat') ? 'selected' : ''}>🟤 Cokelat (Tube 4)</option>
-                <option value="Abu-abu (Tube 5)" ${tube.includes('Abu-abu') ? 'selected' : ''}>⚪ Abu-abu (Tube 5)</option>
-                <option value="Putih (Tube 6)" ${tube.includes('Putih') ? 'selected' : ''}>⚪ Putih (Tube 6)</option>
+                <option value="Biru (Tube 1)" ${tube.includes('Biru') ? 'selected' : ''}>Biru (Tube 1)</option>
+                <option value="Oranye (Tube 2)" ${tube.includes('Oranye') ? 'selected' : ''}>Oranye (Tube 2)</option>
+                <option value="Hijau (Tube 3)" ${tube.includes('Hijau') ? 'selected' : ''}>Hijau (Tube 3)</option>
+                <option value="Cokelat (Tube 4)" ${tube.includes('Cokelat') ? 'selected' : ''}>Cokelat (Tube 4)</option>
+                <option value="Abu-abu (Tube 5)" ${tube.includes('Abu-abu') ? 'selected' : ''}>Abu-abu (Tube 5)</option>
+                <option value="Putih (Tube 6)" ${tube.includes('Putih') ? 'selected' : ''}>Putih (Tube 6)</option>
               </select>
             </div>
 
@@ -1321,7 +1322,7 @@ export class ConnectionPanel {
                       border-radius: 6px; padding: 8px 10px; font-size: 11px; display: flex; flex-direction: column; gap: 5px;">
             <div style="display: flex; align-items: center; justify-content: space-between;">
               <span style="font-weight: 700; color: ${ethComp.badgeColor}; display: flex; align-items: center; gap: 5px;">
-                ${ethComp.status === 'exceeded' ? '⚠️' : (ethComp.status === 'warning' ? '⚠️' : '✓')}
+                ${ethComp.status === 'exceeded' || ethComp.status === 'warning' ? uiIcon('alert', 12) : uiIcon('check', 12)}
                 ${ethComp.badgeText}
               </span>
               <span style="font-family: var(--font-mono); font-size: 10px; color: var(--text-muted);">
@@ -1333,7 +1334,7 @@ export class ConnectionPanel {
             </div>
             ${ethComp.status === 'exceeded' ? `
               <div style="margin-top: 2px; padding: 4px 6px; background: rgba(239, 68, 68, 0.15); border-radius: 4px; font-size: 10px; color: var(--text-primary);">
-                💡 <strong>Solusi Rekayasa:</strong> Tambahkan PoE Extender, Switch Distribusi perantara di titik &lt;90m, atau ganti link ini ke Fiber Optic Single Mode.
+                <strong>Solusi Rekayasa:</strong> Tambahkan PoE Extender, Switch Distribusi perantara di titik &lt;90m, atau ganti link ini ke Fiber Optic Single Mode.
               </div>
             ` : ''}
           </div>
