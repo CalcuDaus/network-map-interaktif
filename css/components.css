@@ -1635,6 +1635,9 @@ textarea:focus {
 .auth-modal-backdrop {
   position: fixed;
   inset: 0;
+  top: var(--auth-vv-top, 0px);
+  bottom: auto;
+  height: var(--auth-vv-height, 100dvh);
   z-index: 10060;
   background:
     radial-gradient(circle at 50% 48%, rgba(255, 255, 255, 0.22) 0, rgba(255, 255, 255, 0.22) 1px, transparent 1px),
@@ -1647,6 +1650,8 @@ textarea:focus {
   align-items: center;
   justify-content: center;
   padding: 20px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 [data-theme="dark"] .auth-modal-backdrop {
@@ -1906,6 +1911,12 @@ textarea:focus {
   display: grid;
   grid-template-columns: 1.3fr 1fr;
   gap: 8px;
+}
+
+.auth-form-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .auth-meta-row {
@@ -2378,6 +2389,68 @@ textarea:focus {
 }
 
 @media (max-height: 540px), (max-width: 920px) and (pointer: coarse) {
+  .auth-modal-backdrop {
+    align-items: flex-start;
+    padding: 6px 10px;
+    overflow-y: auto;
+  }
+
+  .auth-modal-backdrop .auth-modal-card,
+  .auth-modal-backdrop .auth-glass-card:not(.auth-modal-card-wide) {
+    max-width: min(640px, calc(100vw - 20px));
+    max-height: calc(var(--auth-vv-height, 100dvh) - 12px);
+    padding: 12px 16px 14px;
+    gap: 7px;
+    border-radius: 14px;
+    margin: 0 auto;
+  }
+
+  .auth-modal-backdrop .auth-brand-circle,
+  .auth-modal-backdrop .auth-or-divider {
+    display: none !important;
+  }
+
+  .auth-modal-backdrop .auth-glass-title {
+    font-size: 15px;
+    text-align: left;
+    padding-right: 32px;
+  }
+
+  .auth-modal-backdrop .auth-glass-subtitle {
+    font-size: 11px;
+    text-align: left;
+    margin: -4px 0 0;
+  }
+
+  .auth-modal-backdrop .auth-pill-btn {
+    height: 28px;
+    font-size: 11px;
+  }
+
+  .auth-modal-backdrop .auth-form-grid,
+  .auth-modal-backdrop .auth-two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .auth-modal-backdrop .auth-glass-field input,
+  .auth-modal-backdrop .auth-glass-field select,
+  .auth-modal-backdrop .auth-inline-form input {
+    height: 34px;
+    font-size: 16px;
+    padding: 0 10px;
+  }
+
+  .auth-modal-backdrop .auth-pass-wrap input {
+    padding-right: 34px;
+  }
+
+  .auth-modal-backdrop .auth-submit-btn {
+    height: 34px;
+    font-size: 12.5px;
+  }
+
   .ddm-backdrop {
     padding: 8px;
   }
@@ -2396,5 +2469,79 @@ textarea:focus {
     max-height: calc(100dvh - 14px) !important;
     max-width: calc(100vw - 16px) !important;
     overflow-y: auto !important;
+  }
+}
+
+.auth-modal-backdrop.is-keyboard-open {
+  align-items: flex-start;
+  padding: 6px 10px;
+  overflow-y: auto;
+}
+
+.auth-modal-backdrop.is-keyboard-open .auth-modal-card,
+.auth-modal-backdrop.is-keyboard-open .auth-glass-card:not(.auth-modal-card-wide) {
+  max-width: min(640px, calc(100vw - 20px));
+  max-height: calc(var(--auth-vv-height, 100dvh) - 12px);
+  padding: 12px 16px 14px;
+  gap: 7px;
+  border-radius: 14px;
+  margin: 0 auto;
+}
+
+.auth-modal-backdrop.is-keyboard-open .auth-brand-circle,
+.auth-modal-backdrop.is-keyboard-open .auth-or-divider {
+  display: none !important;
+}
+
+.auth-modal-backdrop.is-keyboard-open .auth-form-grid,
+.auth-modal-backdrop.is-keyboard-open .auth-two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.auth-modal-backdrop.is-keyboard-open .auth-glass-field input,
+.auth-modal-backdrop.is-keyboard-open .auth-glass-field select,
+.auth-modal-backdrop.is-keyboard-open .auth-inline-form input {
+  height: 34px;
+  font-size: 16px;
+  padding: 0 10px;
+}
+
+.auth-modal-backdrop.is-keyboard-open .auth-submit-btn {
+  height: 34px;
+  font-size: 12.5px;
+}
+
+@media (orientation: portrait) and (max-width: 680px), (max-width: 600px) {
+  #object-3d-builder-panel {
+    left: 8px !important;
+    right: 8px !important;
+    top: 48px !important;
+    width: calc(100vw - 16px) !important;
+    max-height: calc(100dvh - 60px) !important;
+  }
+
+  #room-3d-modal > div,
+  #device-3d-modal > div,
+  #custom-device-modal > div,
+  #vendor-quick-insert-modal > div,
+  #export-manager-modal > div,
+  #ip-vlan-documentation-modal > div,
+  #project-manager-modal > div,
+  #map-scale-modal > div,
+  #port-picker-modal > div {
+    max-width: calc(100vw - 16px) !important;
+    max-height: calc(100dvh - 16px) !important;
+  }
+
+  #room-3d-modal > div > div:nth-child(2) {
+    grid-template-columns: 1fr !important;
+    padding: 12px !important;
+    gap: 12px !important;
+  }
+
+  .auth-modal-backdrop:not(.is-keyboard-open) .auth-form-grid {
+    grid-template-columns: 1fr;
   }
 }

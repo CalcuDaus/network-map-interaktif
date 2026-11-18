@@ -4546,9 +4546,6 @@ export class Map3DEngine {
     this.syncAvatarCrosshair();
     this.findNearestDeviceToAvatar();
     if (isMobileTouchDevice()) {
-      if (typeof document !== 'undefined') {
-        document.getElementById('hud-3d-controls')?.classList?.add('is-minimized');
-      }
       let savedHudMin = null;
       try {
         savedHudMin = typeof localStorage !== 'undefined' ? localStorage.getItem('netmap_avatar_hud_min_v1') : null;

@@ -1294,6 +1294,11 @@ body.is-mobile-touch .hud-3d-avatar-bar {
   gap: 6px;
 }
 
+body.is-mobile-touch:not(.is-mobile-portrait) .hud-3d-avatar-bar:not(.is-minimized) {
+  bottom: 70px;
+  width: min(520px, calc(100vw - 300px));
+}
+
 body.is-mobile-touch .hud-3d-avatar-bar .avatar-bar-controls-hint {
   display: none;
 }
@@ -1512,6 +1517,150 @@ body.is-mobile-touch.mobile-dock-minimized .map-info-hud {
 body.is-mobile-touch .map-hud-controls {
   right: 10px;
   bottom: 10px;
+}
+
+/* Mobile Portrait Responsive Layout (Playable in Portrait While Preferring Landscape) */
+.mob-dock-btn.is-portrait-hint {
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+  background-color: rgba(42, 124, 19, 0.12);
+}
+
+body.is-mobile-touch.is-mobile-portrait .mobile-fs-dock {
+  top: 6px;
+  width: calc(100vw - 12px);
+  max-width: calc(100vw - 12px);
+  justify-content: flex-start;
+  border-radius: 14px;
+  padding: 4px 6px;
+}
+
+body.is-mobile-touch.is-mobile-portrait .mob-joystick-zone {
+  left: 10px;
+  bottom: 12px;
+  width: 112px;
+  height: 112px;
+}
+
+body.is-mobile-touch.is-mobile-portrait .mob-joystick-base {
+  width: 96px;
+  height: 96px;
+}
+
+body.is-mobile-touch.is-mobile-portrait .mob-joystick-knob {
+  width: 40px;
+  height: 40px;
+}
+
+body.is-mobile-touch.is-mobile-portrait .mob-roblox-actions {
+  right: 10px;
+  bottom: 12px;
+  gap: 6px;
+  max-width: calc(100vw - 134px);
+}
+
+body.is-mobile-touch.is-mobile-portrait .mob-action-row {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  max-width: 176px;
+}
+
+body.is-mobile-touch.is-mobile-portrait .mob-action-btn {
+  width: 44px;
+  height: 44px;
+  font-size: 9px;
+}
+
+body.is-mobile-touch.is-mobile-portrait .mob-jump-btn {
+  width: 60px;
+  height: 60px;
+  font-size: 9px;
+}
+
+body.is-mobile-touch.is-mobile-portrait .hud-3d-avatar-bar {
+  bottom: 136px !important;
+  width: calc(100vw - 16px) !important;
+  min-width: 0 !important;
+  max-width: calc(100vw - 16px) !important;
+  max-height: 42dvh;
+  overflow-y: auto;
+}
+
+body.is-mobile-touch.is-mobile-portrait .hud-3d-avatar-bar.is-minimized {
+  bottom: 132px !important;
+  width: auto !important;
+  max-width: calc(100vw - 20px) !important;
+}
+
+body.is-mobile-touch.is-mobile-portrait .hud-3d-sim-inspector {
+  bottom: 12px;
+  width: calc(100vw - 16px) !important;
+  max-height: 56dvh;
+  overflow-y: auto;
+}
+
+body.is-mobile-touch.is-mobile-portrait .map-info-hud {
+  left: 8px;
+  bottom: 8px;
+  max-width: calc(100vw - 68px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 9.5px;
+  padding: 3px 8px;
+}
+
+body.is-mobile-touch.is-mobile-portrait .map-compass-hud {
+  top: 82px;
+  right: 8px;
+}
+
+@media (orientation: portrait) and (max-width: 680px) {
+  .mobile-fs-dock {
+    top: 6px;
+    width: calc(100vw - 12px);
+    max-width: calc(100vw - 12px);
+    justify-content: flex-start;
+    border-radius: 14px;
+    padding: 4px 6px;
+  }
+
+  .mob-joystick-zone {
+    left: 10px;
+    bottom: 12px;
+    width: 112px;
+    height: 112px;
+  }
+
+  .mob-joystick-base {
+    width: 96px;
+    height: 96px;
+  }
+
+  .mob-joystick-knob {
+    width: 40px;
+    height: 40px;
+  }
+
+  .mob-action-row {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+    max-width: 176px;
+  }
+
+  .mob-action-btn {
+    width: 44px;
+    height: 44px;
+    font-size: 9px;
+  }
+
+  .mob-jump-btn {
+    width: 60px;
+    height: 60px;
+    font-size: 9px;
+  }
 }
 
 /* Portrait Guidance Overlay permanently hidden: mobile automatically forces fullscreen & landscape */

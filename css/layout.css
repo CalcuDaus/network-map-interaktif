@@ -349,6 +349,13 @@ body.workspace-fullscreen.is-mobile-touch .sidebar-right:not(.collapsed) {
   right: 0;
 }
 
+body.is-mobile-touch.is-mobile-portrait .sidebar-left:not(.collapsed),
+body.is-mobile-touch.is-mobile-portrait .sidebar-right:not(.collapsed) {
+  width: min(300px, 88vw) !important;
+  min-width: 0 !important;
+  max-width: 88vw !important;
+}
+
 body.workspace-fullscreen .workspace-exit-fs-btn {
   display: inline-flex;
 }
@@ -1304,11 +1311,33 @@ body.is-mobile-touch.mobile-dock-minimized #hud-3d-controls {
   display: none !important;
 }
 
-body.is-mobile-touch #map-viewport:has(#hud-3d-avatar-bar:not(.hidden)) #hud-3d-controls.is-minimized {
-  display: none !important;
+@media (max-height: 500px) and (pointer: coarse) {
+  body.is-mobile-touch:not(.workspace-fullscreen) #app-status-bar {
+    display: none;
+  }
+
+  body.is-mobile-touch:not(.workspace-fullscreen) #workspace {
+    height: calc(100dvh - var(--header-height));
+  }
 }
 
-@media (max-height: 500px) and (pointer: coarse) {
+@media (max-width: 680px) {
+  #app-toolbar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    height: var(--header-height);
+  }
+
+  #app-toolbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  #app-toolbar .toolbar-section {
+    flex-shrink: 0;
+  }
+
   body.is-mobile-touch:not(.workspace-fullscreen) #app-status-bar {
     display: none;
   }

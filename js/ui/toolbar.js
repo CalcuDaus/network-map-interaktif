@@ -321,16 +321,19 @@ export class Toolbar {
       });
     });
 
-    // Listen to Sidebar collapse events
-    eventBus.on('ui:sidebar-toggled', ({ side, open }) => {
+    // Sync initial & subsequent Sidebar collapse events
+    const applySidebarCollapsedClass = (side, open) => {
       const sidebarEl = document.querySelector(`.sidebar-${side}`);
       if (sidebarEl) {
-        if (open) {
-          sidebarEl.classList.remove('collapsed');
-        } else {
-          sidebarEl.classList.add('collapsed');
-        }
+        sidebarEl.classList.toggle('collapsed', !open);
       }
+    };
+    const uiState = stateManager.getState().ui || {};
+    applySidebarCollapsedClass('left', Boolean(uiState.leftSidebarOpen));
+    applySidebarCollapsedClass('right', Boolean(uiState.rightSidebarOpen));
+
+    eventBus.on('ui:sidebar-toggled', ({ side, open }) => {
+      applySidebarCollapsedClass(side, Boolean(open));
     });
   }
 }

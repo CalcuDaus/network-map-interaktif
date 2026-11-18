@@ -285,14 +285,15 @@ class StateManager {
    * @param {'left'|'right'} side 
    */
   toggleSidebar(side, forceOpen = undefined) {
+    const hasForce = typeof forceOpen === 'boolean';
     if (side === 'left') {
-      const next = typeof forceOpen === 'boolean' ? forceOpen : !this.state.ui.leftSidebarOpen;
-      if (next === this.state.ui.leftSidebarOpen) return;
+      const next = hasForce ? forceOpen : !this.state.ui.leftSidebarOpen;
+      if (!hasForce && next === this.state.ui.leftSidebarOpen) return;
       this.state.ui.leftSidebarOpen = next;
       eventBus.emit('ui:sidebar-toggled', { side: 'left', open: this.state.ui.leftSidebarOpen });
     } else if (side === 'right') {
-      const next = typeof forceOpen === 'boolean' ? forceOpen : !this.state.ui.rightSidebarOpen;
-      if (next === this.state.ui.rightSidebarOpen) return;
+      const next = hasForce ? forceOpen : !this.state.ui.rightSidebarOpen;
+      if (!hasForce && next === this.state.ui.rightSidebarOpen) return;
       this.state.ui.rightSidebarOpen = next;
       eventBus.emit('ui:sidebar-toggled', { side: 'right', open: this.state.ui.rightSidebarOpen });
     }

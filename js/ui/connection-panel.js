@@ -44,9 +44,10 @@ export class ConnectionPanel {
     const sourceDev = this.deviceManager.getDeviceById(cable.source);
     const destDev = this.deviceManager.getDeviceById(cable.destination);
 
-    // Open right sidebar if collapsed
-    if (!stateManager.getState().ui.rightSidebarOpen) {
-      stateManager.toggleSidebar('right');
+    // Open right sidebar if collapsed on desktop (on mobile, user opens Properti explicitly)
+    const isMobileTouch = typeof document !== 'undefined' && document.body?.classList?.contains?.('is-mobile-touch');
+    if (!stateManager.getState().ui.rightSidebarOpen && !isMobileTouch) {
+      stateManager.toggleSidebar('right', true);
     }
 
     const details = cable.details || {};

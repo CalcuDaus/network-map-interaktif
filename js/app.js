@@ -361,7 +361,7 @@ class NetMapApp {
       this._toolbarResizeObserver.observe(toolbar);
     }
     if (document.fonts?.ready) {
-      document.fonts.ready.then(runSync).catch(() => {});
+      document.fonts.ready.then(runSync).catch(() => { });
     }
     requestAnimationFrame(runSync);
   }
@@ -420,15 +420,15 @@ class NetMapApp {
     if (badgeEl) {
       badgeEl.textContent = isAuth
         ? (wsMode === 'personal'
-            ? 'Akun Saya'
-            : (this.authManager.isMainWorkspaceUnlocked?.() ? 'Server Utama' : 'Terkunci'))
+          ? 'Akun Saya'
+          : (this.authManager.isMainWorkspaceUnlocked?.() ? 'Server Utama' : 'Terkunci'))
         : (isPublic ? 'Read-Only' : 'Masuk');
     }
     const status = !isAuth
       ? (isPublic ? 'public-readonly' : 'guest')
       : (!this.authManager.canWriteActiveWorkspace?.()
-          ? 'readonly-main'
-          : (this.projectStorage.hasPendingSave ? 'saving' : 'saved'));
+        ? 'readonly-main'
+        : (this.projectStorage.hasPendingSave ? 'saving' : 'saved'));
     this.projectStorage?.updateStatusIndicator(status);
     this.syncToolbarLayoutFit();
   }
@@ -597,6 +597,9 @@ class NetMapApp {
       if (map3dContainer) map3dContainer.style.display = is3d ? 'block' : 'none';
       hud3d?.classList.toggle('hidden', !is3d);
       if (hud3d) hud3d.style.display = is3d ? 'flex' : 'none';
+      if (is3d) {
+        this._apply3dHudMinimizeState?.();
+      }
       hud3dHints?.classList.toggle('hidden', !is3d);
       if (hud3dHints) hud3dHints.style.display = is3d ? 'flex' : 'none';
       const hud3dSimInspector = document.getElementById('hud-3d-sim-inspector');
@@ -778,9 +781,16 @@ class NetMapApp {
     };
 
     const toggleControlsMin = () => {
-      isControlsMinimized = !isControlsMinimized;
+      const currentlyMin = hud3d ? hud3d.classList.contains('is-minimized') : isControlsMinimized;
+      this.set3DControlsMinimized(!currentlyMin);
+    };
+
+    this._apply3dHudMinimizeState = applyHudMinimizeState;
+    this.set3DControlsMinimized = (minimized) => {
+      isControlsMinimized = Boolean(minimized);
       try { localStorage.setItem(CONTROLS_MIN_KEY, isControlsMinimized ? '1' : '0'); } catch { /* ignore */ }
       applyHudMinimizeState();
+      return isControlsMinimized;
     };
 
     const toggleHintsMin = () => {
@@ -1281,14 +1291,26 @@ class NetMapApp {
 
     const applyMobileEnvironment = (initialBoot = false) => {
       const isMobile = isMobileTouchDevice();
+      const isPortrait = window.innerHeight > window.innerWidth;
       document.body.classList.toggle('is-mobile-touch', isMobile);
+      document.body.classList.toggle('is-mobile-portrait', Boolean(isMobile && isPortrait));
+      document.body.classList.toggle('is-mobile-landscape', Boolean(isMobile && !isPortrait));
+
+      const fsBtn = document.getElementById('btn-mob-fs-native');
+      if (fsBtn) {
+        fsBtn.classList.toggle('is-portrait-hint', Boolean(isMobile && isPortrait));
+        fsBtn.title = isPortrait
+          ? 'Putar ke Landscape Fullscreen (Disarankan)'
+          : 'Fullscreen & Landscape';
+      }
+
       const promptEl = document.getElementById('mobile-landscape-prompt');
       if (promptEl) {
         promptEl.classList.add('hidden');
         promptEl.style.display = 'none';
       }
       if (!isMobile) {
-        document.body.classList.remove('mobile-dock-minimized');
+        document.body.classList.remove('mobile-dock-minimized', 'is-mobile-portrait', 'is-mobile-landscape');
         const showTab = document.getElementById('btn-mob-show-dock');
         if (showTab) {
           showTab.classList.add('hidden');
@@ -1300,9 +1322,14 @@ class NetMapApp {
       if (initialBoot && !this._mobileBootApplied) {
         this._mobileBootApplied = true;
         this._mobileExitedFullscreen = false;
-        // Default sidebars collapsed & force workspace fullscreen + landscape immediately without user prompt
+        this._mobileFirstGestureAttempted = false;
+        // Default sidebars collapsed & force workspace fullscreen + prefer landscape without confirmation dialog
         stateManager.toggleSidebar('left', false);
         stateManager.toggleSidebar('right', false);
+        document.querySelector('.sidebar-left')?.classList?.add('collapsed');
+        document.querySelector('.sidebar-right')?.classList?.add('collapsed');
+        document.getElementById('btn-mob-left-drawer')?.classList?.remove('active');
+        document.getElementById('btn-mob-right-drawer')?.classList?.remove('active');
         this.toolbar?.setWorkspaceFullscreen?.(true, { requestNative: true, lockLandscape: true });
 
         let savedDockMin = false;
@@ -1311,9 +1338,19 @@ class NetMapApp {
         } catch { /* ignore */ }
         this.setMobileDockMinimized(savedDockMin, { persist: false });
 
-        // Force native fullscreen + landscape lock on touch/pointer gesture whenever browser requires user activation
-        const forceMobileFullscreenOnGesture = () => {
+        // Attempt native fullscreen + landscape lock automatically on the first workspace gesture
+        // without blocking ongoing portrait gameplay if user keeps holding phone vertically
+        const forceMobileFullscreenOnGesture = (ev) => {
           if (!document.body.classList.contains('is-mobile-touch') || this._mobileExitedFullscreen) return;
+          if (this.authModal?.isOpen?.()) return;
+          const activeTag = document.activeElement?.tagName || '';
+          if (/^(INPUT|TEXTAREA|SELECT)$/i.test(activeTag)) return;
+          const t = ev?.target;
+          if (t?.closest?.('input, textarea, select, label, form, .auth-modal-backdrop, .ddm-backdrop, #room-3d-modal, #object-3d-modal, #device-3d-model-modal, #mobile-quick-popover')) {
+            return;
+          }
+          if (this._mobileFirstGestureAttempted) return;
+          this._mobileFirstGestureAttempted = true;
           if (!document.body.classList.contains('workspace-fullscreen')) {
             this.toolbar?.setWorkspaceFullscreen?.(true, { requestNative: true, lockLandscape: true });
             return;
@@ -1323,7 +1360,7 @@ class NetMapApp {
           } else if (window.innerHeight > window.innerWidth) {
             try {
               const res = screen?.orientation?.lock?.('landscape');
-              if (res && typeof res.catch === 'function') res.catch(() => {});
+              if (res && typeof res.catch === 'function') res.catch(() => { });
             } catch { /* ignore */ }
           }
         };
@@ -1500,6 +1537,7 @@ class NetMapApp {
         pop.setAttribute('data-kind', 'menu');
         pop.style.cssText = 'position:absolute;top:48px;right:10px;width:min(260px,calc(100vw - 20px));max-height:calc(100dvh - 64px);overflow-y:auto;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:10px;padding:6px;box-shadow:var(--shadow-lg);z-index:96;display:grid;grid-template-columns:1fr;gap:4px;';
         const actions = [
+          { id: 'mob-act-3d-nav', label: 'Buka Bar Navigasi 3D', fn: () => { if (stateManager.getViewMode() !== '3d') stateManager.setViewMode('3d'); this.setMobileDockMinimized(false); this.set3DControlsMinimized?.(false); } },
           { id: 'mob-act-teknisi', label: 'Mode Teknisi (Roblox Mobile)', fn: () => { if (stateManager.getViewMode() !== '3d') stateManager.setViewMode('3d'); setTimeout(() => this.map3DEngine?.setAvatarMode(true, { perspective: 'tpp' }), 40); } },
           { id: 'mob-act-fpp', label: 'Mode FPP (Kamera Orang Pertama)', fn: () => { if (stateManager.getViewMode() !== '3d') stateManager.setViewMode('3d'); setTimeout(() => this.map3DEngine?.setAvatarMode(true, { perspective: 'fpp' }), 40); } },
           { id: 'mob-act-rooms3d', label: 'Ruangan & Gedung 3D (.GLB)', fn: () => this.room3DModal?.show() },

@@ -7,6 +7,8 @@
 
 import { eventBus } from '../core/event-bus.js';
 
+const AUTH_DRAFT_STORAGE_KEY = 'netmap_auth_modal_draft_v1';
+
 function escapeHtml(str) {
   return String(str ?? '')
     .replace(/&/g, '&amp;')
@@ -34,8 +36,27 @@ export class AuthModal {
     this.historyManager = historyManager;
     this.onSeedSample = onSeedSample;
 
-    this.activeGuestTab = 'login'; // 'login' | 'register'
-    this.loginTargetWs = authManager?.getWorkspaceMode?.() || 'main';
+    this.draftForm = {
+      activeGuestTab: 'login',
+      loginTargetWs: authManager?.getWorkspaceMode?.() || 'main',
+      loginUsername: '',
+      loginPassword: '',
+      loginServerPass: '',
+      loginReadonly: false,
+      preserveCanvas: true,
+      regUsername: '',
+      regDisplay: '',
+      regRole: 'teknisi',
+      regPassword: '',
+      regServerPass: '',
+      preserveCanvasReg: true,
+      unlockServerPass: ''
+    };
+    this._backdropPointerDownTarget = null;
+    this.loadDraftFromStorage();
+
+    this.activeGuestTab = this.draftForm.activeGuestTab === 'register' ? 'register' : 'login';
+    this.loginTargetWs = this.draftForm.loginTargetWs || authManager?.getWorkspaceMode?.() || 'main';
     this.statusMessage = '';
     this.statusTone = 'info'; // 'info' | 'success' | 'error'
     this.modalEl = null;
@@ -51,10 +72,23 @@ export class AuthModal {
     this.modalEl.style.display = 'none';
     document.body.appendChild(this.modalEl);
 
+    this.modalEl.addEventListener('pointerdown', (e) => {
+      this._backdropPointerDownTarget = e.target;
+    });
+
     this.modalEl.addEventListener('click', (e) => {
-      if (e.target === this.modalEl) {
-        this.hide();
+      if (e.target !== this.modalEl) return;
+      if (this._backdropPointerDownTarget && this._backdropPointerDownTarget !== this.modalEl) {
+        this._backdropPointerDownTarget = null;
+        return;
       }
+      this._backdropPointerDownTarget = null;
+      const activeEl = typeof document !== 'undefined' ? document.activeElement : null;
+      if (activeEl && this.modalEl.contains?.(activeEl) && /^(INPUT|SELECT|TEXTAREA)$/i.test(activeEl.tagName || '')) {
+        activeEl.blur?.();
+        return;
+      }
+      this.hide();
     });
   }
 
@@ -65,6 +99,17 @@ export class AuthModal {
       }
     });
 
+    const onViewportChange = () => {
+      if (this.isOpen()) {
+        this.syncVisualViewportMetrics();
+      }
+    };
+    window.addEventListener('resize', onViewportChange);
+    if (window.visualViewport?.addEventListener) {
+      window.visualViewport.addEventListener('resize', onViewportChange);
+      window.visualViewport.addEventListener('scroll', onViewportChange);
+    }
+
     eventBus.on('auth:changed', () => {
       if (this.isOpen()) {
         this.render();
@@ -72,21 +117,125 @@ export class AuthModal {
     });
   }
 
+  syncVisualViewportMetrics() {
+    if (!this.modalEl || typeof window === 'undefined') return;
+    const vv = window.visualViewport;
+    const vvHeight = vv?.height ? Math.round(vv.height) : (window.innerHeight || 0);
+    const vvTop = vv?.offsetTop ? Math.round(vv.offsetTop) : 0;
+    const winHeight = window.innerHeight || vvHeight;
+    const kbOpen = Boolean(vv && winHeight > 0 && (winHeight - vv.height) > 100);
+    if (vvHeight > 0) {
+      this.modalEl.style.setProperty?.('--auth-vv-height', `${vvHeight}px`);
+    }
+    this.modalEl.style.setProperty?.('--auth-vv-top', `${vvTop}px`);
+    this.modalEl.classList?.toggle('is-keyboard-open', kbOpen);
+  }
+
+  loadDraftFromStorage() {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      const raw = localStorage.getItem(AUTH_DRAFT_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') {
+        Object.keys(this.draftForm).forEach((key) => {
+          if (key in parsed && parsed[key] !== undefined) {
+            this.draftForm[key] = parsed[key];
+          }
+        });
+      }
+    } catch { /* ignore corrupt draft storage */ }
+  }
+
+  saveDraftToStorage() {
+    if (typeof localStorage === 'undefined') return;
+    try {
+      localStorage.setItem(AUTH_DRAFT_STORAGE_KEY, JSON.stringify(this.draftForm));
+    } catch { /* ignore storage quota errors */ }
+  }
+
+  captureDraftFromDOM() {
+    if (!this.modalEl) return;
+    const readInput = (sel, prop) => {
+      const el = this.modalEl.querySelector(sel);
+      if (el) this.draftForm[prop] = el.value ?? '';
+    };
+    const readCheck = (sel, prop) => {
+      const el = this.modalEl.querySelector(sel);
+      if (el) this.draftForm[prop] = Boolean(el.checked);
+    };
+
+    readInput('#auth-login-username', 'loginUsername');
+    readInput('#auth-login-password', 'loginPassword');
+    readInput('#auth-login-server-pass', 'loginServerPass');
+    readCheck('#auth-login-main-readonly', 'loginReadonly');
+    readCheck('#auth-preserve-canvas', 'preserveCanvas');
+
+    readInput('#auth-reg-username', 'regUsername');
+    readInput('#auth-reg-display', 'regDisplay');
+    readInput('#auth-reg-role', 'regRole');
+    readInput('#auth-reg-password', 'regPassword');
+    readInput('#auth-reg-server-pass', 'regServerPass');
+    readCheck('#auth-preserve-canvas-reg', 'preserveCanvasReg');
+
+    readInput('#auth-unlock-server-pass', 'unlockServerPass');
+
+    this.draftForm.activeGuestTab = this.activeGuestTab;
+    this.draftForm.loginTargetWs = this.loginTargetWs;
+    this.saveDraftToStorage();
+  }
+
+  clearDraft({ keepUsername = true } = {}) {
+    const savedUser = keepUsername ? (this.draftForm.loginUsername || '') : '';
+    this.draftForm = {
+      ...this.draftForm,
+      activeGuestTab: 'login',
+      loginUsername: savedUser,
+      loginPassword: '',
+      loginServerPass: '',
+      loginReadonly: false,
+      regUsername: '',
+      regDisplay: '',
+      regRole: 'teknisi',
+      regPassword: '',
+      regServerPass: '',
+      unlockServerPass: ''
+    };
+    this.activeGuestTab = 'login';
+    this.saveDraftToStorage();
+  }
+
   isOpen() {
     return Boolean(this.modalEl && this.modalEl.style.display === 'flex');
   }
 
   show(initialTab = 'login') {
-    this.activeGuestTab = initialTab === 'register' ? 'register' : 'login';
-    this.loginTargetWs = this.authManager?.getWorkspaceMode?.() || 'main';
+    this.loadDraftFromStorage();
+    const hasRegDraft = Boolean(
+      this.draftForm.regUsername ||
+      this.draftForm.regDisplay ||
+      this.draftForm.regPassword ||
+      this.draftForm.regServerPass
+    );
+    if (initialTab === 'register') {
+      this.activeGuestTab = 'register';
+    } else if (this.draftForm.activeGuestTab === 'register' && hasRegDraft) {
+      this.activeGuestTab = 'register';
+    } else {
+      this.activeGuestTab = 'login';
+    }
+    this.loginTargetWs = this.draftForm.loginTargetWs || this.authManager?.getWorkspaceMode?.() || 'main';
     this.statusMessage = '';
     this.modalEl.style.display = 'flex';
+    this.syncVisualViewportMetrics();
     this.render();
   }
 
   hide() {
+    this.captureDraftFromDOM();
     if (this.modalEl) {
       this.modalEl.style.display = 'none';
+      this.modalEl.classList?.remove('is-keyboard-open');
     }
   }
 
@@ -176,25 +325,27 @@ export class AuthModal {
             <div class="auth-or-divider"><span>ATAU</span></div>
 
             <form id="auth-login-form" class="auth-glass-form">
-              <div class="auth-glass-field">
-                <label for="auth-login-username">Username</label>
-                <input type="text" id="auth-login-username" placeholder="Masukkan username..." autocomplete="username" required>
-              </div>
+              <div class="auth-form-grid">
+                <div class="auth-glass-field">
+                  <label for="auth-login-username">Username</label>
+                  <input type="text" id="auth-login-username" value="${escapeHtml(this.draftForm.loginUsername)}" placeholder="Masukkan username..." autocomplete="username" required>
+                </div>
 
-              <div class="auth-glass-field">
-                <label for="auth-login-password">Password</label>
-                <div class="auth-pass-wrap">
-                  <input type="password" id="auth-login-password" placeholder="Masukkan password..." autocomplete="current-password" required>
-                  <button type="button" class="auth-pass-toggle" data-toggle-pass="auth-login-password" title="Tampilkan / Sembunyikan">
-                    <i data-lucide="eye" style="width: 15px; height: 15px;"></i>
-                  </button>
+                <div class="auth-glass-field">
+                  <label for="auth-login-password">Password</label>
+                  <div class="auth-pass-wrap">
+                    <input type="password" id="auth-login-password" value="${escapeHtml(this.draftForm.loginPassword)}" placeholder="Masukkan password..." autocomplete="current-password" required>
+                    <button type="button" class="auth-pass-toggle" data-toggle-pass="auth-login-password" title="Tampilkan / Sembunyikan">
+                      <i data-lucide="eye" style="width: 15px; height: 15px;"></i>
+                    </button>
+                  </div>
                 </div>
               </div>
 
               <div id="auth-login-server-pass-group" class="auth-glass-field" style="display: ${targetWs === 'main' ? 'flex' : 'none'};">
                 <label for="auth-login-server-pass">Password Server Utama</label>
                 <div class="auth-pass-wrap">
-                  <input type="password" id="auth-login-server-pass" placeholder="Masukkan password server..." autocomplete="off">
+                  <input type="password" id="auth-login-server-pass" value="${escapeHtml(this.draftForm.loginServerPass)}" placeholder="Masukkan password server..." autocomplete="off" ${this.draftForm.loginReadonly ? 'disabled' : ''}>
                   <button type="button" class="auth-pass-toggle" data-toggle-pass="auth-login-server-pass" title="Tampilkan / Sembunyikan">
                     <i data-lucide="eye" style="width: 15px; height: 15px;"></i>
                   </button>
@@ -203,7 +354,7 @@ export class AuthModal {
 
               <div class="auth-meta-row">
                 <label id="auth-login-main-readonly-wrap" class="auth-check-inline" style="display: ${targetWs === 'main' ? 'inline-flex' : 'none'};">
-                  <input type="checkbox" id="auth-login-main-readonly">
+                  <input type="checkbox" id="auth-login-main-readonly" ${this.draftForm.loginReadonly ? 'checked' : ''}>
                   <span>Lihat saja (Read-Only)</span>
                 </label>
                 ${isPublicPreview ? `
@@ -215,7 +366,7 @@ export class AuthModal {
 
               ${hasWork ? `
                 <label class="auth-check-inline">
-                  <input type="checkbox" id="auth-preserve-canvas" checked>
+                  <input type="checkbox" id="auth-preserve-canvas" ${this.draftForm.preserveCanvas !== false ? 'checked' : ''}>
                   <span>Simpan kanvas saat ini (${this.deviceManager.getAllDevices().length} dev)</span>
                 </label>
               ` : ''}
@@ -231,19 +382,19 @@ export class AuthModal {
             <form id="auth-register-form" class="auth-glass-form">
               <div class="auth-glass-field">
                 <label for="auth-reg-username">Username</label>
-                <input type="text" id="auth-reg-username" placeholder="cth: teknisi3" autocomplete="username" required>
+                <input type="text" id="auth-reg-username" value="${escapeHtml(this.draftForm.regUsername)}" placeholder="cth: teknisi3" autocomplete="username" required>
               </div>
 
               <div class="auth-two-col">
                 <div class="auth-glass-field">
                   <label for="auth-reg-display">Nama Lengkap</label>
-                  <input type="text" id="auth-reg-display" placeholder="Nama teknisi" required>
+                  <input type="text" id="auth-reg-display" value="${escapeHtml(this.draftForm.regDisplay)}" placeholder="Nama teknisi" required>
                 </div>
                 <div class="auth-glass-field">
                   <label for="auth-reg-role">Peran</label>
                   <select id="auth-reg-role">
-                    <option value="teknisi" selected>Teknisi</option>
-                    <option value="admin">Admin</option>
+                    <option value="teknisi" ${this.draftForm.regRole !== 'admin' ? 'selected' : ''}>Teknisi</option>
+                    <option value="admin" ${this.draftForm.regRole === 'admin' ? 'selected' : ''}>Admin</option>
                   </select>
                 </div>
               </div>
@@ -251,7 +402,7 @@ export class AuthModal {
               <div class="auth-glass-field">
                 <label for="auth-reg-password">Password Akun</label>
                 <div class="auth-pass-wrap">
-                  <input type="password" id="auth-reg-password" placeholder="Min. 4 karakter" autocomplete="new-password" required>
+                  <input type="password" id="auth-reg-password" value="${escapeHtml(this.draftForm.regPassword)}" placeholder="Min. 4 karakter" autocomplete="new-password" required>
                   <button type="button" class="auth-pass-toggle" data-toggle-pass="auth-reg-password" title="Tampilkan / Sembunyikan">
                     <i data-lucide="eye" style="width: 15px; height: 15px;"></i>
                   </button>
@@ -261,7 +412,7 @@ export class AuthModal {
               <div class="auth-glass-field">
                 <label for="auth-reg-server-pass">Password Server Utama</label>
                 <div class="auth-pass-wrap">
-                  <input type="password" id="auth-reg-server-pass" placeholder="Wajib untuk Admin / edit server" autocomplete="off">
+                  <input type="password" id="auth-reg-server-pass" value="${escapeHtml(this.draftForm.regServerPass)}" placeholder="Wajib untuk Admin / edit server" autocomplete="off">
                   <button type="button" class="auth-pass-toggle" data-toggle-pass="auth-reg-server-pass" title="Tampilkan / Sembunyikan">
                     <i data-lucide="eye" style="width: 15px; height: 15px;"></i>
                   </button>
@@ -270,7 +421,7 @@ export class AuthModal {
 
               ${hasWork ? `
                 <label class="auth-check-inline">
-                  <input type="checkbox" id="auth-preserve-canvas-reg" checked>
+                  <input type="checkbox" id="auth-preserve-canvas-reg" ${this.draftForm.preserveCanvasReg !== false ? 'checked' : ''}>
                   <span>Simpan kanvas saat ini</span>
                 </label>
               ` : ''}
@@ -355,7 +506,7 @@ export class AuthModal {
               </div>
               ${isMainUnlocked ? '' : `
                 <form id="auth-unlock-server-form" class="auth-inline-form">
-                  <input type="password" id="auth-unlock-server-pass" placeholder="Password akses Server Utama..." required>
+                  <input type="password" id="auth-unlock-server-pass" value="${escapeHtml(this.draftForm.unlockServerPass)}" placeholder="Password akses Server Utama..." required>
                   <button type="submit" id="auth-btn-unlock-server" class="btn btn-primary btn-sm">Buka Kunci</button>
                 </form>
               `}
@@ -423,9 +574,25 @@ export class AuthModal {
     this.modalEl.querySelector('#auth-btn-close')?.addEventListener('click', () => this.hide());
     this.modalEl.querySelector('#auth-btn-guest-close')?.addEventListener('click', () => this.hide());
 
+    this.modalEl.querySelectorAll('input, select, textarea').forEach((fieldEl) => {
+      const saveDraft = () => this.captureDraftFromDOM();
+      fieldEl.addEventListener('input', saveDraft);
+      fieldEl.addEventListener('change', saveDraft);
+      fieldEl.addEventListener('focus', (ev) => {
+        this.syncVisualViewportMetrics();
+        const targetEl = ev.currentTarget || ev.target;
+        setTimeout(() => {
+          targetEl?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+        }, 100);
+      });
+    });
+
     this.modalEl.querySelectorAll('[data-auth-tab]').forEach((btn) => {
       btn.addEventListener('click', () => {
-        this.activeGuestTab = btn.getAttribute('data-auth-tab') || 'login';
+        this.captureDraftFromDOM();
+        this.activeGuestTab = btn.getAttribute('data-auth-tab') === 'register' ? 'register' : 'login';
+        this.draftForm.activeGuestTab = this.activeGuestTab;
+        this.saveDraftToStorage();
         this.statusMessage = '';
         this.render();
       });
@@ -468,6 +635,8 @@ export class AuthModal {
       btn.addEventListener('click', () => {
         const ws = btn.getAttribute('data-login-ws') === 'personal' ? 'personal' : 'main';
         this.loginTargetWs = ws;
+        this.draftForm.loginTargetWs = ws;
+        this.saveDraftToStorage();
         this.modalEl.querySelectorAll('[data-login-ws]').forEach((b) => {
           b.classList.toggle('active', b.getAttribute('data-login-ws') === ws);
         });
@@ -483,12 +652,11 @@ export class AuthModal {
     readonlyCheck?.addEventListener('change', () => {
       if (serverPassInput) {
         serverPassInput.disabled = readonlyCheck.checked;
-        if (readonlyCheck.checked) {
-          serverPassInput.value = '';
-        } else {
+        if (!readonlyCheck.checked) {
           serverPassInput.focus();
         }
       }
+      this.captureDraftFromDOM();
     });
 
     this.modalEl.querySelector('#auth-login-form')?.addEventListener('submit', async (e) => {
@@ -507,6 +675,7 @@ export class AuthModal {
         });
         this.authManager.setWorkspaceMode(targetWs);
         await this.handlePostLoginLoad(preserve);
+        this.clearDraft({ keepUsername: true });
         this.render();
       } catch (err) {
         this.setStatus(err.message || 'Gagal login.', 'error');
@@ -533,6 +702,7 @@ export class AuthModal {
         });
         this.authManager.setWorkspaceMode('main');
         await this.handlePostLoginLoad(preserve);
+        this.clearDraft({ keepUsername: true });
         this.render();
       } catch (err) {
         this.setStatus(err.message || 'Gagal mendaftar.', 'error');
@@ -580,6 +750,8 @@ export class AuthModal {
         this.projectStorage.updateStatusIndicator(
           this.authManager.canWriteActiveWorkspace() ? 'saved' : 'readonly-main'
         );
+        this.draftForm.unlockServerPass = '';
+        this.saveDraftToStorage();
         this.statusMessage = 'Password server valid. Akses edit & simpan ke Server Utama sekarang terbuka!';
         this.statusTone = 'success';
         this.render();

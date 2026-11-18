@@ -321,14 +321,15 @@
      * @param {'left'|'right'} side 
      */
     toggleSidebar(side, forceOpen = void 0) {
+      const hasForce = typeof forceOpen === "boolean";
       if (side === "left") {
-        const next = typeof forceOpen === "boolean" ? forceOpen : !this.state.ui.leftSidebarOpen;
-        if (next === this.state.ui.leftSidebarOpen) return;
+        const next = hasForce ? forceOpen : !this.state.ui.leftSidebarOpen;
+        if (!hasForce && next === this.state.ui.leftSidebarOpen) return;
         this.state.ui.leftSidebarOpen = next;
         eventBus.emit("ui:sidebar-toggled", { side: "left", open: this.state.ui.leftSidebarOpen });
       } else if (side === "right") {
-        const next = typeof forceOpen === "boolean" ? forceOpen : !this.state.ui.rightSidebarOpen;
-        if (next === this.state.ui.rightSidebarOpen) return;
+        const next = hasForce ? forceOpen : !this.state.ui.rightSidebarOpen;
+        if (!hasForce && next === this.state.ui.rightSidebarOpen) return;
         this.state.ui.rightSidebarOpen = next;
         eventBus.emit("ui:sidebar-toggled", { side: "right", open: this.state.ui.rightSidebarOpen });
       }
@@ -3404,15 +3405,17 @@
           }
         });
       });
-      eventBus.on("ui:sidebar-toggled", ({ side, open }) => {
+      const applySidebarCollapsedClass = (side, open) => {
         const sidebarEl = document.querySelector(`.sidebar-${side}`);
         if (sidebarEl) {
-          if (open) {
-            sidebarEl.classList.remove("collapsed");
-          } else {
-            sidebarEl.classList.add("collapsed");
-          }
+          sidebarEl.classList.toggle("collapsed", !open);
         }
+      };
+      const uiState = stateManager.getState().ui || {};
+      applySidebarCollapsedClass("left", Boolean(uiState.leftSidebarOpen));
+      applySidebarCollapsedClass("right", Boolean(uiState.rightSidebarOpen));
+      eventBus.on("ui:sidebar-toggled", ({ side, open }) => {
+        applySidebarCollapsedClass(side, Boolean(open));
       });
     }
   };
@@ -7566,8 +7569,9 @@ ${device.network.ip}`;
       const spatial = device.spatial3d || getDefaultSpatial3d(device.type);
       const inv = device.inventory || {};
       const specs = device.specs || {};
-      if (!stateManager.getState().ui.rightSidebarOpen) {
-        stateManager.toggleSidebar("right");
+      const isMobileTouch = typeof document !== "undefined" && document.body?.classList?.contains?.("is-mobile-touch");
+      if (!stateManager.getState().ui.rightSidebarOpen && !isMobileTouch) {
+        stateManager.toggleSidebar("right", true);
       }
       const selectedDevices = this.deviceManager.getSelectedDevices?.() || [device];
       const selectedCount = selectedDevices.length;
@@ -11045,8 +11049,9 @@ ${device.network.ip}`;
       const activeColor = isCustomColor ? cable.customColor.trim() : catDef.color;
       const sourceDev = this.deviceManager.getDeviceById(cable.source);
       const destDev = this.deviceManager.getDeviceById(cable.destination);
-      if (!stateManager.getState().ui.rightSidebarOpen) {
-        stateManager.toggleSidebar("right");
+      const isMobileTouch = typeof document !== "undefined" && document.body?.classList?.contains?.("is-mobile-touch");
+      if (!stateManager.getState().ui.rightSidebarOpen && !isMobileTouch) {
+        stateManager.toggleSidebar("right", true);
       }
       const details = cable.details || {};
       const vSrc = typeof details.verticalDropSource === "number" ? details.verticalDropSource : 1.5;
@@ -15246,6 +15251,7 @@ ${dev.network?.ip || ""}`,
   };
 
   // js/ui/auth-modal.js
+  var AUTH_DRAFT_STORAGE_KEY = "netmap_auth_modal_draft_v1";
   function escapeHtml2(str) {
     return String(str ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
@@ -15266,8 +15272,26 @@ ${dev.network?.ip || ""}`,
       this.cableManager = cableManager;
       this.historyManager = historyManager;
       this.onSeedSample = onSeedSample;
-      this.activeGuestTab = "login";
-      this.loginTargetWs = authManager2?.getWorkspaceMode?.() || "main";
+      this.draftForm = {
+        activeGuestTab: "login",
+        loginTargetWs: authManager2?.getWorkspaceMode?.() || "main",
+        loginUsername: "",
+        loginPassword: "",
+        loginServerPass: "",
+        loginReadonly: false,
+        preserveCanvas: true,
+        regUsername: "",
+        regDisplay: "",
+        regRole: "teknisi",
+        regPassword: "",
+        regServerPass: "",
+        preserveCanvasReg: true,
+        unlockServerPass: ""
+      };
+      this._backdropPointerDownTarget = null;
+      this.loadDraftFromStorage();
+      this.activeGuestTab = this.draftForm.activeGuestTab === "register" ? "register" : "login";
+      this.loginTargetWs = this.draftForm.loginTargetWs || authManager2?.getWorkspaceMode?.() || "main";
       this.statusMessage = "";
       this.statusTone = "info";
       this.modalEl = null;
@@ -15280,10 +15304,22 @@ ${dev.network?.ip || ""}`,
       this.modalEl.className = "auth-modal-backdrop";
       this.modalEl.style.display = "none";
       document.body.appendChild(this.modalEl);
+      this.modalEl.addEventListener("pointerdown", (e) => {
+        this._backdropPointerDownTarget = e.target;
+      });
       this.modalEl.addEventListener("click", (e) => {
-        if (e.target === this.modalEl) {
-          this.hide();
+        if (e.target !== this.modalEl) return;
+        if (this._backdropPointerDownTarget && this._backdropPointerDownTarget !== this.modalEl) {
+          this._backdropPointerDownTarget = null;
+          return;
         }
+        this._backdropPointerDownTarget = null;
+        const activeEl = typeof document !== "undefined" ? document.activeElement : null;
+        if (activeEl && this.modalEl.contains?.(activeEl) && /^(INPUT|SELECT|TEXTAREA)$/i.test(activeEl.tagName || "")) {
+          activeEl.blur?.();
+          return;
+        }
+        this.hide();
       });
     }
     bindGlobalEvents() {
@@ -15292,25 +15328,129 @@ ${dev.network?.ip || ""}`,
           this.hide();
         }
       });
+      const onViewportChange = () => {
+        if (this.isOpen()) {
+          this.syncVisualViewportMetrics();
+        }
+      };
+      window.addEventListener("resize", onViewportChange);
+      if (window.visualViewport?.addEventListener) {
+        window.visualViewport.addEventListener("resize", onViewportChange);
+        window.visualViewport.addEventListener("scroll", onViewportChange);
+      }
       eventBus.on("auth:changed", () => {
         if (this.isOpen()) {
           this.render();
         }
       });
     }
+    syncVisualViewportMetrics() {
+      if (!this.modalEl || typeof window === "undefined") return;
+      const vv = window.visualViewport;
+      const vvHeight = vv?.height ? Math.round(vv.height) : window.innerHeight || 0;
+      const vvTop = vv?.offsetTop ? Math.round(vv.offsetTop) : 0;
+      const winHeight = window.innerHeight || vvHeight;
+      const kbOpen = Boolean(vv && winHeight > 0 && winHeight - vv.height > 100);
+      if (vvHeight > 0) {
+        this.modalEl.style.setProperty?.("--auth-vv-height", `${vvHeight}px`);
+      }
+      this.modalEl.style.setProperty?.("--auth-vv-top", `${vvTop}px`);
+      this.modalEl.classList?.toggle("is-keyboard-open", kbOpen);
+    }
+    loadDraftFromStorage() {
+      if (typeof localStorage === "undefined") return;
+      try {
+        const raw = localStorage.getItem(AUTH_DRAFT_STORAGE_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") {
+          Object.keys(this.draftForm).forEach((key) => {
+            if (key in parsed && parsed[key] !== void 0) {
+              this.draftForm[key] = parsed[key];
+            }
+          });
+        }
+      } catch {
+      }
+    }
+    saveDraftToStorage() {
+      if (typeof localStorage === "undefined") return;
+      try {
+        localStorage.setItem(AUTH_DRAFT_STORAGE_KEY, JSON.stringify(this.draftForm));
+      } catch {
+      }
+    }
+    captureDraftFromDOM() {
+      if (!this.modalEl) return;
+      const readInput = (sel, prop) => {
+        const el = this.modalEl.querySelector(sel);
+        if (el) this.draftForm[prop] = el.value ?? "";
+      };
+      const readCheck = (sel, prop) => {
+        const el = this.modalEl.querySelector(sel);
+        if (el) this.draftForm[prop] = Boolean(el.checked);
+      };
+      readInput("#auth-login-username", "loginUsername");
+      readInput("#auth-login-password", "loginPassword");
+      readInput("#auth-login-server-pass", "loginServerPass");
+      readCheck("#auth-login-main-readonly", "loginReadonly");
+      readCheck("#auth-preserve-canvas", "preserveCanvas");
+      readInput("#auth-reg-username", "regUsername");
+      readInput("#auth-reg-display", "regDisplay");
+      readInput("#auth-reg-role", "regRole");
+      readInput("#auth-reg-password", "regPassword");
+      readInput("#auth-reg-server-pass", "regServerPass");
+      readCheck("#auth-preserve-canvas-reg", "preserveCanvasReg");
+      readInput("#auth-unlock-server-pass", "unlockServerPass");
+      this.draftForm.activeGuestTab = this.activeGuestTab;
+      this.draftForm.loginTargetWs = this.loginTargetWs;
+      this.saveDraftToStorage();
+    }
+    clearDraft({ keepUsername = true } = {}) {
+      const savedUser = keepUsername ? this.draftForm.loginUsername || "" : "";
+      this.draftForm = {
+        ...this.draftForm,
+        activeGuestTab: "login",
+        loginUsername: savedUser,
+        loginPassword: "",
+        loginServerPass: "",
+        loginReadonly: false,
+        regUsername: "",
+        regDisplay: "",
+        regRole: "teknisi",
+        regPassword: "",
+        regServerPass: "",
+        unlockServerPass: ""
+      };
+      this.activeGuestTab = "login";
+      this.saveDraftToStorage();
+    }
     isOpen() {
       return Boolean(this.modalEl && this.modalEl.style.display === "flex");
     }
     show(initialTab = "login") {
-      this.activeGuestTab = initialTab === "register" ? "register" : "login";
-      this.loginTargetWs = this.authManager?.getWorkspaceMode?.() || "main";
+      this.loadDraftFromStorage();
+      const hasRegDraft = Boolean(
+        this.draftForm.regUsername || this.draftForm.regDisplay || this.draftForm.regPassword || this.draftForm.regServerPass
+      );
+      if (initialTab === "register") {
+        this.activeGuestTab = "register";
+      } else if (this.draftForm.activeGuestTab === "register" && hasRegDraft) {
+        this.activeGuestTab = "register";
+      } else {
+        this.activeGuestTab = "login";
+      }
+      this.loginTargetWs = this.draftForm.loginTargetWs || this.authManager?.getWorkspaceMode?.() || "main";
       this.statusMessage = "";
       this.modalEl.style.display = "flex";
+      this.syncVisualViewportMetrics();
       this.render();
     }
     hide() {
+      this.captureDraftFromDOM();
       if (this.modalEl) {
         this.modalEl.style.display = "none";
+        this.modalEl.classList?.remove("is-keyboard-open");
       }
     }
     setStatus(message, tone = "info") {
@@ -15390,25 +15530,27 @@ ${dev.network?.ip || ""}`,
             <div class="auth-or-divider"><span>ATAU</span></div>
 
             <form id="auth-login-form" class="auth-glass-form">
-              <div class="auth-glass-field">
-                <label for="auth-login-username">Username</label>
-                <input type="text" id="auth-login-username" placeholder="Masukkan username..." autocomplete="username" required>
-              </div>
+              <div class="auth-form-grid">
+                <div class="auth-glass-field">
+                  <label for="auth-login-username">Username</label>
+                  <input type="text" id="auth-login-username" value="${escapeHtml2(this.draftForm.loginUsername)}" placeholder="Masukkan username..." autocomplete="username" required>
+                </div>
 
-              <div class="auth-glass-field">
-                <label for="auth-login-password">Password</label>
-                <div class="auth-pass-wrap">
-                  <input type="password" id="auth-login-password" placeholder="Masukkan password..." autocomplete="current-password" required>
-                  <button type="button" class="auth-pass-toggle" data-toggle-pass="auth-login-password" title="Tampilkan / Sembunyikan">
-                    <i data-lucide="eye" style="width: 15px; height: 15px;"></i>
-                  </button>
+                <div class="auth-glass-field">
+                  <label for="auth-login-password">Password</label>
+                  <div class="auth-pass-wrap">
+                    <input type="password" id="auth-login-password" value="${escapeHtml2(this.draftForm.loginPassword)}" placeholder="Masukkan password..." autocomplete="current-password" required>
+                    <button type="button" class="auth-pass-toggle" data-toggle-pass="auth-login-password" title="Tampilkan / Sembunyikan">
+                      <i data-lucide="eye" style="width: 15px; height: 15px;"></i>
+                    </button>
+                  </div>
                 </div>
               </div>
 
               <div id="auth-login-server-pass-group" class="auth-glass-field" style="display: ${targetWs === "main" ? "flex" : "none"};">
                 <label for="auth-login-server-pass">Password Server Utama</label>
                 <div class="auth-pass-wrap">
-                  <input type="password" id="auth-login-server-pass" placeholder="Masukkan password server..." autocomplete="off">
+                  <input type="password" id="auth-login-server-pass" value="${escapeHtml2(this.draftForm.loginServerPass)}" placeholder="Masukkan password server..." autocomplete="off" ${this.draftForm.loginReadonly ? "disabled" : ""}>
                   <button type="button" class="auth-pass-toggle" data-toggle-pass="auth-login-server-pass" title="Tampilkan / Sembunyikan">
                     <i data-lucide="eye" style="width: 15px; height: 15px;"></i>
                   </button>
@@ -15417,7 +15559,7 @@ ${dev.network?.ip || ""}`,
 
               <div class="auth-meta-row">
                 <label id="auth-login-main-readonly-wrap" class="auth-check-inline" style="display: ${targetWs === "main" ? "inline-flex" : "none"};">
-                  <input type="checkbox" id="auth-login-main-readonly">
+                  <input type="checkbox" id="auth-login-main-readonly" ${this.draftForm.loginReadonly ? "checked" : ""}>
                   <span>Lihat saja (Read-Only)</span>
                 </label>
                 ${isPublicPreview ? `
@@ -15429,7 +15571,7 @@ ${dev.network?.ip || ""}`,
 
               ${hasWork ? `
                 <label class="auth-check-inline">
-                  <input type="checkbox" id="auth-preserve-canvas" checked>
+                  <input type="checkbox" id="auth-preserve-canvas" ${this.draftForm.preserveCanvas !== false ? "checked" : ""}>
                   <span>Simpan kanvas saat ini (${this.deviceManager.getAllDevices().length} dev)</span>
                 </label>
               ` : ""}
@@ -15445,19 +15587,19 @@ ${dev.network?.ip || ""}`,
             <form id="auth-register-form" class="auth-glass-form">
               <div class="auth-glass-field">
                 <label for="auth-reg-username">Username</label>
-                <input type="text" id="auth-reg-username" placeholder="cth: teknisi3" autocomplete="username" required>
+                <input type="text" id="auth-reg-username" value="${escapeHtml2(this.draftForm.regUsername)}" placeholder="cth: teknisi3" autocomplete="username" required>
               </div>
 
               <div class="auth-two-col">
                 <div class="auth-glass-field">
                   <label for="auth-reg-display">Nama Lengkap</label>
-                  <input type="text" id="auth-reg-display" placeholder="Nama teknisi" required>
+                  <input type="text" id="auth-reg-display" value="${escapeHtml2(this.draftForm.regDisplay)}" placeholder="Nama teknisi" required>
                 </div>
                 <div class="auth-glass-field">
                   <label for="auth-reg-role">Peran</label>
                   <select id="auth-reg-role">
-                    <option value="teknisi" selected>Teknisi</option>
-                    <option value="admin">Admin</option>
+                    <option value="teknisi" ${this.draftForm.regRole !== "admin" ? "selected" : ""}>Teknisi</option>
+                    <option value="admin" ${this.draftForm.regRole === "admin" ? "selected" : ""}>Admin</option>
                   </select>
                 </div>
               </div>
@@ -15465,7 +15607,7 @@ ${dev.network?.ip || ""}`,
               <div class="auth-glass-field">
                 <label for="auth-reg-password">Password Akun</label>
                 <div class="auth-pass-wrap">
-                  <input type="password" id="auth-reg-password" placeholder="Min. 4 karakter" autocomplete="new-password" required>
+                  <input type="password" id="auth-reg-password" value="${escapeHtml2(this.draftForm.regPassword)}" placeholder="Min. 4 karakter" autocomplete="new-password" required>
                   <button type="button" class="auth-pass-toggle" data-toggle-pass="auth-reg-password" title="Tampilkan / Sembunyikan">
                     <i data-lucide="eye" style="width: 15px; height: 15px;"></i>
                   </button>
@@ -15475,7 +15617,7 @@ ${dev.network?.ip || ""}`,
               <div class="auth-glass-field">
                 <label for="auth-reg-server-pass">Password Server Utama</label>
                 <div class="auth-pass-wrap">
-                  <input type="password" id="auth-reg-server-pass" placeholder="Wajib untuk Admin / edit server" autocomplete="off">
+                  <input type="password" id="auth-reg-server-pass" value="${escapeHtml2(this.draftForm.regServerPass)}" placeholder="Wajib untuk Admin / edit server" autocomplete="off">
                   <button type="button" class="auth-pass-toggle" data-toggle-pass="auth-reg-server-pass" title="Tampilkan / Sembunyikan">
                     <i data-lucide="eye" style="width: 15px; height: 15px;"></i>
                   </button>
@@ -15484,7 +15626,7 @@ ${dev.network?.ip || ""}`,
 
               ${hasWork ? `
                 <label class="auth-check-inline">
-                  <input type="checkbox" id="auth-preserve-canvas-reg" checked>
+                  <input type="checkbox" id="auth-preserve-canvas-reg" ${this.draftForm.preserveCanvasReg !== false ? "checked" : ""}>
                   <span>Simpan kanvas saat ini</span>
                 </label>
               ` : ""}
@@ -15566,7 +15708,7 @@ ${dev.network?.ip || ""}`,
               </div>
               ${isMainUnlocked ? "" : `
                 <form id="auth-unlock-server-form" class="auth-inline-form">
-                  <input type="password" id="auth-unlock-server-pass" placeholder="Password akses Server Utama..." required>
+                  <input type="password" id="auth-unlock-server-pass" value="${escapeHtml2(this.draftForm.unlockServerPass)}" placeholder="Password akses Server Utama..." required>
                   <button type="submit" id="auth-btn-unlock-server" class="btn btn-primary btn-sm">Buka Kunci</button>
                 </form>
               `}
@@ -15631,9 +15773,24 @@ ${dev.network?.ip || ""}`,
     bindRenderedEvents() {
       this.modalEl.querySelector("#auth-btn-close")?.addEventListener("click", () => this.hide());
       this.modalEl.querySelector("#auth-btn-guest-close")?.addEventListener("click", () => this.hide());
+      this.modalEl.querySelectorAll("input, select, textarea").forEach((fieldEl) => {
+        const saveDraft = () => this.captureDraftFromDOM();
+        fieldEl.addEventListener("input", saveDraft);
+        fieldEl.addEventListener("change", saveDraft);
+        fieldEl.addEventListener("focus", (ev) => {
+          this.syncVisualViewportMetrics();
+          const targetEl = ev.currentTarget || ev.target;
+          setTimeout(() => {
+            targetEl?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+          }, 100);
+        });
+      });
       this.modalEl.querySelectorAll("[data-auth-tab]").forEach((btn) => {
         btn.addEventListener("click", () => {
-          this.activeGuestTab = btn.getAttribute("data-auth-tab") || "login";
+          this.captureDraftFromDOM();
+          this.activeGuestTab = btn.getAttribute("data-auth-tab") === "register" ? "register" : "login";
+          this.draftForm.activeGuestTab = this.activeGuestTab;
+          this.saveDraftToStorage();
           this.statusMessage = "";
           this.render();
         });
@@ -15671,6 +15828,8 @@ ${dev.network?.ip || ""}`,
         btn.addEventListener("click", () => {
           const ws = btn.getAttribute("data-login-ws") === "personal" ? "personal" : "main";
           this.loginTargetWs = ws;
+          this.draftForm.loginTargetWs = ws;
+          this.saveDraftToStorage();
           this.modalEl.querySelectorAll("[data-login-ws]").forEach((b) => {
             b.classList.toggle("active", b.getAttribute("data-login-ws") === ws);
           });
@@ -15685,12 +15844,11 @@ ${dev.network?.ip || ""}`,
       readonlyCheck?.addEventListener("change", () => {
         if (serverPassInput) {
           serverPassInput.disabled = readonlyCheck.checked;
-          if (readonlyCheck.checked) {
-            serverPassInput.value = "";
-          } else {
+          if (!readonlyCheck.checked) {
             serverPassInput.focus();
           }
         }
+        this.captureDraftFromDOM();
       });
       this.modalEl.querySelector("#auth-login-form")?.addEventListener("submit", async (e) => {
         e.preventDefault();
@@ -15707,6 +15865,7 @@ ${dev.network?.ip || ""}`,
           });
           this.authManager.setWorkspaceMode(targetWs);
           await this.handlePostLoginLoad(preserve);
+          this.clearDraft({ keepUsername: true });
           this.render();
         } catch (err) {
           this.setStatus(err.message || "Gagal login.", "error");
@@ -15731,6 +15890,7 @@ ${dev.network?.ip || ""}`,
           });
           this.authManager.setWorkspaceMode("main");
           await this.handlePostLoginLoad(preserve);
+          this.clearDraft({ keepUsername: true });
           this.render();
         } catch (err) {
           this.setStatus(err.message || "Gagal mendaftar.", "error");
@@ -15773,6 +15933,8 @@ ${dev.network?.ip || ""}`,
           this.projectStorage.updateStatusIndicator(
             this.authManager.canWriteActiveWorkspace() ? "saved" : "readonly-main"
           );
+          this.draftForm.unlockServerPass = "";
+          this.saveDraftToStorage();
           this.statusMessage = "Password server valid. Akses edit & simpan ke Server Utama sekarang terbuka!";
           this.statusTone = "success";
           this.render();
@@ -71870,9 +72032,6 @@ void main() {
       this.syncAvatarCrosshair();
       this.findNearestDeviceToAvatar();
       if (isMobileTouchDevice()) {
-        if (typeof document !== "undefined") {
-          document.getElementById("hud-3d-controls")?.classList?.add("is-minimized");
-        }
         let savedHudMin = null;
         try {
           savedHudMin = typeof localStorage !== "undefined" ? localStorage.getItem("netmap_avatar_hud_min_v1") : null;
@@ -78434,6 +78593,9 @@ void main() {
         if (map3dContainer) map3dContainer.style.display = is3d ? "block" : "none";
         hud3d?.classList.toggle("hidden", !is3d);
         if (hud3d) hud3d.style.display = is3d ? "flex" : "none";
+        if (is3d) {
+          this._apply3dHudMinimizeState?.();
+        }
         hud3dHints?.classList.toggle("hidden", !is3d);
         if (hud3dHints) hud3dHints.style.display = is3d ? "flex" : "none";
         const hud3dSimInspector = document.getElementById("hud-3d-sim-inspector");
@@ -78582,12 +78744,18 @@ void main() {
         }
       };
       const toggleControlsMin = () => {
-        isControlsMinimized = !isControlsMinimized;
+        const currentlyMin = hud3d ? hud3d.classList.contains("is-minimized") : isControlsMinimized;
+        this.set3DControlsMinimized(!currentlyMin);
+      };
+      this._apply3dHudMinimizeState = applyHudMinimizeState;
+      this.set3DControlsMinimized = (minimized) => {
+        isControlsMinimized = Boolean(minimized);
         try {
           localStorage.setItem(CONTROLS_MIN_KEY, isControlsMinimized ? "1" : "0");
         } catch {
         }
         applyHudMinimizeState();
+        return isControlsMinimized;
       };
       const toggleHintsMin = () => {
         isHintsMinimized = !isHintsMinimized;
@@ -79051,14 +79219,22 @@ void main() {
       this._mobilePopoversInitialized = false;
       const applyMobileEnvironment = (initialBoot = false) => {
         const isMobile = isMobileTouchDevice();
+        const isPortrait = window.innerHeight > window.innerWidth;
         document.body.classList.toggle("is-mobile-touch", isMobile);
+        document.body.classList.toggle("is-mobile-portrait", Boolean(isMobile && isPortrait));
+        document.body.classList.toggle("is-mobile-landscape", Boolean(isMobile && !isPortrait));
+        const fsBtn = document.getElementById("btn-mob-fs-native");
+        if (fsBtn) {
+          fsBtn.classList.toggle("is-portrait-hint", Boolean(isMobile && isPortrait));
+          fsBtn.title = isPortrait ? "Putar ke Landscape Fullscreen (Disarankan)" : "Fullscreen & Landscape";
+        }
         const promptEl = document.getElementById("mobile-landscape-prompt");
         if (promptEl) {
           promptEl.classList.add("hidden");
           promptEl.style.display = "none";
         }
         if (!isMobile) {
-          document.body.classList.remove("mobile-dock-minimized");
+          document.body.classList.remove("mobile-dock-minimized", "is-mobile-portrait", "is-mobile-landscape");
           const showTab = document.getElementById("btn-mob-show-dock");
           if (showTab) {
             showTab.classList.add("hidden");
@@ -79069,8 +79245,13 @@ void main() {
         if (initialBoot && !this._mobileBootApplied) {
           this._mobileBootApplied = true;
           this._mobileExitedFullscreen = false;
+          this._mobileFirstGestureAttempted = false;
           stateManager.toggleSidebar("left", false);
           stateManager.toggleSidebar("right", false);
+          document.querySelector(".sidebar-left")?.classList?.add("collapsed");
+          document.querySelector(".sidebar-right")?.classList?.add("collapsed");
+          document.getElementById("btn-mob-left-drawer")?.classList?.remove("active");
+          document.getElementById("btn-mob-right-drawer")?.classList?.remove("active");
           this.toolbar?.setWorkspaceFullscreen?.(true, { requestNative: true, lockLandscape: true });
           let savedDockMin = false;
           try {
@@ -79078,8 +79259,17 @@ void main() {
           } catch {
           }
           this.setMobileDockMinimized(savedDockMin, { persist: false });
-          const forceMobileFullscreenOnGesture = () => {
+          const forceMobileFullscreenOnGesture = (ev) => {
             if (!document.body.classList.contains("is-mobile-touch") || this._mobileExitedFullscreen) return;
+            if (this.authModal?.isOpen?.()) return;
+            const activeTag = document.activeElement?.tagName || "";
+            if (/^(INPUT|TEXTAREA|SELECT)$/i.test(activeTag)) return;
+            const t = ev?.target;
+            if (t?.closest?.("input, textarea, select, label, form, .auth-modal-backdrop, .ddm-backdrop, #room-3d-modal, #object-3d-modal, #device-3d-model-modal, #mobile-quick-popover")) {
+              return;
+            }
+            if (this._mobileFirstGestureAttempted) return;
+            this._mobileFirstGestureAttempted = true;
             if (!document.body.classList.contains("workspace-fullscreen")) {
               this.toolbar?.setWorkspaceFullscreen?.(true, { requestNative: true, lockLandscape: true });
               return;
@@ -79249,6 +79439,11 @@ void main() {
           pop.setAttribute("data-kind", "menu");
           pop.style.cssText = "position:absolute;top:48px;right:10px;width:min(260px,calc(100vw - 20px));max-height:calc(100dvh - 64px);overflow-y:auto;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:10px;padding:6px;box-shadow:var(--shadow-lg);z-index:96;display:grid;grid-template-columns:1fr;gap:4px;";
           const actions = [
+            { id: "mob-act-3d-nav", label: "Buka Bar Navigasi 3D", fn: () => {
+              if (stateManager.getViewMode() !== "3d") stateManager.setViewMode("3d");
+              this.setMobileDockMinimized(false);
+              this.set3DControlsMinimized?.(false);
+            } },
             { id: "mob-act-teknisi", label: "Mode Teknisi (Roblox Mobile)", fn: () => {
               if (stateManager.getViewMode() !== "3d") stateManager.setViewMode("3d");
               setTimeout(() => this.map3DEngine?.setAvatarMode(true, { perspective: "tpp" }), 40);
