@@ -6,7 +6,11 @@
 
 import { eventBus } from '../core/event-bus.js';
 import { stateManager } from '../core/state-manager.js';
-import { BUILTIN_ROOM_BUILDING_PRESETS, createBuildingRoomPresetData } from '../map/map-3d-models.js';
+import {
+  BUILTIN_ROOM_BUILDING_PRESETS,
+  createBuildingRoomPresetData,
+  getRoomMinDimensions
+} from '../map/map-3d-models.js';
 import { clamp, generateId } from '../utils/helpers.js';
 
 export class Room3DModal {
@@ -101,17 +105,17 @@ export class Room3DModal {
             <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;">
               <div style="display: flex; flex-direction: column; gap: 3px;">
                 <label style="font-size: 10.5px; font-weight: 600; color: var(--text-primary);">Lebar (m)</label>
-                <input type="number" id="r3d-width" min="2" max="200" step="1" value="28"
+                <input type="number" id="r3d-width" min="0.35" max="200" step="0.1" value="28"
                        style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 5px 6px; font-size: 12px; font-family: var(--font-mono);">
               </div>
               <div style="display: flex; flex-direction: column; gap: 3px;">
                 <label style="font-size: 10.5px; font-weight: 600; color: var(--text-primary);">Panjang (m)</label>
-                <input type="number" id="r3d-depth" min="2" max="200" step="1" value="22"
+                <input type="number" id="r3d-depth" min="0.35" max="200" step="0.1" value="22"
                        style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 5px 6px; font-size: 12px; font-family: var(--font-mono);">
               </div>
               <div style="display: flex; flex-direction: column; gap: 3px;">
                 <label style="font-size: 10.5px; font-weight: 600; color: var(--text-primary);">Tinggi (m)</label>
-                <input type="number" id="r3d-height" min="1.5" max="40" step="0.5" value="5"
+                <input type="number" id="r3d-height" min="0.35" max="40" step="0.1" value="5"
                        style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 5px 6px; font-size: 12px; font-family: var(--font-mono);">
               </div>
               <div style="display: flex; flex-direction: column; gap: 3px;">
@@ -285,10 +289,11 @@ export class Room3DModal {
           return;
         }
       }
+      const { minW, minD, minH } = this.getActiveMinDimensions();
       this.formBaseDimensions = {
-        widthMeters: Math.max(2, parseFloat(wInput?.value) || base.widthMeters),
-        depthMeters: Math.max(2, parseFloat(dInput?.value) || base.depthMeters),
-        heightMeters: Math.max(1.5, parseFloat(hInput?.value) || base.heightMeters)
+        widthMeters: Math.max(minW, parseFloat(wInput?.value) || base.widthMeters),
+        depthMeters: Math.max(minD, parseFloat(dInput?.value) || base.depthMeters),
+        heightMeters: Math.max(minH, parseFloat(hInput?.value) || base.heightMeters)
       };
       this.updateScaleReadout(1);
       this.previewEditingRoomDimensions();
@@ -453,11 +458,21 @@ export class Room3DModal {
     return roomData;
   }
 
+  getActiveMinDimensions(explicitCustomUrl = '') {
+    const urlVal = (this.modalEl?.querySelector('#r3d-glb-url')?.value || '').trim();
+    const customModelUrl =
+      explicitCustomUrl ||
+      this.uploadedRoomGlbUrl ||
+      (urlVal && !urlVal.startsWith('[File GLB') ? urlVal : '');
+    return getRoomMinDimensions({ customModelUrl });
+  }
+
   setFormBaseAndScale(baseDims, scale = 1, lockAspect = true) {
+    const { minW, minD, minH } = this.getActiveMinDimensions();
     this.formBaseDimensions = {
-      widthMeters: Math.max(2, Number(baseDims?.widthMeters) || 24),
-      depthMeters: Math.max(2, Number(baseDims?.depthMeters) || 20),
-      heightMeters: Math.max(1.5, Number(baseDims?.heightMeters) || 4.5)
+      widthMeters: Math.max(minW, Number(baseDims?.widthMeters) || 24),
+      depthMeters: Math.max(minD, Number(baseDims?.depthMeters) || 20),
+      heightMeters: Math.max(minH, Number(baseDims?.heightMeters) || 4.5)
     };
     const lockCb = this.modalEl.querySelector('#r3d-lock-aspect');
     if (lockCb) lockCb.checked = Boolean(lockAspect);
@@ -477,12 +492,13 @@ export class Room3DModal {
   applyScaleMultiplierToForm(rawScale, { skipAxis = '' } = {}) {
     const scale = clamp(parseFloat(rawScale) || 1, 0.2, 5);
     const base = this.formBaseDimensions || { widthMeters: 24, depthMeters: 20, heightMeters: 4.5 };
+    const { minW, minD, minH } = this.getActiveMinDimensions();
     const wEl = this.modalEl.querySelector('#r3d-width');
     const dEl = this.modalEl.querySelector('#r3d-depth');
     const hEl = this.modalEl.querySelector('#r3d-height');
-    if (wEl && skipAxis !== 'w') wEl.value = clamp(Number((base.widthMeters * scale).toFixed(2)), 2, 200);
-    if (dEl && skipAxis !== 'd') dEl.value = clamp(Number((base.depthMeters * scale).toFixed(2)), 2, 200);
-    if (hEl && skipAxis !== 'h') hEl.value = clamp(Number((base.heightMeters * scale).toFixed(2)), 1.5, 40);
+    if (wEl && skipAxis !== 'w') wEl.value = clamp(Number((base.widthMeters * scale).toFixed(2)), minW, 200);
+    if (dEl && skipAxis !== 'd') dEl.value = clamp(Number((base.depthMeters * scale).toFixed(2)), minD, 200);
+    if (hEl && skipAxis !== 'h') hEl.value = clamp(Number((base.heightMeters * scale).toFixed(2)), minH, 40);
     this.updateScaleReadout(scale);
     this.previewEditingRoomDimensions();
   }
@@ -491,9 +507,10 @@ export class Room3DModal {
     if (!this.editingRoomId || !this.map3DEngine?.rebuildSingleRoom3dMesh) return;
     const cur = stateManager.getRoom3dById?.(this.editingRoomId);
     if (!cur) return;
-    const widthMeters = clamp(parseFloat(this.modalEl.querySelector('#r3d-width')?.value) || cur.widthMeters, 2, 200);
-    const depthMeters = clamp(parseFloat(this.modalEl.querySelector('#r3d-depth')?.value) || cur.depthMeters, 2, 200);
-    const heightMeters = clamp(parseFloat(this.modalEl.querySelector('#r3d-height')?.value) || cur.heightMeters, 1.5, 40);
+    const { minW, minD, minH } = getRoomMinDimensions(cur);
+    const widthMeters = clamp(parseFloat(this.modalEl.querySelector('#r3d-width')?.value) || cur.widthMeters, minW, 200);
+    const depthMeters = clamp(parseFloat(this.modalEl.querySelector('#r3d-depth')?.value) || cur.depthMeters, minD, 200);
+    const heightMeters = clamp(parseFloat(this.modalEl.querySelector('#r3d-height')?.value) || cur.heightMeters, minH, 40);
     this.map3DEngine.rebuildSingleRoom3dMesh(
       { ...cur, widthMeters, depthMeters, heightMeters },
       stateManager.getSelectedRoom3dId?.() === cur.id
@@ -531,9 +548,10 @@ export class Room3DModal {
 
     const existing = [...stateManager.getRooms3d()];
     const existingItem = this.editingRoomId ? existing.find((r) => r.id === this.editingRoomId) : null;
-    const widthMeters = clamp(parseFloat(this.modalEl.querySelector('#r3d-width')?.value) || 20, 2, 200);
-    const depthMeters = clamp(parseFloat(this.modalEl.querySelector('#r3d-depth')?.value) || 16, 2, 200);
-    const heightMeters = clamp(parseFloat(this.modalEl.querySelector('#r3d-height')?.value) || 4.5, 1.5, 40);
+    const { minW, minD, minH } = getRoomMinDimensions({ customModelUrl });
+    const widthMeters = clamp(parseFloat(this.modalEl.querySelector('#r3d-width')?.value) || 20, minW, 200);
+    const depthMeters = clamp(parseFloat(this.modalEl.querySelector('#r3d-depth')?.value) || 16, minD, 200);
+    const heightMeters = clamp(parseFloat(this.modalEl.querySelector('#r3d-height')?.value) || 4.5, minH, 40);
     const scaleVal = clamp(parseFloat(this.modalEl.querySelector('#r3d-scale-input')?.value) || 1, 0.2, 5);
     const lockAspectRatio = Boolean(this.modalEl.querySelector('#r3d-lock-aspect')?.checked);
 
@@ -675,6 +693,8 @@ export class Room3DModal {
         this.modalEl.querySelector('#r3d-width').value = room.widthMeters;
         this.modalEl.querySelector('#r3d-depth').value = room.depthMeters;
         this.modalEl.querySelector('#r3d-height').value = room.heightMeters;
+        this.modalEl.querySelector('#r3d-glb-url').value = this.uploadedRoomGlbUrl ? '[File GLB Lokal Terpilih]' : (room.customModelUrl || '');
+        this.modalEl.querySelector('#btn-r3d-clear-glb').style.display = room.customModelUrl ? 'inline-flex' : 'none';
         const baseW = Number(room.baseWidthMeters) || Number(room.widthMeters) || 20;
         const baseD = Number(room.baseDepthMeters) || Number(room.depthMeters) || 16;
         const baseH = Number(room.baseHeightMeters) || Number(room.heightMeters) || 4.5;
@@ -691,8 +711,6 @@ export class Room3DModal {
         this.modalEl.querySelector('#r3d-opacity').value = Math.round((room.opacity ?? 0.2) * 100);
         const lockedCb = this.modalEl.querySelector('#r3d-locked');
         if (lockedCb) lockedCb.checked = Boolean(room.locked);
-        this.modalEl.querySelector('#r3d-glb-url').value = this.uploadedRoomGlbUrl ? '[File GLB Lokal Terpilih]' : (room.customModelUrl || '');
-        this.modalEl.querySelector('#btn-r3d-clear-glb').style.display = room.customModelUrl ? 'inline-flex' : 'none';
       });
     });
 

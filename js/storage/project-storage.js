@@ -100,6 +100,7 @@ export class ProjectStorage {
     eventBus.on('connection:deleted', handleMutation);
     eventBus.on('room3d:changed', handleMutation);
     eventBus.on('object3d:changed', handleMutation);
+    eventBus.on('road3d:changed', handleMutation);
   }
 
   /**
@@ -127,6 +128,7 @@ export class ProjectStorage {
       connections: connections,
       rooms3d: state.project.rooms3d || [],
       objects3d: state.project.objects3d || [],
+      roads3d: state.project.roads3d || [],
       customTemplates: (typeof localStorage !== 'undefined' ? JSON.parse(localStorage.getItem('netmap_custom_templates') || '[]') : []),
       updatedAt: new Date().toISOString()
     };
@@ -142,6 +144,7 @@ export class ProjectStorage {
       this.deviceManager?.deselectDevice?.();
       this.cableManager?.deselectConnection?.();
       stateManager.deselectObject3d?.();
+      stateManager.deselectRoad3d?.();
 
       const currentDevs = this.deviceManager.getAllDevices();
       currentDevs.forEach((d) => this.deviceManager.deleteDevice(d.id));
@@ -152,13 +155,14 @@ export class ProjectStorage {
       stateManager.getState().project.name = projectName;
       stateManager.setRooms3d([]);
       stateManager.setObjects3d([]);
+      stateManager.setRoads3d([]);
 
       this.hasPendingSave = false;
       const idleStatus = !this.authManager || !this.authManager.isAuthenticated()
         ? (this.authManager?.isPublicPreviewActive?.() ? 'public-readonly' : 'guest')
         : (this.authManager.canWriteActiveWorkspace() ? 'saved' : 'readonly-main');
       this.updateStatusIndicator(idleStatus);
-      eventBus.emit('project:loaded', { id: 'proj-default', devices: [], connections: [], rooms3d: [], objects3d: [] });
+      eventBus.emit('project:loaded', { id: 'proj-default', devices: [], connections: [], rooms3d: [], objects3d: [], roads3d: [] });
     } finally {
       this.isAutoSaveEnabled = prevAutoSave;
     }
@@ -336,9 +340,10 @@ export class ProjectStorage {
         this.cableManager.setMapScale(projectData.scaleWidthMeters);
       }
 
-      // Load 3D custom rooms & objects
+      // Load 3D custom rooms, objects & roads
       stateManager.setRooms3d(Array.isArray(projectData.rooms3d) ? projectData.rooms3d : []);
       stateManager.setObjects3d(Array.isArray(projectData.objects3d) ? projectData.objects3d : []);
+      stateManager.setRoads3d(Array.isArray(projectData.roads3d) ? projectData.roads3d : []);
 
       // Load devices
       if (Array.isArray(projectData.devices)) {

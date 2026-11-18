@@ -155,15 +155,29 @@ export function buildGlbCollisionProfile(root) {
 }
 
 /**
+ * Return minimum allowed room dimensions in meters.
+ * Custom GLB props (e.g. signposts or bird cages) can be narrower than 2m without distortion.
+ * @param {Object} room
+ * @returns {{ minW: number, minD: number, minH: number }}
+ */
+export function getRoomMinDimensions(room) {
+  if (room?.customModelUrl) {
+    return { minW: 0.35, minD: 0.35, minH: 0.35 };
+  }
+  return { minW: 2, minD: 2, minH: 1.5 };
+}
+
+/**
  * Scale a normalized GLB room wrapper smoothly across X/Y/Z to match room widthMeters/heightMeters/depthMeters.
  * @param {THREE.Group} glbWrapper
  * @param {Object} room
  */
 export function applyRoomGlbScale(glbWrapper, room) {
   if (!glbWrapper || !room) return { sx: 1, sy: 1, sz: 1 };
-  const targetW = Math.max(2, Number(room.widthMeters) || 14);
-  const targetD = Math.max(2, Number(room.depthMeters) || 12);
-  const targetH = Math.max(1.5, Number(room.heightMeters) || 3.5);
+  const { minW, minD, minH } = getRoomMinDimensions(room);
+  const targetW = Math.max(minW, Number(room.widthMeters) || 14);
+  const targetD = Math.max(minD, Number(room.depthMeters) || 12);
+  const targetH = Math.max(minH, Number(room.heightMeters) || 3.5);
   const unitSize = glbWrapper.userData?.unitSize || { x: 1, y: 0.25, z: 0.6 };
   const loadedTarget = Number(glbWrapper.userData?.loadedTargetSize) || 1;
   const curW = Math.max(0.01, unitSize.x * loadedTarget);
@@ -1030,6 +1044,201 @@ export const BUILTIN_ROOM_BUILDING_PRESETS = [
     opacity: 0.18,
     isCutaway: false,
     customModelUrl: 'assets/models/mading_pusat_informasi.glb'
+  },
+  {
+    id: 'gedung-perpustakaan',
+    name: 'Gedung Perpustakaan',
+    subtitle: 'Full exterior + atap (25.7×9.4×5.6m)',
+    widthMeters: 25.72,
+    depthMeters: 9.42,
+    heightMeters: 5.6,
+    wallColor: '#0f766e',
+    floorColor: '#1e293b',
+    opacity: 0.18,
+    isCutaway: false,
+    customModelUrl: 'assets/models/gedung_perpustakaan.glb'
+  },
+  {
+    id: 'gedung-perpustakaan-cutaway',
+    name: 'Gedung Perpustakaan (Cutaway)',
+    subtitle: 'Terbuka dari atas untuk penempatan rak & AP (25.7×9.4m)',
+    widthMeters: 25.72,
+    depthMeters: 9.42,
+    heightMeters: 5.6,
+    wallColor: '#0d9488',
+    floorColor: '#1e293b',
+    opacity: 0.18,
+    isCutaway: true,
+    customModelUrl: 'assets/models/gedung_perpustakaan_cutaway.glb'
+  },
+  {
+    id: 'gedung-kelas-pplg',
+    name: 'Gedung Kelas PPLG',
+    subtitle: 'Full exterior + atap (27.2×9.4×5.5m)',
+    widthMeters: 27.22,
+    depthMeters: 9.35,
+    heightMeters: 5.45,
+    wallColor: '#0284c7',
+    floorColor: '#1e293b',
+    opacity: 0.18,
+    isCutaway: false,
+    customModelUrl: 'assets/models/gedung_kelas_pplg.glb'
+  },
+  {
+    id: 'gedung-kelas-pplg-cutaway',
+    name: 'Gedung Kelas PPLG (Cutaway)',
+    subtitle: 'Terbuka dari atas untuk lihat posisi perangkat (27.2×9.4m)',
+    widthMeters: 27.22,
+    depthMeters: 9.35,
+    heightMeters: 5.45,
+    wallColor: '#38bdf8',
+    floorColor: '#1e293b',
+    opacity: 0.18,
+    isCutaway: true,
+    customModelUrl: 'assets/models/gedung_kelas_pplg_cutaway.glb'
+  },
+  {
+    id: 'gedung-kelas-perhotelan',
+    name: 'Gedung Kelas Perhotelan',
+    subtitle: 'Full exterior + atap (24.9×9.3×5.4m)',
+    widthMeters: 24.86,
+    depthMeters: 9.33,
+    heightMeters: 5.4,
+    wallColor: '#b45309',
+    floorColor: '#1e293b',
+    opacity: 0.18,
+    isCutaway: false,
+    customModelUrl: 'assets/models/gedung_kelas_perhotelan.glb'
+  },
+  {
+    id: 'gedung-kelas-perhotelan-cutaway',
+    name: 'Gedung Kelas Perhotelan (Cutaway)',
+    subtitle: 'Terbuka dari atas untuk lihat posisi perangkat (24.9×9.3m)',
+    widthMeters: 24.86,
+    depthMeters: 9.33,
+    heightMeters: 5.4,
+    wallColor: '#d97706',
+    floorColor: '#1e293b',
+    opacity: 0.18,
+    isCutaway: true,
+    customModelUrl: 'assets/models/gedung_kelas_perhotelan_cutaway.glb'
+  },
+  {
+    id: 'ruang-pramuka',
+    name: 'Ruang Pramuka',
+    subtitle: 'Full exterior + atap (6.5×7.9×3.9m)',
+    widthMeters: 6.47,
+    depthMeters: 7.91,
+    heightMeters: 3.88,
+    wallColor: '#78350f',
+    floorColor: '#1e293b',
+    opacity: 0.18,
+    isCutaway: false,
+    customModelUrl: 'assets/models/ruang_pramuka.glb'
+  },
+  {
+    id: 'ruang-pramuka-cutaway',
+    name: 'Ruang Pramuka (Cutaway)',
+    subtitle: 'Terbuka dari atas untuk interior ruangan (6.5×7.9m)',
+    widthMeters: 6.47,
+    depthMeters: 7.91,
+    heightMeters: 3.88,
+    wallColor: '#92400e',
+    floorColor: '#1e293b',
+    opacity: 0.18,
+    isCutaway: true,
+    customModelUrl: 'assets/models/ruang_pramuka_cutaway.glb'
+  },
+  {
+    id: 'greenhouse',
+    name: 'Greenhouse Sekolah',
+    subtitle: 'Rumah kaca tanaman & hidroponik (8×4.3×3.1m)',
+    widthMeters: 8.0,
+    depthMeters: 4.3,
+    heightMeters: 3.1,
+    wallColor: '#16a34a',
+    floorColor: '#14532d',
+    opacity: 0.18,
+    isCutaway: false,
+    customModelUrl: 'assets/models/greenhouse.glb'
+  },
+  {
+    id: 'pendopo-kecil',
+    name: 'Pendopo Kecil',
+    subtitle: 'Gazebo kayu / saung istirahat taman (3.7×3.4×3.2m)',
+    widthMeters: 3.66,
+    depthMeters: 3.42,
+    heightMeters: 3.22,
+    wallColor: '#9a3412',
+    floorColor: '#1e293b',
+    opacity: 0.18,
+    isCutaway: false,
+    customModelUrl: 'assets/models/pendopo_kecil.glb'
+  },
+  {
+    id: 'tandon-air',
+    name: 'Menara Tandon Air',
+    subtitle: 'Menara besi & tangki air oranye (2.2×2.2×6.4m)',
+    widthMeters: 2.18,
+    depthMeters: 2.18,
+    heightMeters: 6.35,
+    wallColor: '#ea580c',
+    floorColor: '#334155',
+    opacity: 0.18,
+    isCutaway: false,
+    customModelUrl: 'assets/models/tandon_air.glb'
+  },
+  {
+    id: 'halte-tempat-duduk',
+    name: 'Halte Tempat Duduk',
+    subtitle: 'Shelter tunggu & bangku kanopi (2.5×2×2.9m)',
+    widthMeters: 2.48,
+    depthMeters: 2.04,
+    heightMeters: 2.85,
+    wallColor: '#2563eb',
+    floorColor: '#1e293b',
+    opacity: 0.18,
+    isCutaway: false,
+    customModelUrl: 'assets/models/halte_tempat_duduk.glb'
+  },
+  {
+    id: 'penunjuk-arah',
+    name: 'Tiang Penunjuk Arah',
+    subtitle: 'Plang papan penunjuk arah area sekolah (1.2×0.7×2.1m)',
+    widthMeters: 1.16,
+    depthMeters: 0.73,
+    heightMeters: 2.1,
+    wallColor: '#0284c7',
+    floorColor: '#1e293b',
+    opacity: 0.18,
+    isCutaway: false,
+    customModelUrl: 'assets/models/penunjuk_arah.glb'
+  },
+  {
+    id: 'kandang-burung',
+    name: 'Kandang Burung',
+    subtitle: 'Aviari taman sekolah ukuran sedang (1.9×1.7×2.4m)',
+    widthMeters: 1.88,
+    depthMeters: 1.68,
+    heightMeters: 2.38,
+    wallColor: '#15803d',
+    floorColor: '#1e293b',
+    opacity: 0.18,
+    isCutaway: false,
+    customModelUrl: 'assets/models/kandang_burung.glb'
+  },
+  {
+    id: 'kandang-burung-2',
+    name: 'Kandang Burung 2',
+    subtitle: 'Aviari besar area taman sekolah (4.6×2.2×2.5m)',
+    widthMeters: 4.57,
+    depthMeters: 2.16,
+    heightMeters: 2.54,
+    wallColor: '#22c55e',
+    floorColor: '#1e293b',
+    opacity: 0.18,
+    isCutaway: false,
+    customModelUrl: 'assets/models/kandang_burung_2.glb'
   }
 ];
 
@@ -1077,9 +1286,10 @@ export function create3DRoomGroup(room, normToWorldFn, isSelected = false) {
   const rotZ = ((Number(room.rotationZ) || 0) * Math.PI) / 180;
   group.rotation.set(rotX, rotY, rotZ, 'YXZ');
 
-  const w = Math.max(2, Number(room.widthMeters) || 14);
-  const d = Math.max(2, Number(room.depthMeters) || 12);
-  const h = Math.max(1.5, Number(room.heightMeters) || 3.5);
+  const { minW, minD, minH } = getRoomMinDimensions(room);
+  const w = Math.max(minW, Number(room.widthMeters) || 14);
+  const d = Math.max(minD, Number(room.depthMeters) || 12);
+  const h = Math.max(minH, Number(room.heightMeters) || 3.5);
   const wallColor = room.wallColor || '#2a7c13';
   const floorColor = room.floorColor || '#1e293b';
   const opacity = typeof room.opacity === 'number' ? room.opacity : 0.22;
@@ -2028,4 +2238,621 @@ function truncateText(ctx, text, maxWidth) {
   }
   return str + '…';
 }
+
+// =============================================================================
+// City-Builder 3D School Walkway & Road System (roads3d)
+// =============================================================================
+
+export const ROAD3D_PRESETS = {
+  'stepping-slab': {
+    style: 'stepping-slab',
+    name: 'Jalan Setapak Beton & Kerikil',
+    pathMode: 'smooth',
+    widthMeters: 1.55,
+    curbWidthMeters: 0.11,
+    curbHeightMeters: 0.085,
+    slabLengthMeters: 0.64,
+    slabGapMeters: 0.14,
+    sideGutterMeters: 0.11,
+    elevationMeters: 0,
+    slabColor: '#d4d1ca',
+    curbColor: '#dedad2',
+    gravelColor: '#4f4942'
+  },
+  'paving-block': {
+    style: 'paving-block',
+    name: 'Jalan Paving Block Sekolah',
+    pathMode: 'smooth',
+    widthMeters: 2.6,
+    curbWidthMeters: 0.14,
+    curbHeightMeters: 0.1,
+    slabLengthMeters: 0.4,
+    slabGapMeters: 0.02,
+    sideGutterMeters: 0,
+    elevationMeters: 0,
+    slabColor: '#9ca3af',
+    curbColor: '#e2e8f0',
+    gravelColor: '#475569'
+  },
+  'concrete-corridor': {
+    style: 'concrete-corridor',
+    name: 'Jalan Rabat Beton Sekolah',
+    pathMode: 'smooth',
+    widthMeters: 1.9,
+    curbWidthMeters: 0.12,
+    curbHeightMeters: 0.08,
+    slabLengthMeters: 0.8,
+    slabGapMeters: 0.015,
+    sideGutterMeters: 0,
+    elevationMeters: 0,
+    slabColor: '#cbd5e1',
+    curbColor: '#e2e8f0',
+    gravelColor: '#64748b'
+  },
+  'asphalt-campus': {
+    style: 'asphalt-campus',
+    name: 'Jalan Aspal Lingkungan',
+    pathMode: 'smooth',
+    widthMeters: 4.5,
+    curbWidthMeters: 0.18,
+    curbHeightMeters: 0.12,
+    slabLengthMeters: 1.6,
+    slabGapMeters: 0.9,
+    sideGutterMeters: 0,
+    elevationMeters: 0,
+    slabColor: '#334155',
+    curbColor: '#cbd5e1',
+    gravelColor: '#1e293b'
+  }
+};
+
+const _roadTexCache = new Map();
+
+function _seededRoadRand(seed) {
+  let s = (seed >>> 0) || 1;
+  return () => {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+}
+
+function getProceduralRoadGravelTexture(baseHex = '#4f4942') {
+  const key = `gravel:${baseHex}`;
+  if (_roadTexCache.has(key)) return _roadTexCache.get(key);
+  try {
+    if (typeof document === 'undefined' || !document.createElement) return null;
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext?.('2d');
+    if (!ctx) return null;
+    canvas.width = 256;
+    canvas.height = 256;
+
+    // Dark soil bed under river pebbles
+    ctx.fillStyle = '#2d2620';
+    ctx.fillRect(0, 0, 256, 256);
+
+    const rand = _seededRoadRand(71829);
+    const tones = ['#57534e', '#78716c', '#a8a29e', '#6b7280', '#44403c', '#9ca3af', baseHex];
+    for (let i = 0; i < 420; i++) {
+      const px = rand() * 256;
+      const py = rand() * 256;
+      const rad = 2.2 + rand() * 5.2;
+      const tone = tones[Math.floor(rand() * tones.length)];
+      // Draw tiled (wrap across edges) for seamless repeat
+      for (const ox of [-256, 0, 256]) {
+        for (const oy of [-256, 0, 256]) {
+          const cx = px + ox;
+          const cy = py + oy;
+          if (cx < -10 || cx > 266 || cy < -10 || cy > 266) continue;
+          ctx.beginPath();
+          ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+          ctx.fillStyle = tone;
+          ctx.fill();
+          ctx.lineWidth = 0.8;
+          ctx.strokeStyle = 'rgba(20, 16, 12, 0.55)';
+          ctx.stroke();
+        }
+      }
+    }
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    _roadTexCache.set(key, tex);
+    return tex;
+  } catch {
+    return null;
+  }
+}
+
+function getProceduralConcreteSlabTexture(style = 'stepping-slab', baseHex = '#d4d1ca') {
+  const key = `slab:${style}:${baseHex}`;
+  if (_roadTexCache.has(key)) return _roadTexCache.get(key);
+  try {
+    if (typeof document === 'undefined' || !document.createElement) return null;
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext?.('2d');
+    if (!ctx) return null;
+    canvas.width = 256;
+    canvas.height = 256;
+
+    ctx.fillStyle = baseHex;
+    ctx.fillRect(0, 0, 256, 256);
+
+    const rand = _seededRoadRand(style === 'paving-block' ? 9921 : 44123);
+    if (style === 'paving-block') {
+      // Interlocking paving brick joints
+      const rows = 8;
+      const cols = 4;
+      const rh = 256 / rows;
+      const cw = 256 / cols;
+      for (let r = 0; r < rows; r++) {
+        const shift = (r % 2) * (cw * 0.5);
+        for (let c = -1; c <= cols; c++) {
+          const shade = 135 + Math.floor(rand() * 34);
+          ctx.fillStyle = `rgb(${shade}, ${shade + 2}, ${shade + 4})`;
+          ctx.fillRect(c * cw + shift + 2, r * rh + 2, cw - 4, rh - 4);
+        }
+      }
+    } else if (style === 'asphalt-campus') {
+      for (let i = 0; i < 650; i++) {
+        const shade = 38 + Math.floor(rand() * 38);
+        ctx.fillStyle = `rgba(${shade}, ${shade + 4}, ${shade + 8}, 0.55)`;
+        ctx.fillRect(rand() * 256, rand() * 256, 2 + rand() * 3, 2 + rand() * 3);
+      }
+    } else {
+      // Brushed weathered concrete with subtle moisture blotches & hairline cracks
+      for (let i = 0; i < 90; i++) {
+        const shade = 165 + Math.floor(rand() * 55);
+        ctx.fillStyle = `rgba(${shade - 12}, ${shade - 15}, ${shade - 20}, ${0.08 + rand() * 0.14})`;
+        ctx.beginPath();
+        ctx.arc(rand() * 256, rand() * 256, 8 + rand() * 26, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // Fine broom finish horizontal lines
+      ctx.lineWidth = 1;
+      for (let y = 0; y < 256; y += 4) {
+        ctx.strokeStyle = rand() > 0.5 ? 'rgba(255,255,255,0.09)' : 'rgba(60,55,48,0.08)';
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(256, y + (rand() - 0.5) * 2);
+        ctx.stroke();
+      }
+      // Subtle concrete edge border & hairline fracture lines like reference close-up
+      ctx.strokeStyle = 'rgba(72, 66, 58, 0.35)';
+      ctx.lineWidth = 1.3;
+      for (let c = 0; c < 3; c++) {
+        let cx = rand() * 220 + 18;
+        let cy = rand() * 220 + 18;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        for (let s = 0; s < 5; s++) {
+          cx += (rand() - 0.5) * 32;
+          cy += (rand() - 0.5) * 32;
+          ctx.lineTo(cx, cy);
+        }
+        ctx.stroke();
+      }
+    }
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    _roadTexCache.set(key, tex);
+    return tex;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Sample a 3D road's normalized polyline into evenly annotated world-space path samples.
+ * Supports straight multi-segment polylines and Catmull-Rom smooth city-builder curves.
+ */
+export function sampleRoad3DPathWorld(road, normToWorldFn) {
+  const rawPts = Array.isArray(road?.points) ? road.points : [];
+  if (rawPts.length < 2) {
+    return { controlWorldPts: [], samples: [], totalLength: 0 };
+  }
+
+  const elev = Math.max(0, Number(road?.elevationMeters) || 0);
+  const controlWorldPts = rawPts.map((pt) => {
+    const w = normToWorldFn ? normToWorldFn(pt.x ?? 0.5, pt.y ?? 0.5) : { x: pt.x ?? 0, z: pt.y ?? 0 };
+    return new THREE.Vector3(Number(w.x) || 0, elev, Number(w.z) || 0);
+  });
+
+  // Deduplicate near-zero segments while keeping endpoints
+  const cleanPts = [controlWorldPts[0]];
+  for (let i = 1; i < controlWorldPts.length; i++) {
+    if (controlWorldPts[i].distanceTo(cleanPts[cleanPts.length - 1]) > 0.05) {
+      cleanPts.push(controlWorldPts[i]);
+    }
+  }
+  if (cleanPts.length < 2) {
+    return { controlWorldPts, samples: [], totalLength: 0 };
+  }
+
+  const pathMode = road?.pathMode === 'straight' ? 'straight' : 'smooth';
+  const rawSamples = [];
+  if (pathMode === 'smooth' && cleanPts.length >= 3) {
+    const curve = new THREE.CatmullRomCurve3(cleanPts, false, 'catmullrom', 0.42);
+    const estLen = curve.getLength();
+    const divs = Math.max(18, Math.min(240, Math.ceil(estLen / 0.35)));
+    for (let i = 0; i <= divs; i++) {
+      rawSamples.push(curve.getPoint(i / divs));
+    }
+  } else {
+    for (let i = 0; i < cleanPts.length - 1; i++) {
+      const a = cleanPts[i];
+      const b = cleanPts[i + 1];
+      const segLen = a.distanceTo(b);
+      const subSteps = Math.max(1, Math.min(60, Math.ceil(segLen / 0.6)));
+      for (let s = (i === 0 ? 0 : 1); s <= subSteps; s++) {
+        rawSamples.push(new THREE.Vector3().lerpVectors(a, b, s / subSteps));
+      }
+    }
+  }
+
+  const up = new THREE.Vector3(0, 1, 0);
+  const samples = [];
+  let cumDist = 0;
+  for (let i = 0; i < rawSamples.length; i++) {
+    const p = rawSamples[i];
+    if (i > 0) cumDist += p.distanceTo(rawSamples[i - 1]);
+    const prev = rawSamples[Math.max(0, i - 1)];
+    const next = rawSamples[Math.min(rawSamples.length - 1, i + 1)];
+    const tangent = new THREE.Vector3().subVectors(next, prev);
+    tangent.y = 0;
+    if (tangent.lengthSq() < 1e-8) {
+      tangent.set(0, 0, -1);
+    } else {
+      tangent.normalize();
+    }
+    const right = new THREE.Vector3().crossVectors(tangent, up).normalize();
+    samples.push({ pos: p, tangent, right, cumDist });
+  }
+
+  return { controlWorldPts, samples, totalLength: cumDist };
+}
+
+function _interpolateRoadSampleAtDist(samples, targetDist) {
+  if (!samples || samples.length === 0) return null;
+  if (targetDist <= 0) return samples[0];
+  const last = samples[samples.length - 1];
+  if (targetDist >= last.cumDist) return last;
+
+  for (let i = 0; i < samples.length - 1; i++) {
+    const a = samples[i];
+    const b = samples[i + 1];
+    if (targetDist >= a.cumDist && targetDist <= b.cumDist) {
+      const span = Math.max(1e-6, b.cumDist - a.cumDist);
+      const t = (targetDist - a.cumDist) / span;
+      const pos = new THREE.Vector3().lerpVectors(a.pos, b.pos, t);
+      const tangent = new THREE.Vector3().lerpVectors(a.tangent, b.tangent, t).normalize();
+      const right = new THREE.Vector3().crossVectors(tangent, new THREE.Vector3(0, 1, 0)).normalize();
+      return { pos, tangent, right, cumDist: targetDist };
+    }
+  }
+  return last;
+}
+
+function _buildExtrudedRoadRibbonGeo(samples, offsetLeft, offsetRight, bottomY, topY, uvScaleU = 1, uvScaleV = 1) {
+  const n = samples.length;
+  const positions = [];
+  const uvs = [];
+  const indices = [];
+
+  const addQuad = (a, b, c, d, u0, v0, u1, v1) => {
+    const base = positions.length / 3;
+    positions.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, d.x, d.y, d.z);
+    uvs.push(u0, v0, u1, v0, u1, v1, u0, v1);
+    indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  };
+
+  for (let i = 0; i < n - 1; i++) {
+    const s0 = samples[i];
+    const s1 = samples[i + 1];
+
+    const tL0 = s0.pos.clone().addScaledVector(s0.right, offsetLeft).setY(topY);
+    const tR0 = s0.pos.clone().addScaledVector(s0.right, offsetRight).setY(topY);
+    const tL1 = s1.pos.clone().addScaledVector(s1.right, offsetLeft).setY(topY);
+    const tR1 = s1.pos.clone().addScaledVector(s1.right, offsetRight).setY(topY);
+
+    const v0 = s0.cumDist / Math.max(0.1, uvScaleV);
+    const v1 = s1.cumDist / Math.max(0.1, uvScaleV);
+    // Top walkable surface
+    addQuad(tL0, tR0, tR1, tL1, 0, v0, uvScaleU, v1);
+
+    if (topY - bottomY > 0.008) {
+      const bL0 = tL0.clone().setY(bottomY);
+      const bR0 = tR0.clone().setY(bottomY);
+      const bL1 = tL1.clone().setY(bottomY);
+      const bR1 = tR1.clone().setY(bottomY);
+      // Outer / inner vertical walls
+      addQuad(bL0, tL0, tL1, bL1, 0, v0, 0.25, v1);
+      addQuad(tR0, bR0, bR1, tR1, 0, v0, 0.25, v1);
+    }
+  }
+
+  // Front & end caps
+  if (n >= 2 && topY - bottomY > 0.008) {
+    const first = samples[0];
+    const last = samples[n - 1];
+    addQuad(
+      first.pos.clone().addScaledVector(first.right, offsetLeft).setY(bottomY),
+      first.pos.clone().addScaledVector(first.right, offsetRight).setY(bottomY),
+      first.pos.clone().addScaledVector(first.right, offsetRight).setY(topY),
+      first.pos.clone().addScaledVector(first.right, offsetLeft).setY(topY),
+      0, 0, 1, 0.25
+    );
+    addQuad(
+      last.pos.clone().addScaledVector(last.right, offsetRight).setY(bottomY),
+      last.pos.clone().addScaledVector(last.right, offsetLeft).setY(bottomY),
+      last.pos.clone().addScaledVector(last.right, offsetLeft).setY(topY),
+      last.pos.clone().addScaledVector(last.right, offsetRight).setY(topY),
+      0, 0, 1, 0.25
+    );
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+/**
+ * Create a high-detail 3D city-builder road/walkway group matching the school stepping-slab + pebble-gravel walkway reference.
+ * Includes interactive vertex handles, segment midpoint '+' handles, and whole-road move handle when selected.
+ */
+export function create3DRoadGroup(road, normToWorldFn, isSelected = false, { isPreview = false } = {}) {
+  const group = new THREE.Group();
+  const preset = ROAD3D_PRESETS[road?.style] || ROAD3D_PRESETS['stepping-slab'];
+  const style = preset.style;
+  const elev = Math.max(0, Number(road?.elevationMeters ?? preset.elevationMeters) || 0);
+  const width = Math.max(0.6, Math.min(14, Number(road?.widthMeters ?? preset.widthMeters) || 1.55));
+  const curbW = Math.max(0.04, Math.min(width * 0.25, Number(road?.curbWidthMeters ?? preset.curbWidthMeters) || 0.11));
+  const curbH = Math.max(0.03, Math.min(0.4, Number(road?.curbHeightMeters ?? preset.curbHeightMeters) || 0.085));
+  const slabLen = Math.max(0.2, Math.min(4.0, Number(road?.slabLengthMeters ?? preset.slabLengthMeters) || 0.64));
+  const slabGap = Math.max(0.01, Math.min(1.5, Number(road?.slabGapMeters ?? preset.slabGapMeters) || 0.14));
+  const sideGutter = style === 'stepping-slab'
+    ? Math.max(0.04, Math.min((width - curbW * 2) * 0.28, Number(road?.sideGutterMeters ?? preset.sideGutterMeters) || 0.11))
+    : 0;
+  const halfW = width * 0.5;
+  const innerHalfW = Math.max(0.2, halfW - curbW);
+  const opacity = isPreview ? 0.65 : 1.0;
+
+  const { controlWorldPts, samples, totalLength } = sampleRoad3DPathWorld(road, normToWorldFn);
+  if (samples.length < 2) return group;
+
+  const gravelColor = road?.gravelColor || preset.gravelColor;
+  const curbColor = road?.curbColor || preset.curbColor;
+  const slabColor = road?.slabColor || preset.slabColor;
+
+  const gravelTex = getProceduralRoadGravelTexture(gravelColor);
+  const slabTex = getProceduralConcreteSlabTexture(style, slabColor);
+
+  // 1. Gravel / Sub-base Ribbon Bed (visible inside pebble gaps & gutters)
+  const bedMat = new THREE.MeshStandardMaterial({
+    color: gravelTex ? 0xffffff : gravelColor,
+    map: gravelTex || undefined,
+    roughness: 0.94,
+    metalness: 0.04,
+    side: THREE.DoubleSide,
+    transparent: isPreview,
+    opacity
+  });
+  const bedGeo = _buildExtrudedRoadRibbonGeo(samples, -innerHalfW, innerHalfW, elev + 0.004, elev + 0.026, innerHalfW * 1.4, 1.15);
+  const bedMesh = new THREE.Mesh(bedGeo, bedMat);
+  bedMesh.name = 'RoadGravelBed';
+  bedMesh.receiveShadow = true;
+  group.add(bedMesh);
+
+  // 2. Left & Right Raised Concrete Curbs (Kanstin)
+  const curbMat = new THREE.MeshStandardMaterial({
+    color: curbColor,
+    roughness: 0.78,
+    metalness: 0.06,
+    side: THREE.DoubleSide,
+    transparent: isPreview,
+    opacity
+  });
+  const leftCurbGeo = _buildExtrudedRoadRibbonGeo(samples, -halfW, -innerHalfW, elev + 0.004, elev + curbH, 0.4, 1.5);
+  const leftCurb = new THREE.Mesh(leftCurbGeo, curbMat);
+  leftCurb.name = 'RoadCurbLeft';
+  leftCurb.castShadow = !isPreview;
+  leftCurb.receiveShadow = true;
+  group.add(leftCurb);
+
+  const rightCurbGeo = _buildExtrudedRoadRibbonGeo(samples, innerHalfW, halfW, elev + 0.004, elev + curbH, 0.4, 1.5);
+  const rightCurb = new THREE.Mesh(rightCurbGeo, curbMat);
+  rightCurb.name = 'RoadCurbRight';
+  rightCurb.castShadow = !isPreview;
+  rightCurb.receiveShadow = true;
+  group.add(rightCurb);
+
+  // Curb expansion joints along outer border stones
+  if (!isPreview && totalLength >= 0.75) {
+    const jointMat = makeMat('#6b665e', { roughness: 0.9, metalness: 0 });
+    const jointCount = Math.min(220, Math.floor(totalLength / 0.75));
+    const jointGeo = new THREE.BoxGeometry(curbW + 0.008, 0.008, 0.016);
+    for (let j = 1; j <= jointCount; j++) {
+      const sample = _interpolateRoadSampleAtDist(samples, j * 0.75);
+      if (!sample) continue;
+      const yaw = Math.atan2(sample.tangent.x, sample.tangent.z);
+      for (const sideSign of [-1, 1]) {
+        const jPos = sample.pos.clone().addScaledVector(sample.right, sideSign * (innerHalfW + curbW * 0.5));
+        const jMesh = new THREE.Mesh(jointGeo, jointMat);
+        jMesh.position.set(jPos.x, elev + curbH + 0.001, jPos.z);
+        jMesh.rotation.y = yaw;
+        group.add(jMesh);
+      }
+    }
+  }
+
+  // 3. Road Surface Layer (Stepping Slabs w/ Pebble Gaps OR Continuous Pavement)
+  const slabMat = new THREE.MeshStandardMaterial({
+    color: slabTex ? 0xffffff : slabColor,
+    map: slabTex || undefined,
+    roughness: style === 'asphalt-campus' ? 0.85 : 0.74,
+    metalness: 0.05,
+    side: THREE.DoubleSide,
+    transparent: isPreview,
+    opacity
+  });
+
+  if (style === 'stepping-slab') {
+    const slabWidth = Math.max(0.32, (innerHalfW - sideGutter) * 2);
+    const slabThick = Math.max(0.038, curbH - 0.016);
+    const slabCenterY = elev + 0.02 + slabThick * 0.5;
+    const stepPeriod = slabLen + slabGap;
+    const maxSlabs = 320;
+    const slabCount = Math.max(1, Math.min(maxSlabs, Math.floor((totalLength + slabGap * 0.5) / stepPeriod)));
+    const slabGeo = new THREE.BoxGeometry(slabWidth, slabThick, slabLen);
+
+    const slabsGroup = new THREE.Group();
+    slabsGroup.name = 'RoadSteppingSlabs';
+    const pebbleCoords = [];
+
+    for (let k = 0; k < slabCount; k++) {
+      const dist = slabLen * 0.5 + k * stepPeriod;
+      if (dist > totalLength - 0.05 && slabCount > 1) break;
+      const sample = _interpolateRoadSampleAtDist(samples, Math.min(totalLength, dist));
+      if (!sample) continue;
+
+      const slabMesh = new THREE.Mesh(slabGeo, slabMat);
+      slabMesh.name = 'RoadSteppingSlabPiece';
+      slabMesh.position.set(sample.pos.x, slabCenterY, sample.pos.z);
+      slabMesh.rotation.y = Math.atan2(sample.tangent.x, sample.tangent.z);
+      slabMesh.castShadow = !isPreview;
+      slabMesh.receiveShadow = true;
+      slabsGroup.add(slabMesh);
+
+      if (!isPreview) {
+        // Side gutter pebbles beside slab + transverse gap pebbles between slabs
+        for (const sideSign of [-1, 1]) {
+          const lat = sideSign * (slabWidth * 0.5 + sideGutter * 0.52);
+          for (const zOff of [-slabLen * 0.25, slabLen * 0.25]) {
+            const px = sample.pos.x + sample.right.x * lat + sample.tangent.x * zOff;
+            const pz = sample.pos.z + sample.right.z * lat + sample.tangent.z * zOff;
+            pebbleCoords.push({ x: px, z: pz });
+          }
+        }
+        if (k < slabCount - 1) {
+          const gapSample = _interpolateRoadSampleAtDist(samples, Math.min(totalLength, dist + slabLen * 0.5 + slabGap * 0.5));
+          if (gapSample) {
+            for (const f of [-0.42, -0.18, 0.08, 0.34]) {
+              const px = gapSample.pos.x + gapSample.right.x * (innerHalfW * f);
+              const pz = gapSample.pos.z + gapSample.right.z * (innerHalfW * f);
+              pebbleCoords.push({ x: px, z: pz });
+            }
+          }
+        }
+      }
+    }
+    group.add(slabsGroup);
+
+    // 3D River Pebbles rendered in 1 draw call via InstancedMesh
+    if (!isPreview && pebbleCoords.length > 0 && typeof THREE.InstancedMesh === 'function') {
+      const maxPebbles = Math.min(pebbleCoords.length, 480);
+      const pebGeo = new THREE.DodecahedronGeometry(0.032, 0);
+      const pebMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, metalness: 0.05 });
+      const pebMesh = new THREE.InstancedMesh(pebGeo, pebMat, maxPebbles);
+      pebMesh.name = 'RoadRiverPebbles';
+      const dummy = new THREE.Object3D();
+      const pebPalette = [0x78716c, 0x57534e, 0x9ca3af, 0xa8a29e, 0x6b7280];
+      const pebRand = _seededRoadRand(202611);
+      for (let i = 0; i < maxPebbles; i++) {
+        const pc = pebbleCoords[i];
+        dummy.position.set(
+          pc.x + (pebRand() - 0.5) * 0.06,
+          elev + 0.031,
+          pc.z + (pebRand() - 0.5) * 0.06
+        );
+        dummy.rotation.set(pebRand() * 0.4, pebRand() * Math.PI * 2, pebRand() * 0.4);
+        const sScale = 0.72 + pebRand() * 0.65;
+        dummy.scale.set(sScale * 1.25, sScale * 0.52, sScale * 0.95);
+        dummy.updateMatrix();
+        pebMesh.setMatrixAt(i, dummy.matrix);
+        pebMesh.setColorAt?.(i, new THREE.Color(pebPalette[i % pebPalette.length]));
+      }
+      pebMesh.instanceMatrix.needsUpdate = true;
+      if (pebMesh.instanceColor) pebMesh.instanceColor.needsUpdate = true;
+      group.add(pebMesh);
+    }
+  } else {
+    // Continuous road surface (paving block / concrete corridor / asphalt campus)
+    const deckGeo = _buildExtrudedRoadRibbonGeo(samples, -innerHalfW, innerHalfW, elev + 0.02, elev + Math.max(0.052, curbH - 0.015), innerHalfW * 1.25, 1.3);
+    const deckMesh = new THREE.Mesh(deckGeo, slabMat);
+    deckMesh.name = 'RoadPavementSurface';
+    deckMesh.castShadow = !isPreview;
+    deckMesh.receiveShadow = true;
+    group.add(deckMesh);
+
+    if (style === 'asphalt-campus' && !isPreview && totalLength >= 1.5) {
+      const stripeMat = makeMat(0xf8fafc, { roughness: 0.55, metalness: 0.05 });
+      const stripeGeo = new THREE.BoxGeometry(0.11, 0.012, slabLen);
+      const count = Math.min(180, Math.floor(totalLength / (slabLen + slabGap)));
+      const deckTopY = elev + Math.max(0.058, curbH - 0.008);
+      for (let sIdx = 0; sIdx < count; sIdx++) {
+        const sample = _interpolateRoadSampleAtDist(samples, slabLen * 0.5 + sIdx * (slabLen + slabGap));
+        if (!sample) continue;
+        const stripe = new THREE.Mesh(stripeGeo, stripeMat);
+        stripe.position.set(sample.pos.x, deckTopY, sample.pos.z);
+        stripe.rotation.y = Math.atan2(sample.tangent.x, sample.tangent.z);
+        group.add(stripe);
+      }
+    }
+  }
+
+  // Selection Centerline & Vertex/Midpoint/Move Gizmo Handles
+  group.traverse((child) => {
+    child.userData.roadId = road.id;
+  });
+  group.userData.roadId = road.id;
+
+  if (isSelected && !isPreview) {
+    const linePts = samples.map((s) => new THREE.Vector3(s.pos.x, elev + curbH + 0.06, s.pos.z));
+    const lineGeo = new THREE.BufferGeometry().setFromPoints(linePts);
+    const lineMat = new THREE.LineBasicMaterial({ color: 0xfacc15, transparent: true, opacity: 0.95 });
+    const selLine = new THREE.Line(lineGeo, lineMat);
+    selLine.userData.roadId = road.id;
+    group.add(selLine);
+
+    const nodeMat = makeMat(0xfacc15, { emissive: 0xeab308, emissiveIntensity: 0.65, roughness: 0.2 });
+    const midMat = makeMat(0x38bdf8, { emissive: 0x0284c7, emissiveIntensity: 0.6, roughness: 0.2 });
+    const moveMat = makeMat(0xf97316, { emissive: 0xea580c, emissiveIntensity: 0.6, roughness: 0.2 });
+
+    controlWorldPts.forEach((wp, idx) => {
+      const nodeMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.28, 0.22, 16), nodeMat);
+      nodeMesh.position.set(wp.x, elev + curbH + 0.14, wp.z);
+      nodeMesh.userData = { roadId: road.id, gizmoType: 'road-node', nodeIndex: idx };
+      group.add(nodeMesh);
+
+      if (idx < controlWorldPts.length - 1) {
+        const nextWp = controlWorldPts[idx + 1];
+        const midX = (wp.x + nextWp.x) * 0.5;
+        const midZ = (wp.z + nextWp.z) * 0.5;
+        const midMesh = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 12), midMat);
+        midMesh.position.set(midX, elev + curbH + 0.14, midZ);
+        midMesh.userData = { roadId: road.id, gizmoType: 'road-insert-node', insertAfterIndex: idx };
+        group.add(midMesh);
+      }
+    });
+
+    const centerSample = _interpolateRoadSampleAtDist(samples, totalLength * 0.5) || samples[0];
+    if (centerSample) {
+      const movePad = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.36, 0.16, 8), moveMat);
+      movePad.position.set(centerSample.pos.x, elev + curbH + 0.34, centerSample.pos.z);
+      movePad.userData = { roadId: road.id, gizmoType: 'road-move' };
+      group.add(movePad);
+    }
+  }
+
+  return group;
+}
+
 

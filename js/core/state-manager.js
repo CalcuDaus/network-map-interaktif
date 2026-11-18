@@ -23,7 +23,8 @@ class StateManager {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         rooms3d: [],
-        objects3d: []
+        objects3d: [],
+        roads3d: []
       },
       // Active viewport renderer mode: '2d' | '3d'
       viewMode: '2d',
@@ -33,6 +34,8 @@ class StateManager {
       selectedObject3dId: null,
       // Selected 3D room ID
       selectedRoom3dId: null,
+      // Selected 3D road ID
+      selectedRoad3dId: null,
       // Viewport transform
       viewport: {
         x: 0,
@@ -244,6 +247,81 @@ class StateManager {
 
   getSelectedObject3dId() {
     return this.state.selectedObject3dId || null;
+  }
+
+  getRoads3d() {
+    return this.state.project.roads3d || [];
+  }
+
+  setRoads3d(roads) {
+    this.state.project.roads3d = Array.isArray(roads) ? roads : [];
+    if (
+      this.state.selectedRoad3dId &&
+      !this.state.project.roads3d.some((r) => r.id === this.state.selectedRoad3dId)
+    ) {
+      this.state.selectedRoad3dId = null;
+      eventBus.emit('road3d:deselected', {});
+    }
+    eventBus.emit('road3d:changed', { roads: this.state.project.roads3d });
+  }
+
+  getRoad3dById(id) {
+    return this.getRoads3d().find((r) => r.id === id) || null;
+  }
+
+  addRoad3d(roadData) {
+    if (!roadData || !roadData.id) return null;
+    const list = [...this.getRoads3d(), roadData];
+    this.state.project.roads3d = list;
+    eventBus.emit('road3d:changed', { roads: list });
+    this.selectRoad3d(roadData.id);
+    return roadData;
+  }
+
+  updateRoad3d(id, updates) {
+    const list = [...this.getRoads3d()];
+    const idx = list.findIndex((r) => r.id === id);
+    if (idx < 0) return null;
+    const updated = { ...list[idx], ...updates, id };
+    list[idx] = updated;
+    this.state.project.roads3d = list;
+    eventBus.emit('road3d:changed', { roads: list });
+    if (this.state.selectedRoad3dId === id) {
+      eventBus.emit('road3d:selected', updated);
+    }
+    return updated;
+  }
+
+  deleteRoad3d(id) {
+    const list = this.getRoads3d();
+    const next = list.filter((r) => r.id !== id);
+    if (next.length === list.length) return false;
+    const wasSelected = this.state.selectedRoad3dId === id;
+    this.state.project.roads3d = next;
+    if (wasSelected) {
+      this.state.selectedRoad3dId = null;
+      eventBus.emit('road3d:deselected', { id });
+    }
+    eventBus.emit('road3d:changed', { roads: next });
+    return true;
+  }
+
+  selectRoad3d(id) {
+    const road = this.getRoad3dById(id);
+    if (!road) return;
+    this.state.selectedRoad3dId = id;
+    eventBus.emit('road3d:selected', road);
+  }
+
+  deselectRoad3d() {
+    if (!this.state.selectedRoad3dId) return;
+    const prevId = this.state.selectedRoad3dId;
+    this.state.selectedRoad3dId = null;
+    eventBus.emit('road3d:deselected', { id: prevId });
+  }
+
+  getSelectedRoad3dId() {
+    return this.state.selectedRoad3dId || null;
   }
 
   /**

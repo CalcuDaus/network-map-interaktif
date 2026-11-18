@@ -442,8 +442,71 @@
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25) inset;
 }
 
-#map-3d-container.tool-box canvas {
+#map-3d-container.tool-box canvas,
+#map-3d-container.tool-road3d canvas {
   cursor: crosshair !important;
+}
+
+/* City-Builder 3D Road & Walkway Floating Toolbar */
+.hud-3d-road-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 58px;
+  transform: translateX(-50%);
+  width: min(1060px, calc(100% - 28px));
+  z-index: 37;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 7px 11px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--accent-green);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  color: var(--text-primary);
+  pointer-events: auto;
+  backdrop-filter: blur(8px);
+}
+
+.hud-3d-road-bar.hidden {
+  display: none !important;
+}
+
+.road-bar-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-green);
+  white-space: nowrap;
+}
+
+.road-bar-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.road-bar-num {
+  width: 54px;
+  height: 23px;
+  padding: 0 5px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+
+.road-bar-btns {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  flex-wrap: wrap;
 }
 
 /* Simulator Device & Port Inspector Dock (Bottom Center in 3D Mode) */

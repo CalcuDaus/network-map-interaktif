@@ -42,7 +42,8 @@ export class HistoryManager {
       devices: JSON.parse(JSON.stringify(this.deviceManager.getAllDevices())),
       connections: JSON.parse(JSON.stringify(this.cableManager.getAllConnections())),
       rooms3d: JSON.parse(JSON.stringify(stateManager.getRooms3d())),
-      objects3d: JSON.parse(JSON.stringify(stateManager.getObjects3d()))
+      objects3d: JSON.parse(JSON.stringify(stateManager.getObjects3d())),
+      roads3d: JSON.parse(JSON.stringify(stateManager.getRoads3d()))
     };
   }
 
@@ -74,7 +75,8 @@ export class HistoryManager {
       if (JSON.stringify(top.devices) === JSON.stringify(current.devices) &&
           JSON.stringify(top.connections) === JSON.stringify(current.connections) &&
           JSON.stringify(top.objects3d || []) === JSON.stringify(current.objects3d || []) &&
-          JSON.stringify(top.rooms3d || []) === JSON.stringify(current.rooms3d || [])) {
+          JSON.stringify(top.rooms3d || []) === JSON.stringify(current.rooms3d || []) &&
+          JSON.stringify(top.roads3d || []) === JSON.stringify(current.roads3d || [])) {
         return;
       }
     }
@@ -132,6 +134,10 @@ export class HistoryManager {
 
     eventBus.on('room3d:changed', () => {
       handleMutation('Ubah Ruangan 3D');
+    });
+
+    eventBus.on('road3d:changed', () => {
+      handleMutation('Ubah Jalan 3D');
     });
   }
 
@@ -204,12 +210,16 @@ export class HistoryManager {
     this.deviceManager.deselectDevice();
     this.cableManager.deselectConnection();
     stateManager.deselectObject3d?.();
+    stateManager.deselectRoad3d?.();
 
     if (Array.isArray(snapshot.rooms3d)) {
       stateManager.setRooms3d(JSON.parse(JSON.stringify(snapshot.rooms3d)));
     }
     if (Array.isArray(snapshot.objects3d)) {
       stateManager.setObjects3d(JSON.parse(JSON.stringify(snapshot.objects3d)));
+    }
+    if (Array.isArray(snapshot.roads3d)) {
+      stateManager.setRoads3d(JSON.parse(JSON.stringify(snapshot.roads3d)));
     }
 
     // 1. Restore Devices:

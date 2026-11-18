@@ -24,10 +24,10 @@
     rel="stylesheet">
 
   <!-- Core Stylesheets -->
-  <link rel="stylesheet" href="css/main.css?v=20261118-buildmode-v5">
-  <link rel="stylesheet" href="css/layout.css?v=20261118-buildmode-v5">
-  <link rel="stylesheet" href="css/components.css?v=20261118-buildmode-v5">
-  <link rel="stylesheet" href="css/map.css?v=20261118-buildmode-v5">
+  <link rel="stylesheet" href="css/main.css?v=20261118-glbmodels-v7">
+  <link rel="stylesheet" href="css/layout.css?v=20261118-glbmodels-v7">
+  <link rel="stylesheet" href="css/components.css?v=20261118-glbmodels-v7">
+  <link rel="stylesheet" href="css/map.css?v=20261118-glbmodels-v7">
 
   <!-- Vendor Libraries (Offline-First with CDN fallback) -->
   <script src="assets/vendor/konva.min.js"></script>
@@ -505,6 +505,11 @@
               <i data-lucide="box" style="width: 13px; height: 13px;"></i>
               <span>Buat 3D</span>
             </button>
+            <button id="btn-3d-tool-road" class="hud-3d-btn" data-tool3d="road3d"
+              title="Bangun Jalan &amp; Trotoar 3D ala City-Builder (N) — Klik titik jalur sesuai lingkungan sekolah">
+              <i data-lucide="route" style="width: 13px; height: 13px;"></i>
+              <span>Jalan 3D</span>
+            </button>
           </div>
 
           <div class="hud-3d-divider"></div>
@@ -609,6 +614,49 @@
 
         <!-- Mode Teknisi Roblox Avatar Radar & Control Bar (Bottom Center in 3D Mode) -->
         <div id="hud-3d-avatar-bar" class="hud-3d-avatar-bar hidden" style="display: none;"></div>
+
+        <!-- City-Builder 3D Road & Walkway Toolbar (Floating Bottom Center in Road Mode / Selected Road) -->
+        <div id="hud-3d-road-bar" class="hud-3d-road-bar hidden" style="display: none;"
+          aria-label="Alat Bangun Jalan 3D">
+          <div class="road-bar-title">🛣️ City-Builder Jalan 3D</div>
+          <label class="road-bar-field" title="Model / Permukaan Jalan 3D">
+            <span>Model</span>
+            <select id="select-road3d-style" class="hud-3d-select">
+              <option value="stepping-slab" selected>Setapak Kerikil + Beton Sekolah</option>
+              <option value="paving-block">Paving Block + Kanstin</option>
+              <option value="concrete-corridor">Rabat Beton + Kanstin</option>
+              <option value="asphalt-campus">Aspal Sekolah + Marka</option>
+            </select>
+          </label>
+          <label class="road-bar-field" title="Mode jalur: Lengkung mulus (Catmull-Rom) atau Lurus bertekuk">
+            <span>Jalur</span>
+            <select id="select-road3d-path-mode" class="hud-3d-select">
+              <option value="smooth" selected>Lengkung Mulus</option>
+              <option value="straight">Lurus Sudut</option>
+            </select>
+          </label>
+          <label class="road-bar-field" title="Total lebar jalan termasuk kanstin tepi (meter)">
+            <span>Lebar(m)</span>
+            <input type="number" id="input-road3d-width" class="road-bar-num" min="0.6" max="14" step="0.1" value="1.55">
+          </label>
+          <label class="road-bar-field" title="Panjang tiap papan beton pijakan (meter)">
+            <span>Papan(m)</span>
+            <input type="number" id="input-road3d-slab-len" class="road-bar-num" min="0.2" max="4" step="0.05" value="0.64">
+          </label>
+          <label class="road-bar-field" title="Jarak celah batu kerikil antar papan beton (meter)">
+            <span>Celah(m)</span>
+            <input type="number" id="input-road3d-slab-gap" class="road-bar-num" min="0.01" max="1.5" step="0.02" value="0.14">
+          </label>
+          <select id="select-road3d-list" class="hud-3d-select" title="Pilih / lompat ke jalan 3D yang sudah dibuat">
+            <option value="">-- Jalan (0) --</option>
+          </select>
+          <div class="road-bar-btns">
+            <button type="button" id="btn-road3d-undo-pt" class="sim-action-btn" title="Hapus titik terakhir (Backspace)">↶ Titik</button>
+            <button type="button" id="btn-road3d-finish-chain" class="sim-action-btn is-primary" title="Selesaikan jalur ini dan siap buat jalan baru (Klik Kanan / Enter)">✓ Selesai Jalur</button>
+            <button type="button" id="btn-road3d-delete" class="sim-action-btn is-exit" title="Hapus jalan terpilih (Delete)">🗑 Hapus</button>
+            <button type="button" id="btn-road3d-close" class="sim-action-btn" title="Tutup alat Jalan 3D">✕</button>
+          </div>
+        </div>
 
         <!-- Roblox-Mobile Virtual Joystick + Action Controls (Mode Teknisi Touch HUD) -->
         <div id="mobile-roblox-controls" class="mobile-roblox-controls hidden" style="display: none;"
@@ -829,7 +877,7 @@
   </div>
 
   <!-- Application Bootstrap (Bundled for file:// and http:// compatibility) -->
-  <script src="js/bundle.js?v=20261118-buildmode-v5"></script>
+  <script src="js/bundle.js?v=20261118-glbmodels-v7"></script>
 </body>
 
 </html>

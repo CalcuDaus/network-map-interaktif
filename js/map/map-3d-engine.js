@@ -16,9 +16,12 @@ import {
   create3DLabelSprite,
   create3DRoomGroup,
   createCustomObject3DGroup,
+  create3DRoadGroup,
+  ROAD3D_PRESETS,
   OBJECT3D_PRESETS,
   loadCustomGlbModel,
   applyRoomGlbScale,
+  getRoomMinDimensions,
   create3DPortsSubGroup,
   createRobloxAvatar3DGroup,
   updateRobloxAvatarLabel,
@@ -107,6 +110,10 @@ export class Map3DEngine {
 
     // Scene Groups
     this.groundGroup = new THREE.Group();
+    this.roadsGroup = new THREE.Group();
+    this.roadsGroup.name = 'Roads3DGroup';
+    this.roadPreviewGroup = new THREE.Group();
+    this.roadPreviewGroup.name = 'Road3DPreviewGroup';
     this.roomsGroup = new THREE.Group();
     this.objects3dGroup = new THREE.Group();
     this.devicesGroup = new THREE.Group();
@@ -117,6 +124,7 @@ export class Map3DEngine {
     this.deviceMeshMap = new Map(); // deviceId -> THREE.Group
     this.object3dMeshMap = new Map(); // object3dId -> THREE.Group
     this.room3dMeshMap = new Map(); // roomId -> THREE.Group
+    this.road3dMeshMap = new Map(); // roadId -> THREE.Group
     this.cableMeshMap = new Map();  // cableId -> THREE.Mesh
     this.effectivePosMap = new Map(); // deviceId -> THREE.Vector3
     this.portWorldPosMap = new Map(); // "${deviceId}::${portName}" -> THREE.Vector3
@@ -161,6 +169,14 @@ export class Map3DEngine {
     this._moveGuideTimer = null;
     this.boxSelectState = null;
     this.activeDraw3dTemplate = { ...OBJECT3D_PRESETS.pole };
+    this.activeRoad3dConfig = {
+      style: 'stepping-slab',
+      pathMode: 'smooth',
+      widthMeters: ROAD3D_PRESETS['stepping-slab'].widthMeters,
+      slabLengthMeters: ROAD3D_PRESETS['stepping-slab'].slabLengthMeters,
+      slabGapMeters: ROAD3D_PRESETS['stepping-slab'].slabGapMeters
+    };
+    this.roadBuildState = null;
     this.object3dDragState = null;
     this.cableDragState = null;
     this._marqueeEl = null;
@@ -311,6 +327,8 @@ export class Map3DEngine {
     this.scene.add(dirLight);
 
     this.scene.add(this.groundGroup);
+    this.scene.add(this.roadsGroup);
+    this.scene.add(this.roadPreviewGroup);
     this.scene.add(this.roomsGroup);
     this.scene.add(this.objects3dGroup);
     this.scene.add(this.coverageGroup);
@@ -467,6 +485,9 @@ export class Map3DEngine {
       if (this.dragRotateState) {
         this.updateDeviceDragRotate(e);
         return;
+      }
+      if (this.navTool === 'road3d' && this.roadBuildState && !this.avatarMode) {
+        this.updateRoad3dBuildHover(e);
       }
       if (this.avatarMode && !this.simulatorFocusedDeviceId) {
         if (e.pointerType === 'touch') {
@@ -684,6 +705,8 @@ export class Map3DEngine {
     this.pendingCableSourceId = null;
     this.pendingCableSourcePort = '';
     this.pending3dWaypoints = [];
+    this.roadBuildState = null;
+    this.clearGroup(this.roadPreviewGroup);
     if (this.carriedObjects?.length > 0) {
       this.dropCarriedObjectsFromAvatar?.({ dropAll: true, silent: true });
     }
@@ -699,6 +722,7 @@ export class Map3DEngine {
     this.syncAvatarCrosshair();
     this.syncAvatarControlsUI();
     this.syncMobileRobloxControlsVisibility?.();
+    this.renderRoad3dHudBar?.();
     this.configureControlsForAvatarMode(false);
     if (typeof document !== 'undefined') {
       const avatarHudEl = document.getElementById('hud-3d-avatar-bar');
@@ -846,6 +870,7 @@ export class Map3DEngine {
 
   syncAll() {
     if (!this.isActive || !this.isInitialized) return;
+    this.syncRoads();
     this.syncRooms();
     this.syncObjects3d();
     this.syncDevices();
@@ -854,9 +879,10 @@ export class Map3DEngine {
 
   _attachRoomFallbackMesh(room, roomGroup) {
     if (!roomGroup || roomGroup.userData?.hasFallbackRoomMesh) return;
-    const w = Math.max(2, Number(room.widthMeters) || 14);
-    const d = Math.max(2, Number(room.depthMeters) || 12);
-    const h = Math.max(1.5, Number(room.heightMeters) || 4);
+    const { minW, minD, minH } = getRoomMinDimensions(room);
+    const w = Math.max(minW, Number(room.widthMeters) || 14);
+    const d = Math.max(minD, Number(room.depthMeters) || 12);
+    const h = Math.max(minH, Number(room.heightMeters) || 4);
     const wallHex = room.wallColor || '#2a7c13';
     const floorHex = room.floorColor || '#1e293b';
 
@@ -1125,6 +1151,508 @@ export class Map3DEngine {
     this.objects3dGroup.add(next);
     this.object3dMeshMap.set(obj.id, next);
     return next;
+  }
+
+  syncRoads() {
+    if (!this.isActive || !this.isInitialized) return;
+    this.clearGroup(this.roadsGroup);
+    this.road3dMeshMap.clear();
+
+    const roads = stateManager.getRoads3d?.() || [];
+    const selectedId = stateManager.getSelectedRoad3dId?.() || null;
+    roads.forEach((road) => {
+      if (!road || road.visible === false || !Array.isArray(road.points) || road.points.length < 2) return;
+      const meshGroup = create3DRoadGroup(
+        road,
+        (nx, ny) => this.normToWorld(nx, ny),
+        road.id === selectedId
+      );
+      this.roadsGroup.add(meshGroup);
+      this.road3dMeshMap.set(road.id, meshGroup);
+    });
+    this.renderRoad3dHudBar?.();
+  }
+
+  rebuildSingleRoad3dMesh(road, isSelected = true) {
+    if (!this.isInitialized || !road?.id) return null;
+    const prev = this.road3dMeshMap.get(road.id);
+    if (prev) {
+      this.roadsGroup.remove(prev);
+      this._disposeObject3DResources(prev);
+    }
+    const next = create3DRoadGroup(road, (nx, ny) => this.normToWorld(nx, ny), isSelected);
+    this.roadsGroup.add(next);
+    this.road3dMeshMap.set(road.id, next);
+    return next;
+  }
+
+  _snapRoadWorldPoint(wx, wz, { excludeRoadId = null, excludeNodeIdx = -1, anchorWorld = null, shiftKey = false } = {}) {
+    let x = Number(wx) || 0;
+    let z = Number(wz) || 0;
+    let nodeSnapped = false;
+
+    // 1. Snap to any nearby existing road vertex within 1.25m for clean intersections/branches
+    const roads = stateManager.getRoads3d?.() || [];
+    let bestDist = 1.25;
+    let bestPt = null;
+    roads.forEach((r) => {
+      const pts = Array.isArray(r?.points) ? r.points : [];
+      pts.forEach((pt, idx) => {
+        if (r.id === excludeRoadId && idx === excludeNodeIdx) return;
+        const w = this.normToWorld(pt.x, pt.y);
+        const d = Math.hypot(w.x - x, w.z - z);
+        if (d < bestDist) {
+          bestDist = d;
+          bestPt = w;
+        }
+      });
+    });
+    if (bestPt) {
+      return { x: bestPt.x, z: bestPt.z, nodeSnapped: true };
+    }
+
+    // 2. Angle Snap relative to anchor segment when Shift held or Build Mode angle snap active
+    const angleStepDeg = shiftKey
+      ? 15
+      : (this.buildPlacementConfig?.buildModeEnabled && (Number(this.buildPlacementConfig?.angleSnapDeg) || 0) > 0
+        ? Number(this.buildPlacementConfig.angleSnapDeg)
+        : 0);
+    if (anchorWorld && angleStepDeg > 0) {
+      const dx = x - anchorWorld.x;
+      const dz = z - anchorWorld.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist > 0.2) {
+        const stepRad = (angleStepDeg * Math.PI) / 180;
+        const snappedRad = Math.round(Math.atan2(dz, dx) / stepRad) * stepRad;
+        x = anchorWorld.x + Math.cos(snappedRad) * dist;
+        z = anchorWorld.z + Math.sin(snappedRad) * dist;
+      }
+    }
+
+    // 3. Optional Grid Snap
+    if (this.applyBuildGridSnapWorld) {
+      const g = this.applyBuildGridSnapWorld(x, z);
+      x = g.x;
+      z = g.z;
+    }
+
+    return { x, z, nodeSnapped };
+  }
+
+  _resolveRoadGroundWorldFromEvent(e) {
+    if (!this.camera || !this.renderer?.domElement) return null;
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+
+    const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    const hitPt = new THREE.Vector3();
+    if (this.raycaster.ray.intersectPlane(floorPlane, hitPt)) {
+      return { x: hitPt.x, z: hitPt.z };
+    }
+    const groundHits = this.raycaster.intersectObjects(this.groundGroup?.children || [], true);
+    if (groundHits.length > 0) {
+      return { x: groundHits[0].point.x, z: groundHits[0].point.z };
+    }
+    return null;
+  }
+
+  syncRoadBuildPreview() {
+    if (!this.roadPreviewGroup) return;
+    this.clearGroup(this.roadPreviewGroup);
+    if (!this.isActive || this.navTool !== 'road3d' || !this.roadBuildState) return;
+    const { points, cursorPoint } = this.roadBuildState;
+    if (!Array.isArray(points) || points.length === 0) return;
+
+    const previewPts = cursorPoint ? [...points, cursorPoint] : [...points];
+    const preset = ROAD3D_PRESETS[this.activeRoad3dConfig?.style] || ROAD3D_PRESETS['stepping-slab'];
+
+    if (previewPts.length >= 2) {
+      const previewRoad = {
+        id: '__road3d_preview__',
+        ...preset,
+        ...(this.activeRoad3dConfig || {}),
+        points: previewPts
+      };
+      const prevMesh = create3DRoadGroup(previewRoad, (nx, ny) => this.normToWorld(nx, ny), false, { isPreview: true });
+      this.roadPreviewGroup.add(prevMesh);
+    }
+
+    // Show cyan anchor pin at active last point & cursor point
+    const pinGeo = new THREE.CylinderGeometry(0.22, 0.26, 0.35, 14);
+    const lastPt = points[points.length - 1];
+    const lastW = this.normToWorld(lastPt.x, lastPt.y);
+    const startPin = new THREE.Mesh(pinGeo, new THREE.MeshBasicMaterial({ color: 0x22c55e }));
+    startPin.position.set(lastW.x, 0.25, lastW.z);
+    this.roadPreviewGroup.add(startPin);
+    if (cursorPoint) {
+      const curW = this.normToWorld(cursorPoint.x, cursorPoint.y);
+      const endPin = new THREE.Mesh(pinGeo, new THREE.MeshBasicMaterial({ color: 0x38bdf8 }));
+      endPin.position.set(curW.x, 0.25, curW.z);
+      this.roadPreviewGroup.add(endPin);
+    }
+  }
+
+  updateRoad3dBuildHover(e) {
+    if (!this.roadBuildState || !Array.isArray(this.roadBuildState.points) || this.roadBuildState.points.length === 0) return;
+    const raw = this._resolveRoadGroundWorldFromEvent(e);
+    if (!raw) return;
+    const lastPt = this.roadBuildState.points[this.roadBuildState.points.length - 1];
+    const anchorWorld = this.normToWorld(lastPt.x, lastPt.y);
+    const snapped = this._snapRoadWorldPoint(raw.x, raw.z, {
+      anchorWorld,
+      shiftKey: Boolean(e.shiftKey)
+    });
+    const { normX, normY } = this.worldToNorm(snapped.x, snapped.z);
+    this.roadBuildState.cursorPoint = { x: Number(normX.toFixed(5)), y: Number(normY.toFixed(5)) };
+    this.syncRoadBuildPreview();
+
+    const segLen = Math.hypot(snapped.x - anchorWorld.x, snapped.z - anchorWorld.z);
+    const deg = ((Math.round((Math.atan2(snapped.x - anchorWorld.x, snapped.z - anchorWorld.z) * 180) / Math.PI) % 360) + 360) % 360;
+    this.showStatusHint(
+      `🛣️ Jalan 3D: ${segLen.toFixed(1)}m (${deg}°) — Klik untuk sambung belokan • Klik kanan / Enter untuk selesai • Shift = kunci sudut 15°${snapped.nodeSnapped ? ' • 🧲 Simpul Tertaut' : ''}`
+    );
+  }
+
+  handleRoad3dBuildClick(e, explicitWorld = null) {
+    if (
+      authManager?.isAuthenticated?.()
+      && authManager.getActiveWorkspaceKey?.() === 'main'
+      && authManager.isMainWorkspaceUnlocked?.() === false
+    ) {
+      this.showStatusHint('🔒 Server Utama terkunci (hanya lihat). Buka kunci terlebih dahulu untuk membangun jalan.');
+      return null;
+    }
+
+    const raw = explicitWorld || this._resolveRoadGroundWorldFromEvent(e);
+    if (!raw) return null;
+
+    const anchorNorm = this.roadBuildState?.points?.length > 0
+      ? this.roadBuildState.points[this.roadBuildState.points.length - 1]
+      : null;
+    const anchorWorld = anchorNorm ? this.normToWorld(anchorNorm.x, anchorNorm.y) : null;
+    const snapped = this._snapRoadWorldPoint(raw.x, raw.z, {
+      anchorWorld,
+      shiftKey: Boolean(e?.shiftKey)
+    });
+    const { normX, normY } = this.worldToNorm(snapped.x, snapped.z);
+    const ptNorm = { x: Number(normX.toFixed(5)), y: Number(normY.toFixed(5)) };
+
+    if (!this.roadBuildState) {
+      this.roadBuildState = {
+        roadId: null,
+        points: [ptNorm],
+        cursorPoint: ptNorm
+      };
+      this.syncRoadBuildPreview();
+      this.renderRoad3dHudBar?.();
+      this.showStatusHint('🛣️ Titik awal Jalan 3D diletakkan — Klik titik berikutnya untuk membangun & belokkan jalur (Klik kanan / Enter = selesai).');
+      return { started: true, point: ptNorm };
+    }
+
+    if (anchorWorld && Math.hypot(snapped.x - anchorWorld.x, snapped.z - anchorWorld.z) < 0.25) {
+      this.showStatusHint('Titik terlalu dekat dengan titik sebelumnya — geser kursor sedikit lebih jauh.');
+      return null;
+    }
+
+    const nextPoints = [...this.roadBuildState.points, ptNorm];
+    this.roadBuildState.points = nextPoints;
+    this.roadBuildState.cursorPoint = ptNorm;
+
+    if (!this.roadBuildState.roadId) {
+      const preset = ROAD3D_PRESETS[this.activeRoad3dConfig?.style] || ROAD3D_PRESETS['stepping-slab'];
+      const count = (stateManager.getRoads3d?.()?.length || 0) + 1;
+      const newRoad = stateManager.addRoad3d?.({
+        id: generateId('road3d'),
+        name: `${preset.name} #${count}`,
+        ...preset,
+        ...(this.activeRoad3dConfig || {}),
+        points: nextPoints
+      });
+      this.roadBuildState.roadId = newRoad?.id || null;
+      this.showStatusHint(`✅ Segmen jalan #${count} dibangun (${nextPoints.length} titik) — Klik lagi untuk belokkan, atau Klik Kanan / Enter untuk selesai.`);
+    } else {
+      stateManager.updateRoad3d?.(this.roadBuildState.roadId, { points: nextPoints });
+      this.showStatusHint(`🛣️ Jalan diperpanjang (${nextPoints.length} titik) — Klik lanjut belok, Backspace undo titik, Klik Kanan / Enter selesai.`);
+    }
+
+    this.syncRoadBuildPreview();
+    this.renderRoad3dHudBar?.();
+    return { roadId: this.roadBuildState.roadId, points: nextPoints };
+  }
+
+  undoLastRoadBuildPoint() {
+    if (!this.roadBuildState || !Array.isArray(this.roadBuildState.points)) return false;
+    if (this.roadBuildState.points.length <= 1) {
+      if (this.roadBuildState.roadId) {
+        stateManager.deleteRoad3d?.(this.roadBuildState.roadId);
+      }
+      this.roadBuildState = null;
+      this.clearGroup(this.roadPreviewGroup);
+      this.renderRoad3dHudBar?.();
+      this.showStatusHint('↶ Pembangunan jalan dibatalkan.');
+      return true;
+    }
+
+    const nextPts = this.roadBuildState.points.slice(0, -1);
+    this.roadBuildState.points = nextPts;
+    this.roadBuildState.cursorPoint = nextPts[nextPts.length - 1];
+    if (this.roadBuildState.roadId) {
+      if (nextPts.length < 2) {
+        stateManager.deleteRoad3d?.(this.roadBuildState.roadId);
+        this.roadBuildState.roadId = null;
+      } else {
+        stateManager.updateRoad3d?.(this.roadBuildState.roadId, { points: nextPts });
+      }
+    }
+    this.syncRoadBuildPreview();
+    this.renderRoad3dHudBar?.();
+    this.showStatusHint(`↶ 1 titik dikurangi (sisa ${nextPts.length} titik).`);
+    return true;
+  }
+
+  finishActiveRoadBuild({ silent = false } = {}) {
+    const hadBuild = Boolean(this.roadBuildState);
+    const finishedId = this.roadBuildState?.roadId || null;
+    this.roadBuildState = null;
+    this.clearGroup(this.roadPreviewGroup);
+    if (finishedId) {
+      stateManager.selectRoad3d?.(finishedId);
+    }
+    this.renderRoad3dHudBar?.();
+    if (!silent && hadBuild) {
+      this.showStatusHint('✅ Pembangunan jalur jalan selesai — Seret titik kuning untuk menggeser sudut belokan, atau klik tanah untuk membuat jalur baru.');
+    }
+    return hadBuild;
+  }
+
+  startRoad3dGizmoDrag(e, dom, gizmoHit) {
+    const road = stateManager.getRoad3dById?.(gizmoHit?.roadId);
+    if (!road || !Array.isArray(road.points) || road.points.length < 2) return;
+    if (this.controls) {
+      this.controls.enabled = false;
+      this._temporarilyDisabledControlsForBox = true;
+    }
+    stateManager.selectRoad3d?.(road.id);
+    this.deviceManager.deselectDevice();
+    this.cableManager.deselectConnection();
+    stateManager.deselectObject3d?.();
+    stateManager.deselectRoom3d?.();
+
+    const elev = Math.max(0, Number(road.elevationMeters) || 0);
+    const dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -elev);
+
+    if (gizmoHit.gizmoType === 'road-insert-node' && gizmoHit.insertAfterIndex >= 0) {
+      const pts = road.points.map((p) => ({ ...p }));
+      const a = pts[gizmoHit.insertAfterIndex];
+      const b = pts[gizmoHit.insertAfterIndex + 1];
+      if (!a || !b) return;
+      const midPt = {
+        x: Number((((a.x ?? 0.5) + (b.x ?? 0.5)) * 0.5).toFixed(5)),
+        y: Number((((a.y ?? 0.5) + (b.y ?? 0.5)) * 0.5).toFixed(5))
+      };
+      const newIdx = gizmoHit.insertAfterIndex + 1;
+      pts.splice(newIdx, 0, midPt);
+      const updatedRoad = stateManager.updateRoad3d?.(road.id, { points: pts }) || { ...road, points: pts };
+      this.object3dDragState = {
+        kind: 'road-node',
+        roadId: road.id,
+        nodeIndex: newIdx,
+        plane: dragPlane,
+        anchorWorld: this.normToWorld(a.x, a.y),
+        draftRoad: { ...updatedRoad },
+        latestPoints: pts,
+        moved: true
+      };
+      dom.setPointerCapture?.(e.pointerId);
+      return;
+    }
+
+    if (gizmoHit.gizmoType === 'road-node' && gizmoHit.nodeIndex >= 0) {
+      const prevIdx = gizmoHit.nodeIndex > 0 ? gizmoHit.nodeIndex - 1 : 1;
+      const anchorPt = road.points[prevIdx] || road.points[0];
+      this.object3dDragState = {
+        kind: 'road-node',
+        roadId: road.id,
+        nodeIndex: gizmoHit.nodeIndex,
+        plane: dragPlane,
+        anchorWorld: this.normToWorld(anchorPt.x, anchorPt.y),
+        draftRoad: { ...road },
+        latestPoints: road.points.map((p) => ({ ...p })),
+        moved: false
+      };
+      dom.setPointerCapture?.(e.pointerId);
+      return;
+    }
+
+    // Whole road move ('road-move')
+    const hitPt = new THREE.Vector3();
+    if (!this.raycaster.ray.intersectPlane(dragPlane, hitPt)) return;
+    const refWorld = this.normToWorld(road.points[0].x, road.points[0].y);
+    this.object3dDragState = {
+      kind: 'road-move',
+      roadId: road.id,
+      plane: dragPlane,
+      startRefWorld: refWorld,
+      startPoints: road.points.map((p) => ({ ...p })),
+      grabOffsetX: refWorld.x - hitPt.x,
+      grabOffsetZ: refWorld.z - hitPt.z,
+      draftRoad: { ...road },
+      latestPoints: road.points.map((p) => ({ ...p })),
+      moved: false
+    };
+    dom.setPointerCapture?.(e.pointerId);
+  }
+
+  nudgeSelectedRoad3d(deltaWorldX = 0, deltaWorldZ = 0) {
+    const selId = stateManager.getSelectedRoad3dId?.();
+    if (!selId) return false;
+    const road = stateManager.getRoad3dById?.(selId);
+    if (!road || !Array.isArray(road.points) || road.points.length < 2) return false;
+    const nextPts = road.points.map((pt) => {
+      const w = this.normToWorld(pt.x, pt.y);
+      const n = this.worldToNorm(w.x + deltaWorldX, w.z + deltaWorldZ);
+      return { x: Number(n.normX.toFixed(5)), y: Number(n.normY.toFixed(5)) };
+    });
+    stateManager.updateRoad3d?.(road.id, { points: nextPts });
+    this.showStatusHint(`🛣️ "${road.name || 'Jalan 3D'}" digeser`);
+    return true;
+  }
+
+  bindRoad3dHudControls() {
+    if (typeof document === 'undefined' || this._roadHudBound) return;
+    const bar = document.getElementById('hud-3d-road-bar');
+    if (!bar) return;
+    this._roadHudBound = true;
+    bar.addEventListener('pointerdown', (ev) => ev.stopPropagation());
+
+    const applyPatch = (patch, rebuildStyleDefaults = false) => {
+      this.activeRoad3dConfig = { ...this.activeRoad3dConfig, ...patch };
+      const selId = stateManager.getSelectedRoad3dId?.();
+      if (selId) {
+        const cur = stateManager.getRoad3dById?.(selId);
+        if (cur) {
+          let fullPatch = { ...patch };
+          if (rebuildStyleDefaults && patch.style && ROAD3D_PRESETS[patch.style]) {
+            const p = ROAD3D_PRESETS[patch.style];
+            fullPatch = {
+              style: p.style,
+              widthMeters: p.widthMeters,
+              curbWidthMeters: p.curbWidthMeters,
+              curbHeightMeters: p.curbHeightMeters,
+              slabLengthMeters: p.slabLengthMeters,
+              slabGapMeters: p.slabGapMeters,
+              sideGutterMeters: p.sideGutterMeters,
+              slabColor: p.slabColor,
+              curbColor: p.curbColor,
+              gravelColor: p.gravelColor
+            };
+            this.activeRoad3dConfig = { ...this.activeRoad3dConfig, ...fullPatch };
+          }
+          stateManager.updateRoad3d?.(selId, fullPatch);
+        }
+      }
+      this.syncRoadBuildPreview();
+      this.renderRoad3dHudBar();
+    };
+
+    bar.querySelector('#select-road3d-style')?.addEventListener('change', (ev) => {
+      applyPatch({ style: ev.target.value }, true);
+    });
+    bar.querySelector('#select-road3d-path-mode')?.addEventListener('change', (ev) => {
+      applyPatch({ pathMode: ev.target.value === 'straight' ? 'straight' : 'smooth' });
+    });
+    bar.querySelector('#input-road3d-width')?.addEventListener('change', (ev) => {
+      applyPatch({ widthMeters: clamp(Number(ev.target.value) || 1.55, 0.6, 14) });
+    });
+    bar.querySelector('#input-road3d-slab-len')?.addEventListener('change', (ev) => {
+      applyPatch({ slabLengthMeters: clamp(Number(ev.target.value) || 0.64, 0.2, 4.0) });
+    });
+    bar.querySelector('#input-road3d-slab-gap')?.addEventListener('change', (ev) => {
+      applyPatch({ slabGapMeters: clamp(Number(ev.target.value) || 0.14, 0.01, 1.5) });
+    });
+    bar.querySelector('#select-road3d-list')?.addEventListener('change', (ev) => {
+      const id = ev.target.value;
+      if (id) {
+        stateManager.selectRoad3d?.(id);
+        const road = stateManager.getRoad3dById?.(id);
+        if (road?.points?.[0] && this.controls && this.camera) {
+          const w = this.normToWorld(road.points[0].x, road.points[0].y);
+          this.animateCameraTo(new THREE.Vector3(w.x + 8, 9, w.z + 8), new THREE.Vector3(w.x, 0.2, w.z), 380);
+        }
+      } else {
+        stateManager.deselectRoad3d?.();
+      }
+    });
+    bar.querySelector('#btn-road3d-undo-pt')?.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      this.undoLastRoadBuildPoint();
+    });
+    bar.querySelector('#btn-road3d-finish-chain')?.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      this.finishActiveRoadBuild();
+    });
+    bar.querySelector('#btn-road3d-delete')?.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const selId = stateManager.getSelectedRoad3dId?.();
+      if (selId) {
+        if (this.roadBuildState?.roadId === selId) {
+          this.roadBuildState = null;
+          this.clearGroup(this.roadPreviewGroup);
+        }
+        stateManager.deleteRoad3d?.(selId);
+        this.renderRoad3dHudBar();
+      }
+    });
+    bar.querySelector('#btn-road3d-close')?.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      this.finishActiveRoadBuild({ silent: true });
+      stateManager.deselectRoad3d?.();
+      if (this.navTool === 'road3d') this.setNavTool('orbit');
+      else this.renderRoad3dHudBar();
+    });
+  }
+
+  renderRoad3dHudBar() {
+    if (typeof document === 'undefined') return;
+    const bar = document.getElementById('hud-3d-road-bar');
+    if (!bar) return;
+    this.bindRoad3dHudControls();
+
+    const selId = stateManager.getSelectedRoad3dId?.();
+    const selRoad = selId ? stateManager.getRoad3dById?.(selId) : null;
+    const isVisible = Boolean(this.isActive && !this.avatarMode && (this.navTool === 'road3d' || selRoad));
+    bar.classList.toggle('hidden', !isVisible);
+    bar.style.display = isVisible ? 'flex' : 'none';
+    if (!isVisible) return;
+
+    const cfg = selRoad || this.activeRoad3dConfig || ROAD3D_PRESETS['stepping-slab'];
+    const styleSel = bar.querySelector('#select-road3d-style');
+    const modeSel = bar.querySelector('#select-road3d-path-mode');
+    const widthInp = bar.querySelector('#input-road3d-width');
+    const slabLenInp = bar.querySelector('#input-road3d-slab-len');
+    const slabGapInp = bar.querySelector('#input-road3d-slab-gap');
+    const roadListSel = bar.querySelector('#select-road3d-list');
+    const btnUndo = bar.querySelector('#btn-road3d-undo-pt');
+    const btnFinish = bar.querySelector('#btn-road3d-finish-chain');
+    const btnDel = bar.querySelector('#btn-road3d-delete');
+
+    if (styleSel) styleSel.value = cfg.style || 'stepping-slab';
+    if (modeSel) modeSel.value = cfg.pathMode === 'straight' ? 'straight' : 'smooth';
+    if (widthInp) widthInp.value = String(Number(cfg.widthMeters ?? 1.55).toFixed(2));
+    if (slabLenInp) slabLenInp.value = String(Number(cfg.slabLengthMeters ?? 0.64).toFixed(2));
+    if (slabGapInp) slabGapInp.value = String(Number(cfg.slabGapMeters ?? 0.14).toFixed(2));
+
+    if (roadListSel) {
+      const roads = stateManager.getRoads3d?.() || [];
+      roadListSel.innerHTML = `<option value="">-- Jalan (${roads.length}) --</option>` + roads.map(
+        (r) => `<option value="${this.escapeHudHtml(r.id)}" ${r.id === selId ? 'selected' : ''}>${this.escapeHudHtml(r.name || 'Jalan 3D')} (${r.points?.length || 0}ttk)</option>`
+      ).join('');
+    }
+    if (btnUndo) btnUndo.disabled = !this.roadBuildState;
+    if (btnFinish) btnFinish.disabled = !this.roadBuildState;
+    if (btnDel) btnDel.disabled = !selRoad;
   }
 
   getDeviceCollisionFootprint(dev, userModelScale = 1) {
@@ -2289,6 +2817,12 @@ export class Map3DEngine {
       }
     }
 
+    // 1c-road. City-Builder Road Drawing Mode (click ground or snap to road nodes to place segments)
+    if (this.navTool === 'road3d' && !this.avatarMode) {
+      this.handleRoad3dBuildClick(e);
+      return;
+    }
+
     // 2. Check Custom 3D Builder Object selection (Tiang, Rak Server, Balok, dll)
     if (stateManager.getMode() !== 'draw-cable') {
       const objHit = this.findObject3dHit(this.raycaster);
@@ -2296,6 +2830,7 @@ export class Map3DEngine {
         this.deviceManager.deselectDevice();
         this.cableManager.deselectConnection();
         stateManager.deselectRoom3d?.();
+        stateManager.deselectRoad3d?.();
         stateManager.selectObject3d(objHit.object3dId);
         return;
       }
@@ -2308,7 +2843,25 @@ export class Map3DEngine {
       if (cabId) {
         stateManager.deselectObject3d?.();
         stateManager.deselectRoom3d?.();
+        stateManager.deselectRoad3d?.();
         this.cableManager.selectConnection(cabId);
+        return;
+      }
+    }
+
+    // 3a. Check 3D Road selection (City-Builder Walkway / Road)
+    if (stateManager.getMode() !== 'draw-cable') {
+      const roadHit = this.findRoad3dHit?.(this.raycaster);
+      if (roadHit?.roadId) {
+        this.deviceManager.deselectDevice();
+        this.cableManager.deselectConnection();
+        stateManager.deselectObject3d?.();
+        stateManager.deselectRoom3d?.();
+        stateManager.selectRoad3d?.(roadHit.roadId);
+        const road = stateManager.getRoad3dById?.(roadHit.roadId);
+        this.showStatusHint(
+          `🛣️ Jalan "${road?.name || 'Jalan 3D'}" dipilih — Tarik titik kuning untuk belok/panjang • Tarik titik biru (+) untuk tambah tekukan • Delete untuk hapus`
+        );
         return;
       }
     }
@@ -2320,6 +2873,7 @@ export class Map3DEngine {
         this.deviceManager.deselectDevice();
         this.cableManager.deselectConnection();
         stateManager.deselectObject3d?.();
+        stateManager.deselectRoad3d?.();
         stateManager.selectRoom3d?.(roomHit.roomId);
         const room = stateManager.getRoom3dById?.(roomHit.roomId);
         this.showStatusHint(
@@ -2345,6 +2899,7 @@ export class Map3DEngine {
       this.cableManager.deselectConnection();
       stateManager.deselectObject3d?.();
       stateManager.deselectRoom3d?.();
+      stateManager.deselectRoad3d?.();
       if (this.simulatorFocusedDeviceId) {
         this.exitSimulatorFocus({ restoreCamera: false });
       } else if (this.avatarMode && e.pointerType !== 'touch') {
@@ -2355,6 +2910,10 @@ export class Map3DEngine {
   }
 
   handleCanvasRightClick(e) {
+    if (this.navTool === 'road3d' && this.roadBuildState) {
+      this.finishActiveRoadBuild();
+      return;
+    }
     const isPointerLocked = typeof document !== 'undefined' && document.pointerLockElement === this.renderer?.domElement;
     if (isPointerLocked) {
       this.pointer.set(0, 0);
@@ -2509,18 +3068,22 @@ export class Map3DEngine {
   }
 
   setNavTool(tool) {
-    const validTools = ['orbit', 'pan', 'zoom', 'look', 'move', 'rotate', 'box', 'draw3d'];
+    const validTools = ['orbit', 'pan', 'zoom', 'look', 'move', 'rotate', 'box', 'draw3d', 'road3d'];
     if (!validTools.includes(tool)) return;
+    if (this.navTool === 'road3d' && tool !== 'road3d' && this.roadBuildState) {
+      this.finishActiveRoadBuild({ silent: true });
+    }
     this.navTool = tool;
     this.applyNavToolConfig();
     this.syncElevationGuides();
     this.syncTransformGizmo?.();
+    this.renderRoad3dHudBar?.();
     eventBus.emit('map3d:navtool-changed', { tool });
   }
 
   applyNavToolConfig() {
     if (this.container) {
-      this.container.classList.remove('tool-orbit', 'tool-pan', 'tool-zoom', 'tool-look', 'tool-move', 'tool-rotate', 'tool-box', 'tool-draw3d');
+      this.container.classList.remove('tool-orbit', 'tool-pan', 'tool-zoom', 'tool-look', 'tool-move', 'tool-rotate', 'tool-box', 'tool-draw3d', 'tool-road3d');
       this.container.classList.add(`tool-${this.navTool}`);
     }
     if (!this.controls) return;
@@ -2529,9 +3092,9 @@ export class Map3DEngine {
       TWO: THREE.TOUCH.DOLLY_PAN
     };
 
-    if (this.navTool === 'draw3d') {
+    if (this.navTool === 'draw3d' || this.navTool === 'road3d') {
       this.controls.mouseButtons = {
-        LEFT: -1, // Click or drag on 3D floor to place/draw SketchUp 3D objects
+        LEFT: -1, // Click on 3D floor to place SketchUp 3D objects or City-Builder 3D roads
         MIDDLE: THREE.MOUSE.ROTATE,
         RIGHT: THREE.MOUSE.PAN
       };
@@ -2764,11 +3327,47 @@ export class Map3DEngine {
     return null;
   }
 
+  findRoad3dHit(raycaster = this.raycaster) {
+    if (!this.roadsGroup || this.roadsGroup.children.length === 0) return null;
+    const hits = raycaster.intersectObjects(this.roadsGroup.children, true);
+    for (let i = 0; i < hits.length; i++) {
+      let curr = hits[i].object;
+      let gizmoType = null;
+      let roadId = null;
+      let nodeIndex = -1;
+      let insertAfterIndex = -1;
+      while (curr && curr !== this.roadsGroup) {
+        if (!gizmoType && curr.userData?.gizmoType) {
+          gizmoType = curr.userData.gizmoType;
+          if (typeof curr.userData.nodeIndex === 'number') nodeIndex = curr.userData.nodeIndex;
+          if (typeof curr.userData.insertAfterIndex === 'number') insertAfterIndex = curr.userData.insertAfterIndex;
+        }
+        if (!roadId && curr.userData?.roadId) roadId = curr.userData.roadId;
+        if (roadId) {
+          return {
+            roadId,
+            gizmoType,
+            nodeIndex,
+            insertAfterIndex,
+            point: hits[i].point.clone(),
+            object: hits[i].object
+          };
+        }
+        curr = curr.parent;
+      }
+    }
+    return null;
+  }
+
   checkGizmoHitAtEvent(e) {
     if (!this.isInitialized || !this.camera || !this.renderer?.domElement) return null;
     const hasSelObj = Boolean(stateManager.getSelectedObject3dId?.() && this.objects3dGroup?.children?.length > 0);
     const hasSelRoom = Boolean(stateManager.getSelectedRoom3dId?.() && this.roomsGroup?.children?.length > 0);
-    if (!hasSelObj && !hasSelRoom) return null;
+    const hasSelRoad = Boolean(
+      (stateManager.getSelectedRoad3dId?.() || this.navTool === 'road3d' || this.navTool === 'move')
+      && this.roadsGroup?.children?.length > 0
+    );
+    if (!hasSelObj && !hasSelRoom && !hasSelRoad) return null;
 
     const rect = this.renderer.domElement.getBoundingClientRect();
     this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
@@ -2779,6 +3378,10 @@ export class Map3DEngine {
       const objHit = this.findObject3dHit(this.raycaster);
       if (objHit && objHit.gizmoType) return objHit;
     }
+    if (hasSelRoad) {
+      const roadHit = this.findRoad3dHit(this.raycaster);
+      if (roadHit && roadHit.gizmoType) return roadHit;
+    }
     if (hasSelRoom) {
       const roomHit = this.findRoom3dHit(this.raycaster);
       if (roomHit && roomHit.gizmoType) return roomHit;
@@ -2787,6 +3390,9 @@ export class Map3DEngine {
   }
 
   startObject3dGizmoDrag(e, dom, gizmoHit) {
+    if (gizmoHit?.roadId || String(gizmoHit?.gizmoType || '').startsWith('road-')) {
+      return this.startRoad3dGizmoDrag(e, dom, gizmoHit);
+    }
     if (gizmoHit?.roomId || String(gizmoHit?.gizmoType || '').startsWith('room-')) {
       return this.startRoom3dGizmoDrag(e, dom, gizmoHit);
     }
@@ -3265,6 +3871,55 @@ export class Map3DEngine {
       return;
     }
 
+    if (state.kind === 'road-node') {
+      const hitPt = new THREE.Vector3();
+      if (!this.raycaster.ray.intersectPlane(state.plane, hitPt)) return;
+      state.moved = true;
+      const snapped = this._snapRoadWorldPoint(hitPt.x, hitPt.z, {
+        excludeRoadId: state.roadId,
+        excludeNodeIdx: state.nodeIndex,
+        anchorWorld: state.anchorWorld,
+        shiftKey: Boolean(e.shiftKey)
+      });
+      const { normX, normY } = this.worldToNorm(snapped.x, snapped.z);
+      const pts = (state.draftRoad.points || []).map((p) => ({ ...p }));
+      if (state.nodeIndex >= 0 && state.nodeIndex < pts.length) {
+        pts[state.nodeIndex] = { x: Number(normX.toFixed(5)), y: Number(normY.toFixed(5)) };
+      }
+      state.draftRoad = { ...state.draftRoad, points: pts };
+      state.latestPoints = pts;
+      this.rebuildSingleRoad3dMesh(state.draftRoad, true);
+      this.showStatusHint(
+        `🛣️ Titik #${state.nodeIndex + 1} "${state.draftRoad.name || 'Jalan 3D'}": X:${snapped.x.toFixed(1)}m Z:${snapped.z.toFixed(1)}m${snapped.nodeSnapped ? ' (Tertaut Simpul)' : ''}`
+      );
+      return;
+    }
+
+    if (state.kind === 'road-move') {
+      const hitPt = new THREE.Vector3();
+      if (!this.raycaster.ray.intersectPlane(state.plane, hitPt)) return;
+      state.moved = true;
+      let targetX = hitPt.x + state.grabOffsetX;
+      let targetZ = hitPt.z + state.grabOffsetZ;
+      if (this.applyBuildGridSnapWorld) {
+        const g = this.applyBuildGridSnapWorld(targetX, targetZ);
+        targetX = g.x;
+        targetZ = g.z;
+      }
+      const dx = targetX - state.startRefWorld.x;
+      const dz = targetZ - state.startRefWorld.z;
+      const pts = state.startPoints.map((pt) => {
+        const w = this.normToWorld(pt.x, pt.y);
+        const n = this.worldToNorm(w.x + dx, w.z + dz);
+        return { x: Number(n.normX.toFixed(5)), y: Number(n.normY.toFixed(5)) };
+      });
+      state.draftRoad = { ...state.draftRoad, points: pts };
+      state.latestPoints = pts;
+      this.rebuildSingleRoad3dMesh(state.draftRoad, true);
+      this.showStatusHint(`🛣️ Geser "${state.draftRoad.name || 'Jalan 3D'}"`);
+      return;
+    }
+
     if (state.kind === 'move-room3d') {
       const hitPt = new THREE.Vector3();
       if (!this.raycaster.ray.intersectPlane(state.plane, hitPt)) return;
@@ -3386,6 +4041,14 @@ export class Map3DEngine {
           rotationY: state.latestRy,
           rotationZ: state.latestRz
         });
+      }
+      return;
+    }
+    if (state.kind === 'road-node' || state.kind === 'road-move') {
+      if (state.moved && Array.isArray(state.latestPoints)) {
+        this._suppressNextClick = true;
+        stateManager.updateRoad3d?.(state.roadId, { points: state.latestPoints });
+        this.renderRoad3dHudBar?.();
       }
       return;
     }
@@ -3574,6 +4237,12 @@ export class Map3DEngine {
       const objHit = this.findObject3dHit(this.raycaster);
       if (objHit?.object3dId) {
         this.startObject3dMoveDrag(e, dom, objHit);
+        return;
+      }
+      // Or drag a 3D Road / Walkway directly on the map ground
+      const roadHit = this.findRoad3dHit?.(this.raycaster);
+      if (roadHit?.roadId) {
+        this.startRoad3dGizmoDrag(e, dom, { ...roadHit, gizmoType: roadHit.gizmoType || 'road-move' });
         return;
       }
       // Or drag a 3D Room / Building zone directly on the map ground
@@ -4256,12 +4925,13 @@ export class Map3DEngine {
     }
 
     const mul = Math.max(0.25, Math.min(4.0, Number(factor) || 1));
-    const curW = Math.max(2, Number(room.widthMeters) || 14);
-    const curD = Math.max(2, Number(room.depthMeters) || 12);
-    const curH = Math.max(1.5, Number(room.heightMeters) || 3.5);
-    const nextW = clamp(Number((curW * mul).toFixed(2)), 2, 200);
-    const nextD = clamp(Number((curD * mul).toFixed(2)), 2, 200);
-    const nextH = clamp(Number((curH * mul).toFixed(2)), 1.5, 40);
+    const { minW, minD, minH } = getRoomMinDimensions(room);
+    const curW = Math.max(minW, Number(room.widthMeters) || 14);
+    const curD = Math.max(minD, Number(room.depthMeters) || 12);
+    const curH = Math.max(minH, Number(room.heightMeters) || 3.5);
+    const nextW = clamp(Number((curW * mul).toFixed(2)), minW, 200);
+    const nextD = clamp(Number((curD * mul).toFixed(2)), minD, 200);
+    const nextH = clamp(Number((curH * mul).toFixed(2)), minH, 40);
     const baseW = Number(room.baseWidthMeters) || curW;
     const nextScale = Number((nextW / baseW).toFixed(3));
 
@@ -4817,6 +5487,7 @@ export class Map3DEngine {
       this.updateAvatarDeviceLabelsVisibility?.();
       this.syncElevationGuides?.();
       this.syncTransformGizmo?.();
+      this.renderRoad3dHudBar?.();
       this.releaseAvatarPointerLock();
       this.syncAvatarCrosshair();
       this.syncAvatarControlsUI();
@@ -4919,6 +5590,7 @@ export class Map3DEngine {
     this.configureControlsForAvatarMode(true);
     this.syncElevationGuides?.();
     this.syncTransformGizmo?.();
+    this.renderRoad3dHudBar?.();
     this.syncAvatarMeshVisibilityForPerspective();
     this.syncAvatarControlsUI();
     this.syncAvatarCrosshair();
@@ -7357,6 +8029,9 @@ export class Map3DEngine {
               <button type="button" class="gizmo-axis-btn is-z" data-gizmo-nudge="z:1" title="Geser Z+">+Z</button>
             </div>
           </div>
+          <div class="build-mode-row" title="Buka Alat Bangun Jalan / Trotoar 3D ala City-Builder">
+            <button type="button" id="btn-build-road-tool" class="avatar-sim-chip">🛣️ Bangun Jalan 3D</button>
+          </div>
         </div>
       </div>
       <div id="avatar-sim-settings-popover" class="avatar-sim-popover ${isSettingsOpen ? '' : 'hidden'}">
@@ -7592,6 +8267,13 @@ export class Map3DEngine {
     hudEl.querySelector('#select-build-gizmo-mode')?.addEventListener('change', (ev) => {
       ev.stopPropagation();
       this.setBuildPlacementConfig({ gizmoMode: ev.target.value, gizmoEnabled: true });
+    });
+
+    hudEl.querySelector('#btn-build-road-tool')?.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      this.setAvatarMode(false);
+      this.setNavTool('road3d');
+      this.showStatusHint('🛣️ Mode Bangun Jalan 3D aktif — Klik pada lantai denah untuk meletakkan jalur batu pijakan & kerikil sekolah.');
     });
 
     hudEl.querySelectorAll('[data-gizmo-nudge]')?.forEach((btn) => {
@@ -9408,6 +10090,15 @@ export class Map3DEngine {
     eventBus.on('object3d:changed', syncObjects3dOnly);
     eventBus.on('object3d:selected', syncObjects3dOnly);
     eventBus.on('object3d:deselected', syncObjects3dOnly);
+
+    const syncRoadsOnly = () => {
+      if (this.isActive && !this.object3dDragState) {
+        this.syncRoads();
+      }
+    };
+    eventBus.on('road3d:changed', syncRoadsOnly);
+    eventBus.on('road3d:selected', syncRoadsOnly);
+    eventBus.on('road3d:deselected', syncRoadsOnly);
 
     eventBus.on('map:scale-changed', () => {
       if (this.isInitialized) {

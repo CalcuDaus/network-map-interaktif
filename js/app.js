@@ -648,7 +648,8 @@ class NetMapApp {
       { id: 'btn-3d-tool-move', tool: 'move' },
       { id: 'btn-3d-tool-rotate', tool: 'rotate' },
       { id: 'btn-3d-tool-box', tool: 'box' },
-      { id: 'btn-3d-tool-draw3d', tool: 'draw3d' }
+      { id: 'btn-3d-tool-draw3d', tool: 'draw3d' },
+      { id: 'btn-3d-tool-road', tool: 'road3d' }
     ];
     navToolButtons.forEach(({ id, tool }) => {
       document.getElementById(id)?.addEventListener('click', () => {
@@ -973,6 +974,21 @@ class NetMapApp {
           this.object3DModal?.show();
           return;
         }
+        if (lower === 'n') {
+          e.preventDefault();
+          this.map3DEngine?.setNavTool('road3d');
+          return;
+        }
+        if (e.key === 'Enter' && this.map3DEngine?.roadBuildState) {
+          e.preventDefault();
+          this.map3DEngine.finishActiveRoadBuild();
+          return;
+        }
+        if (e.key === 'Backspace' && this.map3DEngine?.navTool === 'road3d' && this.map3DEngine?.roadBuildState) {
+          e.preventDefault();
+          this.map3DEngine.undoLastRoadBuildPoint();
+          return;
+        }
         if (lower === 'g' && !e.ctrlKey && !e.metaKey) {
           e.preventDefault();
           this.map3DEngine?.toggleAvatarMode();
@@ -1030,6 +1046,10 @@ class NetMapApp {
           return; // Handled smoothly by Map3DEngine walk loop
         }
         if (e.key === 'Escape') {
+          if (this.map3DEngine?.roadBuildState) {
+            this.map3DEngine.finishActiveRoadBuild();
+            return;
+          }
           if (this.map3DEngine?.pendingCableSourceId && !this.map3DEngine.simulatorFocusedDeviceId) {
             this.map3DEngine.pendingCableSourceId = null;
             this.map3DEngine.pendingCableSourcePort = '';
@@ -1046,6 +1066,7 @@ class NetMapApp {
           this.cableManager.deselectConnection();
           stateManager.deselectObject3d?.();
           stateManager.deselectRoom3d?.();
+          stateManager.deselectRoad3d?.();
           this.map3DEngine?.setNavTool('orbit');
           return;
         }
@@ -1156,7 +1177,8 @@ class NetMapApp {
 
     const hasSelObjOrRoom = stateManager.getViewMode() === '3d' && (
       Boolean(stateManager.getSelectedObject3dId?.()) ||
-      Boolean(stateManager.getSelectedRoom3dId?.())
+      Boolean(stateManager.getSelectedRoom3dId?.()) ||
+      Boolean(stateManager.getSelectedRoad3dId?.())
     );
 
     if (selectedDeviceIds.length === 0 && !hasSelObjOrRoom) {
@@ -1248,6 +1270,12 @@ class NetMapApp {
         this.map3DEngine?.showStatusHint?.(`🏠 "${room.name}" (X: ${newX.toFixed(4)}, Y: ${newY.toFixed(4)})`);
         return true;
       }
+
+      const selRoadId = stateManager.getSelectedRoad3dId?.();
+      if (selRoadId && this.map3DEngine?.getWorldDimensions) {
+        const dims = this.map3DEngine.getWorldDimensions();
+        return this.map3DEngine.nudgeSelectedRoad3d(dx * (dims.worldW || 100), dy * (dims.worldD || 80));
+      }
     }
 
     return false;
@@ -1288,6 +1316,18 @@ class NetMapApp {
       const curRoom3d = stateManager.getRoom3dById?.(selRoom3dId);
       if (curRoom3d && confirm(`Hapus ruangan 3D "${curRoom3d.name || selRoom3dId}"?`)) {
         stateManager.deleteRoom3d?.(selRoom3dId);
+      }
+      return true;
+    }
+    const selRoad3dId = stateManager.getSelectedRoad3dId?.();
+    if (selRoad3dId) {
+      const curRoad3d = stateManager.getRoad3dById?.(selRoad3dId);
+      if (curRoad3d && confirm(`Hapus jalan 3D "${curRoad3d.name || selRoad3dId}"?`)) {
+        if (this.map3DEngine?.roadBuildState?.roadId === selRoad3dId) {
+          this.map3DEngine.roadBuildState = null;
+          this.map3DEngine.clearGroup?.(this.map3DEngine.roadPreviewGroup);
+        }
+        stateManager.deleteRoad3d?.(selRoad3dId);
       }
       return true;
     }
