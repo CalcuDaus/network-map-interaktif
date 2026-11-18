@@ -199,6 +199,32 @@ export class DeviceManager {
   }
 
   /**
+   * Nudge all currently selected (unlocked) devices by normalized delta (Arrow keys)
+   * @param {number} dxNorm
+   * @param {number} dyNorm
+   * @param {Object} [options]
+   * @returns {Array<Object>}
+   */
+  nudgeSelectedDevices(dxNorm = 0, dyNorm = 0, { syncRenderer = true } = {}) {
+    const ids = this.getSelectedDeviceIds();
+    if (ids.length === 0) return [];
+    const moves = [];
+    ids.forEach((id) => {
+      const dev = this.devices.get(id);
+      if (!dev || dev.layerLocked || !dev.position) return;
+      moves.push({
+        id,
+        position: {
+          x: clamp(Number((Number(dev.position.x) + dxNorm).toFixed(4)), 0, 1),
+          y: clamp(Number((Number(dev.position.y) + dyNorm).toFixed(4)), 0, 1)
+        }
+      });
+    });
+    if (moves.length === 0) return [];
+    return this.moveDeviceGroup(moves, { syncRenderer });
+  }
+
+  /**
    * Duplicate a device near its current position
    * @param {string} id 
    * @returns {Object|null}

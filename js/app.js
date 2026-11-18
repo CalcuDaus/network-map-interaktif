@@ -38,7 +38,7 @@ import { Object3DModal } from './ui/object-3d-modal.js';
 import { Device3DModelModal } from './ui/device-3d-modal.js';
 import { PortPickerModal } from './ui/port-picker-modal.js';
 import { DeviceDetailModal } from './ui/device-detail-modal.js';
-import { isMobileTouchDevice } from './utils/helpers.js';
+import { clamp, isMobileTouchDevice } from './utils/helpers.js';
 
 class NetMapApp {
   constructor() {
@@ -809,6 +809,10 @@ class NetMapApp {
     document.getElementById('btn-3d-rooms')?.addEventListener('click', () => {
       this.room3DModal?.show();
     });
+    document.getElementById('btn-3d-lock-rooms')?.addEventListener('click', () => {
+      this.map3DEngine?.toggleRoomsLocked();
+    });
+    this.map3DEngine?.syncRoomLockUI?.();
     document.getElementById('btn-3d-objects')?.addEventListener('click', () => {
       this.object3DModal?.toggle();
     });
@@ -878,6 +882,17 @@ class NetMapApp {
 
       // Don't trigger map shortcuts while DeviceDetailModal or AuthModal is open
       if (this.deviceDetailModal?.isOpen() || this.authModal?.isOpen()) {
+        return;
+      }
+
+      // Arrow key nudging for selected device(s) (or selected 3D object/room) in both 2D and 3D mode
+      if (
+        ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) &&
+        !e.ctrlKey && !e.metaKey &&
+        !this.map3DEngine?.avatarMode &&
+        this.nudgeSelectionByArrowKey(e)
+      ) {
+        e.preventDefault();
         return;
       }
 
@@ -1109,6 +1124,89 @@ class NetMapApp {
           break;
       }
     });
+  }
+
+  nudgeSelectionByArrowKey(e) {
+    const key = e?.key;
+    if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(key)) return false;
+
+    const step = e.shiftKey ? 0.01 : (e.altKey ? 0.0005 : 0.002);
+    let dx = 0;
+    let dy = 0;
+    if (key === 'ArrowLeft') dx = -step;
+    else if (key === 'ArrowRight') dx = step;
+    else if (key === 'ArrowUp') dy = -step;
+    else if (key === 'ArrowDown') dy = step;
+
+    const selectedDeviceIds = this.deviceManager?.getSelectedDeviceIds?.() || [];
+    if (selectedDeviceIds.length > 0) {
+      const moved = this.deviceManager.nudgeSelectedDevices(dx, dy, { syncRenderer: true });
+      if (moved.length === 0) {
+        this.map3DEngine?.showStatusHint?.('🔒 Perangkat yang dipilih terkunci pada Layer.');
+        return true;
+      }
+      if (stateManager.getViewMode() === '3d') {
+        this.map3DEngine?.syncDevices?.();
+        this.map3DEngine?.syncCables?.();
+        const hint = moved.length === 1
+          ? `↕️ "${moved[0].name}" (X: ${moved[0].position.x.toFixed(4)}, Y: ${moved[0].position.y.toFixed(4)}) — Shift=cepat • Alt=halus`
+          : `↕️ ${moved.length} perangkat digeser (Shift=cepat • Alt=halus)`;
+        this.map3DEngine?.showStatusHint?.(hint);
+      }
+      return true;
+    }
+
+    if (stateManager.getViewMode() === '3d') {
+      const selObjId = stateManager.getSelectedObject3dId?.();
+      if (selObjId) {
+        const obj = stateManager.getObject3dById?.(selObjId);
+        if (!obj) return false;
+        const prevX = Number(obj.x) || 0;
+        const prevY = Number(obj.y) || 0;
+        const newX = clamp(Number((prevX + dx).toFixed(4)), 0, 1);
+        const newY = clamp(Number((prevY + dy).toFixed(4)), 0, 1);
+        const actualDx = newX - prevX;
+        const actualDy = newY - prevY;
+        stateManager.updateObject3d?.(obj.id, { x: newX, y: newY });
+
+        const mountedMoves = [];
+        this.deviceManager?.getAllDevices?.()?.forEach((dev) => {
+          if (dev.spatial3d?.mountedOnObjectId === obj.id && !dev.layerLocked && dev.position) {
+            mountedMoves.push({
+              id: dev.id,
+              position: {
+                x: clamp(Number((Number(dev.position.x) + actualDx).toFixed(4)), 0, 1),
+                y: clamp(Number((Number(dev.position.y) + actualDy).toFixed(4)), 0, 1)
+              }
+            });
+          }
+        });
+        if (mountedMoves.length > 0) {
+          this.deviceManager.moveDeviceGroup(mountedMoves, { syncRenderer: true });
+          this.map3DEngine?.syncDevices?.();
+          this.map3DEngine?.syncCables?.();
+        }
+        this.map3DEngine?.showStatusHint?.(`↕️ Objek "${obj.name}" (X: ${newX.toFixed(4)}, Y: ${newY.toFixed(4)})`);
+        return true;
+      }
+
+      const selRoomId = stateManager.getSelectedRoom3dId?.();
+      if (selRoomId) {
+        const room = stateManager.getRoom3dById?.(selRoomId);
+        if (!room) return false;
+        if (this.map3DEngine?.isRoomLocked?.(room)) {
+          this.map3DEngine?.showStatusHint?.(`🔒 Ruangan "${room.name}" sedang dikunci.`);
+          return true;
+        }
+        const newX = clamp(Number(((Number(room.x) || 0) + dx).toFixed(4)), 0, 1);
+        const newY = clamp(Number(((Number(room.y) || 0) + dy).toFixed(4)), 0, 1);
+        stateManager.updateRoom3d?.(room.id, { x: newX, y: newY });
+        this.map3DEngine?.showStatusHint?.(`🏠 "${room.name}" (X: ${newX.toFixed(4)}, Y: ${newY.toFixed(4)})`);
+        return true;
+      }
+    }
+
+    return false;
   }
 
   deleteCurrentSelection() {
@@ -1540,6 +1638,7 @@ class NetMapApp {
           { id: 'mob-act-3d-nav', label: 'Buka Bar Navigasi 3D', fn: () => { if (stateManager.getViewMode() !== '3d') stateManager.setViewMode('3d'); this.setMobileDockMinimized(false); this.set3DControlsMinimized?.(false); } },
           { id: 'mob-act-teknisi', label: 'Mode Teknisi (Roblox Mobile)', fn: () => { if (stateManager.getViewMode() !== '3d') stateManager.setViewMode('3d'); setTimeout(() => this.map3DEngine?.setAvatarMode(true, { perspective: 'tpp' }), 40); } },
           { id: 'mob-act-fpp', label: 'Mode FPP (Kamera Orang Pertama)', fn: () => { if (stateManager.getViewMode() !== '3d') stateManager.setViewMode('3d'); setTimeout(() => this.map3DEngine?.setAvatarMode(true, { perspective: 'fpp' }), 40); } },
+          { id: 'mob-act-lock-rooms', label: this.map3DEngine?.roomsLocked ? '🔓 Buka Kunci Ruangan 3D' : '🔒 Kunci Semua Ruangan 3D', fn: () => this.map3DEngine?.toggleRoomsLocked?.() },
           { id: 'mob-act-rooms3d', label: 'Ruangan & Gedung 3D (.GLB)', fn: () => this.room3DModal?.show() },
           { id: 'mob-act-obj3d', label: 'Studio Objek 3D', fn: () => this.object3DModal?.show() },
           { id: 'mob-act-dev3d', label: 'Model 3D Perangkat', fn: () => this.device3DModelModal?.show() },

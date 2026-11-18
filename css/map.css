@@ -395,6 +395,12 @@
   border-color: var(--accent-green);
 }
 
+#btn-3d-lock-rooms.active {
+  background-color: #d97706;
+  border-color: #b45309;
+  color: #ffffff;
+}
+
 .hud-3d-inline {
   display: inline-flex;
   align-items: center;
@@ -1287,16 +1293,16 @@ body.is-mobile-touch.workspace-fullscreen .mobile-fs-dock {
 
 /* Keep Mode Teknisi HUD bar tucked cleanly between left joystick & right action wheel on mobile */
 body.is-mobile-touch .hud-3d-avatar-bar {
-  bottom: 8px;
-  width: min(500px, calc(100vw - 320px));
-  min-width: 240px;
+  bottom: 10px;
+  width: min(440px, calc(100vw - 360px));
+  min-width: 220px;
   padding: 5px 8px;
-  gap: 6px;
+  gap: 5px;
 }
 
 body.is-mobile-touch:not(.is-mobile-portrait) .hud-3d-avatar-bar:not(.is-minimized) {
-  bottom: 70px;
-  width: min(520px, calc(100vw - 300px));
+  bottom: 10px;
+  width: min(440px, calc(100vw - 360px));
 }
 
 body.is-mobile-touch .hud-3d-avatar-bar .avatar-bar-controls-hint {
@@ -1306,6 +1312,250 @@ body.is-mobile-touch .hud-3d-avatar-bar .avatar-bar-controls-hint {
 body.is-mobile-touch .hud-3d-avatar-bar .avatar-bar-nearest {
   font-size: 10px;
   padding: 2px 6px;
+}
+
+.avatar-hud-top-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.avatar-hud-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 21px;
+  padding: 0 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.avatar-hud-pill-btn.active {
+  background: var(--accent-blue);
+  color: #ffffff;
+  border-color: var(--accent-blue);
+}
+
+.avatar-sim-popover {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+}
+
+.avatar-sim-popover.hidden,
+.avatar-sim-deck.hidden {
+  display: none !important;
+}
+
+.avatar-sim-deck {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 7px 8px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--accent-blue);
+  background: var(--bg-primary);
+  max-height: 210px;
+}
+
+.avatar-sim-deck-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.avatar-sim-deck-search {
+  flex: 1 1 130px;
+  min-width: 110px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 11px;
+}
+
+.avatar-sim-deck-filters {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.avatar-sim-chip {
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.avatar-sim-chip.active {
+  background: var(--accent-blue);
+  border-color: var(--accent-blue);
+  color: #ffffff;
+}
+
+.avatar-sim-layout-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding-bottom: 4px;
+  border-bottom: 1px dashed var(--border-color);
+}
+
+.avatar-sim-strip-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-right: 2px;
+}
+
+.avatar-sim-deck-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(195px, 1fr));
+  gap: 5px;
+  overflow-y: auto;
+  max-height: 112px;
+  padding-right: 2px;
+}
+
+.avatar-sim-deck-empty {
+  grid-column: 1 / -1;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 8px;
+}
+
+.avatar-sim-dev-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 5px 7px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  min-width: 0;
+}
+
+.avatar-sim-dev-card.is-nearest {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 1px var(--accent-blue) inset;
+}
+
+.avatar-sim-dev-card.is-carried {
+  border-color: #d97706;
+}
+
+.avatar-sim-dev-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.avatar-sim-dev-name {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.avatar-sim-dev-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 9.5px;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+
+.avatar-sim-dev-btns {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.avatar-sim-mini-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+
+.avatar-sim-mini-btn:hover:not(:disabled) {
+  border-color: var(--accent-blue);
+  background: var(--bg-hover);
+}
+
+.avatar-sim-mini-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.avatar-nav-step-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.avatar-step-btn {
+  width: 22px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.avatar-step-btn:hover {
+  border-color: var(--accent-blue);
+  background: var(--bg-hover);
+}
+
+.hud-3d-avatar-bar.is-minimized .avatar-hud-pill-btn,
+.hud-3d-avatar-bar.is-minimized .avatar-sim-popover,
+.hud-3d-avatar-bar.is-minimized .avatar-sim-deck {
+  display: none !important;
 }
 
 .mob-show-dock-tab {

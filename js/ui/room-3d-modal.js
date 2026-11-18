@@ -158,6 +158,11 @@ export class Room3DModal {
               </div>
             </div>
 
+            <label style="display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; color: var(--text-primary); cursor: pointer;">
+              <input type="checkbox" id="r3d-locked">
+              <span>🔒 Kunci posisi ruangan ini (tidak ikut tergeser saat klik perangkat)</span>
+            </label>
+
             <!-- Custom .GLB/.GLTF Room Model Upload -->
             <div style="display: flex; flex-direction: column; gap: 4px; border-top: 1px dashed var(--border-color); padding-top: 8px;">
               <label style="font-size: 11px; font-weight: 600; color: var(--text-primary);">Model 3D Ruangan Kustom (.glb / .gltf - Opsional)</label>
@@ -215,7 +220,10 @@ export class Room3DModal {
             </div>
 
             <div style="background: var(--bg-primary, #fff8cf); border: 1px solid var(--border-color, #e5cca0); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px; flex: 1;">
-              <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--accent-blue, #2a7c13);">Daftar Ruangan 3D Tersimpan</span>
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap;">
+                <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--accent-blue, #2a7c13);">Daftar Ruangan 3D Tersimpan</span>
+                <button type="button" id="btn-r3d-lock-all" class="btn btn-secondary btn-sm" style="font-size: 10.5px; padding: 3px 8px;" title="Kunci atau buka kunci posisi semua ruangan 3D">🔓 Kunci Semua</button>
+              </div>
               <div id="r3d-list-container" style="display: flex; flex-direction: column; gap: 6px; max-height: 190px; overflow-y: auto;"></div>
             </div>
 
@@ -360,8 +368,27 @@ export class Room3DModal {
 
     this.modalEl.querySelector('#btn-room3d-save')?.addEventListener('click', () => this.saveRoomFromForm());
     this.modalEl.querySelector('#btn-room3d-reset-form')?.addEventListener('click', () => this.resetForm());
+    this.modalEl.querySelector('#btn-r3d-lock-all')?.addEventListener('click', () => {
+      this.map3DEngine?.toggleRoomsLocked?.();
+      this.syncGlobalLockButton();
+      this.renderRoomList();
+    });
 
     eventBus.on('modal:open-room-3d', () => this.show());
+    eventBus.on('rooms3d:lock-changed', () => {
+      this.syncGlobalLockButton();
+      if (this.modalEl.style.display === 'flex') {
+        this.renderRoomList();
+      }
+    });
+  }
+
+  syncGlobalLockButton() {
+    const btn = this.modalEl.querySelector('#btn-r3d-lock-all');
+    if (!btn) return;
+    const locked = Boolean(this.map3DEngine?.roomsLocked);
+    btn.className = `btn btn-sm ${locked ? 'btn-primary' : 'btn-secondary'}`;
+    btn.textContent = locked ? '🔒 Semua Terkunci (Klik Buka)' : '🔓 Kunci Semua Ruangan';
   }
 
   getViewportCenterNorm() {
@@ -486,6 +513,8 @@ export class Room3DModal {
     this.setFormBaseAndScale({ widthMeters: 24, depthMeters: 20, heightMeters: 4.5 }, 1, true);
     const rotInput = this.modalEl.querySelector('#r3d-rot-y');
     if (rotInput) rotInput.value = '0';
+    const lockedCb = this.modalEl.querySelector('#r3d-locked');
+    if (lockedCb) lockedCb.checked = false;
     this.modalEl.querySelector('#r3d-glb-url').value = '';
     this.modalEl.querySelector('#btn-r3d-clear-glb').style.display = 'none';
   }
@@ -526,6 +555,7 @@ export class Room3DModal {
       wallColor: this.modalEl.querySelector('#r3d-wall-color')?.value || '#2a7c13',
       floorColor: this.modalEl.querySelector('#r3d-floor-color')?.value || '#1e293b',
       opacity: clamp((parseFloat(this.modalEl.querySelector('#r3d-opacity')?.value) || 20) / 100, 0.05, 0.85),
+      locked: Boolean(this.modalEl.querySelector('#r3d-locked')?.checked),
       customModelUrl
     };
 
@@ -559,25 +589,31 @@ export class Room3DModal {
       return;
     }
 
+    const globalLocked = Boolean(this.map3DEngine?.roomsLocked);
     container.innerHTML = rooms.map((r) => {
       const rotDeg = Math.round(Number(r.rotationY ?? r.rotationDeg) || 0);
       const scalePct = r.baseWidthMeters > 0
         ? Math.round((Number(r.widthMeters) / Number(r.baseWidthMeters)) * 100)
         : Math.round((Number(r.modelScale) || 1) * 100);
+      const roomSelfLocked = Boolean(r.locked);
+      const isLocked = globalLocked || roomSelfLocked;
+      const disabledAttr = isLocked ? 'disabled style="font-size: 10px; padding: 2px 6px; opacity: 0.45; cursor: not-allowed;"' : 'style="font-size: 10px; padding: 2px 6px;"';
+      const moveDisabledAttr = isLocked ? 'disabled style="font-size: 10px; padding: 2px 7px; opacity: 0.45; cursor: not-allowed;"' : 'style="font-size: 10px; padding: 2px 7px;"';
       return `
-      <div style="background: var(--bg-secondary, #fbe6c2); border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+      <div style="background: var(--bg-secondary, #fbe6c2); border: 1px solid ${isLocked ? '#d97706' : 'var(--border-color)'}; border-radius: 6px; padding: 8px 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
         <div style="min-width: 0;">
           <div style="font-size: 12px; font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-            ${r.name}
+            ${isLocked ? '🔒 ' : ''}${r.name}
           </div>
           <div style="font-size: 10px; color: var(--text-muted); font-family: var(--font-mono);">
-            ${r.widthMeters}x${r.depthMeters}x${r.heightMeters}m • ${scalePct}% • ${rotDeg}°${r.customModelUrl ? ' • GLB' : ''}
+            ${r.widthMeters}x${r.depthMeters}x${r.heightMeters}m • ${scalePct}% • ${rotDeg}°${r.customModelUrl ? ' • GLB' : ''}${isLocked ? ' • Terkunci' : ''}
           </div>
         </div>
-        <div style="display: flex; gap: 4px; flex-shrink: 0;">
-          <button type="button" class="btn btn-secondary btn-sm btn-r3d-scale-step" data-id="${r.id}" data-factor="0.9" style="font-size: 10px; padding: 2px 6px;" title="Perkecil skala -10%">-</button>
-          <button type="button" class="btn btn-secondary btn-sm btn-r3d-scale-step" data-id="${r.id}" data-factor="1.1" style="font-size: 10px; padding: 2px 6px;" title="Perbesar skala +10%">+</button>
-          <button type="button" class="btn btn-primary btn-sm btn-r3d-move" data-id="${r.id}" style="font-size: 10px; padding: 2px 7px;" title="Tutup modal dan langsung geser ruangan di kanvas 3D">Geser</button>
+        <div style="display: flex; gap: 4px; flex-shrink: 0; flex-wrap: wrap;">
+          <button type="button" class="btn ${roomSelfLocked ? 'btn-primary' : 'btn-secondary'} btn-sm btn-r3d-lock" data-id="${r.id}" style="font-size: 10px; padding: 2px 6px;" title="${roomSelfLocked ? 'Buka kunci ruangan ini' : 'Kunci ruangan ini agar tidak tergeser'}">${roomSelfLocked ? '🔒' : '🔓'}</button>
+          <button type="button" class="btn btn-secondary btn-sm btn-r3d-scale-step" data-id="${r.id}" data-factor="0.9" ${disabledAttr} title="Perkecil skala -10%">-</button>
+          <button type="button" class="btn btn-secondary btn-sm btn-r3d-scale-step" data-id="${r.id}" data-factor="1.1" ${disabledAttr} title="Perbesar skala +10%">+</button>
+          <button type="button" class="btn btn-primary btn-sm btn-r3d-move" data-id="${r.id}" ${moveDisabledAttr} title="Tutup modal dan langsung geser ruangan di kanvas 3D">Geser</button>
           <button type="button" class="btn btn-secondary btn-sm btn-r3d-edit" data-id="${r.id}" style="font-size: 10px; padding: 2px 6px;">Edit</button>
           <button type="button" class="btn btn-sm btn-r3d-del" data-id="${r.id}" style="font-size: 10px; padding: 2px 6px; background: rgba(239,68,68,0.14); color: #dc2626;">Hapus</button>
         </div>
@@ -585,10 +621,24 @@ export class Room3DModal {
     `;
     }).join('');
 
+    container.querySelectorAll('.btn-r3d-lock').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-id');
+        if (this.map3DEngine?.toggleSingleRoomLock) {
+          this.map3DEngine.toggleSingleRoomLock(id);
+        } else {
+          const targetRoom = rooms.find((r) => r.id === id);
+          if (targetRoom) stateManager.updateRoom3d?.(id, { locked: !targetRoom.locked });
+        }
+        this.renderRoomList();
+      });
+    });
+
     container.querySelectorAll('.btn-r3d-scale-step').forEach((btn) => {
       btn.addEventListener('click', () => {
         const id = btn.getAttribute('data-id');
         const factor = parseFloat(btn.getAttribute('data-factor')) || 1;
+        if (this.map3DEngine?.isRoomLocked?.(id)) return;
         stateManager.selectRoom3d?.(id);
         this.map3DEngine?.scaleSelectedRoomIn3D?.(factor);
         this.renderRoomList();
@@ -598,7 +648,7 @@ export class Room3DModal {
     container.querySelectorAll('.btn-r3d-move').forEach((btn) => {
       btn.addEventListener('click', () => {
         const room = rooms.find((r) => r.id === btn.getAttribute('data-id'));
-        if (!room) return;
+        if (!room || this.map3DEngine?.isRoomLocked?.(room)) return;
         this.hide();
         if (stateManager.getViewMode?.() !== '3d') {
           stateManager.setViewMode?.('3d');
@@ -639,6 +689,8 @@ export class Room3DModal {
         this.modalEl.querySelector('#r3d-wall-color').value = room.wallColor || '#2a7c13';
         this.modalEl.querySelector('#r3d-floor-color').value = room.floorColor || '#1e293b';
         this.modalEl.querySelector('#r3d-opacity').value = Math.round((room.opacity ?? 0.2) * 100);
+        const lockedCb = this.modalEl.querySelector('#r3d-locked');
+        if (lockedCb) lockedCb.checked = Boolean(room.locked);
         this.modalEl.querySelector('#r3d-glb-url').value = this.uploadedRoomGlbUrl ? '[File GLB Lokal Terpilih]' : (room.customModelUrl || '');
         this.modalEl.querySelector('#btn-r3d-clear-glb').style.display = room.customModelUrl ? 'inline-flex' : 'none';
       });
@@ -654,6 +706,7 @@ export class Room3DModal {
   }
 
   show() {
+    this.syncGlobalLockButton();
     this.renderRoomList();
     this.modalEl.style.display = 'flex';
     if (window.lucide && typeof window.lucide.createIcons === 'function') {
