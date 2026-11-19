@@ -64212,6 +64212,406 @@ void main() {
   var glbCollisionCache = /* @__PURE__ */ new Map();
   var ROOM_ROOF_RE = /atap|plafon|kanopi|lisplang|roof|ceiling/i;
   var ROOM_FLOOR_RE = /lantai|selasar|koridor|beranda|panggung|umpak|floor/i;
+  var DOOR_MESH_CANDIDATE_RE = /pintu|door|shutter|kusen_jendela_biruabu|kaca_jendela_transparan/i;
+  var DOOR_MESH_EXCLUDE_RE = /atap|lantai|plafon|tanaman|ac_|papan|signage|ornamen|plat_pintu|list_batu|handle|grendel|daun_hijau|daun_jarum|pohon/i;
+  function _buildSubGeometryFromTriangles(mesh, triIndices, pivotWorld = null) {
+    const srcGeo = mesh.geometry;
+    const posAttr = srcGeo.attributes.position;
+    const normAttr = srcGeo.attributes.normal || null;
+    const uvAttr = srcGeo.attributes.uv || null;
+    const idxAttr = srcGeo.index || null;
+    const vertCount = triIndices.length * 3;
+    const outPos = new Float32Array(vertCount * 3);
+    const outNorm = normAttr ? new Float32Array(vertCount * 3) : null;
+    const outUv = uvAttr ? new Float32Array(vertCount * 2) : null;
+    const v = new Vector3();
+    const n = new Vector3();
+    const matWorld = pivotWorld ? mesh.matrixWorld : null;
+    const normMat = pivotWorld && normAttr ? new Matrix3().getNormalMatrix(mesh.matrixWorld) : null;
+    let pOff = 0;
+    let nOff = 0;
+    let uOff = 0;
+    for (let i = 0; i < triIndices.length; i++) {
+      const t = triIndices[i];
+      for (let k = 0; k < 3; k++) {
+        const vi = idxAttr ? idxAttr.getX(t * 3 + k) : t * 3 + k;
+        v.fromBufferAttribute(posAttr, vi);
+        if (pivotWorld) {
+          v.applyMatrix4(matWorld);
+          outPos[pOff++] = v.x - pivotWorld.x;
+          outPos[pOff++] = v.y - pivotWorld.y;
+          outPos[pOff++] = v.z - pivotWorld.z;
+        } else {
+          outPos[pOff++] = v.x;
+          outPos[pOff++] = v.y;
+          outPos[pOff++] = v.z;
+        }
+        if (outNorm && normAttr) {
+          n.fromBufferAttribute(normAttr, vi);
+          if (normMat) n.applyMatrix3(normMat).normalize();
+          outNorm[nOff++] = n.x;
+          outNorm[nOff++] = n.y;
+          outNorm[nOff++] = n.z;
+        }
+        if (outUv && uvAttr) {
+          outUv[uOff++] = uvAttr.getX(vi);
+          outUv[uOff++] = uvAttr.getY(vi);
+        }
+      }
+    }
+    const geo = new BufferGeometry();
+    geo.setAttribute("position", new BufferAttribute(outPos, 3));
+    if (outNorm) {
+      geo.setAttribute("normal", new BufferAttribute(outNorm, 3));
+    } else {
+      geo.computeVertexNormals();
+    }
+    if (outUv) {
+      geo.setAttribute("uv", new BufferAttribute(outUv, 2));
+    }
+    geo.computeBoundingBox();
+    geo.computeBoundingSphere();
+    return geo;
+  }
+  function extractInteractiveDoorsFromGlbRoot(root) {
+    if (!root) return [];
+    root.updateMatrixWorld(true);
+    const rootBox = new Box3().setFromObject(root);
+    const rootSize = new Vector3();
+    const rootCenter = new Vector3();
+    rootBox.getSize(rootSize);
+    rootBox.getCenter(rootCenter);
+    if (rootSize.y < 1.8 || Math.max(rootSize.x, rootSize.z) < 2) {
+      return [];
+    }
+    const candidateMeshes = [];
+    root.traverse((obj) => {
+      if (!obj?.isMesh || !obj.geometry?.attributes?.position) return;
+      const name = String(obj.name || "");
+      if (!DOOR_MESH_CANDIDATE_RE.test(name) || DOOR_MESH_EXCLUDE_RE.test(name)) return;
+      candidateMeshes.push(obj);
+    });
+    if (candidateMeshes.length === 0) return [];
+    const frames = [];
+    const meshIslandEntries = [];
+    const tmpV = new Vector3();
+    for (const mesh of candidateMeshes) {
+      mesh.updateWorldMatrix(true, false);
+      const geo = mesh.geometry;
+      const pos = geo.attributes.position;
+      const idx = geo.index;
+      const triCount = idx ? Math.floor(idx.count / 3) : Math.floor(pos.count / 3);
+      if (triCount === 0) continue;
+      const parent = new Int32Array(triCount);
+      for (let i = 0; i < triCount; i++) parent[i] = i;
+      const find = (x) => {
+        while (parent[x] !== x) {
+          parent[x] = parent[parent[x]];
+          x = parent[x];
+        }
+        return x;
+      };
+      const union = (a, b) => {
+        const ra = find(a);
+        const rb = find(b);
+        if (ra !== rb) parent[ra] = rb;
+      };
+      const vertToTri = /* @__PURE__ */ new Map();
+      const triBounds = new Array(triCount);
+      const matW = mesh.matrixWorld;
+      for (let t = 0; t < triCount; t++) {
+        let mnX = Infinity, mnY = Infinity, mnZ = Infinity;
+        let mxX = -Infinity, mxY = -Infinity, mxZ = -Infinity;
+        for (let k = 0; k < 3; k++) {
+          const vi = idx ? idx.getX(t * 3 + k) : t * 3 + k;
+          tmpV.fromBufferAttribute(pos, vi).applyMatrix4(matW);
+          if (tmpV.x < mnX) mnX = tmpV.x;
+          if (tmpV.x > mxX) mxX = tmpV.x;
+          if (tmpV.y < mnY) mnY = tmpV.y;
+          if (tmpV.y > mxY) mxY = tmpV.y;
+          if (tmpV.z < mnZ) mnZ = tmpV.z;
+          if (tmpV.z > mxZ) mxZ = tmpV.z;
+          const vKey = `${Math.round(tmpV.x * 100)},${Math.round(tmpV.y * 100)},${Math.round(tmpV.z * 100)}`;
+          const prev = vertToTri.get(vKey);
+          if (prev !== void 0) union(prev, t);
+          else vertToTri.set(vKey, t);
+        }
+        triBounds[t] = { mnX, mnY, mnZ, mxX, mxY, mxZ };
+      }
+      const compMap = /* @__PURE__ */ new Map();
+      for (let t = 0; t < triCount; t++) {
+        const r = find(t);
+        let comp = compMap.get(r);
+        const b = triBounds[t];
+        if (!comp) {
+          comp = {
+            mnX: b.mnX,
+            mnY: b.mnY,
+            mnZ: b.mnZ,
+            mxX: b.mxX,
+            mxY: b.mxY,
+            mxZ: b.mxZ,
+            tris: [t]
+          };
+          compMap.set(r, comp);
+        } else {
+          if (b.mnX < comp.mnX) comp.mnX = b.mnX;
+          if (b.mxX > comp.mxX) comp.mxX = b.mxX;
+          if (b.mnY < comp.mnY) comp.mnY = b.mnY;
+          if (b.mxY > comp.mxY) comp.mxY = b.mxY;
+          if (b.mnZ < comp.mnZ) comp.mnZ = b.mnZ;
+          if (b.mxZ > comp.mxZ) comp.mxZ = b.mxZ;
+          comp.tris.push(t);
+        }
+      }
+      const meshName = String(mesh.name || "");
+      const isGlassMesh = /kaca_jendela|kaca.*pintu/i.test(meshName);
+      const doorIslands = [];
+      for (const comp of compMap.values()) {
+        const w = comp.mxX - comp.mnX;
+        const h = comp.mxY - comp.mnY;
+        const d = comp.mxZ - comp.mnZ;
+        const span = Math.max(w, d);
+        const thick = Math.min(w, d);
+        const tLen = comp.tris.length;
+        const cx = (comp.mnX + comp.mxX) * 0.5;
+        const cy = (comp.mnY + comp.mxY) * 0.5;
+        const cz = (comp.mnZ + comp.mxZ) * 0.5;
+        const nearFloor = comp.mnY >= rootBox.min.y - 0.05 && comp.mnY <= rootBox.min.y + 0.58 || comp.mnY >= rootBox.min.y + 3.05 && comp.mnY <= rootBox.min.y + 4.15;
+        if (tLen >= 28 && tLen <= 44 && h >= 1.75 && h <= 2.75 && span >= 0.65 && span <= 2.4 && thick <= 0.28 && nearFloor) {
+          frames.push({ mnX: comp.mnX, mxX: comp.mxX, mnY: comp.mnY, mxY: comp.mxY, mnZ: comp.mnZ, mxZ: comp.mxZ, w, h, d, cx, cz });
+          continue;
+        }
+        if (!nearFloor) continue;
+        if (tLen < 2 || tLen > 20) continue;
+        if (h < 1.68 || h > 2.42) continue;
+        if (span < 0.5 || span > 2.25) continue;
+        if (thick > 0.18) continue;
+        if (isGlassMesh) {
+          if (h < 1.95 || comp.mnY > rootBox.min.y + 0.45 || span < 1.1) continue;
+        }
+        doorIslands.push({
+          mesh,
+          meshName,
+          mnX: comp.mnX,
+          mxX: comp.mxX,
+          mnY: comp.mnY,
+          mxY: comp.mxY,
+          mnZ: comp.mnZ,
+          mxZ: comp.mxZ,
+          w,
+          h,
+          d,
+          span,
+          thick,
+          cx,
+          cy,
+          cz,
+          tris: comp.tris,
+          paired: false,
+          pairIdx: -1
+        });
+      }
+      if (doorIslands.length > 0) {
+        meshIslandEntries.push({ mesh, triCount, doorIslands });
+      }
+    }
+    const allDoors = [];
+    for (const entry of meshIslandEntries) {
+      for (const isl of entry.doorIslands) {
+        isl.doorIdx = allDoors.length;
+        allDoors.push(isl);
+      }
+    }
+    if (allDoors.length === 0) return [];
+    const findTouchingPerpFrame = (isl) => {
+      const leafSpanX = isl.w >= isl.d;
+      for (const fr of frames) {
+        if (Math.abs(fr.mnY - isl.mnY) > 0.35) continue;
+        const frameSpanX = fr.w >= fr.d;
+        if (frameSpanX === leafSpanX) continue;
+        const gapX = Math.max(0, Math.max(fr.mnX - isl.mxX, isl.mnX - fr.mxX));
+        const gapZ = Math.max(0, Math.max(fr.mnZ - isl.mxZ, isl.mnZ - fr.mxZ));
+        if (gapX <= 0.22 && gapZ <= 0.22) return fr;
+      }
+      return null;
+    };
+    for (let i = 0; i < allDoors.length; i++) {
+      const a = allDoors[i];
+      if (a.paired) continue;
+      for (let j = i + 1; j < allDoors.length; j++) {
+        const b = allDoors[j];
+        if (b.paired) continue;
+        if (Math.abs(a.mnY - b.mnY) > 0.25 || Math.abs(a.h - b.h) > 0.16) continue;
+        if (Math.abs(a.span - b.span) > 0.16) continue;
+        const aSpanX = a.w >= a.d;
+        const bSpanX = b.w >= b.d;
+        if (aSpanX && bSpanX && Math.abs(a.cz - b.cz) < 0.14) {
+          const left = a.cx <= b.cx ? a : b;
+          const right = a.cx <= b.cx ? b : a;
+          const gap = right.mnX - left.mxX;
+          if (gap >= -0.05 && gap <= 0.2) {
+            left.paired = true;
+            right.paired = true;
+            left.pairIdx = right.doorIdx;
+            right.pairIdx = left.doorIdx;
+            left.pairSide = "left";
+            right.pairSide = "right";
+            left.pairMode = "closed-x";
+            right.pairMode = "closed-x";
+            break;
+          }
+        } else if (!aSpanX && !bSpanX && Math.abs(a.cz - b.cz) < 0.18) {
+          const left = a.cx <= b.cx ? a : b;
+          const right = a.cx <= b.cx ? b : a;
+          const distX = right.cx - left.cx;
+          if (distX >= 0.95 && distX <= 1.85) {
+            left.paired = true;
+            right.paired = true;
+            left.pairIdx = right.doorIdx;
+            right.pairIdx = left.doorIdx;
+            left.pairSide = "left";
+            right.pairSide = "right";
+            left.pairMode = "open-z";
+            right.pairMode = "open-z";
+            break;
+          }
+        }
+      }
+    }
+    const extractedMeta = [];
+    for (const isl of allDoors) {
+      let doorType = "swing";
+      let initialOpen = false;
+      let hinge = new Vector3(isl.mnX, isl.mnY, isl.cz);
+      let closedAngle = 0;
+      let openAngle = Math.PI * 0.52;
+      let slideAxis = "x";
+      let labelKind = "Pintu";
+      if (/rolling_shutter/i.test(isl.meshName)) {
+        doorType = "shutter";
+        hinge.set(isl.cx, isl.mxY, isl.cz);
+        closedAngle = 0;
+        openAngle = 0;
+        labelKind = "Rolling Shutter";
+      } else if (isl.span >= 1.65 && /kaca|lipat|geser|sliding/i.test(isl.meshName)) {
+        doorType = "slide";
+        slideAxis = isl.w >= isl.d ? "x" : "z";
+        hinge.set(slideAxis === "x" ? isl.mnX : isl.cx, isl.mnY, slideAxis === "x" ? isl.cz : isl.mnZ);
+        closedAngle = 0;
+        openAngle = 0;
+        labelKind = /lipat/i.test(isl.meshName) ? "Pintu Lipat" : "Pintu Kaca Geser";
+      } else if (isl.pairMode === "closed-x") {
+        initialOpen = false;
+        const inwardSign = isl.cz >= rootCenter.z ? 1 : -1;
+        if (isl.pairSide === "left") {
+          hinge.set(isl.mnX, isl.mnY, isl.cz);
+          closedAngle = 0;
+          openAngle = inwardSign * Math.PI * 0.52;
+        } else {
+          hinge.set(isl.mxX, isl.mnY, isl.cz);
+          closedAngle = 0;
+          openAngle = -inwardSign * Math.PI * 0.52;
+        }
+        labelKind = "Pintu Ganda";
+      } else if (isl.pairMode === "open-z") {
+        initialOpen = true;
+        const touchFrame = findTouchingPerpFrame(isl);
+        let hingeAtMaxZ;
+        if (touchFrame) {
+          hingeAtMaxZ = Math.abs(isl.mxZ - touchFrame.cz) <= Math.abs(isl.mnZ - touchFrame.cz);
+        } else {
+          hingeAtMaxZ = Math.abs(isl.mxZ - rootCenter.z) < Math.abs(isl.mnZ - rootCenter.z);
+        }
+        hinge.set(isl.cx, isl.mnY, hingeAtMaxZ ? isl.mxZ : isl.mnZ);
+        const extendsPosZ = !hingeAtMaxZ;
+        openAngle = 0;
+        if (isl.pairSide === "left") {
+          closedAngle = extendsPosZ ? Math.PI * 0.47 : -Math.PI * 0.47;
+        } else {
+          closedAngle = extendsPosZ ? -Math.PI * 0.47 : Math.PI * 0.47;
+        }
+        labelKind = "Pintu Ganda";
+      } else {
+        const touchFrame = findTouchingPerpFrame(isl);
+        if (touchFrame) {
+          initialOpen = true;
+          openAngle = 0;
+          if (isl.d > isl.w) {
+            const hingeAtMaxZ = Math.abs(isl.mxZ - touchFrame.cz) <= Math.abs(isl.mnZ - touchFrame.cz);
+            hinge.set(isl.cx, isl.mnY, hingeAtMaxZ ? isl.mxZ : isl.mnZ);
+            const extendsPosZ = !hingeAtMaxZ;
+            const closeToPosX = touchFrame.cx >= isl.cx;
+            closedAngle = (extendsPosZ === closeToPosX ? 1 : -1) * Math.PI * 0.48;
+          } else {
+            const hingeAtMaxX = Math.abs(isl.mxX - touchFrame.cx) <= Math.abs(isl.mnX - touchFrame.cx);
+            hinge.set(hingeAtMaxX ? isl.mxX : isl.mnX, isl.mnY, isl.cz);
+            const extendsPosX = !hingeAtMaxX;
+            const closeToPosZ = touchFrame.cz >= isl.cz;
+            closedAngle = (extendsPosX === closeToPosZ ? -1 : 1) * Math.PI * 0.48;
+          }
+        } else if (isl.w >= isl.d) {
+          initialOpen = false;
+          hinge.set(isl.mnX, isl.mnY, isl.cz);
+          closedAngle = 0;
+          openAngle = (isl.cz >= rootCenter.z ? 1 : -1) * Math.PI * 0.52;
+        } else {
+          initialOpen = false;
+          hinge.set(isl.cx, isl.mnY, isl.mnZ);
+          closedAngle = 0;
+          openAngle = (isl.cx < rootCenter.x ? 1 : -1) * Math.PI * 0.52;
+        }
+        labelKind = isl.span >= 1.25 ? "Pintu Ganda" : "Pintu";
+      }
+      const pivotGroup = new Group();
+      pivotGroup.name = `InteractiveDoorPivot_${isl.doorIdx}`;
+      pivotGroup.position.copy(hinge);
+      pivotGroup.userData.isInteractiveDoorPivot = true;
+      pivotGroup.userData.doorMeta = {
+        doorIdx: isl.doorIdx,
+        pairIdx: isl.pairIdx,
+        doorType,
+        slideAxis,
+        initialOpen,
+        closedAngle,
+        openAngle,
+        labelKind,
+        localCenter: { x: isl.cx, y: isl.cy, z: isl.cz },
+        span: Number(isl.span.toFixed(2)),
+        height: Number(isl.h.toFixed(2))
+      };
+      const leafGeo = _buildSubGeometryFromTriangles(isl.mesh, isl.tris, hinge);
+      const leafMat = Array.isArray(isl.mesh.material) ? isl.mesh.material[0] : isl.mesh.material;
+      const leafMesh = new Mesh(leafGeo, leafMat);
+      leafMesh.name = `InteractiveDoorLeaf_${isl.doorIdx}`;
+      leafMesh.castShadow = true;
+      leafMesh.receiveShadow = true;
+      leafMesh.userData.isInteractiveDoorMesh = true;
+      leafMesh.userData.doorIdx = isl.doorIdx;
+      pivotGroup.add(leafMesh);
+      root.add(pivotGroup);
+      extractedMeta.push({ pivotGroup, meta: pivotGroup.userData.doorMeta });
+    }
+    for (const entry of meshIslandEntries) {
+      const removedSet = /* @__PURE__ */ new Set();
+      for (const isl of entry.doorIslands) {
+        for (const t of isl.tris) removedSet.add(t);
+      }
+      const keepTris = [];
+      for (let t = 0; t < entry.triCount; t++) {
+        if (!removedSet.has(t)) keepTris.push(t);
+      }
+      if (keepTris.length === 0) {
+        entry.mesh.visible = false;
+        entry.mesh.parent?.remove(entry.mesh);
+      } else {
+        const nextStaticGeo = _buildSubGeometryFromTriangles(entry.mesh, keepTris, null);
+        entry.mesh.geometry = nextStaticGeo;
+      }
+    }
+    root.updateMatrixWorld(true);
+    return extractedMeta;
+  }
   function _addTriToGridCells(cellMap, cellSize, tri) {
     const gx0 = Math.floor(tri.minX / cellSize);
     const gx1 = Math.floor(tri.maxX / cellSize);
@@ -64262,11 +64662,25 @@ void main() {
     const norm = new Vector3();
     let wallTriCount = 0;
     let floorTriCount = 0;
+    const tempDoorRestores = [];
+    root.traverse((obj) => {
+      if (obj?.userData?.isInteractiveDoorPivot && obj.userData?.doorMeta) {
+        const dm = obj.userData.doorMeta;
+        if (dm.doorType === "swing" && Math.abs((dm.closedAngle || 0) - obj.rotation.y) > 1e-4) {
+          tempDoorRestores.push({ obj, prevRotY: obj.rotation.y });
+          obj.rotation.y = dm.closedAngle || 0;
+        }
+      }
+    });
+    if (tempDoorRestores.length > 0) {
+      root.updateMatrixWorld(true);
+    }
     root.traverse((obj) => {
       if (!obj?.isMesh || !obj.geometry?.attributes?.position) return;
       const meshName = String(obj.name || "");
+      const doorIdx = Number.isInteger(obj.userData?.doorIdx) ? obj.userData.doorIdx : -1;
       const isFloorNamed = ROOM_FLOOR_RE.test(meshName);
-      const isRoof = ROOM_ROOF_RE.test(meshName) && !isFloorNamed && !/tangga|stair/i.test(meshName);
+      const isRoof = doorIdx < 0 && ROOM_ROOF_RE.test(meshName) && !isFloorNamed && !/tangga|stair/i.test(meshName);
       const posAttr = obj.geometry.attributes.position;
       const indexAttr = obj.geometry.index;
       const matWorld = obj.matrixWorld;
@@ -64309,10 +64723,14 @@ void main() {
           maxY: Math.max(ay, by, cy),
           minZ: Math.min(az, bz, cz),
           maxZ: Math.max(az, bz, cz),
-          ny: norm.y
+          ny: norm.y,
+          doorIdx
         };
         if (isRoof) {
           _addTriToGridCells(roofCells, cellSize, tri);
+        } else if (doorIdx >= 0) {
+          _addTriToGridCells(wallCells, cellSize, tri);
+          wallTriCount += 1;
         } else if (Math.abs(tri.ny) > 0.72) {
           _addTriToGridCells(floorCells, cellSize, tri);
           floorTriCount += 1;
@@ -64322,6 +64740,12 @@ void main() {
         }
       }
     });
+    if (tempDoorRestores.length > 0) {
+      tempDoorRestores.forEach(({ obj, prevRotY }) => {
+        obj.rotation.y = prevRotY;
+      });
+      root.updateMatrixWorld(true);
+    }
     return {
       rawSize,
       unitSize,
@@ -64458,6 +64882,10 @@ void main() {
       glbCache.set(cacheKey, promise);
     }
     return glbCache.get(cacheKey).then((cachedRoot) => {
+      if (!cachedRoot.userData._interactiveDoorsExtracted) {
+        cachedRoot.userData._interactiveDoorsExtracted = true;
+        extractInteractiveDoorsFromGlbRoot(cachedRoot);
+      }
       if (!glbCollisionCache.has(cacheKey)) {
         glbCollisionCache.set(cacheKey, buildGlbCollisionProfile(cachedRoot));
       }
@@ -69612,6 +70040,8 @@ void main() {
       this.roadBuildState = null;
       this.object3dDragState = null;
       this.cableDragState = null;
+      this.doorStatesByKey = /* @__PURE__ */ new Map();
+      this.activeDoorRigs = /* @__PURE__ */ new Map();
       this._marqueeEl = null;
       this._temporarilyDisabledControlsForBox = false;
       this._pendingSyncRaf = null;
@@ -69841,10 +70271,8 @@ void main() {
           if (gizmoHit) {
             cancelLongPress();
             this.startObject3dGizmoDrag(e, dom, gizmoHit);
-          } else if (this.navTool === "box" || e.ctrlKey || e.metaKey) {
-          } else if (this.navTool === "box" && !this.avatarMode || e.ctrlKey || e.metaKey) {
+          } else if (!this.avatarMode && (this.navTool === "box" || e.ctrlKey || e.metaKey)) {
             this.startBoxSelect(e, dom);
-          } else if (this.navTool === "draw3d") {
           } else if (this.navTool === "draw3d" && !this.avatarMode) {
             this.startObject3dCreateDraw(e, dom);
           } else if (this.navTool === "look") {
@@ -69855,10 +70283,8 @@ void main() {
             this.lookYaw = Math.atan2(dir.x, dir.z);
             this.lookPitch = Math.asin(Math.max(-0.99, Math.min(0.99, dir.y)));
             dom.setPointerCapture?.(e.pointerId);
-          } else if (this.navTool === "move") {
           } else if (this.navTool === "move" && !this.avatarMode) {
             this.startDeviceDragMove(e, dom);
-          } else if (this.navTool === "rotate") {
           } else if (this.navTool === "rotate" && !this.avatarMode) {
             this.startRotateDrag(e, dom);
           }
@@ -70100,6 +70526,7 @@ void main() {
           this.publishLocalPresence(false);
         }
         this.updateRemoteAvatars(dt);
+        this.updateInteractiveDoors?.(dt);
         this.updatePacketFlows3D?.(now);
         if (this.avatarMode && !this.simulatorFocusedDeviceId) {
           if (this.camera && this.controls) {
@@ -70266,6 +70693,222 @@ void main() {
       roomGroup.userData.attachedRoomUrl = room.customModelUrl;
       roomGroup.userData.roomCollisionProfile = glb.userData?.collisionProfile || null;
       roomGroup.userData.roomCollisionScale = colScale;
+      this._registerRoomInteractiveDoors(room, roomGroup, glb);
+    }
+    _registerRoomInteractiveDoors(room, roomGroup, glb) {
+      if (!room?.id || !roomGroup || !glb) return;
+      if (!this.doorStatesByKey) this.doorStatesByKey = /* @__PURE__ */ new Map();
+      if (!this.activeDoorRigs) this.activeDoorRigs = /* @__PURE__ */ new Map();
+      const prefix = `${room.id}::`;
+      for (const k of Array.from(this.activeDoorRigs.keys())) {
+        if (k.startsWith(prefix)) this.activeDoorRigs.delete(k);
+      }
+      const openDoorIndices = /* @__PURE__ */ new Set();
+      const roomDoorRigs = [];
+      glb.traverse((node) => {
+        if (!node?.userData?.isInteractiveDoorPivot || !node.userData?.doorMeta) return;
+        const meta = node.userData.doorMeta;
+        const doorKey = `${room.id}::${meta.doorIdx}`;
+        const isOpen = this.doorStatesByKey.has(doorKey) ? Boolean(this.doorStatesByKey.get(doorKey)) : Boolean(meta.initialOpen);
+        const rig = {
+          key: doorKey,
+          roomId: room.id,
+          roomName: room.name || "Ruangan",
+          doorIdx: meta.doorIdx,
+          pairKey: meta.pairIdx >= 0 ? `${room.id}::${meta.pairIdx}` : null,
+          doorType: meta.doorType || "swing",
+          slideAxis: meta.slideAxis || "x",
+          closedAngle: Number(meta.closedAngle) || 0,
+          openAngle: Number(meta.openAngle) || 0,
+          labelKind: meta.labelKind || "Pintu",
+          pivotGroup: node,
+          roomGroup,
+          isOpen,
+          openProgress: isOpen ? 1 : 0,
+          targetProgress: isOpen ? 1 : 0
+        };
+        node.userData.interactiveDoorKey = doorKey;
+        node.traverse((ch) => {
+          ch.userData.interactiveDoorKey = doorKey;
+          ch.userData.roomId = room.id;
+        });
+        this._applyDoorRigPose(rig);
+        if (isOpen) openDoorIndices.add(meta.doorIdx);
+        this.activeDoorRigs.set(doorKey, rig);
+        roomDoorRigs.push(rig);
+      });
+      roomGroup.userData.doorRigs = roomDoorRigs;
+      roomGroup.userData.openDoorIndices = openDoorIndices;
+    }
+    _applyDoorRigPose(rig) {
+      if (!rig?.pivotGroup) return;
+      const t = clamp(Number(rig.openProgress) || 0, 0, 1);
+      const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      if (rig.doorType === "shutter") {
+        rig.pivotGroup.scale.y = Math.max(0.1, 1 - ease * 0.88);
+      } else if (rig.doorType === "slide") {
+        if (rig.slideAxis === "z") {
+          rig.pivotGroup.scale.z = Math.max(0.14, 1 - ease * 0.84);
+        } else {
+          rig.pivotGroup.scale.x = Math.max(0.14, 1 - ease * 0.84);
+        }
+      } else {
+        rig.pivotGroup.rotation.y = rig.closedAngle + (rig.openAngle - rig.closedAngle) * ease;
+      }
+    }
+    toggleInteractiveDoor(doorKey, { forceOpen = null, silent = false } = {}) {
+      const rig = this.activeDoorRigs?.get(doorKey);
+      if (!rig) return false;
+      const nextOpen = forceOpen !== null ? Boolean(forceOpen) : !rig.isOpen;
+      const targets = [rig];
+      if (rig.pairKey && this.activeDoorRigs.has(rig.pairKey)) {
+        const twin = this.activeDoorRigs.get(rig.pairKey);
+        if (twin && twin !== rig) targets.push(twin);
+      }
+      for (const r of targets) {
+        r.isOpen = nextOpen;
+        r.targetProgress = nextOpen ? 1 : 0;
+        this.doorStatesByKey.set(r.key, nextOpen);
+        const openSet = r.roomGroup?.userData?.openDoorIndices;
+        if (openSet) {
+          if (nextOpen) openSet.add(r.doorIdx);
+          else openSet.delete(r.doorIdx);
+        }
+      }
+      this.renderHouseFlipperPromptHud?.();
+      if (!silent) {
+        this.showStatusHint(`${nextOpen ? "Membuka" : "Menutup"} ${rig.labelKind} ${rig.roomName}`);
+      }
+      return nextOpen;
+    }
+    setAllInteractiveDoorsOpen(open = true) {
+      if (!this.activeDoorRigs || this.activeDoorRigs.size === 0) return 0;
+      let count = 0;
+      const visited = /* @__PURE__ */ new Set();
+      for (const [key, rig] of this.activeDoorRigs.entries()) {
+        if (visited.has(key)) continue;
+        visited.add(key);
+        if (rig.pairKey) visited.add(rig.pairKey);
+        this.toggleInteractiveDoor(key, { forceOpen: Boolean(open), silent: true });
+        count++;
+      }
+      this.showStatusHint(
+        open ? `Semua pintu ruangan dibuka (${count} pintu).` : `Semua pintu ruangan ditutup (${count} pintu).`
+      );
+      return count;
+    }
+    updateInteractiveDoors(dt = 0.016) {
+      if (!this.activeDoorRigs || this.activeDoorRigs.size === 0) return;
+      const step = Math.min(0.25, Math.max(4e-3, Number(dt) || 0.016)) * 4.8;
+      const isCarryingInAvatar = Boolean(
+        this.avatarMode && !this.simulatorFocusedDeviceId && Array.isArray(this.carriedObjects) && this.carriedObjects.length > 0
+      );
+      const avX = Number(this.avatarState?.x) || 0;
+      const avY = (Number(this.avatarState?.y) || 0) + 1;
+      const avZ = Number(this.avatarState?.z) || 0;
+      const doorWorldPos = isCarryingInAvatar ? new Vector3() : null;
+      for (const rig of this.activeDoorRigs.values()) {
+        if (!rig?.pivotGroup) continue;
+        const diff = rig.targetProgress - rig.openProgress;
+        if (Math.abs(diff) > 5e-4) {
+          if (Math.abs(diff) <= step) {
+            rig.openProgress = rig.targetProgress;
+          } else {
+            rig.openProgress += Math.sign(diff) * step;
+          }
+          this._applyDoorRigPose(rig);
+        }
+        if (isCarryingInAvatar && !rig.isOpen && doorWorldPos) {
+          rig.pivotGroup.getWorldPosition(doorWorldPos);
+          const dy = Math.abs(doorWorldPos.y - (avY - 1));
+          if (dy <= 1.8) {
+            const distXZ = Math.hypot(doorWorldPos.x - avX, doorWorldPos.z - avZ);
+            if (distXZ <= 1.95) {
+              this.toggleInteractiveDoor(rig.key, { forceOpen: true, silent: true });
+            }
+          }
+        }
+      }
+    }
+    findInteractiveDoorHit(raycaster = this.raycaster, maxDist = Infinity) {
+      if (!raycaster || !this.roomsGroup || !this.roomsGroup.visible || this.roomsGroup.children.length === 0) {
+        return null;
+      }
+      const hits = this._filterVisibleRayHits(raycaster.intersectObjects(this.roomsGroup.children, true));
+      if (!hits || hits.length === 0) return null;
+      const first = hits[0];
+      if (!Number.isFinite(first.distance) || first.distance > maxDist) return null;
+      let curr = first.object;
+      while (curr && curr !== this.roomsGroup) {
+        const key = curr.userData?.interactiveDoorKey;
+        if (key && this.activeDoorRigs?.has(key)) {
+          return {
+            doorKey: key,
+            rig: this.activeDoorRigs.get(key),
+            distance: first.distance,
+            point: first.point.clone()
+          };
+        }
+        curr = curr.parent;
+      }
+      return null;
+    }
+    findTargetInteractiveDoorForAvatar() {
+      if (!this.avatarMode || !this.activeDoorRigs || this.activeDoorRigs.size === 0) return null;
+      if (this.camera && this.raycaster && (this.camera.isPerspectiveCamera || this.camera.isOrthographicCamera)) {
+        try {
+          this.camera.updateMatrixWorld?.();
+          this.raycaster.setFromCamera({ x: 0, y: 0 }, this.camera);
+          const aimed = this.findInteractiveDoorHit(this.raycaster, 4.6);
+          if (aimed?.rig) {
+            return { ...aimed, fromAim: true };
+          }
+        } catch {
+        }
+      }
+      const ax = Number(this.avatarState?.x) || 0;
+      const ay = Number(this.avatarState?.y) || 0;
+      const az = Number(this.avatarState?.z) || 0;
+      const yaw = Number(this.avatarState?.yaw) || 0;
+      const fwdX = Math.sin(yaw);
+      const fwdZ = Math.cos(yaw);
+      const wPos = new Vector3();
+      let best = null;
+      for (const rig of this.activeDoorRigs.values()) {
+        if (!rig?.pivotGroup || rig.roomGroup?.visible === false) continue;
+        rig.pivotGroup.getWorldPosition(wPos);
+        if (Math.abs(wPos.y - ay) > 1.7) continue;
+        const dx = wPos.x - ax;
+        const dz = wPos.z - az;
+        const dist = Math.hypot(dx, dz);
+        if (dist > 2.55) continue;
+        const dot = dist > 0.01 ? (dx * fwdX + dz * fwdZ) / dist : 1;
+        const score = dist - (dot > 0.35 ? 0.5 : 0);
+        if (!best || score < best.score) {
+          best = { doorKey: rig.key, rig, distance: dist, score, fromAim: false };
+        }
+      }
+      return best;
+    }
+    interactOrPickupFromAvatar() {
+      if (!this.avatarMode) return false;
+      const nearestPick = this.findNearestPickableObjectToAvatar?.();
+      if (nearestPick?.source === "selected") {
+        return this.pickupNearestObjectFromAvatar();
+      }
+      const doorTarget = this.findTargetInteractiveDoorForAvatar?.();
+      if (doorTarget?.fromAim && (!nearestPick || nearestPick.source !== "aim" || doorTarget.distance <= (nearestPick.distance ?? Infinity))) {
+        this.toggleInteractiveDoor(doorTarget.doorKey);
+        return true;
+      }
+      if (nearestPick?.source === "aim") {
+        return this.pickupNearestObjectFromAvatar();
+      }
+      if (doorTarget?.doorKey) {
+        this.toggleInteractiveDoor(doorTarget.doorKey);
+        return true;
+      }
+      return this.pickupNearestObjectFromAvatar();
     }
     _attachRoomCustomGlb(room, roomGroup) {
       if (!room?.customModelUrl || !roomGroup) return;
@@ -70369,6 +71012,7 @@ void main() {
       if (!this.isActive || !this.isInitialized) return;
       this.clearGroup(this.roomsGroup);
       this.room3dMeshMap.clear();
+      this.activeDoorRigs?.clear?.();
       const rooms = stateManager.getRooms3d();
       const selectedRoomId = stateManager.getSelectedRoom3dId?.() || null;
       rooms.forEach((room) => {
@@ -71944,6 +72588,13 @@ void main() {
         this.handleRoad3dBuildClick(e);
         return;
       }
+      if (stateManager.getMode() !== "draw-cable" && stateManager.getMode() !== "add-device" && this.navTool !== "road3d" && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+        const doorHit = this.findInteractiveDoorHit?.(this.raycaster, this.avatarMode ? 5.5 : 160);
+        if (doorHit?.doorKey) {
+          this.toggleInteractiveDoor(doorHit.doorKey);
+          return;
+        }
+      }
       if (stateManager.getMode() !== "draw-cable") {
         const objHit = this.findObject3dHit(this.raycaster);
         if (objHit?.object3dId) {
@@ -73287,10 +73938,28 @@ void main() {
       });
       const meshGroup = this.deviceMeshMap.get(devId);
       const devWorld = this.normToWorld(device.position.x, device.position.y);
-      const planeY = meshGroup ? meshGroup.position.y : 0;
+      const planeY = meshGroup ? meshGroup.position.y : Number(device.spatial3d?.elevationMeters) || 0;
       const dragPlane = new Plane(new Vector3(0, 1, 0), -planeY);
+      const devAnchor = new Vector3(
+        meshGroup ? meshGroup.position.x : devWorld.x,
+        planeY,
+        meshGroup ? meshGroup.position.z : devWorld.z
+      );
+      const camFwd = new Vector3(0, 0, -1);
+      this.camera?.getWorldDirection?.(camFwd);
+      const camHorizNormal = new Vector3(camFwd.x, 0, camFwd.z);
+      if (camHorizNormal.lengthSq() < 1e-4) camHorizNormal.set(0, 0, 1);
+      else camHorizNormal.normalize();
+      const verticalFallbackPlane = new Plane().setFromNormalAndCoplanarPoint(camHorizNormal, devAnchor);
       const hitPt = new Vector3();
-      if (!this.raycaster.ray.intersectPlane(dragPlane, hitPt)) return;
+      const hitPlaneOk = this.raycaster.ray.intersectPlane(dragPlane, hitPt) && Math.abs(this.raycaster.ray.direction.y) >= 0.06 && hitPt.distanceTo(devAnchor) <= 35;
+      if (!hitPlaneOk) {
+        if (devHits[0]?.point) {
+          hitPt.copy(devHits[0].point);
+        } else if (!this.raycaster.ray.intersectPlane(verticalFallbackPlane, hitPt)) {
+          hitPt.copy(devAnchor);
+        }
+      }
       const meshOffsetX = meshGroup ? meshGroup.position.x - devWorld.x : 0;
       const meshOffsetZ = meshGroup ? meshGroup.position.z - devWorld.z : 0;
       const prevEff = this.effectivePosMap.get(devId);
@@ -73319,7 +73988,7 @@ void main() {
       });
       const mc = meshGroup?.getObjectByName?.("DeviceModelContainer");
       const startRotY = Number(device.spatial3d?.rotationY ?? device.rotation ?? 0) || 0;
-      const startHolderY = meshGroup ? meshGroup.position.y : 0;
+      const startHolderY = meshGroup ? meshGroup.position.y : Number(device.spatial3d?.elevationMeters) || 0;
       const startSupportY = typeof this.getCarriedDropSupportElevation === "function" ? this.getCarriedDropSupportElevation(devWorld.x, devWorld.z, devId) : 0;
       this.dragMoveState = {
         deviceId: devId,
@@ -73334,6 +74003,9 @@ void main() {
         startRotY,
         hasModelContainer: Boolean(mc),
         plane: dragPlane,
+        verticalFallbackPlane,
+        startClientY: e.clientY,
+        camDistAtStart: this.camera?.position ? Math.max(1.5, this.camera.position.distanceTo(devAnchor)) : 8,
         grabOffsetX: devWorld.x - hitPt.x,
         grabOffsetZ: devWorld.z - hitPt.z,
         meshOffsetX,
@@ -73361,7 +74033,7 @@ void main() {
       const meshTargets = [];
       const visit = (node) => {
         if (!node || node.visible === false) return;
-        if (node.userData?.gizmoType || node.userData?.isSelectionRing || node.userData?.isCarriedByAvatar) return;
+        if (node.userData?.gizmoType || node.userData?.isSelectionRing || node.userData?.isCarriedByAvatar || node.userData?.isInteractiveDoorPivot || node.userData?.isInteractiveDoorMesh) return;
         if (node.userData?.object3dId) {
           const objRec = stateManager?.getObject3dById?.(node.userData.object3dId);
           const shp = String(objRec?.shape || "").toLowerCase();
@@ -73433,6 +74105,37 @@ void main() {
       this.raycaster.setFromCamera(this.pointer, this.camera);
       const meshGroup = this.deviceMeshMap.get(state.deviceId);
       const modelContainer = meshGroup?.getObjectByName?.("DeviceModelContainer");
+      if (e.shiftKey && state.peers.length === 0) {
+        const dyPx = (Number(state.startClientY) || e.clientY) - e.clientY;
+        const meterPerPx = clamp((Number(state.camDistAtStart) || 8) * 28e-4, 6e-3, 0.06);
+        const rawElev = clamp(state.startHolderY + dyPx * meterPerPx, 0, 20);
+        const newElev = Math.round(rawElev * 20) / 20;
+        const curNorm = state.latestNorm || { x: state.startNormX, y: state.startNormY };
+        const curWorld = this.normToWorld(curNorm.x, curNorm.y);
+        const shiftX = curWorld.x - state.startWorldX;
+        const shiftZ = curWorld.z - state.startWorldZ;
+        const shiftY = newElev - state.startHolderY;
+        state.wallMountSnap = null;
+        state.surfaceSnapElev = newElev;
+        state.latestNorm = curNorm;
+        if (meshGroup) {
+          meshGroup.position.set(curWorld.x + state.meshOffsetX, newElev, curWorld.z + state.meshOffsetZ);
+          this.effectivePosMap.set(
+            state.deviceId,
+            new Vector3(meshGroup.position.x, state.effY + shiftY, meshGroup.position.z)
+          );
+          state.portInitials.forEach(({ key, initial }) => {
+            this.portWorldPosMap.set(
+              key,
+              new Vector3(initial.x + shiftX, initial.y + shiftY, initial.z + shiftZ)
+            );
+          });
+        }
+        this.syncCables();
+        this.syncTransformGizmo?.();
+        this.showStatusHint(`Atur Elevasi Z (Shift + Drag): ${newElev.toFixed(2)}m`);
+        return;
+      }
       if (state.peers.length === 0) {
         const wallHit = this.find3DWallMountTarget(
           this.raycaster.ray.origin,
@@ -73472,6 +74175,7 @@ void main() {
             mountType: "wall"
           };
           this.syncCables();
+          this.syncTransformGizmo?.();
           this.showStatusHint(`Menempel ke dinding 3D (Tinggi: ${mountY.toFixed(2)}m \u2022 Hadap: ${wallHit.rotationY}\xB0)`);
           return;
         }
@@ -73482,7 +74186,13 @@ void main() {
         }
       }
       const hitPt = new Vector3();
-      if (!this.raycaster.ray.intersectPlane(state.plane, hitPt)) return;
+      const isGrazingHorizontal = Math.abs(this.raycaster.ray.direction.y) < 0.06;
+      const hitHorizOk = !isGrazingHorizontal && this.raycaster.ray.intersectPlane(state.plane, hitPt) && (!this.camera?.position || hitPt.distanceTo(this.camera.position) <= 350);
+      if (!hitHorizOk) {
+        if (!state.verticalFallbackPlane || !this.raycaster.ray.intersectPlane(state.verticalFallbackPlane, hitPt)) {
+          return;
+        }
+      }
       let newWorldX = hitPt.x + state.grabOffsetX;
       let newWorldZ = hitPt.z + state.grabOffsetZ;
       let activeElevY = state.startHolderY;
@@ -75407,16 +76117,32 @@ void main() {
       }
       return { devices: [], fromCarried: false };
     }
-    /** Resets any manual Z elevation offset on carried items back to surface-snap height (0 offset). */
+    /** Resets any manual Z elevation offset on carried items (or selected device in free-cam) back to floor/surface. */
     resetCarriedElevationOffset() {
-      if (!Array.isArray(this.carriedObjects) || this.carriedObjects.length === 0) return false;
-      this.carriedObjects.forEach((item) => {
-        if (item) item.carryElevationOffset = 0;
+      if (Array.isArray(this.carriedObjects) && this.carriedObjects.length > 0) {
+        this.carriedObjects.forEach((item) => {
+          if (item) item.carryElevationOffset = 0;
+        });
+        this.syncSimplePlacementIndicator?.();
+        this.renderHouseFlipperPromptHud?.();
+        const aim = this.computeAvatarAimPlacementTarget?.({ item: this.carriedObjects[this.carriedObjects.length - 1] });
+        this.showStatusHint(`Tinggi Z direset ke permukaan (${Number(aim?.elevationMeters ?? 0).toFixed(2)}m)`);
+        return true;
+      }
+      const selId = this.deviceManager?.selectedDeviceId;
+      const dev = selId ? this.deviceManager?.getDeviceById?.(selId) : null;
+      if (!dev || dev.layerLocked) return false;
+      const baseSp = { ...getDefaultSpatial3d(dev.type), ...dev.spatial3d || {} };
+      this.deviceManager?.updateDevice?.(dev.id, {
+        spatial3d: { ...baseSp, elevationMeters: 0, offsetY: 0 }
       });
+      if (this.isActive && this.isInitialized) {
+        this.syncDevices();
+        this.syncCables();
+      }
       this.syncSimplePlacementIndicator?.();
       this.renderHouseFlipperPromptHud?.();
-      const aim = this.computeAvatarAimPlacementTarget?.({ item: this.carriedObjects[this.carriedObjects.length - 1] });
-      this.showStatusHint(`Tinggi Z direset ke permukaan (${Number(aim?.elevationMeters ?? 0).toFixed(2)}m)`);
+      this.showStatusHint(`Tinggi Z "${dev.name}" direset ke lantai (0.00m)`);
       return true;
     }
     adjustAvatarTargetOrCarriedElevation(deltaMeters = 0.25) {
@@ -75439,7 +76165,7 @@ void main() {
         this.showStatusHint(`Ketinggian Z penempatan: ${finalTargetElev.toFixed(2)}m`);
         return true;
       }
-      const targetId = (this.avatarState?.nearestDist <= 10 ? this.avatarState.nearestDeviceId : null) || this.deviceManager?.selectedDeviceId || this.avatarState?.nearestDeviceId;
+      const targetId = this.deviceManager?.selectedDeviceId || (this.avatarMode && this.avatarState?.nearestDist <= 10 ? this.avatarState.nearestDeviceId : null) || (this.avatarMode ? this.avatarState?.nearestDeviceId : null);
       const dev = targetId ? this.deviceManager?.getDeviceById?.(targetId) : null;
       if (!dev || dev.layerLocked) {
         this.showStatusHint("Dekati atau bawa perangkat terlebih dahulu untuk ubah ketinggian Z.");
@@ -76174,6 +76900,7 @@ void main() {
         const roomGroup = this.room3dMeshMap?.get(room.id);
         const profile = roomGroup?.userData?.roomCollisionProfile;
         const colScale = roomGroup?.userData?.roomCollisionScale;
+        const openDoorIndices = roomGroup?.userData?.openDoorIndices;
         if (!profile || !colScale) continue;
         const f = this._mapWorldToRoomFrame(room, colScale, curX, curZ);
         const prevFrame = this._mapWorldToRoomFrame(room, colScale, prevX ?? curX, prevZ ?? curZ);
@@ -76208,6 +76935,7 @@ void main() {
               for (const tri of tris) {
                 if (sweptSeen.has(tri)) continue;
                 sweptSeen.add(tri);
+                if (tri.doorIdx >= 0 && openDoorIndices?.has(tri.doorIdx)) continue;
                 const triMinY = tri.minY * sy + 0.025;
                 const triMaxY = tri.maxY * sy + 0.025;
                 if (minWallClearY >= triMaxY - 1e-4 || y + doorClearHeight <= triMinY + 1e-4) continue;
@@ -76264,6 +76992,7 @@ void main() {
             for (const tri of tris) {
               if (seenTris.has(tri)) continue;
               seenTris.add(tri);
+              if (tri.doorIdx >= 0 && openDoorIndices?.has(tri.doorIdx)) continue;
               const triMinY = tri.minY * sy + 0.025;
               const triMaxY = tri.maxY * sy + 0.025;
               if (minWallClearY >= triMaxY - 1e-4 || y + doorClearHeight <= triMinY + 1e-4) {
@@ -77972,6 +78701,9 @@ void main() {
             this.dropCarriedObjectsFromAvatar({ dropAll: Boolean(ev.shiftKey), useAimTarget: true });
           } else if (act === "pickup") {
             this.pickupNearestObjectFromAvatar();
+          } else if (act === "toggle-door") {
+            const dKey = btn.dataset.doorKey;
+            if (dKey) this.toggleInteractiveDoor(dKey);
           }
         });
       }
@@ -78007,6 +78739,26 @@ void main() {
       }
       if (this.avatarMode) {
         const nearestPick = this.findNearestPickableObjectToAvatar?.();
+        const doorTarget = this.findTargetInteractiveDoorForAvatar?.();
+        const preferDoor = Boolean(
+          doorTarget?.rig && (!nearestPick || nearestPick.source !== "selected" && nearestPick.source !== "aim" || doorTarget.fromAim && nearestPick.source === "aim" && doorTarget.distance <= (nearestPick.distance ?? Infinity))
+        );
+        if (preferDoor) {
+          const rig = doorTarget.rig;
+          const key = `door:${rig.key}:${rig.isOpen ? 1 : 0}`;
+          if (this._lastHouseFlipperHudKey !== key) {
+            this._lastHouseFlipperHudKey = key;
+            const label = `${rig.labelKind} ${rig.roomName}`;
+            const actionText = rig.isOpen ? "Tutup (Klik / E)" : "Buka (Klik / E)";
+            tipEl.className = "hud-3d-houseflipper-tip";
+            tipEl.style.display = "inline-flex";
+            tipEl.innerHTML = `
+            <span class="hf-tip-name">${this.escapeHudHtml(label)}</span>
+            <button type="button" class="hf-tip-btn is-primary" data-hf-action="toggle-door" data-door-key="${this.escapeHudHtml(rig.key)}">${actionText}</button>
+          `;
+          }
+          return;
+        }
         const shouldShowPick = Boolean(
           nearestPick?.id && (this.navTool === "move" || nearestPick.source === "selected" || nearestPick.source === "aim")
         );
@@ -78028,17 +78780,23 @@ void main() {
         }
       }
       if (!this.avatarMode && this.navTool === "move" && !this.transformGizmoGroup?.visible) {
-        const selId = this.deviceManager?.selectedDeviceId;
+        const selId = this.dragMoveState?.deviceId || this.deviceManager?.selectedDeviceId;
         const dev = selId ? this.deviceManager?.getDeviceById?.(selId) : null;
         if (dev && dev.layerVisible !== false) {
-          const key = `orbitmove:${dev.id}`;
+          const holder = this.deviceMeshMap?.get(dev.id);
+          const curZ = holder ? holder.position.y : Math.max(0, Number(dev.spatial3d?.elevationMeters) || 0);
+          const curZStr = Number(curZ).toFixed(2);
+          const key = `orbitmove:${dev.id}:${curZStr}`;
           if (this._lastHouseFlipperHudKey !== key) {
             this._lastHouseFlipperHudKey = key;
             tipEl.className = "hud-3d-houseflipper-tip is-orbit-move";
             tipEl.style.display = "inline-flex";
             tipEl.innerHTML = `
             <span class="hf-tip-name">${this.escapeHudHtml(dev.name || "Alat")}</span>
-            <button type="button" class="hf-tip-btn" data-hf-action="rotate">Putar (R)</button>
+            <button type="button" class="hf-tip-btn" data-hf-action="z-down" title="Turun Z (-0.25m) \u2022 PgDn / Shift+Drag">Z-</button>
+            <button type="button" class="hf-tip-zval ${curZ > 0.01 ? "is-custom" : ""}" data-hf-action="z-reset" title="Reset Z ke 0.00m">Z ${curZStr}m</button>
+            <button type="button" class="hf-tip-btn" data-hf-action="z-up" title="Naik Z (+0.25m) \u2022 PgUp / Shift+Drag">Z+</button>
+            <button type="button" class="hf-tip-btn" data-hf-action="rotate" title="Putar 45\xB0 (R)">Putar (R)</button>
           `;
           }
           return;
@@ -84949,9 +85707,9 @@ ${result.output}`);
         if (this.deviceDetailModal?.isOpen() || this.authModal?.isOpen()) {
           return;
         }
-        if (stateManager.getViewMode() === "3d" && this.map3DEngine?.avatarMode && !e.ctrlKey && !e.metaKey) {
-          const isPgUpDn = e.key === "PageUp" || e.key === "PageDown";
-          const isCarryingArrowZ = (e.key === "ArrowUp" || e.key === "ArrowDown") && Array.isArray(this.map3DEngine.carriedObjects) && this.map3DEngine.carriedObjects.length > 0;
+        if (stateManager.getViewMode() === "3d" && !e.ctrlKey && !e.metaKey) {
+          const isPgUpDn = (e.key === "PageUp" || e.key === "PageDown") && (this.map3DEngine?.avatarMode || Boolean(this.deviceManager?.selectedDeviceId));
+          const isCarryingArrowZ = this.map3DEngine?.avatarMode && (e.key === "ArrowUp" || e.key === "ArrowDown") && Array.isArray(this.map3DEngine.carriedObjects) && this.map3DEngine.carriedObjects.length > 0;
           if (isPgUpDn || isCarryingArrowZ) {
             e.preventDefault();
             const mag = e.shiftKey ? 0.1 : e.altKey ? 0.5 : 0.25;
@@ -85077,6 +85835,8 @@ ${result.output}`);
             e.preventDefault();
             if (this.map3DEngine.carriedObjects?.length > 0 && !e.shiftKey) {
               this.map3DEngine.dropCarriedObjectsFromAvatar({ dropAll: false, useAimTarget: true });
+            } else if (typeof this.map3DEngine.interactOrPickupFromAvatar === "function" && !e.shiftKey) {
+              this.map3DEngine.interactOrPickupFromAvatar();
             } else {
               this.map3DEngine.pickupNearestObjectFromAvatar();
             }

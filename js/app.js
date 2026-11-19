@@ -945,10 +945,12 @@ class NetMapApp {
         return;
       }
 
-      // Live Z elevation shortcuts in Mode Teknisi (PageUp/PageDown always, or ArrowUp/ArrowDown while carrying)
-      if (stateManager.getViewMode() === '3d' && this.map3DEngine?.avatarMode && !e.ctrlKey && !e.metaKey) {
-        const isPgUpDn = e.key === 'PageUp' || e.key === 'PageDown';
+      // Live Z elevation shortcuts in 3D view (PageUp/PageDown in Mode Teknisi or on selected device; ArrowUp/ArrowDown while carrying)
+      if (stateManager.getViewMode() === '3d' && !e.ctrlKey && !e.metaKey) {
+        const isPgUpDn = (e.key === 'PageUp' || e.key === 'PageDown')
+          && (this.map3DEngine?.avatarMode || Boolean(this.deviceManager?.selectedDeviceId));
         const isCarryingArrowZ =
+          this.map3DEngine?.avatarMode &&
           (e.key === 'ArrowUp' || e.key === 'ArrowDown') &&
           Array.isArray(this.map3DEngine.carriedObjects) &&
           this.map3DEngine.carriedObjects.length > 0;
@@ -1085,6 +1087,8 @@ class NetMapApp {
           e.preventDefault();
           if (this.map3DEngine.carriedObjects?.length > 0 && !e.shiftKey) {
             this.map3DEngine.dropCarriedObjectsFromAvatar({ dropAll: false, useAimTarget: true });
+          } else if (typeof this.map3DEngine.interactOrPickupFromAvatar === 'function' && !e.shiftKey) {
+            this.map3DEngine.interactOrPickupFromAvatar();
           } else {
             this.map3DEngine.pickupNearestObjectFromAvatar();
           }

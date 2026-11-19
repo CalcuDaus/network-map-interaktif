@@ -190,6 +190,8 @@ export class Map3DEngine {
     this.roadBuildState = null;
     this.object3dDragState = null;
     this.cableDragState = null;
+    this.doorStatesByKey = new Map(); // `${roomId}::${doorIdx}` -> boolean isOpen
+    this.activeDoorRigs = new Map();  // `${roomId}::${doorIdx}` -> DoorRig
     this._marqueeEl = null;
     this._temporarilyDisabledControlsForBox = false;
     this._pendingSyncRaf = null;
@@ -451,10 +453,8 @@ export class Map3DEngine {
         if (gizmoHit) {
           cancelLongPress();
           this.startObject3dGizmoDrag(e, dom, gizmoHit);
-        } else if (this.navTool === 'box' || e.ctrlKey || e.metaKey) {
-        } else if ((this.navTool === 'box' && !this.avatarMode) || e.ctrlKey || e.metaKey) {
+        } else if (!this.avatarMode && (this.navTool === 'box' || e.ctrlKey || e.metaKey)) {
           this.startBoxSelect(e, dom);
-        } else if (this.navTool === 'draw3d') {
         } else if (this.navTool === 'draw3d' && !this.avatarMode) {
           this.startObject3dCreateDraw(e, dom);
         } else if (this.navTool === 'look') {
@@ -465,10 +465,8 @@ export class Map3DEngine {
           this.lookYaw = Math.atan2(dir.x, dir.z);
           this.lookPitch = Math.asin(Math.max(-0.99, Math.min(0.99, dir.y)));
           dom.setPointerCapture?.(e.pointerId);
-        } else if (this.navTool === 'move') {
         } else if (this.navTool === 'move' && !this.avatarMode) {
           this.startDeviceDragMove(e, dom);
-        } else if (this.navTool === 'rotate') {
         } else if (this.navTool === 'rotate' && !this.avatarMode) {
           this.startRotateDrag(e, dom);
         }
@@ -729,6 +727,7 @@ export class Map3DEngine {
         this.publishLocalPresence(false);
       }
       this.updateRemoteAvatars(dt);
+      this.updateInteractiveDoors?.(dt);
       this.updatePacketFlows3D?.(now);
       if (this.avatarMode && !this.simulatorFocusedDeviceId) {
         if (this.camera && this.controls) {
@@ -915,6 +914,257 @@ export class Map3DEngine {
     roomGroup.userData.attachedRoomUrl = room.customModelUrl;
     roomGroup.userData.roomCollisionProfile = glb.userData?.collisionProfile || null;
     roomGroup.userData.roomCollisionScale = colScale;
+    this._registerRoomInteractiveDoors(room, roomGroup, glb);
+  }
+
+  _registerRoomInteractiveDoors(room, roomGroup, glb) {
+    if (!room?.id || !roomGroup || !glb) return;
+    if (!this.doorStatesByKey) this.doorStatesByKey = new Map();
+    if (!this.activeDoorRigs) this.activeDoorRigs = new Map();
+
+    // Remove stale door rigs belonging to this room before re-registering
+    const prefix = `${room.id}::`;
+    for (const k of Array.from(this.activeDoorRigs.keys())) {
+      if (k.startsWith(prefix)) this.activeDoorRigs.delete(k);
+    }
+
+    const openDoorIndices = new Set();
+    const roomDoorRigs = [];
+
+    glb.traverse((node) => {
+      if (!node?.userData?.isInteractiveDoorPivot || !node.userData?.doorMeta) return;
+      const meta = node.userData.doorMeta;
+      const doorKey = `${room.id}::${meta.doorIdx}`;
+      const isOpen = this.doorStatesByKey.has(doorKey)
+        ? Boolean(this.doorStatesByKey.get(doorKey))
+        : Boolean(meta.initialOpen);
+
+      const rig = {
+        key: doorKey,
+        roomId: room.id,
+        roomName: room.name || 'Ruangan',
+        doorIdx: meta.doorIdx,
+        pairKey: meta.pairIdx >= 0 ? `${room.id}::${meta.pairIdx}` : null,
+        doorType: meta.doorType || 'swing',
+        slideAxis: meta.slideAxis || 'x',
+        closedAngle: Number(meta.closedAngle) || 0,
+        openAngle: Number(meta.openAngle) || 0,
+        labelKind: meta.labelKind || 'Pintu',
+        pivotGroup: node,
+        roomGroup,
+        isOpen,
+        openProgress: isOpen ? 1 : 0,
+        targetProgress: isOpen ? 1 : 0
+      };
+
+      node.userData.interactiveDoorKey = doorKey;
+      node.traverse((ch) => {
+        ch.userData.interactiveDoorKey = doorKey;
+        ch.userData.roomId = room.id;
+      });
+
+      this._applyDoorRigPose(rig);
+      if (isOpen) openDoorIndices.add(meta.doorIdx);
+      this.activeDoorRigs.set(doorKey, rig);
+      roomDoorRigs.push(rig);
+    });
+
+    roomGroup.userData.doorRigs = roomDoorRigs;
+    roomGroup.userData.openDoorIndices = openDoorIndices;
+  }
+
+  _applyDoorRigPose(rig) {
+    if (!rig?.pivotGroup) return;
+    const t = clamp(Number(rig.openProgress) || 0, 0, 1);
+    const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    if (rig.doorType === 'shutter') {
+      rig.pivotGroup.scale.y = Math.max(0.1, 1 - ease * 0.88);
+    } else if (rig.doorType === 'slide') {
+      if (rig.slideAxis === 'z') {
+        rig.pivotGroup.scale.z = Math.max(0.14, 1 - ease * 0.84);
+      } else {
+        rig.pivotGroup.scale.x = Math.max(0.14, 1 - ease * 0.84);
+      }
+    } else {
+      rig.pivotGroup.rotation.y = rig.closedAngle + (rig.openAngle - rig.closedAngle) * ease;
+    }
+  }
+
+  toggleInteractiveDoor(doorKey, { forceOpen = null, silent = false } = {}) {
+    const rig = this.activeDoorRigs?.get(doorKey);
+    if (!rig) return false;
+    const nextOpen = forceOpen !== null ? Boolean(forceOpen) : !rig.isOpen;
+    const targets = [rig];
+    if (rig.pairKey && this.activeDoorRigs.has(rig.pairKey)) {
+      const twin = this.activeDoorRigs.get(rig.pairKey);
+      if (twin && twin !== rig) targets.push(twin);
+    }
+
+    for (const r of targets) {
+      r.isOpen = nextOpen;
+      r.targetProgress = nextOpen ? 1 : 0;
+      this.doorStatesByKey.set(r.key, nextOpen);
+      const openSet = r.roomGroup?.userData?.openDoorIndices;
+      if (openSet) {
+        if (nextOpen) openSet.add(r.doorIdx);
+        else openSet.delete(r.doorIdx);
+      }
+    }
+
+    this.renderHouseFlipperPromptHud?.();
+    if (!silent) {
+      this.showStatusHint(`${nextOpen ? 'Membuka' : 'Menutup'} ${rig.labelKind} ${rig.roomName}`);
+    }
+    return nextOpen;
+  }
+
+  setAllInteractiveDoorsOpen(open = true) {
+    if (!this.activeDoorRigs || this.activeDoorRigs.size === 0) return 0;
+    let count = 0;
+    const visited = new Set();
+    for (const [key, rig] of this.activeDoorRigs.entries()) {
+      if (visited.has(key)) continue;
+      visited.add(key);
+      if (rig.pairKey) visited.add(rig.pairKey);
+      this.toggleInteractiveDoor(key, { forceOpen: Boolean(open), silent: true });
+      count++;
+    }
+    this.showStatusHint(
+      open
+        ? `Semua pintu ruangan dibuka (${count} pintu).`
+        : `Semua pintu ruangan ditutup (${count} pintu).`
+    );
+    return count;
+  }
+
+  updateInteractiveDoors(dt = 0.016) {
+    if (!this.activeDoorRigs || this.activeDoorRigs.size === 0) return;
+    const step = Math.min(0.25, Math.max(0.004, Number(dt) || 0.016)) * 4.8;
+    const isCarryingInAvatar = Boolean(
+      this.avatarMode && !this.simulatorFocusedDeviceId && Array.isArray(this.carriedObjects) && this.carriedObjects.length > 0
+    );
+    const avX = Number(this.avatarState?.x) || 0;
+    const avY = (Number(this.avatarState?.y) || 0) + 1.0;
+    const avZ = Number(this.avatarState?.z) || 0;
+    const doorWorldPos = isCarryingInAvatar ? new THREE.Vector3() : null;
+
+    for (const rig of this.activeDoorRigs.values()) {
+      if (!rig?.pivotGroup) continue;
+      const diff = rig.targetProgress - rig.openProgress;
+      if (Math.abs(diff) > 0.0005) {
+        if (Math.abs(diff) <= step) {
+          rig.openProgress = rig.targetProgress;
+        } else {
+          rig.openProgress += Math.sign(diff) * step;
+        }
+        this._applyDoorRigPose(rig);
+      }
+
+      // Smart auto-open when carrying network devices up to a closed doorway
+      if (isCarryingInAvatar && !rig.isOpen && doorWorldPos) {
+        rig.pivotGroup.getWorldPosition(doorWorldPos);
+        const dy = Math.abs(doorWorldPos.y - (avY - 1.0));
+        if (dy <= 1.8) {
+          const distXZ = Math.hypot(doorWorldPos.x - avX, doorWorldPos.z - avZ);
+          if (distXZ <= 1.95) {
+            this.toggleInteractiveDoor(rig.key, { forceOpen: true, silent: true });
+          }
+        }
+      }
+    }
+  }
+
+  findInteractiveDoorHit(raycaster = this.raycaster, maxDist = Infinity) {
+    if (!raycaster || !this.roomsGroup || !this.roomsGroup.visible || this.roomsGroup.children.length === 0) {
+      return null;
+    }
+    const hits = this._filterVisibleRayHits(raycaster.intersectObjects(this.roomsGroup.children, true));
+    if (!hits || hits.length === 0) return null;
+    // Only consider the closest visible room hit so walls occlude doors behind them
+    const first = hits[0];
+    if (!Number.isFinite(first.distance) || first.distance > maxDist) return null;
+    let curr = first.object;
+    while (curr && curr !== this.roomsGroup) {
+      const key = curr.userData?.interactiveDoorKey;
+      if (key && this.activeDoorRigs?.has(key)) {
+        return {
+          doorKey: key,
+          rig: this.activeDoorRigs.get(key),
+          distance: first.distance,
+          point: first.point.clone()
+        };
+      }
+      curr = curr.parent;
+    }
+    return null;
+  }
+
+  findTargetInteractiveDoorForAvatar() {
+    if (!this.avatarMode || !this.activeDoorRigs || this.activeDoorRigs.size === 0) return null;
+
+    // 1) Crosshair direct 3D raycast to a door within 4.6m
+    if (this.camera && this.raycaster && (this.camera.isPerspectiveCamera || this.camera.isOrthographicCamera)) {
+      try {
+        this.camera.updateMatrixWorld?.();
+        this.raycaster.setFromCamera({ x: 0, y: 0 }, this.camera);
+        const aimed = this.findInteractiveDoorHit(this.raycaster, 4.6);
+        if (aimed?.rig) {
+          return { ...aimed, fromAim: true };
+        }
+      } catch { /* ignore mock camera */ }
+    }
+
+    // 2) Proximity fallback within 2.5m horizontally & same floor level
+    const ax = Number(this.avatarState?.x) || 0;
+    const ay = Number(this.avatarState?.y) || 0;
+    const az = Number(this.avatarState?.z) || 0;
+    const yaw = Number(this.avatarState?.yaw) || 0;
+    const fwdX = Math.sin(yaw);
+    const fwdZ = Math.cos(yaw);
+    const wPos = new THREE.Vector3();
+    let best = null;
+
+    for (const rig of this.activeDoorRigs.values()) {
+      if (!rig?.pivotGroup || rig.roomGroup?.visible === false) continue;
+      rig.pivotGroup.getWorldPosition(wPos);
+      if (Math.abs(wPos.y - ay) > 1.7) continue;
+      const dx = wPos.x - ax;
+      const dz = wPos.z - az;
+      const dist = Math.hypot(dx, dz);
+      if (dist > 2.55) continue;
+      const dot = dist > 0.01 ? (dx * fwdX + dz * fwdZ) / dist : 1;
+      const score = dist - (dot > 0.35 ? 0.5 : 0);
+      if (!best || score < best.score) {
+        best = { doorKey: rig.key, rig, distance: dist, score, fromAim: false };
+      }
+    }
+    return best;
+  }
+
+  interactOrPickupFromAvatar() {
+    if (!this.avatarMode) return false;
+    const nearestPick = this.findNearestPickableObjectToAvatar?.();
+    // Priority 1: Explicitly selected device/object always wins
+    if (nearestPick?.source === 'selected') {
+      return this.pickupNearestObjectFromAvatar();
+    }
+    const doorTarget = this.findTargetInteractiveDoorForAvatar?.();
+    // Priority 2: Direct crosshair aim on a door closer than any aimed device
+    if (doorTarget?.fromAim && (!nearestPick || nearestPick.source !== 'aim' || doorTarget.distance <= (nearestPick.distance ?? Infinity))) {
+      this.toggleInteractiveDoor(doorTarget.doorKey);
+      return true;
+    }
+    // Priority 3: Direct crosshair aim on a device/object
+    if (nearestPick?.source === 'aim') {
+      return this.pickupNearestObjectFromAvatar();
+    }
+    // Priority 4: Standing right beside a door
+    if (doorTarget?.doorKey) {
+      this.toggleInteractiveDoor(doorTarget.doorKey);
+      return true;
+    }
+    // Priority 5: Nearest pickable device/object fallback
+    return this.pickupNearestObjectFromAvatar();
   }
 
   _attachRoomCustomGlb(room, roomGroup) {
@@ -1038,6 +1288,7 @@ export class Map3DEngine {
     if (!this.isActive || !this.isInitialized) return;
     this.clearGroup(this.roomsGroup);
     this.room3dMeshMap.clear();
+    this.activeDoorRigs?.clear?.();
 
     const rooms = stateManager.getRooms3d();
     const selectedRoomId = stateManager.getSelectedRoom3dId?.() || null;
@@ -2857,6 +3108,22 @@ export class Map3DEngine {
       return;
     }
 
+    // 1d. Interactive Building Doors: clicking any door leaf toggles Open/Close smoothly
+    if (
+      stateManager.getMode() !== 'draw-cable'
+      && stateManager.getMode() !== 'add-device'
+      && this.navTool !== 'road3d'
+      && !e.ctrlKey
+      && !e.metaKey
+      && !e.shiftKey
+    ) {
+      const doorHit = this.findInteractiveDoorHit?.(this.raycaster, this.avatarMode ? 5.5 : 160);
+      if (doorHit?.doorKey) {
+        this.toggleInteractiveDoor(doorHit.doorKey);
+        return;
+      }
+    }
+
     // 2. Check Custom 3D Builder Object selection (Tiang, Rak Server, Balok, dll)
     if (stateManager.getMode() !== 'draw-cable') {
       const objHit = this.findObject3dHit(this.raycaster);
@@ -4355,11 +4622,31 @@ export class Map3DEngine {
 
     const meshGroup = this.deviceMeshMap.get(devId);
     const devWorld = this.normToWorld(device.position.x, device.position.y);
-    const planeY = meshGroup ? meshGroup.position.y : 0;
+    const planeY = meshGroup ? meshGroup.position.y : (Number(device.spatial3d?.elevationMeters) || 0);
     const dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -planeY);
+    const devAnchor = new THREE.Vector3(
+      meshGroup ? meshGroup.position.x : devWorld.x,
+      planeY,
+      meshGroup ? meshGroup.position.z : devWorld.z
+    );
+    const camFwd = new THREE.Vector3(0, 0, -1);
+    this.camera?.getWorldDirection?.(camFwd);
+    const camHorizNormal = new THREE.Vector3(camFwd.x, 0, camFwd.z);
+    if (camHorizNormal.lengthSq() < 0.0001) camHorizNormal.set(0, 0, 1);
+    else camHorizNormal.normalize();
+    const verticalFallbackPlane = new THREE.Plane().setFromNormalAndCoplanarPoint(camHorizNormal, devAnchor);
 
     const hitPt = new THREE.Vector3();
-    if (!this.raycaster.ray.intersectPlane(dragPlane, hitPt)) return;
+    const hitPlaneOk = this.raycaster.ray.intersectPlane(dragPlane, hitPt)
+      && Math.abs(this.raycaster.ray.direction.y) >= 0.06
+      && hitPt.distanceTo(devAnchor) <= 35;
+    if (!hitPlaneOk) {
+      if (devHits[0]?.point) {
+        hitPt.copy(devHits[0].point);
+      } else if (!this.raycaster.ray.intersectPlane(verticalFallbackPlane, hitPt)) {
+        hitPt.copy(devAnchor);
+      }
+    }
 
     const meshOffsetX = meshGroup ? (meshGroup.position.x - devWorld.x) : 0;
     const meshOffsetZ = meshGroup ? (meshGroup.position.z - devWorld.z) : 0;
@@ -4391,7 +4678,7 @@ export class Map3DEngine {
 
     const mc = meshGroup?.getObjectByName?.('DeviceModelContainer');
     const startRotY = Number(device.spatial3d?.rotationY ?? device.rotation ?? 0) || 0;
-    const startHolderY = meshGroup ? meshGroup.position.y : 0;
+    const startHolderY = meshGroup ? meshGroup.position.y : (Number(device.spatial3d?.elevationMeters) || 0);
     const startSupportY = typeof this.getCarriedDropSupportElevation === 'function'
       ? this.getCarriedDropSupportElevation(devWorld.x, devWorld.z, devId)
       : 0;
@@ -4409,6 +4696,9 @@ export class Map3DEngine {
       startRotY,
       hasModelContainer: Boolean(mc),
       plane: dragPlane,
+      verticalFallbackPlane,
+      startClientY: e.clientY,
+      camDistAtStart: this.camera?.position ? Math.max(1.5, this.camera.position.distanceTo(devAnchor)) : 8,
       grabOffsetX: devWorld.x - hitPt.x,
       grabOffsetZ: devWorld.z - hitPt.z,
       meshOffsetX,
@@ -4439,7 +4729,13 @@ export class Map3DEngine {
     const meshTargets = [];
     const visit = (node) => {
       if (!node || node.visible === false) return;
-      if (node.userData?.gizmoType || node.userData?.isSelectionRing || node.userData?.isCarriedByAvatar) return;
+      if (
+        node.userData?.gizmoType
+        || node.userData?.isSelectionRing
+        || node.userData?.isCarriedByAvatar
+        || node.userData?.isInteractiveDoorPivot
+        || node.userData?.isInteractiveDoorMesh
+      ) return;
       if (node.userData?.object3dId) {
         const objRec = stateManager?.getObject3dById?.(node.userData.object3dId);
         const shp = String(objRec?.shape || '').toLowerCase();
@@ -4527,6 +4823,40 @@ export class Map3DEngine {
     const meshGroup = this.deviceMeshMap.get(state.deviceId);
     const modelContainer = meshGroup?.getObjectByName?.('DeviceModelContainer');
 
+    // Shift + Drag Up/Down adjusts vertical Z elevation smoothly in 3D Move mode
+    if (e.shiftKey && state.peers.length === 0) {
+      const dyPx = (Number(state.startClientY) || e.clientY) - e.clientY;
+      const meterPerPx = clamp((Number(state.camDistAtStart) || 8) * 0.0028, 0.006, 0.06);
+      const rawElev = clamp(state.startHolderY + dyPx * meterPerPx, 0, 20);
+      const newElev = Math.round(rawElev * 20) / 20;
+      const curNorm = state.latestNorm || { x: state.startNormX, y: state.startNormY };
+      const curWorld = this.normToWorld(curNorm.x, curNorm.y);
+      const shiftX = curWorld.x - state.startWorldX;
+      const shiftZ = curWorld.z - state.startWorldZ;
+      const shiftY = newElev - state.startHolderY;
+
+      state.wallMountSnap = null;
+      state.surfaceSnapElev = newElev;
+      state.latestNorm = curNorm;
+      if (meshGroup) {
+        meshGroup.position.set(curWorld.x + state.meshOffsetX, newElev, curWorld.z + state.meshOffsetZ);
+        this.effectivePosMap.set(
+          state.deviceId,
+          new THREE.Vector3(meshGroup.position.x, state.effY + shiftY, meshGroup.position.z)
+        );
+        state.portInitials.forEach(({ key, initial }) => {
+          this.portWorldPosMap.set(
+            key,
+            new THREE.Vector3(initial.x + shiftX, initial.y + shiftY, initial.z + shiftZ)
+          );
+        });
+      }
+      this.syncCables();
+      this.syncTransformGizmo?.();
+      this.showStatusHint(`Atur Elevasi Z (Shift + Drag): ${newElev.toFixed(2)}m`);
+      return;
+    }
+
     // Allow snapping a single dragged device flush onto any 3D building/room wall under the cursor
     if (state.peers.length === 0) {
       const wallHit = this.find3DWallMountTarget(
@@ -4567,6 +4897,7 @@ export class Map3DEngine {
           mountType: 'wall'
         };
         this.syncCables();
+        this.syncTransformGizmo?.();
         this.showStatusHint(`Menempel ke dinding 3D (Tinggi: ${mountY.toFixed(2)}m • Hadap: ${wallHit.rotationY}°)`);
         return;
       }
@@ -4578,7 +4909,15 @@ export class Map3DEngine {
     }
 
     const hitPt = new THREE.Vector3();
-    if (!this.raycaster.ray.intersectPlane(state.plane, hitPt)) return;
+    const isGrazingHorizontal = Math.abs(this.raycaster.ray.direction.y) < 0.06;
+    const hitHorizOk = !isGrazingHorizontal
+      && this.raycaster.ray.intersectPlane(state.plane, hitPt)
+      && (!this.camera?.position || hitPt.distanceTo(this.camera.position) <= 350);
+    if (!hitHorizOk) {
+      if (!state.verticalFallbackPlane || !this.raycaster.ray.intersectPlane(state.verticalFallbackPlane, hitPt)) {
+        return;
+      }
+    }
 
     let newWorldX = hitPt.x + state.grabOffsetX;
     let newWorldZ = hitPt.z + state.grabOffsetZ;
@@ -6785,16 +7124,33 @@ export class Map3DEngine {
     return { devices: [], fromCarried: false };
   }
 
-  /** Resets any manual Z elevation offset on carried items back to surface-snap height (0 offset). */
+  /** Resets any manual Z elevation offset on carried items (or selected device in free-cam) back to floor/surface. */
   resetCarriedElevationOffset() {
-    if (!Array.isArray(this.carriedObjects) || this.carriedObjects.length === 0) return false;
-    this.carriedObjects.forEach((item) => {
-      if (item) item.carryElevationOffset = 0;
+    if (Array.isArray(this.carriedObjects) && this.carriedObjects.length > 0) {
+      this.carriedObjects.forEach((item) => {
+        if (item) item.carryElevationOffset = 0;
+      });
+      this.syncSimplePlacementIndicator?.();
+      this.renderHouseFlipperPromptHud?.();
+      const aim = this.computeAvatarAimPlacementTarget?.({ item: this.carriedObjects[this.carriedObjects.length - 1] });
+      this.showStatusHint(`Tinggi Z direset ke permukaan (${Number(aim?.elevationMeters ?? 0).toFixed(2)}m)`);
+      return true;
+    }
+
+    const selId = this.deviceManager?.selectedDeviceId;
+    const dev = selId ? this.deviceManager?.getDeviceById?.(selId) : null;
+    if (!dev || dev.layerLocked) return false;
+    const baseSp = { ...getDefaultSpatial3d(dev.type), ...(dev.spatial3d || {}) };
+    this.deviceManager?.updateDevice?.(dev.id, {
+      spatial3d: { ...baseSp, elevationMeters: 0, offsetY: 0 }
     });
+    if (this.isActive && this.isInitialized) {
+      this.syncDevices();
+      this.syncCables();
+    }
     this.syncSimplePlacementIndicator?.();
     this.renderHouseFlipperPromptHud?.();
-    const aim = this.computeAvatarAimPlacementTarget?.({ item: this.carriedObjects[this.carriedObjects.length - 1] });
-    this.showStatusHint(`Tinggi Z direset ke permukaan (${Number(aim?.elevationMeters ?? 0).toFixed(2)}m)`);
+    this.showStatusHint(`Tinggi Z "${dev.name}" direset ke lantai (0.00m)`);
     return true;
   }
 
@@ -6819,9 +7175,9 @@ export class Map3DEngine {
       return true;
     }
 
-    const targetId = (this.avatarState?.nearestDist <= 10 ? this.avatarState.nearestDeviceId : null)
-      || this.deviceManager?.selectedDeviceId
-      || this.avatarState?.nearestDeviceId;
+    const targetId = this.deviceManager?.selectedDeviceId
+      || (this.avatarMode && this.avatarState?.nearestDist <= 10 ? this.avatarState.nearestDeviceId : null)
+      || (this.avatarMode ? this.avatarState?.nearestDeviceId : null);
     const dev = targetId ? this.deviceManager?.getDeviceById?.(targetId) : null;
     if (!dev || dev.layerLocked) {
       this.showStatusHint('Dekati atau bawa perangkat terlebih dahulu untuk ubah ketinggian Z.');
@@ -7664,6 +8020,7 @@ export class Map3DEngine {
       const roomGroup = this.room3dMeshMap?.get(room.id);
       const profile = roomGroup?.userData?.roomCollisionProfile;
       const colScale = roomGroup?.userData?.roomCollisionScale;
+      const openDoorIndices = roomGroup?.userData?.openDoorIndices;
       if (!profile || !colScale) continue;
 
       const f = this._mapWorldToRoomFrame(room, colScale, curX, curZ);
@@ -7704,6 +8061,7 @@ export class Map3DEngine {
             for (const tri of tris) {
               if (sweptSeen.has(tri)) continue;
               sweptSeen.add(tri);
+              if (tri.doorIdx >= 0 && openDoorIndices?.has(tri.doorIdx)) continue;
               const triMinY = tri.minY * sy + 0.025;
               const triMaxY = tri.maxY * sy + 0.025;
               if (minWallClearY >= triMaxY - 1e-4 || y + doorClearHeight <= triMinY + 1e-4) continue;
@@ -7763,6 +8121,7 @@ export class Map3DEngine {
           for (const tri of tris) {
             if (seenTris.has(tri)) continue;
             seenTris.add(tri);
+            if (tri.doorIdx >= 0 && openDoorIndices?.has(tri.doorIdx)) continue;
 
             const triMinY = tri.minY * sy + 0.025;
             const triMaxY = tri.maxY * sy + 0.025;
@@ -9720,6 +10079,9 @@ export class Map3DEngine {
           this.dropCarriedObjectsFromAvatar({ dropAll: Boolean(ev.shiftKey), useAimTarget: true });
         } else if (act === 'pickup') {
           this.pickupNearestObjectFromAvatar();
+        } else if (act === 'toggle-door') {
+          const dKey = btn.dataset.doorKey;
+          if (dKey) this.toggleInteractiveDoor(dKey);
         }
       });
     }
@@ -9758,6 +10120,31 @@ export class Map3DEngine {
 
     if (this.avatarMode) {
       const nearestPick = this.findNearestPickableObjectToAvatar?.();
+      const doorTarget = this.findTargetInteractiveDoorForAvatar?.();
+      const preferDoor = Boolean(
+        doorTarget?.rig && (
+          !nearestPick
+          || (nearestPick.source !== 'selected' && nearestPick.source !== 'aim')
+          || (doorTarget.fromAim && nearestPick.source === 'aim' && doorTarget.distance <= (nearestPick.distance ?? Infinity))
+        )
+      );
+      if (preferDoor) {
+        const rig = doorTarget.rig;
+        const key = `door:${rig.key}:${rig.isOpen ? 1 : 0}`;
+        if (this._lastHouseFlipperHudKey !== key) {
+          this._lastHouseFlipperHudKey = key;
+          const label = `${rig.labelKind} ${rig.roomName}`;
+          const actionText = rig.isOpen ? 'Tutup (Klik / E)' : 'Buka (Klik / E)';
+          tipEl.className = 'hud-3d-houseflipper-tip';
+          tipEl.style.display = 'inline-flex';
+          tipEl.innerHTML = `
+            <span class="hf-tip-name">${this.escapeHudHtml(label)}</span>
+            <button type="button" class="hf-tip-btn is-primary" data-hf-action="toggle-door" data-door-key="${this.escapeHudHtml(rig.key)}">${actionText}</button>
+          `;
+        }
+        return;
+      }
+
       const shouldShowPick = Boolean(
         nearestPick?.id && (
           this.navTool === 'move'
@@ -9784,17 +10171,23 @@ export class Map3DEngine {
     }
 
     if (!this.avatarMode && this.navTool === 'move' && !this.transformGizmoGroup?.visible) {
-      const selId = this.deviceManager?.selectedDeviceId;
+      const selId = this.dragMoveState?.deviceId || this.deviceManager?.selectedDeviceId;
       const dev = selId ? this.deviceManager?.getDeviceById?.(selId) : null;
       if (dev && dev.layerVisible !== false) {
-        const key = `orbitmove:${dev.id}`;
+        const holder = this.deviceMeshMap?.get(dev.id);
+        const curZ = holder ? holder.position.y : Math.max(0, Number(dev.spatial3d?.elevationMeters) || 0);
+        const curZStr = Number(curZ).toFixed(2);
+        const key = `orbitmove:${dev.id}:${curZStr}`;
         if (this._lastHouseFlipperHudKey !== key) {
           this._lastHouseFlipperHudKey = key;
           tipEl.className = 'hud-3d-houseflipper-tip is-orbit-move';
           tipEl.style.display = 'inline-flex';
           tipEl.innerHTML = `
             <span class="hf-tip-name">${this.escapeHudHtml(dev.name || 'Alat')}</span>
-            <button type="button" class="hf-tip-btn" data-hf-action="rotate">Putar (R)</button>
+            <button type="button" class="hf-tip-btn" data-hf-action="z-down" title="Turun Z (-0.25m) • PgDn / Shift+Drag">Z-</button>
+            <button type="button" class="hf-tip-zval ${curZ > 0.01 ? 'is-custom' : ''}" data-hf-action="z-reset" title="Reset Z ke 0.00m">Z ${curZStr}m</button>
+            <button type="button" class="hf-tip-btn" data-hf-action="z-up" title="Naik Z (+0.25m) • PgUp / Shift+Drag">Z+</button>
+            <button type="button" class="hf-tip-btn" data-hf-action="rotate" title="Putar 45° (R)">Putar (R)</button>
           `;
         }
         return;

@@ -14,6 +14,444 @@ const glbCollisionCache = new Map(); // url -> CollisionProfile
 
 const ROOM_ROOF_RE = /atap|plafon|kanopi|lisplang|roof|ceiling/i;
 const ROOM_FLOOR_RE = /lantai|selasar|koridor|beranda|panggung|umpak|floor/i;
+const DOOR_MESH_CANDIDATE_RE = /pintu|door|shutter|kusen_jendela_biruabu|kaca_jendela_transparan/i;
+const DOOR_MESH_EXCLUDE_RE = /atap|lantai|plafon|tanaman|ac_|papan|signage|ornamen|plat_pintu|list_batu|handle|grendel|daun_hijau|daun_jarum|pohon/i;
+
+function _buildSubGeometryFromTriangles(mesh, triIndices, pivotWorld = null) {
+  const srcGeo = mesh.geometry;
+  const posAttr = srcGeo.attributes.position;
+  const normAttr = srcGeo.attributes.normal || null;
+  const uvAttr = srcGeo.attributes.uv || null;
+  const idxAttr = srcGeo.index || null;
+  const vertCount = triIndices.length * 3;
+  const outPos = new Float32Array(vertCount * 3);
+  const outNorm = normAttr ? new Float32Array(vertCount * 3) : null;
+  const outUv = uvAttr ? new Float32Array(vertCount * 2) : null;
+
+  const v = new THREE.Vector3();
+  const n = new THREE.Vector3();
+  const matWorld = pivotWorld ? mesh.matrixWorld : null;
+  const normMat = pivotWorld && normAttr ? new THREE.Matrix3().getNormalMatrix(mesh.matrixWorld) : null;
+
+  let pOff = 0;
+  let nOff = 0;
+  let uOff = 0;
+  for (let i = 0; i < triIndices.length; i++) {
+    const t = triIndices[i];
+    for (let k = 0; k < 3; k++) {
+      const vi = idxAttr ? idxAttr.getX(t * 3 + k) : (t * 3 + k);
+      v.fromBufferAttribute(posAttr, vi);
+      if (pivotWorld) {
+        v.applyMatrix4(matWorld);
+        outPos[pOff++] = v.x - pivotWorld.x;
+        outPos[pOff++] = v.y - pivotWorld.y;
+        outPos[pOff++] = v.z - pivotWorld.z;
+      } else {
+        outPos[pOff++] = v.x;
+        outPos[pOff++] = v.y;
+        outPos[pOff++] = v.z;
+      }
+      if (outNorm && normAttr) {
+        n.fromBufferAttribute(normAttr, vi);
+        if (normMat) n.applyMatrix3(normMat).normalize();
+        outNorm[nOff++] = n.x;
+        outNorm[nOff++] = n.y;
+        outNorm[nOff++] = n.z;
+      }
+      if (outUv && uvAttr) {
+        outUv[uOff++] = uvAttr.getX(vi);
+        outUv[uOff++] = uvAttr.getY(vi);
+      }
+    }
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(outPos, 3));
+  if (outNorm) {
+    geo.setAttribute('normal', new THREE.BufferAttribute(outNorm, 3));
+  } else {
+    geo.computeVertexNormals();
+  }
+  if (outUv) {
+    geo.setAttribute('uv', new THREE.BufferAttribute(outUv, 2));
+  }
+  geo.computeBoundingBox();
+  geo.computeBoundingSphere();
+  return geo;
+}
+
+/**
+ * Automatically extract individual door leaves (swinging single/double doors, sliding glass/folding doors,
+ * and rolling shutters) from merged school-building GLB meshes and rig each leaf on an accurate hinge pivot.
+ * Runs once per cached GLB template before cloning & collision profile generation.
+ * @param {THREE.Object3D} root
+ * @returns {Array<Object>}
+ */
+export function extractInteractiveDoorsFromGlbRoot(root) {
+  if (!root) return [];
+  root.updateMatrixWorld(true);
+  const rootBox = new THREE.Box3().setFromObject(root);
+  const rootSize = new THREE.Vector3();
+  const rootCenter = new THREE.Vector3();
+  rootBox.getSize(rootSize);
+  rootBox.getCenter(rootCenter);
+
+  // Skip small non-building GLBs (routers, switches, APs, props < 1.8m tall)
+  if (rootSize.y < 1.8 || Math.max(rootSize.x, rootSize.z) < 2.0) {
+    return [];
+  }
+
+  const candidateMeshes = [];
+  root.traverse((obj) => {
+    if (!obj?.isMesh || !obj.geometry?.attributes?.position) return;
+    const name = String(obj.name || '');
+    if (!DOOR_MESH_CANDIDATE_RE.test(name) || DOOR_MESH_EXCLUDE_RE.test(name)) return;
+    candidateMeshes.push(obj);
+  });
+  if (candidateMeshes.length === 0) return [];
+
+  const frames = [];
+  const meshIslandEntries = [];
+  const tmpV = new THREE.Vector3();
+
+  for (const mesh of candidateMeshes) {
+    mesh.updateWorldMatrix(true, false);
+    const geo = mesh.geometry;
+    const pos = geo.attributes.position;
+    const idx = geo.index;
+    const triCount = idx ? Math.floor(idx.count / 3) : Math.floor(pos.count / 3);
+    if (triCount === 0) continue;
+
+    const parent = new Int32Array(triCount);
+    for (let i = 0; i < triCount; i++) parent[i] = i;
+    const find = (x) => {
+      while (parent[x] !== x) {
+        parent[x] = parent[parent[x]];
+        x = parent[x];
+      }
+      return x;
+    };
+    const union = (a, b) => {
+      const ra = find(a);
+      const rb = find(b);
+      if (ra !== rb) parent[ra] = rb;
+    };
+
+    const vertToTri = new Map();
+    const triBounds = new Array(triCount);
+    const matW = mesh.matrixWorld;
+
+    for (let t = 0; t < triCount; t++) {
+      let mnX = Infinity, mnY = Infinity, mnZ = Infinity;
+      let mxX = -Infinity, mxY = -Infinity, mxZ = -Infinity;
+      for (let k = 0; k < 3; k++) {
+        const vi = idx ? idx.getX(t * 3 + k) : (t * 3 + k);
+        tmpV.fromBufferAttribute(pos, vi).applyMatrix4(matW);
+        if (tmpV.x < mnX) mnX = tmpV.x;
+        if (tmpV.x > mxX) mxX = tmpV.x;
+        if (tmpV.y < mnY) mnY = tmpV.y;
+        if (tmpV.y > mxY) mxY = tmpV.y;
+        if (tmpV.z < mnZ) mnZ = tmpV.z;
+        if (tmpV.z > mxZ) mxZ = tmpV.z;
+        const vKey = `${Math.round(tmpV.x * 100)},${Math.round(tmpV.y * 100)},${Math.round(tmpV.z * 100)}`;
+        const prev = vertToTri.get(vKey);
+        if (prev !== undefined) union(prev, t);
+        else vertToTri.set(vKey, t);
+      }
+      triBounds[t] = { mnX, mnY, mnZ, mxX, mxY, mxZ };
+    }
+
+    const compMap = new Map();
+    for (let t = 0; t < triCount; t++) {
+      const r = find(t);
+      let comp = compMap.get(r);
+      const b = triBounds[t];
+      if (!comp) {
+        comp = {
+          mnX: b.mnX, mnY: b.mnY, mnZ: b.mnZ,
+          mxX: b.mxX, mxY: b.mxY, mxZ: b.mxZ,
+          tris: [t]
+        };
+        compMap.set(r, comp);
+      } else {
+        if (b.mnX < comp.mnX) comp.mnX = b.mnX;
+        if (b.mxX > comp.mxX) comp.mxX = b.mxX;
+        if (b.mnY < comp.mnY) comp.mnY = b.mnY;
+        if (b.mxY > comp.mxY) comp.mxY = b.mxY;
+        if (b.mnZ < comp.mnZ) comp.mnZ = b.mnZ;
+        if (b.mxZ > comp.mxZ) comp.mxZ = b.mxZ;
+        comp.tris.push(t);
+      }
+    }
+
+    const meshName = String(mesh.name || '');
+    const isGlassMesh = /kaca_jendela|kaca.*pintu/i.test(meshName);
+    const doorIslands = [];
+
+    for (const comp of compMap.values()) {
+      const w = comp.mxX - comp.mnX;
+      const h = comp.mxY - comp.mnY;
+      const d = comp.mxZ - comp.mnZ;
+      const span = Math.max(w, d);
+      const thick = Math.min(w, d);
+      const tLen = comp.tris.length;
+      const cx = (comp.mnX + comp.mxX) * 0.5;
+      const cy = (comp.mnY + comp.mxY) * 0.5;
+      const cz = (comp.mnZ + comp.mxZ) * 0.5;
+      const nearFloor = (comp.mnY >= rootBox.min.y - 0.05 && comp.mnY <= rootBox.min.y + 0.58)
+        || (comp.mnY >= rootBox.min.y + 3.05 && comp.mnY <= rootBox.min.y + 4.15);
+
+      // Record 3-bar door frames (typically 36 tris) for accurate hinge-side & pre-opened detection
+      if (tLen >= 28 && tLen <= 44 && h >= 1.75 && h <= 2.75 && span >= 0.65 && span <= 2.4 && thick <= 0.28 && nearFloor) {
+        frames.push({ mnX: comp.mnX, mxX: comp.mxX, mnY: comp.mnY, mxY: comp.mxY, mnZ: comp.mnZ, mxZ: comp.mxZ, w, h, d, cx, cz });
+        continue;
+      }
+
+      if (!nearFloor) continue;
+      if (tLen < 2 || tLen > 20) continue;
+      if (h < 1.68 || h > 2.42) continue;
+      if (span < 0.50 || span > 2.25) continue;
+      if (thick > 0.18) continue;
+
+      if (isGlassMesh) {
+        // Only full-height entrance glass doors, never upper windows
+        if (h < 1.95 || comp.mnY > rootBox.min.y + 0.45 || span < 1.1) continue;
+      }
+
+      doorIslands.push({
+        mesh,
+        meshName,
+        mnX: comp.mnX, mxX: comp.mxX,
+        mnY: comp.mnY, mxY: comp.mxY,
+        mnZ: comp.mnZ, mxZ: comp.mxZ,
+        w, h, d, span, thick, cx, cy, cz,
+        tris: comp.tris,
+        paired: false,
+        pairIdx: -1
+      });
+    }
+
+    if (doorIslands.length > 0) {
+      meshIslandEntries.push({ mesh, triCount, doorIslands });
+    }
+  }
+
+  const allDoors = [];
+  for (const entry of meshIslandEntries) {
+    for (const isl of entry.doorIslands) {
+      isl.doorIdx = allDoors.length;
+      allDoors.push(isl);
+    }
+  }
+  if (allDoors.length === 0) return [];
+
+  // Helper: find a perpendicular frame touching a given door island
+  const findTouchingPerpFrame = (isl) => {
+    const leafSpanX = isl.w >= isl.d;
+    for (const fr of frames) {
+      if (Math.abs(fr.mnY - isl.mnY) > 0.35) continue;
+      const frameSpanX = fr.w >= fr.d;
+      if (frameSpanX === leafSpanX) continue; // not perpendicular
+      // Check bounding box proximity within 0.22m
+      const gapX = Math.max(0, Math.max(fr.mnX - isl.mxX, isl.mnX - fr.mxX));
+      const gapZ = Math.max(0, Math.max(fr.mnZ - isl.mxZ, isl.mnZ - fr.mxZ));
+      if (gapX <= 0.22 && gapZ <= 0.22) return fr;
+    }
+    return null;
+  };
+
+  // Detect double-door pairs (both closed side-by-side along X and pre-opened parallel along Z)
+  for (let i = 0; i < allDoors.length; i++) {
+    const a = allDoors[i];
+    if (a.paired) continue;
+    for (let j = i + 1; j < allDoors.length; j++) {
+      const b = allDoors[j];
+      if (b.paired) continue;
+      if (Math.abs(a.mnY - b.mnY) > 0.25 || Math.abs(a.h - b.h) > 0.16) continue;
+      if (Math.abs(a.span - b.span) > 0.16) continue;
+
+      const aSpanX = a.w >= a.d;
+      const bSpanX = b.w >= b.d;
+      if (aSpanX && bSpanX && Math.abs(a.cz - b.cz) < 0.14) {
+        const left = a.cx <= b.cx ? a : b;
+        const right = a.cx <= b.cx ? b : a;
+        const gap = right.mnX - left.mxX;
+        if (gap >= -0.05 && gap <= 0.20) {
+          left.paired = true;
+          right.paired = true;
+          left.pairIdx = right.doorIdx;
+          right.pairIdx = left.doorIdx;
+          left.pairSide = 'left';
+          right.pairSide = 'right';
+          left.pairMode = 'closed-x';
+          right.pairMode = 'closed-x';
+          break;
+        }
+      } else if (!aSpanX && !bSpanX && Math.abs(a.cz - b.cz) < 0.18) {
+        const left = a.cx <= b.cx ? a : b;
+        const right = a.cx <= b.cx ? b : a;
+        const distX = right.cx - left.cx;
+        if (distX >= 0.95 && distX <= 1.85) {
+          left.paired = true;
+          right.paired = true;
+          left.pairIdx = right.doorIdx;
+          right.pairIdx = left.doorIdx;
+          left.pairSide = 'left';
+          right.pairSide = 'right';
+          left.pairMode = 'open-z';
+          right.pairMode = 'open-z';
+          break;
+        }
+      }
+    }
+  }
+
+  // Compute hinge pivot, doorType, closedAngle, openAngle, initialOpen for every door leaf
+  const extractedMeta = [];
+  for (const isl of allDoors) {
+    let doorType = 'swing';
+    let initialOpen = false;
+    let hinge = new THREE.Vector3(isl.mnX, isl.mnY, isl.cz);
+    let closedAngle = 0;
+    let openAngle = Math.PI * 0.52;
+    let slideAxis = 'x';
+    let labelKind = 'Pintu';
+
+    if (/rolling_shutter/i.test(isl.meshName)) {
+      doorType = 'shutter';
+      hinge.set(isl.cx, isl.mxY, isl.cz);
+      closedAngle = 0;
+      openAngle = 0;
+      labelKind = 'Rolling Shutter';
+    } else if (isl.span >= 1.65 && /kaca|lipat|geser|sliding/i.test(isl.meshName)) {
+      doorType = 'slide';
+      slideAxis = isl.w >= isl.d ? 'x' : 'z';
+      hinge.set(slideAxis === 'x' ? isl.mnX : isl.cx, isl.mnY, slideAxis === 'x' ? isl.cz : isl.mnZ);
+      closedAngle = 0;
+      openAngle = 0;
+      labelKind = /lipat/i.test(isl.meshName) ? 'Pintu Lipat' : 'Pintu Kaca Geser';
+    } else if (isl.pairMode === 'closed-x') {
+      initialOpen = false;
+      const inwardSign = isl.cz >= rootCenter.z ? 1 : -1;
+      if (isl.pairSide === 'left') {
+        hinge.set(isl.mnX, isl.mnY, isl.cz);
+        closedAngle = 0;
+        openAngle = inwardSign * Math.PI * 0.52;
+      } else {
+        hinge.set(isl.mxX, isl.mnY, isl.cz);
+        closedAngle = 0;
+        openAngle = -inwardSign * Math.PI * 0.52;
+      }
+      labelKind = 'Pintu Ganda';
+    } else if (isl.pairMode === 'open-z') {
+      initialOpen = true;
+      const touchFrame = findTouchingPerpFrame(isl);
+      let hingeAtMaxZ;
+      if (touchFrame) {
+        hingeAtMaxZ = Math.abs(isl.mxZ - touchFrame.cz) <= Math.abs(isl.mnZ - touchFrame.cz);
+      } else {
+        hingeAtMaxZ = Math.abs(isl.mxZ - rootCenter.z) < Math.abs(isl.mnZ - rootCenter.z);
+      }
+      hinge.set(isl.cx, isl.mnY, hingeAtMaxZ ? isl.mxZ : isl.mnZ);
+      const extendsPosZ = !hingeAtMaxZ;
+      openAngle = 0;
+      if (isl.pairSide === 'left') {
+        // Rotate leaf toward +X to meet twin leaf at midpoint
+        closedAngle = extendsPosZ ? Math.PI * 0.47 : -Math.PI * 0.47;
+      } else {
+        // Rotate leaf toward -X to meet twin leaf at midpoint
+        closedAngle = extendsPosZ ? -Math.PI * 0.47 : Math.PI * 0.47;
+      }
+      labelKind = 'Pintu Ganda';
+    } else {
+      const touchFrame = findTouchingPerpFrame(isl);
+      if (touchFrame) {
+        initialOpen = true;
+        openAngle = 0;
+        if (isl.d > isl.w) {
+          // Leaf extends along Z, frame spans X
+          const hingeAtMaxZ = Math.abs(isl.mxZ - touchFrame.cz) <= Math.abs(isl.mnZ - touchFrame.cz);
+          hinge.set(isl.cx, isl.mnY, hingeAtMaxZ ? isl.mxZ : isl.mnZ);
+          const extendsPosZ = !hingeAtMaxZ;
+          const closeToPosX = touchFrame.cx >= isl.cx;
+          closedAngle = (extendsPosZ === closeToPosX ? 1 : -1) * Math.PI * 0.48;
+        } else {
+          // Leaf extends along X, frame spans Z (e.g., mushola right entrance)
+          const hingeAtMaxX = Math.abs(isl.mxX - touchFrame.cx) <= Math.abs(isl.mnX - touchFrame.cx);
+          hinge.set(hingeAtMaxX ? isl.mxX : isl.mnX, isl.mnY, isl.cz);
+          const extendsPosX = !hingeAtMaxX;
+          const closeToPosZ = touchFrame.cz >= isl.cz;
+          // Rotating (+1,0,0) by θ gives (cos θ, 0, -sin θ), so +Z requires θ < 0
+          closedAngle = (extendsPosX === closeToPosZ ? -1 : 1) * Math.PI * 0.48;
+        }
+      } else if (isl.w >= isl.d) {
+        initialOpen = false;
+        hinge.set(isl.mnX, isl.mnY, isl.cz);
+        closedAngle = 0;
+        openAngle = (isl.cz >= rootCenter.z ? 1 : -1) * Math.PI * 0.52;
+      } else {
+        initialOpen = false;
+        hinge.set(isl.cx, isl.mnY, isl.mnZ);
+        closedAngle = 0;
+        openAngle = (isl.cx < rootCenter.x ? 1 : -1) * Math.PI * 0.52;
+      }
+      labelKind = isl.span >= 1.25 ? 'Pintu Ganda' : 'Pintu';
+    }
+
+    const pivotGroup = new THREE.Group();
+    pivotGroup.name = `InteractiveDoorPivot_${isl.doorIdx}`;
+    pivotGroup.position.copy(hinge);
+    pivotGroup.userData.isInteractiveDoorPivot = true;
+    pivotGroup.userData.doorMeta = {
+      doorIdx: isl.doorIdx,
+      pairIdx: isl.pairIdx,
+      doorType,
+      slideAxis,
+      initialOpen,
+      closedAngle,
+      openAngle,
+      labelKind,
+      localCenter: { x: isl.cx, y: isl.cy, z: isl.cz },
+      span: Number(isl.span.toFixed(2)),
+      height: Number(isl.h.toFixed(2))
+    };
+
+    const leafGeo = _buildSubGeometryFromTriangles(isl.mesh, isl.tris, hinge);
+    const leafMat = Array.isArray(isl.mesh.material) ? isl.mesh.material[0] : isl.mesh.material;
+    const leafMesh = new THREE.Mesh(leafGeo, leafMat);
+    leafMesh.name = `InteractiveDoorLeaf_${isl.doorIdx}`;
+    leafMesh.castShadow = true;
+    leafMesh.receiveShadow = true;
+    leafMesh.userData.isInteractiveDoorMesh = true;
+    leafMesh.userData.doorIdx = isl.doorIdx;
+    pivotGroup.add(leafMesh);
+    root.add(pivotGroup);
+
+    extractedMeta.push({ pivotGroup, meta: pivotGroup.userData.doorMeta });
+  }
+
+  // Strip extracted door triangles from original static meshes so doors don't render twice
+  for (const entry of meshIslandEntries) {
+    const removedSet = new Set();
+    for (const isl of entry.doorIslands) {
+      for (const t of isl.tris) removedSet.add(t);
+    }
+    const keepTris = [];
+    for (let t = 0; t < entry.triCount; t++) {
+      if (!removedSet.has(t)) keepTris.push(t);
+    }
+    if (keepTris.length === 0) {
+      entry.mesh.visible = false;
+      entry.mesh.parent?.remove(entry.mesh);
+    } else {
+      const nextStaticGeo = _buildSubGeometryFromTriangles(entry.mesh, keepTris, null);
+      entry.mesh.geometry = nextStaticGeo;
+    }
+  }
+
+  root.updateMatrixWorld(true);
+  return extractedMeta;
+}
 
 function _addTriToGridCells(cellMap, cellSize, tri) {
   const gx0 = Math.floor(tri.minX / cellSize);
@@ -78,11 +516,28 @@ export function buildGlbCollisionProfile(root) {
   let wallTriCount = 0;
   let floorTriCount = 0;
 
+  // Temporarily pose any pre-opened interactive doors into their CLOSED position while baking wallCells
+  // so closed doorways reliably block avatar passage and open doorways cleanly skip tri.doorIdx.
+  const tempDoorRestores = [];
+  root.traverse((obj) => {
+    if (obj?.userData?.isInteractiveDoorPivot && obj.userData?.doorMeta) {
+      const dm = obj.userData.doorMeta;
+      if (dm.doorType === 'swing' && Math.abs((dm.closedAngle || 0) - obj.rotation.y) > 1e-4) {
+        tempDoorRestores.push({ obj, prevRotY: obj.rotation.y });
+        obj.rotation.y = dm.closedAngle || 0;
+      }
+    }
+  });
+  if (tempDoorRestores.length > 0) {
+    root.updateMatrixWorld(true);
+  }
+
   root.traverse((obj) => {
     if (!obj?.isMesh || !obj.geometry?.attributes?.position) return;
     const meshName = String(obj.name || '');
+    const doorIdx = Number.isInteger(obj.userData?.doorIdx) ? obj.userData.doorIdx : -1;
     const isFloorNamed = ROOM_FLOOR_RE.test(meshName);
-    const isRoof = ROOM_ROOF_RE.test(meshName) && !isFloorNamed && !/tangga|stair/i.test(meshName);
+    const isRoof = doorIdx < 0 && ROOM_ROOF_RE.test(meshName) && !isFloorNamed && !/tangga|stair/i.test(meshName);
     const posAttr = obj.geometry.attributes.position;
     const indexAttr = obj.geometry.index;
     const matWorld = obj.matrixWorld;
@@ -124,11 +579,15 @@ export function buildGlbCollisionProfile(root) {
         maxY: Math.max(ay, by, cy),
         minZ: Math.min(az, bz, cz),
         maxZ: Math.max(az, bz, cz),
-        ny: norm.y
+        ny: norm.y,
+        doorIdx
       };
 
       if (isRoof) {
         _addTriToGridCells(roofCells, cellSize, tri);
+      } else if (doorIdx >= 0) {
+        _addTriToGridCells(wallCells, cellSize, tri);
+        wallTriCount += 1;
       } else if (Math.abs(tri.ny) > 0.72) {
         _addTriToGridCells(floorCells, cellSize, tri);
         floorTriCount += 1;
@@ -138,6 +597,13 @@ export function buildGlbCollisionProfile(root) {
       }
     }
   });
+
+  if (tempDoorRestores.length > 0) {
+    tempDoorRestores.forEach(({ obj, prevRotY }) => {
+      obj.rotation.y = prevRotY;
+    });
+    root.updateMatrixWorld(true);
+  }
 
   return {
     rawSize,
@@ -315,6 +781,10 @@ export function loadCustomGlbModel(url, targetSize = 1.2) {
   }
 
   return glbCache.get(cacheKey).then((cachedRoot) => {
+    if (!cachedRoot.userData._interactiveDoorsExtracted) {
+      cachedRoot.userData._interactiveDoorsExtracted = true;
+      extractInteractiveDoorsFromGlbRoot(cachedRoot);
+    }
     if (!glbCollisionCache.has(cacheKey)) {
       glbCollisionCache.set(cacheKey, buildGlbCollisionProfile(cachedRoot));
     }
