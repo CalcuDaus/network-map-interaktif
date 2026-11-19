@@ -730,7 +730,13 @@ export class Map3DEngine {
       }
       this.updateRemoteAvatars(dt);
       this.updatePacketFlows3D?.(now);
-      this.controls?.update();
+      if (this.avatarMode && !this.simulatorFocusedDeviceId) {
+        if (this.camera && this.controls) {
+          this.camera.lookAt?.(this.controls.target);
+        }
+      } else {
+        this.controls?.update();
+      }
       this.syncFppViewmodelTransform();
       this.renderer?.render(this.scene, this.camera);
     };
@@ -2623,12 +2629,12 @@ export class Map3DEngine {
 
     this.raycaster.setFromCamera(this.pointer, this.camera);
 
-    // House-Flipper 1-click Place: when carrying items in Mode Move, left-clicking places onto the aimed surface/wall
+    // House-Flipper 1-click Place: when carrying items in Mode Teknisi, left-clicking places onto the aimed surface/wall
     if (
       this.avatarMode
       && !this.simulatorFocusedDeviceId
-      && this.navTool === 'move'
       && stateManager.getMode() !== 'draw-cable'
+      && stateManager.getMode() !== 'add-device'
       && Array.isArray(this.carriedObjects)
       && this.carriedObjects.length > 0
       && !e.ctrlKey
@@ -2649,9 +2655,10 @@ export class Map3DEngine {
       ? this._filterVisibleRayHits(this.raycaster.intersectObjects(this.cablesGroup.children, true))
       : [];
 
+    const cableDistBias = (this.avatarMode || this.navTool === 'move') ? -0.02 : 0.25;
     if (cableHitsPre.length > 0 && (
       devHits.length === 0 ||
-      cableHitsPre[0].distance <= devHits[0].distance + 0.25 ||
+      cableHitsPre[0].distance <= devHits[0].distance + cableDistBias ||
       Boolean(cableHitsPre[0].object?.userData?.cableHandleType)
     )) {
       const cabId = cableHitsPre[0].object.userData?.cableId;
@@ -3210,6 +3217,9 @@ export class Map3DEngine {
         RIGHT: THREE.MOUSE.PAN
       };
       this.controls.maxPolarAngle = Math.PI * 0.495;
+    }
+    if (this.avatarMode && !this.simulatorFocusedDeviceId) {
+      this.configureControlsForAvatarMode(true);
     }
   }
 
@@ -5258,6 +5268,7 @@ export class Map3DEngine {
       this.avatarState.camPitch = clamp(Number.isFinite(this.avatarState.camPitch) ? this.avatarState.camPitch : 0.32, -0.1, 0.85);
       this.avatarState.camDist = clamp(this.avatarState.camDist || 5.8, 2.2, 22.0);
     }
+    this.configureControlsForAvatarMode(true);
     this.syncAvatarMeshVisibilityForPerspective();
     this.syncAvatarControlsUI();
     this.syncAvatarCameraFromAngles();
@@ -5511,6 +5522,8 @@ export class Map3DEngine {
     const { endPos, target } = this.getAvatarFollowCameraPose(this.avatarState.camDist);
     this.controls.target.copy(target);
     this.camera.position.copy(endPos);
+    this.camera.lookAt?.(target);
+    this.camera.updateMatrixWorld?.();
     this.syncSimplePlacementIndicator?.();
     this.renderHouseFlipperPromptHud?.();
   }
@@ -5849,6 +5862,70 @@ export class Map3DEngine {
     return true;
   }
 
+  findAimedPickableObjectFromCrosshair(carriedIds = new Set()) {
+    if (!this.camera || !this.raycaster) return null;
+    if (!this.camera.isPerspectiveCamera && !this.camera.isOrthographicCamera) return null;
+    try {
+      this.camera.updateMatrixWorld?.();
+      this.raycaster.setFromCamera({ x: 0, y: 0 }, this.camera);
+    } catch {
+      return null;
+    }
+
+    const maxAimDist = Math.max(14, (Number(this.objectCarryReachMeters) || 6.5) * 2.4);
+    let bestHit = null;
+
+    if (!this.workspaceGhostDevices && this.devicesGroup?.visible && this.devicesGroup.children?.length > 0) {
+      const devHits = this._filterVisibleRayHits(this.raycaster.intersectObjects(this.devicesGroup.children, true));
+      for (const h of devHits) {
+        if (!Number.isFinite(h.distance) || h.distance > maxAimDist) break;
+        const devId = this.findDeviceIdFromObject?.(h.object);
+        if (!devId || carriedIds.has(devId)) continue;
+        const dev = this.deviceManager?.getDeviceById?.(devId);
+        if (!dev || dev.layerVisible === false || dev.layerLocked === true) continue;
+        bestHit = {
+          kind: 'device',
+          id: dev.id,
+          name: dev.name || 'Perangkat',
+          obj: dev,
+          dev,
+          distance: h.distance,
+          source: 'aim'
+        };
+        break;
+      }
+    }
+
+    if (!this.roomsLocked && this.objects3dGroup?.visible && this.objects3dGroup.children?.length > 0) {
+      const objHits = this._filterVisibleRayHits(this.raycaster.intersectObjects(this.objects3dGroup.children, true));
+      for (const h of objHits) {
+        if (!Number.isFinite(h.distance) || h.distance > maxAimDist) break;
+        if (bestHit && h.distance >= bestHit.distance) break;
+        let curr = h.object;
+        let objId = null;
+        while (curr && !objId) {
+          if (curr.userData?.object3dId) objId = curr.userData.object3dId;
+          curr = curr.parent;
+        }
+        if (!objId || carriedIds.has(objId) || this.isObject3dLocked?.(objId)) continue;
+        const obj = stateManager?.getObject3dById?.(objId);
+        if (!obj || obj.visible === false || obj.locked === true) continue;
+        bestHit = {
+          kind: 'object3d',
+          id: obj.id,
+          name: obj.name || 'Objek 3D',
+          obj,
+          dev: null,
+          distance: h.distance,
+          source: 'aim'
+        };
+        break;
+      }
+    }
+
+    return bestHit;
+  }
+
   findNearestPickableObjectToAvatar() {
     const carriedIds = new Set();
     if (Array.isArray(this.carriedObjects)) {
@@ -5859,12 +5936,72 @@ export class Map3DEngine {
       }
     }
     const ax = Number(this.avatarState.x) || 0;
+    const ay = Number(this.avatarState.y) || 0;
     const az = Number(this.avatarState.z) || 0;
     const yaw = Number(this.avatarState.yaw) || 0;
     const fwdX = Math.sin(yaw);
     const fwdZ = Math.cos(yaw);
     const maxReach = Number(this.objectCarryReachMeters) || 6.5;
 
+    // Priority 1: Explicitly selected Device or 3D Object (yellow selection ring)
+    // Guarantees 1-by-1 accurate pickup even when multiple devices are tightly stacked/adjacent.
+    const selDevId = this.deviceManager?.selectedDeviceId || null;
+    if (selDevId && !carriedIds.has(selDevId)) {
+      const selDev = this.deviceManager?.getDeviceById?.(selDevId);
+      if (selDev && selDev.layerVisible !== false && selDev.layerLocked !== true) {
+        const effPos = this.effectivePosMap?.get(selDev.id);
+        const pos = effPos || (this.normToWorld && selDev.position ? this.normToWorld(selDev.position.x, selDev.position.y) : null);
+        const selElev = Number(selDev.spatial3d?.elevationMeters) || 0;
+        const dist3d = pos
+          ? Math.hypot((pos.x ?? 0) - ax, ((pos.y ?? selElev) - (ay + 1.5)), (pos.z ?? 0) - az)
+          : 0;
+        return {
+          kind: 'device',
+          id: selDev.id,
+          name: selDev.name || 'Perangkat',
+          obj: selDev,
+          dev: selDev,
+          distance: dist3d,
+          source: 'selected'
+        };
+      }
+    }
+
+    const selObjId = stateManager?.getSelectedObject3dId?.() || null;
+    if (selObjId && !carriedIds.has(selObjId) && !this.roomsLocked && !this.isObject3dLocked?.(selObjId)) {
+      const selObj = stateManager?.getObject3dById?.(selObjId);
+      if (selObj && selObj.visible !== false && selObj.locked !== true) {
+        const pos = this.normToWorld ? this.normToWorld(selObj.x ?? 0.5, selObj.y ?? 0.5) : { x: 0, z: 0 };
+        const dist3d = Math.hypot((pos.x ?? 0) - ax, ((Number(selObj.elevationMeters) || 0) - ay), (pos.z ?? 0) - az);
+        return {
+          kind: 'object3d',
+          id: selObj.id,
+          name: selObj.name || 'Objek 3D',
+          obj: selObj,
+          dev: null,
+          distance: dist3d,
+          source: 'selected'
+        };
+      }
+    }
+
+    // Priority 2: Direct 3D Crosshair Raycast Aim (FPP / TPP center reticle)
+    const aimed = this.findAimedPickableObjectFromCrosshair(carriedIds);
+    if (aimed) {
+      return aimed;
+    }
+
+    // Priority 3: Nearest reachable proximity fallback (with 3D elevation & camera look direction)
+    let lookDir3 = null;
+    if (this.camera && typeof this.camera.getWorldDirection === 'function') {
+      try {
+        lookDir3 = new THREE.Vector3();
+        this.camera.getWorldDirection(lookDir3);
+      } catch {
+        lookDir3 = null;
+      }
+    }
+    const eyeY = ay + 1.66 * resolveEngineAvatarScale(this);
     let best = null;
 
     // 1) Custom 3D Objects (walls, racks, poles, tables, boxes, cylinders, cabinets)
@@ -5919,6 +6056,17 @@ export class Map3DEngine {
       const invD = centerDist > 0.001 ? 1 / centerDist : 0;
       const dot = (dx * fwdX + dz * fwdZ) * invD;
       const devElev = Number(sp.elevationMeters) || 0;
+      const devY = Number.isFinite(pos.y) ? pos.y : devElev;
+      let aimBonus = dot > 0.45 ? 0.65 : 0;
+      if (lookDir3) {
+        const toDev = new THREE.Vector3(dx, devY - eyeY, dz);
+        const len3 = toDev.length();
+        if (len3 > 0.01) {
+          const dot3 = toDev.dot(lookDir3) / len3;
+          if (dot3 > 0.85) aimBonus = Math.max(aimBonus, 1.35);
+          else if (dot3 > 0.65) aimBonus = Math.max(aimBonus, 0.9);
+        }
+      }
       const mountedOnUncarriedObj = objects.some(
         (o) =>
           o &&
@@ -5928,7 +6076,7 @@ export class Map3DEngine {
           devElev >= (Number(o.elevationMeters) || 0)
       );
       // If device is mounted onto an uncarried rack/pole/table, prefer lifting the parent structure first
-      const score = edgeDist - (dot > 0.45 ? 0.65 : 0) + (mountedOnUncarriedObj ? 1.8 : 0);
+      const score = edgeDist - aimBonus + (mountedOnUncarriedObj ? 1.8 : 0);
       if (!best || score < best.score || (Math.abs(score - best.score) < 0.05 && centerDist < best.centerDist)) {
         best = {
           kind: 'device',
@@ -5950,7 +6098,8 @@ export class Map3DEngine {
         name: best.name,
         obj: best.obj,
         dev: best.dev || null,
-        distance: best.distance
+        distance: best.distance,
+        source: 'nearest'
       }
       : null;
   }
@@ -9607,18 +9756,27 @@ export class Map3DEngine {
       return;
     }
 
-    if (this.avatarMode && this.navTool === 'move') {
+    if (this.avatarMode) {
       const nearestPick = this.findNearestPickableObjectToAvatar?.();
-      if (nearestPick?.id) {
-        const key = `pick:${nearestPick.id}`;
+      const shouldShowPick = Boolean(
+        nearestPick?.id && (
+          this.navTool === 'move'
+          || nearestPick.source === 'selected'
+          || nearestPick.source === 'aim'
+        )
+      );
+      if (shouldShowPick) {
+        const isMoveTool = this.navTool === 'move';
+        const key = `pick:${nearestPick.id}:${nearestPick.source || 'nearest'}:${isMoveTool ? 1 : 0}`;
         if (this._lastHouseFlipperHudKey !== key) {
           this._lastHouseFlipperHudKey = key;
           const escName = this.escapeHudHtml(nearestPick.name || 'Alat');
+          const actionLabel = isMoveTool ? 'Angkat (Klik / E)' : 'Angkat (E)';
           tipEl.className = 'hud-3d-houseflipper-tip';
           tipEl.style.display = 'inline-flex';
           tipEl.innerHTML = `
             <span class="hf-tip-name">${escName}</span>
-            <button type="button" class="hf-tip-btn is-primary" data-hf-action="pickup">Angkat (Klik / E)</button>
+            <button type="button" class="hf-tip-btn is-primary" data-hf-action="pickup">${actionLabel}</button>
           `;
         }
         return;
@@ -10903,6 +11061,8 @@ export class Map3DEngine {
       this.apply3dViewFilters();
       if (this.avatarMode) {
         this.syncBuildPlacementHudUI?.();
+        this.renderHouseFlipperPromptHud?.();
+        this.updateAvatarProximityHud?.();
       }
       if (this.simulatorFocusedDeviceId) {
         if (this.deviceManager?.getDeviceById?.(this.simulatorFocusedDeviceId)) {
@@ -10959,6 +11119,10 @@ export class Map3DEngine {
     const syncObjects3dOnly = () => {
       if (this.isActive && !this.object3dDragState) {
         this.syncObjects3d();
+        if (this.avatarMode) {
+          this.renderHouseFlipperPromptHud?.();
+          this.updateAvatarProximityHud?.();
+        }
       }
     };
     eventBus.on('object3d:changed', syncObjects3dOnly);

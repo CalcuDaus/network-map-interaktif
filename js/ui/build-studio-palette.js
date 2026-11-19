@@ -25,7 +25,16 @@ const FACILITY_PRESET_IDS = new Set([
   'halte-tempat-duduk',
   'penunjuk-arah',
   'kandang-burung',
-  'kandang-burung-2'
+  'kandang-burung-2',
+  'joglo-belakang',
+  'halte-tempat-duduk-2',
+  'tong-sampah',
+  'wastafel-semen-corak-kayu',
+  'keran-air-kecil',
+  'plank-motivasi',
+  'banner-kejuruan',
+  'pohon-mahoni-kecil',
+  'pohon-pinus-kecil'
 ]);
 
 const OBJECT_ICON_MAP = {
