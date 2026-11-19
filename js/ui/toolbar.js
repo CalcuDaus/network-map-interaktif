@@ -38,12 +38,19 @@ export class Toolbar {
     this.btnToggleFullscreen = document.getElementById('btn-toggle-fullscreen');
     this.btnExitWorkspaceFullscreen = document.getElementById('btn-exit-workspace-fullscreen');
 
-    // Navbar Dropdowns (Feature Menu & Compact Search)
+    // Navbar Dropdowns (Feature Menu, View Filter, Compact Search & General Settings)
     this.navbarMenuWrapper = document.getElementById('navbar-menu-wrapper');
     this.btnNavbarMenu = document.getElementById('btn-navbar-menu');
+    this.navbarViewFilterWrapper = document.getElementById('navbar-view-filter-wrapper');
+    this.btnNavbarViewFilter = document.getElementById('btn-navbar-view-filter');
     this.navbarSearchWrapper = document.getElementById('navbar-search-wrapper');
     this.btnToggleSearch = document.getElementById('btn-toggle-search');
     this.globalSearchInput = document.getElementById('global-search-input');
+    this.navbarSettingsWrapper = document.getElementById('navbar-settings-wrapper');
+    this.btnNavbarSettings = document.getElementById('btn-navbar-settings');
+    this.toggleSettingFooter = document.getElementById('toggle-setting-footer');
+    this.toggleSettingMapHud = document.getElementById('toggle-setting-map-hud');
+    this.btnSettingsMapScale = document.getElementById('btn-settings-map-scale');
 
     // Mode Selector Items
     this.modeButtons = document.querySelectorAll('[data-mode]');
@@ -147,6 +154,21 @@ export class Toolbar {
       });
     });
 
+    // Navbar View & Layer Filter Dropdown (stays open while toggling multiple checkboxes)
+    this.btnNavbarViewFilter?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const willOpen = !this.navbarViewFilterWrapper?.classList.contains('open');
+      this.closeNavbarDropdowns();
+      if (willOpen && this.navbarViewFilterWrapper) {
+        this.navbarViewFilterWrapper.classList.add('open');
+        this.btnNavbarViewFilter?.setAttribute('aria-expanded', 'true');
+      }
+    });
+
+    this.navbarViewFilterWrapper?.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+
     // Navbar Compact Search Dropdown
     this.btnToggleSearch?.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -161,9 +183,31 @@ export class Toolbar {
       e.stopPropagation();
     });
 
+    // Modular General Settings Dropdown (stays open while adjusting multiple toggles)
+    this.btnNavbarSettings?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const willOpen = !this.navbarSettingsWrapper?.classList.contains('open');
+      this.closeNavbarDropdowns();
+      if (willOpen && this.navbarSettingsWrapper) {
+        this.navbarSettingsWrapper.classList.add('open');
+        this.btnNavbarSettings?.setAttribute('aria-expanded', 'true');
+      }
+    });
+
+    this.navbarSettingsWrapper?.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+
+    this.setupGeneralSettings();
+
     document.addEventListener('click', (e) => {
       const target = e.target;
-      if (!this.navbarMenuWrapper?.contains(target) && !this.navbarSearchWrapper?.contains(target)) {
+      if (
+        !this.navbarMenuWrapper?.contains(target) &&
+        !this.navbarViewFilterWrapper?.contains(target) &&
+        !this.navbarSearchWrapper?.contains(target) &&
+        !this.navbarSettingsWrapper?.contains(target)
+      ) {
         this.closeNavbarDropdowns();
       }
     });
@@ -182,6 +226,67 @@ export class Toolbar {
     });
   }
 
+  /** Initializes General Settings UI preferences (hidden footer by default, map HUD, scale button). */
+  setupGeneralSettings() {
+    let showFooter = false;
+    let showMapHud = true;
+    try {
+      showFooter = localStorage.getItem('netmap_show_footer_v1') === '1';
+      showMapHud = localStorage.getItem('netmap_show_map_hud_v1') !== '0';
+    } catch { /* ignore storage errors */ }
+
+    this.setFooterVisible(showFooter, { persist: false, emitResize: false });
+    this.setMapInfoHudVisible(showMapHud, { persist: false });
+
+    this.toggleSettingFooter?.addEventListener('change', (e) => {
+      this.setFooterVisible(Boolean(e.target.checked));
+    });
+
+    this.toggleSettingMapHud?.addEventListener('change', (e) => {
+      this.setMapInfoHudVisible(Boolean(e.target.checked));
+    });
+
+    this.btnSettingsMapScale?.addEventListener('click', () => {
+      this.closeNavbarDropdowns();
+      eventBus.emit('modal:open-map-scale');
+    });
+  }
+
+  /** Shows or hides the bottom footer status bar cleanly & notifies canvases to resize. */
+  setFooterVisible(visible, { persist = true, emitResize = true } = {}) {
+    const show = Boolean(visible);
+    if (typeof document !== 'undefined' && document.body?.classList) {
+      document.body.classList.toggle('hide-footer-status', !show);
+    }
+    if (this.toggleSettingFooter) {
+      this.toggleSettingFooter.checked = show;
+    }
+    if (persist) {
+      try { localStorage.setItem('netmap_show_footer_v1', show ? '1' : '0'); } catch { /* ignore */ }
+    }
+    if (emitResize && typeof window !== 'undefined') {
+      const dispatch = () => window.dispatchEvent(new Event('resize'));
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(dispatch);
+      else dispatch();
+    }
+    return show;
+  }
+
+  /** Shows or hides the bottom-left floating map scale/count HUD badge. */
+  setMapInfoHudVisible(visible, { persist = true } = {}) {
+    const show = Boolean(visible);
+    if (typeof document !== 'undefined' && document.body?.classList) {
+      document.body.classList.toggle('hide-map-info-hud', !show);
+    }
+    if (this.toggleSettingMapHud) {
+      this.toggleSettingMapHud.checked = show;
+    }
+    if (persist) {
+      try { localStorage.setItem('netmap_show_map_hud_v1', show ? '1' : '0'); } catch { /* ignore */ }
+    }
+    return show;
+  }
+
   openSearchDropdown() {
     if (!this.navbarSearchWrapper) return;
     this.navbarSearchWrapper.classList.add('open');
@@ -195,8 +300,12 @@ export class Toolbar {
   closeNavbarDropdowns() {
     this.navbarMenuWrapper?.classList.remove('open');
     this.btnNavbarMenu?.setAttribute('aria-expanded', 'false');
+    this.navbarViewFilterWrapper?.classList.remove('open');
+    this.btnNavbarViewFilter?.setAttribute('aria-expanded', 'false');
     this.navbarSearchWrapper?.classList.remove('open');
     this.btnToggleSearch?.setAttribute('aria-expanded', 'false');
+    this.navbarSettingsWrapper?.classList.remove('open');
+    this.btnNavbarSettings?.setAttribute('aria-expanded', 'false');
   }
 
   initTheme() {
@@ -210,7 +319,7 @@ export class Toolbar {
 
     if (this.btnToggleTheme) {
       const isDark = theme === 'dark';
-      this.btnToggleTheme.innerHTML = `<i data-lucide="${isDark ? 'sun' : 'moon'}" id="theme-toggle-icon" style="width: 15px; height: 15px;"></i>`;
+      this.btnToggleTheme.innerHTML = `<i data-lucide="${isDark ? 'sun' : 'moon'}" id="theme-toggle-icon" style="width: 13px; height: 13px;"></i><span>${isDark ? 'Mode Terang' : 'Mode Gelap'}</span>`;
       this.btnToggleTheme.title = isDark ? 'Beralih ke Tema Botanical Cream (Terang)' : 'Beralih ke Tema Forest Pine (Gelap)';
       if (window.lucide && typeof window.lucide.createIcons === 'function') {
         window.lucide.createIcons();

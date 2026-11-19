@@ -1,7 +1,7 @@
 
 
 # Project Memory — network-map-interaktif
-> 61 notes | Score threshold: >40
+> 70 notes | Score threshold: >40
 
 ## Safety — Never Run Destructive Commands
 
@@ -18,22 +18,13 @@
 
 **Stack:** JavaScript · DB: MySQL
 
-## 📝 NOTE: 1 uncommitted file(s) in working tree.\n\n## Active: `.`
+## 📝 NOTE: 1 uncommitted file(s) in working tree.\n\n## Project Standards
 
-- **🟢 Edited docker-compose.yml (73 changes, 8min) — confirmed 3x**
-- **🟢 Edited index.html (5 changes, 15min) — confirmed 3x**
-- **convention in .gitignore**
-- **convention in .gitignore**
-- **convention in .gitignore**
-
-## Project Standards
-
+- Fixed null crash in Quick — prevents XSS injection attacks — confirmed 4x
+- Git Commit: feat: implement interactive 3D map engine and models — confirmed 3x
 - 🟢 Edited docker-compose.yml (73 changes, 8min) — confirmed 3x
 - 🟢 Edited index.html (5 changes, 15min) — confirmed 3x
 - convention in .gitignore
-- convention in .gitignore
-- convention in .gitignore
-- Fixed null crash in Quick — prevents XSS injection attacks — confirmed 4x
 - Git Commit: feat: implement project management and authentication featur — confirmed 3x
 
 ## Learned Patterns

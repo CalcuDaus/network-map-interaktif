@@ -24,10 +24,10 @@
     rel="stylesheet">
 
   <!-- Core Stylesheets -->
-  <link rel="stylesheet" href="css/main.css?v=20261118-houseflipper-v12">
-  <link rel="stylesheet" href="css/layout.css?v=20261118-houseflipper-v12">
-  <link rel="stylesheet" href="css/components.css?v=20261118-houseflipper-v12">
-  <link rel="stylesheet" href="css/map.css?v=20261118-houseflipper-v12">
+  <link rel="stylesheet" href="css/main.css?v=20261118-elevz-v22">
+  <link rel="stylesheet" href="css/layout.css?v=20261118-elevz-v22">
+  <link rel="stylesheet" href="css/components.css?v=20261118-elevz-v22">
+  <link rel="stylesheet" href="css/map.css?v=20261118-elevz-v22">
 
   <!-- Vendor Libraries (Offline-First with CDN fallback) -->
   <script src="assets/vendor/konva.min.js"></script>
@@ -63,7 +63,17 @@
   </script>
 </head>
 
-<body>
+<body class="hide-footer-status">
+  <script>
+    try {
+      if (localStorage.getItem('netmap_show_footer_v1') === '1') {
+        document.body.classList.remove('hide-footer-status');
+      }
+      if (localStorage.getItem('netmap_show_map_hud_v1') === '0') {
+        document.body.classList.add('hide-map-info-hud');
+      }
+    } catch {}
+  </script>
   <div id="app-container">
 
     <!-- ====================================================================
@@ -91,18 +101,15 @@
         <!-- Primary Educational Workspace Switcher -->
         <div id="workspace-mode-switcher" class="workspace-switcher" role="group" aria-label="Pilih Workspace Belajar">
           <button type="button" id="btn-workspace-build" class="workspace-switch-btn" data-workspace-switch="build"
-            title="Studio Bangunan 3D — Susun gedung, fasilitas &amp; jalan kampus sekolah">
+            title="Edit Bangunan — Susun gedung, fasilitas &amp; jalan kampus sekolah">
             <i data-lucide="building-2" style="width: 13px; height: 13px;"></i>
-            <span>Studio Bangunan</span>
+            <span>Edit Bangunan</span>
           </button>
-          <button type="button" id="btn-workspace-network" class="workspace-switch-btn active" data-workspace-switch="network"
-            title="Lab Engineering Jaringan — Pasang perangkat, kabel, simulasi Ping &amp; Terminal CLI">
+          <button type="button" id="btn-workspace-network" class="workspace-switch-btn active"
+            data-workspace-switch="network"
+            title="Simulasi Jaringan — Pasang perangkat, kabel, simulasi Ping &amp; Terminal CLI">
             <i data-lucide="network" style="width: 13px; height: 13px;"></i>
-            <span>Lab Jaringan</span>
-          </button>
-          <button type="button" id="btn-open-workspace-launcher" class="btn btn-icon btn-sm"
-            title="Buka Menu Pilih Mode Belajar" style="width: 24px; height: 24px;">
-            <i data-lucide="help-circle" style="width: 13px; height: 13px;"></i>
+            <span>Simulasi Jaringan</span>
           </button>
         </div>
 
@@ -192,39 +199,98 @@
               <i data-lucide="folder" style="width: 14px; height: 14px; color: var(--status-warning);"></i>
               <span>Proyek</span>
             </button>
-            <div style="height: 1px; background: var(--border-color); margin: 3px 4px;"></div>
-            <button id="btn-menu-toggle-3d-nav" class="navbar-dropdown-item" role="menuitem"
-              title="Tampilkan / Minimize Bar Navigasi 3D (Orbit, Pan, dll)">
-              <i data-lucide="sliders-horizontal" style="width: 14px; height: 14px; color: var(--accent-green);"></i>
-              <span style="flex: 1;">Navigasi 3D</span>
-              <span id="badge-menu-3d-nav" style="font-size: 10px; opacity: 0.75;">Tampil</span>
-            </button>
-            <button id="btn-menu-toggle-3d-hints" class="navbar-dropdown-item" role="menuitem"
-              title="Tampilkan / Minimize Panduan Kontrol 3D di Bawah">
-              <i data-lucide="help-circle" style="width: 14px; height: 14px; color: var(--accent-green);"></i>
-              <span style="flex: 1;">Panduan 3D</span>
-              <span id="badge-menu-3d-hints" style="font-size: 10px; opacity: 0.75;">Tampil</span>
-            </button>
-            <div style="height: 1px; background: var(--border-color); margin: 3px 4px;"></div>
-            <button id="btn-menu-install-pwa" class="navbar-dropdown-item" role="menuitem"
-              title="Install SmartSchool NetMap sebagai Aplikasi (PWA)">
-              <i data-lucide="download" style="width: 14px; height: 14px; color: var(--accent-blue);"></i>
-              <span style="flex: 1;">Install Aplikasi (PWA)</span>
-              <span id="badge-menu-pwa" style="font-size: 10px; opacity: 0.75;">Siap</span>
-            </button>
+          </div>
+        </div>
+
+        <!-- View & Layer Filter Dropdown (Moved cleanly from Left Sidebar to Top Bar) -->
+        <div id="navbar-view-filter-wrapper" class="navbar-dropdown">
+          <button type="button" id="btn-navbar-view-filter" class="btn btn-secondary btn-sm navbar-dropdown-trigger"
+            title="Visibilitas Layer &amp; Filter Cepat Komponen" aria-expanded="false" aria-haspopup="true">
+            <i data-lucide="layers" style="width: 14px; height: 14px; color: var(--accent-green);"></i>
+            <span>View</span>
+            <span id="badge-navbar-view-filter" class="vf-active-badge hidden"></span>
+            <i data-lucide="chevron-down" style="width: 13px; height: 13px; opacity: 0.7;"></i>
+          </button>
+          <div id="navbar-view-filter-dropdown" class="navbar-dropdown-panel navbar-view-filter-panel" role="menu">
+            <div class="vf-dropdown-header">
+              <span class="vf-dropdown-title">
+                <i data-lucide="sliders-horizontal" style="width: 13px; height: 13px; color: var(--accent-green);"></i>
+                <span>Visibilitas &amp; Filter Tampilan</span>
+              </span>
+              <button type="button" id="btn-view-filter-reset" class="vf-reset-btn" title="Tampilkan semua layer &amp; filter">
+                Tampilkan Semua
+              </button>
+            </div>
+
+            <div class="vf-grid">
+              <div class="vf-col">
+                <div class="vf-col-title">Visibilitas Layer</div>
+                <label class="vf-check-row">
+                  <input type="checkbox" id="layer-toggle-bg" checked data-layer="background"
+                    style="accent-color: var(--accent-blue);">
+                  <span>Denah Latar Belakang</span>
+                </label>
+                <label class="vf-check-row">
+                  <input type="checkbox" id="layer-toggle-devices" checked data-layer="devices"
+                    style="accent-color: var(--accent-blue);">
+                  <span>Perangkat Jaringan (Markers)</span>
+                </label>
+                <label class="vf-check-row">
+                  <input type="checkbox" id="layer-toggle-connections" checked data-layer="connections"
+                    style="accent-color: var(--accent-blue);">
+                  <span>Jalur Kabel &amp; Link</span>
+                </label>
+                <label class="vf-check-row">
+                  <input type="checkbox" id="layer-toggle-infra" checked data-layer="infrastructure"
+                    style="accent-color: var(--accent-blue);">
+                  <span>Infrastruktur Jaringan</span>
+                </label>
+                <label class="vf-check-row">
+                  <input type="checkbox" id="layer-toggle-buildings" checked data-layer="buildings"
+                    style="accent-color: var(--accent-blue);">
+                  <span>Objek Bangunan</span>
+                </label>
+                <label class="vf-check-row">
+                  <input type="checkbox" id="layer-toggle-annotations" checked data-layer="annotations"
+                    style="accent-color: var(--accent-blue);">
+                  <span>Label &amp; Anotasi</span>
+                </label>
+              </div>
+
+              <div class="vf-col">
+                <div class="vf-col-title">Filter Cepat Komponen</div>
+                <label class="vf-check-row">
+                  <input type="checkbox" id="filter-toggle-cctv" checked style="accent-color: var(--status-online);">
+                  <span>Tampilkan Kamera CCTV</span>
+                </label>
+                <label class="vf-check-row">
+                  <input type="checkbox" id="filter-toggle-fiber" checked style="accent-color: #eab308;">
+                  <span>Tampilkan Kabel Fiber Optik</span>
+                </label>
+                <label class="vf-check-row">
+                  <input type="checkbox" id="filter-toggle-wireless" checked style="accent-color: #06b6d4;">
+                  <span>Tampilkan Link Nirkabel</span>
+                </label>
+                <label class="vf-check-row">
+                  <input type="checkbox" id="filter-toggle-coverage" checked style="accent-color: #2a7c13;">
+                  <span>Tampilkan Cakupan Sinyal WiFi</span>
+                </label>
+                <label class="vf-check-row vf-check-focus"
+                  title="Latar belakang peta akan sedikit transparan saat perangkat atau kabel dipilih agar objek terlihat lebih kontras dan jelas">
+                  <input type="checkbox" id="toggle-dim-bg-on-select" checked style="accent-color: var(--accent-blue);">
+                  <div style="display: flex; flex-direction: column; gap: 1px;">
+                    <span style="font-weight: 700; color: var(--text-primary);">Fokus Seleksi Objek</span>
+                    <span class="vf-subhint">Redupkan denah saat klik perangkat/kabel</span>
+                  </div>
+                </label>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Right: Gamification XP, Multi-Technician Account, Search Icon Dropdown, Zoom Controls & Panel Toggles -->
+      <!-- Right: Account, Search, Modular Settings, Sidebar & Fullscreen -->
       <div class="toolbar-section">
-        <button type="button" id="navbar-quest-btn" class="btn btn-secondary btn-sm navbar-quest-btn"
-          title="Misi Belajar, XP &amp; Lencana Gamifikasi">
-          <i data-lucide="award" style="width: 13px; height: 13px;"></i>
-          <span id="navbar-quest-level">Lv.1</span>
-          <span id="navbar-quest-xp" class="navbar-quest-xp">0 XP</span>
-        </button>
-
         <!-- Multi-Technician Account & Server Utama Button -->
         <button id="btn-navbar-auth" class="btn btn-secondary btn-sm navbar-auth-btn"
           title="Akun Teknisi & Server Utama (Multi-User)">
@@ -248,46 +314,109 @@
           </div>
         </div>
 
-        <div class="divider-vertical"></div>
+        <!-- Unified Modular General Settings Dropdown -->
+        <div id="navbar-settings-wrapper" class="navbar-dropdown">
+          <button type="button" id="btn-navbar-settings" class="btn btn-secondary btn-sm navbar-dropdown-trigger"
+            title="Pengaturan Umum Aplikasi (Footer, HUD 3D, Tema, Zoom &amp; Skala)" aria-expanded="false"
+            aria-haspopup="true">
+            <i data-lucide="settings" style="width: 14px; height: 14px;"></i>
+            <span>Pengaturan</span>
+          </button>
+          <div id="navbar-settings-dropdown" class="navbar-dropdown-panel navbar-settings-panel" role="dialog"
+            aria-label="Pengaturan Umum Aplikasi">
+            <div class="vf-dropdown-header">
+              <span class="vf-dropdown-title">
+                <i data-lucide="settings" style="width: 13px; height: 13px; color: var(--accent-green);"></i>
+                <span>Pengaturan Aplikasi</span>
+              </span>
+              <div class="gs-header-actions">
+                <button id="btn-toggle-theme" type="button" class="btn btn-secondary btn-sm gs-theme-btn"
+                  title="Ganti Tema (Botanical Cream / Forest Dark)">
+                  <i data-lucide="moon" id="theme-toggle-icon" style="width: 13px; height: 13px;"></i>
+                  <span>Mode Gelap</span>
+                </button>
+              </div>
+            </div>
 
-        <!-- Zoom Action Buttons -->
-        <button id="btn-zoom-out" class="btn btn-icon" title="Zoom Out (Perkecil)">
-          <i data-lucide="zoom-out"></i>
-        </button>
+            <div class="gs-grid">
+              <!-- Column 1: Modular HUD & Screen Preferences -->
+              <div class="gs-section">
+                <div class="vf-col-title">Tampilan &amp; HUD</div>
+                <label class="vf-check-row" title="Tampilkan atau sembunyikan baris status informasi di footer bawah">
+                  <input type="checkbox" id="toggle-setting-footer" style="accent-color: var(--accent-blue);">
+                  <div style="display: flex; flex-direction: column;">
+                    <span>Info Footer Bawah</span>
+                    <span class="vf-subhint">Status bar &amp; koordinat</span>
+                  </div>
+                </label>
+                <label class="vf-check-row" title="Tampilkan lencana skala &amp; jumlah perangkat di pojok kiri bawah">
+                  <input type="checkbox" id="toggle-setting-map-hud" checked style="accent-color: var(--accent-blue);">
+                  <span>Info Skala Peta</span>
+                </label>
+                <button id="btn-menu-toggle-3d-nav" type="button" class="gs-action-item"
+                  title="Tampilkan / Minimize Bar Navigasi 3D">
+                  <span class="gs-action-label">
+                    <i data-lucide="sliders-horizontal" style="width: 12px; height: 12px; color: var(--accent-green);"></i>
+                    <span>Navigasi 3D</span>
+                  </span>
+                  <span id="badge-menu-3d-nav" class="gs-status-badge">Tampil</span>
+                </button>
+                <button id="btn-menu-toggle-3d-hints" type="button" class="gs-action-item"
+                  title="Tampilkan / Minimize Panduan Kontrol 3D">
+                  <span class="gs-action-label">
+                    <i data-lucide="help-circle" style="width: 12px; height: 12px; color: var(--accent-green);"></i>
+                    <span>Panduan 3D</span>
+                  </span>
+                  <span id="badge-menu-3d-hints" class="gs-status-badge">Tampil</span>
+                </button>
+              </div>
 
-        <span id="zoom-percentage" class="status-pill"
-          style="min-width: 48px; justify-content: center; font-family: var(--font-mono);">
-          100%
-        </span>
-
-        <button id="btn-zoom-in" class="btn btn-icon" title="Zoom In (Perbesar)">
-          <i data-lucide="zoom-in"></i>
-        </button>
-
-        <button id="btn-fit-screen" class="btn btn-secondary btn-sm" title="Sesuaikan Peta ke Layar">
-          <i data-lucide="maximize" style="width: 14px; height: 14px;"></i>
-          <span>Fit</span>
-        </button>
-
-        <button id="btn-reset-view" class="btn btn-secondary btn-sm" title="Reset Skala 100%">
-          <i data-lucide="rotate-ccw" style="width: 14px; height: 14px;"></i>
-          <span>100%</span>
-        </button>
-
-        <div class="divider-vertical"></div>
-
-        <!-- Theme Toggle (Botanical Cream / Forest Dark) -->
-        <button id="btn-toggle-theme" class="btn btn-icon" title="Ganti Tema (Botanical Cream / Forest Dark)">
-          <i data-lucide="moon" id="theme-toggle-icon" style="width: 15px; height: 15px;"></i>
-        </button>
+              <!-- Column 2: Canvas Zoom, Calibration & App -->
+              <div class="gs-section">
+                <div class="vf-col-title">Kanvas &amp; Sistem</div>
+                <div class="gs-zoom-bar">
+                  <button id="btn-zoom-out" type="button" class="btn btn-icon btn-sm" title="Zoom Out (Perkecil)">
+                    <i data-lucide="zoom-out" style="width: 13px; height: 13px;"></i>
+                  </button>
+                  <span id="zoom-percentage" class="status-pill"
+                    style="justify-content: center; font-family: var(--font-mono);">100%</span>
+                  <button id="btn-zoom-in" type="button" class="btn btn-icon btn-sm" title="Zoom In (Perbesar)">
+                    <i data-lucide="zoom-in" style="width: 13px; height: 13px;"></i>
+                  </button>
+                </div>
+                <div class="gs-zoom-presets">
+                  <button id="btn-fit-screen" type="button" class="btn btn-secondary btn-sm"
+                    title="Sesuaikan Peta ke Layar">
+                    <i data-lucide="maximize" style="width: 12px; height: 12px;"></i>
+                    <span>Fit</span>
+                  </button>
+                  <button id="btn-reset-view" type="button" class="btn btn-secondary btn-sm" title="Reset Skala 100%">
+                    <i data-lucide="rotate-ccw" style="width: 12px; height: 12px;"></i>
+                    <span>100%</span>
+                  </button>
+                </div>
+                <button id="btn-settings-map-scale" type="button" class="gs-action-item"
+                  title="Kalibrasi ukuran fisik denah dalam meter">
+                  <span class="gs-action-label">
+                    <i data-lucide="ruler" style="width: 12px; height: 12px; color: var(--accent-green);"></i>
+                    <span>Kalibrasi Skala</span>
+                  </span>
+                </button>
+                <button id="btn-install-pwa" type="button" class="btn btn-secondary btn-sm gs-install-btn"
+                  title="Install Aplikasi Web (PWA) ke Perangkat">
+                  <span class="gs-action-label">
+                    <i data-lucide="download" style="width: 12px; height: 12px; color: var(--accent-blue);"></i>
+                    <span>Install App</span>
+                  </span>
+                  <span id="badge-menu-pwa" class="gs-status-badge">Siap</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
 
         <button id="btn-toggle-right-sidebar" class="btn btn-icon" title="Toggle Panel Properti">
           <i data-lucide="panel-right"></i>
-        </button>
-
-        <button id="btn-install-pwa" class="btn btn-secondary btn-sm" title="Install Aplikasi Web (PWA) ke Perangkat">
-          <i data-lucide="download" style="width: 14px; height: 14px; color: var(--accent-blue);"></i>
-          <span>Install App</span>
         </button>
 
         <!-- Workspace Fullscreen Toggle -->
@@ -320,82 +449,6 @@
           <div id="build-studio-palette-container" style="display: none;"></div>
           <!-- Device Palette Component Container -->
           <div id="device-palette-container"></div>
-
-          <div class="divider-horizontal"></div>
-
-          <!-- Layer Management Checklist (PRD Section 2.2 & 3.7) -->
-          <div class="panel-section">
-            <span class="section-label">Visibilitas Layer</span>
-            <div class="info-card" style="gap: 8px; font-size: 12px;">
-              <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; line-height: 1.35;">
-                <input type="checkbox" id="layer-toggle-bg" checked data-layer="background"
-                  style="accent-color: var(--accent-blue); margin-top: 2px;">
-                <span>Denah Latar Belakang</span>
-              </label>
-              <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; line-height: 1.35;">
-                <input type="checkbox" id="layer-toggle-devices" checked data-layer="devices"
-                  style="accent-color: var(--accent-blue); margin-top: 2px;">
-                <span>Perangkat Jaringan (Markers)</span>
-              </label>
-              <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; line-height: 1.35;">
-                <input type="checkbox" id="layer-toggle-connections" checked data-layer="connections"
-                  style="accent-color: var(--accent-blue); margin-top: 2px;">
-                <span>Jalur Kabel & Link</span>
-              </label>
-              <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; line-height: 1.35;">
-                <input type="checkbox" id="layer-toggle-infra" checked data-layer="infrastructure"
-                  style="accent-color: var(--accent-blue); margin-top: 2px;">
-                <span>Infrastruktur Jaringan</span>
-              </label>
-              <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; line-height: 1.35;">
-                <input type="checkbox" id="layer-toggle-buildings" checked data-layer="buildings"
-                  style="accent-color: var(--accent-blue); margin-top: 2px;">
-                <span>Objek Bangunan</span>
-              </label>
-              <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; line-height: 1.35;">
-                <input type="checkbox" id="layer-toggle-annotations" checked data-layer="annotations"
-                  style="accent-color: var(--accent-blue); margin-top: 2px;">
-                <span>Label & Anotasi</span>
-              </label>
-            </div>
-          </div>
-
-          <!-- Quick Sub-Filters (PRD Section 3.7) -->
-          <div class="panel-section">
-            <span class="section-label">Filter Cepat Komponen</span>
-            <div class="info-card" style="gap: 8px; font-size: 12px;">
-              <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; line-height: 1.35;">
-                <input type="checkbox" id="filter-toggle-cctv" checked
-                  style="accent-color: var(--status-online); margin-top: 2px;">
-                <span>Tampilkan Kamera CCTV</span>
-              </label>
-              <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; line-height: 1.35;">
-                <input type="checkbox" id="filter-toggle-fiber" checked style="accent-color: #eab308; margin-top: 2px;">
-                <span>Tampilkan Kabel Fiber Optik</span>
-              </label>
-              <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; line-height: 1.35;">
-                <input type="checkbox" id="filter-toggle-wireless" checked
-                  style="accent-color: #06b6d4; margin-top: 2px;">
-                <span>Tampilkan Link Nirkabel</span>
-              </label>
-              <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; line-height: 1.35;">
-                <input type="checkbox" id="filter-toggle-coverage" checked
-                  style="accent-color: #2a7c13; margin-top: 2px;">
-                <span>Tampilkan Cakupan Sinyal WiFi</span>
-              </label>
-              <label
-                style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; line-height: 1.35; border-top: 1px dashed var(--border-color); padding-top: 6px;"
-                title="Latar belakang peta akan sedikit transparan saat perangkat atau kabel dipilih agar objek terlihat lebih kontras dan jelas">
-                <input type="checkbox" id="toggle-dim-bg-on-select" checked
-                  style="accent-color: var(--accent-blue); margin-top: 2px;">
-                <div style="display: flex; flex-direction: column; gap: 1px;">
-                  <span style="font-weight: 600; color: var(--text-primary);">Fokus Seleksi Objek</span>
-                  <span style="font-size: 10px; color: var(--text-muted); line-height: 1.25;">Redupkan denah saat klik
-                    perangkat/kabel</span>
-                </div>
-              </label>
-            </div>
-          </div>
         </div>
       </aside>
 
@@ -412,10 +465,12 @@
             <span>Properti</span>
           </button>
           <div class="mob-dock-seg" role="group" aria-label="Workspace Belajar">
-            <button type="button" id="btn-mob-ws-build" class="mob-dock-seg-btn" data-workspace-switch="build" title="Studio Bangunan 3D">
+            <button type="button" id="btn-mob-ws-build" class="mob-dock-seg-btn" data-workspace-switch="build"
+              title="Edit Bangunan">
               <i data-lucide="building-2" style="width: 13px; height: 13px;"></i>
             </button>
-            <button type="button" id="btn-mob-ws-network" class="mob-dock-seg-btn active" data-workspace-switch="network" title="Lab Jaringan">
+            <button type="button" id="btn-mob-ws-network" class="mob-dock-seg-btn active"
+              data-workspace-switch="network" title="Simulasi Jaringan">
               <i data-lucide="network" style="width: 13px; height: 13px;"></i>
             </button>
           </div>
@@ -569,7 +624,8 @@
             <button id="btn-3d-front" class="hud-3d-btn" title="Tampak Depan">Depan</button>
             <button id="btn-3d-side" class="hud-3d-btn" title="Tampak Samping (Lihat Tumpukan)">Samping</button>
             <button id="btn-3d-focus" class="hud-3d-btn" title="Fokus ke Perangkat Terpilih">Fokus</button>
-            <button id="btn-3d-autofocus" class="hud-3d-btn active ws-network-only" title="Auto-Fokus Simulator saat Perangkat Diklik">
+            <button id="btn-3d-autofocus" class="hud-3d-btn active ws-network-only"
+              title="Auto-Fokus Simulator saat Perangkat Diklik">
               <i data-lucide="crosshair" style="width: 12px; height: 12px;"></i>
               <span>Auto-Fokus</span>
             </button>
@@ -588,7 +644,8 @@
             </select>
           </label>
 
-          <label class="hud-3d-inline ws-network-only" title="Ukuran diameter kabel 3D (1.0x = otomatis pas dengan ukuran lubang Port)">
+          <label class="hud-3d-inline ws-network-only"
+            title="Ukuran diameter kabel 3D (1.0x = otomatis pas dengan ukuran lubang Port)">
             <span>Kabel</span>
             <select id="select-3d-cable-size" class="hud-3d-select">
               <option value="0.6">0.6x Port</option>
@@ -599,7 +656,8 @@
             </select>
           </label>
 
-          <button id="btn-3d-explode" class="hud-3d-btn ws-network-only" title="Regangkan perangkat yang bertumpuk agar terlihat semua">
+          <button id="btn-3d-explode" class="hud-3d-btn ws-network-only"
+            title="Regangkan perangkat yang bertumpuk agar terlihat semua">
             <i data-lucide="layers" style="width: 13px; height: 13px;"></i>
             <span>Regangkan</span>
           </button>
@@ -664,25 +722,25 @@
         <!-- Mode Teknisi Roblox Avatar Radar & Control Bar (Bottom Center in 3D Mode) -->
         <div id="hud-3d-avatar-bar" class="hud-3d-avatar-bar hidden" style="display: none;"></div>
 
-        <!-- Dedicated Studio Bangunan 3D Placement Bar (Visible Only in 'build' Workspace) -->
+        <!-- Dedicated Edit Bangunan 3D Placement Bar (Visible Only in 'build' Workspace) -->
         <div id="hud-3d-build-studio" class="hud-3d-build-studio hidden" style="display: none;"
-          aria-label="Alat Placement Studio Bangunan 3D">
-          <span class="studio-bar-badge"><i data-lucide="building-2" style="width: 13px; height: 13px;"></i> Studio Bangunan</span>
-          <button type="button" id="btn-studio-grid-snap" class="avatar-sim-chip active" title="Snap ke kotak grid lantai">
+          aria-label="Alat Edit Bangunan 3D">
+          <button type="button" id="btn-studio-grid-snap" class="avatar-sim-chip active"
+            title="Snap grid lantai">
             <i data-lucide="grid-3x3" style="width: 12px; height: 12px;"></i>
             <span>Snap: ON</span>
           </button>
-          <select id="select-studio-grid-size" class="hud-3d-select" title="Ukuran Grid (meter)">
+          <select id="select-studio-grid-size" class="hud-3d-select" title="Ukuran Grid">
             <option value="0.25">0.25m</option>
             <option value="0.5" selected>0.50m</option>
             <option value="1">1.00m</option>
             <option value="2">2.00m</option>
           </select>
           <select id="select-studio-angle-snap" class="hud-3d-select" title="Sudut Putar">
-            <option value="0">Bebas 360°</option>
-            <option value="15">Snap 15°</option>
-            <option value="45" selected>Snap 45°</option>
-            <option value="90">Snap 90°</option>
+            <option value="0">360°</option>
+            <option value="15">15°</option>
+            <option value="45" selected>45°</option>
+            <option value="90">90°</option>
           </select>
           <button type="button" id="btn-studio-rot-ccw" class="avatar-sim-mini-btn" title="Putar Kiri ([)">
             <i data-lucide="rotate-ccw" style="width: 12px; height: 12px;"></i>
@@ -694,37 +752,36 @@
             <i data-lucide="shield" style="width: 12px; height: 12px;"></i>
             <span>Anti-Tabrakan</span>
           </button>
-          <button type="button" id="btn-studio-surface-snap" class="avatar-sim-chip active" title="Tempel otomatis di permukaan">
+          <button type="button" id="btn-studio-surface-snap" class="avatar-sim-chip active"
+            title="Tempel permukaan">
             <i data-lucide="magnet" style="width: 12px; height: 12px;"></i>
             <span>Surface</span>
           </button>
-          <button type="button" id="btn-studio-gizmo" class="avatar-sim-chip active" title="Tampilkan Gizmo RGB">
+          <button type="button" id="btn-studio-gizmo" class="avatar-sim-chip" title="Tampilkan Gizmo">
             <i data-lucide="move" style="width: 12px; height: 12px;"></i>
-            <span>Gizmo: ON</span>
+            <span>Gizmo: OFF</span>
           </button>
-          <select id="select-studio-gizmo-mode" class="hud-3d-select" title="Mode Sumbu Gizmo">
+          <select id="select-studio-gizmo-mode" class="hud-3d-select" title="Mode Gizmo" style="display: none;">
             <option value="both" selected>Panah + Putar</option>
             <option value="translate">Geser</option>
             <option value="rotate">Putar</option>
           </select>
-          <button type="button" id="btn-studio-duplicate" class="avatar-sim-chip" title="Duplikat Gedung / Objek Terpilih">
+          <button type="button" id="btn-studio-duplicate" class="avatar-sim-chip"
+            title="Duplikat">
             <i data-lucide="copy" style="width: 12px; height: 12px;"></i>
             <span>Duplikat</span>
           </button>
-          <button type="button" id="btn-studio-road" class="avatar-sim-chip" title="Gambar Jalan &amp; Trotoar 3D">
+          <button type="button" id="btn-studio-road" class="avatar-sim-chip" title="Jalan 3D">
             <i data-lucide="route" style="width: 12px; height: 12px;"></i>
             <span>Jalan 3D</span>
-          </button>
-          <button type="button" id="btn-studio-to-network" class="btn btn-primary btn-sm" title="Lanjut ke Lab Jaringan">
-            <i data-lucide="network" style="width: 12px; height: 12px;"></i>
-            <span>Lanjut Jaringan</span>
           </button>
         </div>
 
         <!-- City-Builder 3D Road & Walkway Toolbar (Floating Bottom Center in Road Mode / Selected Road) -->
         <div id="hud-3d-road-bar" class="hud-3d-road-bar hidden" style="display: none;"
           aria-label="Alat Bangun Jalan 3D">
-          <div class="road-bar-title"><i data-lucide="route" style="width: 13px; height: 13px;"></i> City-Builder Jalan 3D</div>
+          <div class="road-bar-title"><i data-lucide="route" style="width: 13px; height: 13px;"></i> City-Builder Jalan
+            3D</div>
           <label class="road-bar-field" title="Model / Permukaan Jalan 3D">
             <span>Model</span>
             <select id="select-road3d-style" class="hud-3d-select">
@@ -743,29 +800,35 @@
           </label>
           <label class="road-bar-field" title="Total lebar jalan termasuk kanstin tepi (meter)">
             <span>Lebar(m)</span>
-            <input type="number" id="input-road3d-width" class="road-bar-num" min="0.6" max="14" step="0.1" value="1.55">
+            <input type="number" id="input-road3d-width" class="road-bar-num" min="0.6" max="14" step="0.1"
+              value="1.55">
           </label>
           <label class="road-bar-field" title="Panjang tiap papan beton pijakan (meter)">
             <span>Papan(m)</span>
-            <input type="number" id="input-road3d-slab-len" class="road-bar-num" min="0.2" max="4" step="0.05" value="0.64">
+            <input type="number" id="input-road3d-slab-len" class="road-bar-num" min="0.2" max="4" step="0.05"
+              value="0.64">
           </label>
           <label class="road-bar-field" title="Jarak celah batu kerikil antar papan beton (meter)">
             <span>Celah(m)</span>
-            <input type="number" id="input-road3d-slab-gap" class="road-bar-num" min="0.01" max="1.5" step="0.02" value="0.14">
+            <input type="number" id="input-road3d-slab-gap" class="road-bar-num" min="0.01" max="1.5" step="0.02"
+              value="0.14">
           </label>
           <select id="select-road3d-list" class="hud-3d-select" title="Pilih / lompat ke jalan 3D yang sudah dibuat">
             <option value="">-- Jalan (0) --</option>
           </select>
           <div class="road-bar-btns">
-            <button type="button" id="btn-road3d-undo-pt" class="sim-action-btn" title="Hapus titik terakhir (Backspace)">
+            <button type="button" id="btn-road3d-undo-pt" class="sim-action-btn"
+              title="Hapus titik terakhir (Backspace)">
               <i data-lucide="undo-2" style="width: 12px; height: 12px;"></i>
               <span>Titik</span>
             </button>
-            <button type="button" id="btn-road3d-finish-chain" class="sim-action-btn is-primary" title="Selesaikan jalur ini dan siap buat jalan baru (Klik Kanan / Enter)">
+            <button type="button" id="btn-road3d-finish-chain" class="sim-action-btn is-primary"
+              title="Selesaikan jalur ini dan siap buat jalan baru (Klik Kanan / Enter)">
               <i data-lucide="check" style="width: 12px; height: 12px;"></i>
               <span>Selesai Jalur</span>
             </button>
-            <button type="button" id="btn-road3d-delete" class="sim-action-btn is-exit" title="Hapus jalan terpilih (Delete)">
+            <button type="button" id="btn-road3d-delete" class="sim-action-btn is-exit"
+              title="Hapus jalan terpilih (Delete)">
               <i data-lucide="trash-2" style="width: 12px; height: 12px;"></i>
               <span>Hapus</span>
             </button>
@@ -995,7 +1058,7 @@
   </div>
 
   <!-- Application Bootstrap (Bundled for file:// and http:// compatibility) -->
-  <script src="js/bundle.js?v=20261118-houseflipper-v12"></script>
+  <script src="js/bundle.js?v=20261118-elevz-v22"></script>
 </body>
 
 </html>

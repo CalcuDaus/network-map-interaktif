@@ -1790,12 +1790,20 @@ body.is-mobile-touch.mobile-dock-minimized #btn-mob-show-dock:not(.hidden) {
   bottom: 8px;
   width: auto !important;
   min-width: 0 !important;
-  max-width: calc(100vw - 290px);
-  padding: 4px 10px;
+  max-width: calc(100vw - 32px);
+  padding: 4px 8px;
   border-radius: 999px;
-  gap: 8px;
+  gap: 6px;
 }
 
+.hud-3d-avatar-bar.is-minimized .avatar-bar-status {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+.hud-3d-avatar-bar.is-minimized .avatar-bar-title,
+.hud-3d-avatar-bar.is-minimized .avatar-compact-nearest,
 .hud-3d-avatar-bar.is-minimized .avatar-bar-nearest,
 .hud-3d-avatar-bar.is-minimized .avatar-bar-actions,
 .hud-3d-avatar-bar.is-minimized .avatar-bar-controls-hint,
@@ -1803,7 +1811,6 @@ body.is-mobile-touch.mobile-dock-minimized #btn-mob-show-dock:not(.hidden) {
   display: none !important;
 }
 
-.hud-3d-avatar-bar.is-minimized .avatar-compact-nearest,
 .hud-3d-avatar-bar.is-minimized #btn-avatar-compact-exit {
   display: inline-flex !important;
   align-items: center;
@@ -2185,80 +2192,83 @@ body[data-workspace="network"] #avatar-sim-build-panel {
   color: #ffffff;
 }
 
-.navbar-quest-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-weight: 700;
-}
-
-.navbar-quest-xp {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--accent-green);
-  font-weight: 800;
-}
-
 /* Compact Desktop Studio Bangunan 3D Floating Bar */
 .hud-3d-build-studio {
   position: absolute;
-  bottom: 48px;
+  bottom: 44px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 44;
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
+  flex-wrap: nowrap;
+  gap: 4px;
   max-width: calc(100vw - 32px);
-  padding: 7px 11px;
-  border-radius: 12px;
+  overflow-x: auto;
+  padding: 5px 8px;
+  border-radius: 10px;
   background: var(--bg-secondary);
-  border: 1.5px solid #d97706;
-  box-shadow: var(--shadow-lg);
+  border: 1px solid #d97706;
+  box-shadow: var(--shadow-md);
 }
 
 body:not(.is-mobile-touch) #map-viewport:has(#hud-3d-avatar-bar:not(.hidden).is-minimized) .hud-3d-build-studio {
-  bottom: 72px;
+  bottom: 66px;
 }
 
 body:not(.is-mobile-touch) #map-viewport:has(#hud-3d-avatar-bar:not(.hidden):not(.is-minimized)) .hud-3d-build-studio {
   display: none !important;
 }
 
-/* Simple House-Flipper Style Prompt Pill below Center Crosshair / Move Hint */
+/* Simple House-Flipper Style Prompt Pill (compact near bottom-center, clear of crosshair view) */
 .hud-3d-houseflipper-tip {
   position: absolute;
   left: 50%;
-  top: calc(50% + 26px);
+  top: auto;
+  bottom: 52px;
   transform: translateX(-50%);
   z-index: 46;
   display: inline-flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: center;
-  gap: 8px;
-  max-width: min(640px, calc(100vw - 36px));
-  padding: 6px 12px;
+  gap: 5px;
+  max-width: calc(100vw - 32px);
+  padding: 2px 7px;
   border-radius: 999px;
-  background: rgba(15, 23, 42, 0.84);
+  background: rgba(15, 23, 42, 0.72);
   color: #f8fafc;
-  border: 1.5px solid rgba(56, 189, 248, 0.55);
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.35);
-  backdrop-filter: blur(8px);
-  font-size: 11.5px;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.24);
+  backdrop-filter: blur(5px);
+  font-size: 9.5px;
   font-weight: 600;
   pointer-events: auto;
   user-select: none;
 }
 
-.hud-3d-houseflipper-tip.is-carrying {
-  border-color: rgba(34, 197, 94, 0.85);
+body:not(.is-mobile-touch) #map-viewport:has(#hud-3d-avatar-bar:not(.hidden).is-minimized) .hud-3d-houseflipper-tip {
+  bottom: 46px;
 }
 
-.hud-3d-houseflipper-tip.is-orbit-move {
-  top: auto;
-  bottom: 72px;
+body:not(.is-mobile-touch) #map-viewport:has(#hud-3d-build-studio:not(.hidden)) .hud-3d-houseflipper-tip {
+  bottom: 92px;
+}
+
+body:not(.is-mobile-touch) #map-viewport:has(#hud-3d-avatar-bar:not(.hidden).is-minimized):has(#hud-3d-build-studio:not(.hidden)) .hud-3d-houseflipper-tip {
+  bottom: 108px;
+}
+
+body:not(.is-mobile-touch) #map-viewport:has(#hud-3d-avatar-bar:not(.hidden):not(.is-minimized)) .hud-3d-houseflipper-tip {
+  bottom: 158px;
+}
+
+.hud-3d-houseflipper-tip.is-carrying {
+  border-color: rgba(34, 197, 94, 0.72);
+}
+
+body.is-mobile-touch .hud-3d-houseflipper-tip {
+  bottom: 174px;
 }
 
 .hud-3d-houseflipper-tip.hidden {
@@ -2266,9 +2276,10 @@ body:not(.is-mobile-touch) #map-viewport:has(#hud-3d-avatar-bar:not(.hidden):not
 }
 
 .hf-tip-name {
-  font-weight: 800;
+  font-weight: 700;
   color: #86efac;
-  max-width: 190px;
+  max-width: 115px;
+  font-size: 9.5px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2280,17 +2291,19 @@ body:not(.is-mobile-touch) #map-viewport:has(#hud-3d-avatar-bar:not(.hidden):not
 }
 
 .hf-tip-btn {
-  border: 1px solid rgba(255, 255, 255, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.24);
   background: rgba(255, 255, 255, 0.14);
   color: #ffffff;
   border-radius: 999px;
-  padding: 3px 9px;
-  font-size: 11px;
+  padding: 1px 6px;
+  font-size: 9.5px;
   font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   transition: background 0.15s ease, transform 0.12s ease;
 }
 
@@ -2305,6 +2318,26 @@ body:not(.is-mobile-touch) #map-viewport:has(#hud-3d-avatar-bar:not(.hidden):not
 
 .hf-tip-btn.is-primary:hover {
   background: #15803d;
+}
+
+.hf-tip-zval {
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  background: rgba(15, 23, 42, 0.55);
+  color: #bae6fd;
+  border-radius: 999px;
+  padding: 1px 6px;
+  font-size: 9.5px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.hf-tip-zval.is-custom {
+  color: #86efac;
+  border-color: rgba(34, 197, 94, 0.72);
+  background: rgba(22, 163, 74, 0.24);
 }
 
 .studio-bar-badge {
@@ -2442,10 +2475,8 @@ body:not(.is-mobile-touch) #map-viewport:has(#hud-3d-avatar-bar:not(.hidden):not
   flex-shrink: 0;
 }
 
-/* Dual-Mode Modals: Mode Launcher, Packet Tracer, Quest Gamification */
-.workspace-launcher-modal,
-.packet-tracer-modal,
-.quest-gamification-modal {
+/* Packet Tracer Modal */
+.packet-tracer-modal {
   position: fixed;
   inset: 0;
   z-index: 950;
@@ -2457,9 +2488,7 @@ body:not(.is-mobile-touch) #map-viewport:has(#hud-3d-avatar-bar:not(.hidden):not
   padding: 16px;
 }
 
-.launcher-modal-card,
-.packet-tracer-card,
-.quest-modal-card {
+.packet-tracer-card {
   width: min(760px, 100%);
   max-height: min(88vh, 720px);
   overflow-y: auto;
@@ -2473,100 +2502,6 @@ body:not(.is-mobile-touch) #map-viewport:has(#hud-3d-avatar-bar:not(.hidden):not
   gap: 12px;
 }
 
-.launcher-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 12px;
-}
-
-.launcher-eyebrow {
-  font-size: 10.5px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.7px;
-  color: var(--accent-green);
-}
-
-.launcher-title {
-  margin: 2px 0 4px;
-  font-size: 18px;
-  font-weight: 800;
-  color: var(--text-primary);
-}
-
-.launcher-subtitle {
-  margin: 0;
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.launcher-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 12px;
-}
-
-.launcher-choice-card {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 16px;
-  border-radius: 12px;
-  border: 1.5px solid var(--border-color);
-  background: var(--bg-primary);
-  text-align: left;
-  cursor: pointer;
-  transition: transform 0.14s ease, border-color 0.14s ease;
-}
-
-.launcher-choice-card.is-build:hover {
-  border-color: #d97706;
-  transform: translateY(-2px);
-}
-
-.launcher-choice-card.is-network:hover {
-  border-color: var(--accent-blue);
-  transform: translateY(-2px);
-}
-
-.launcher-choice-icon {
-  font-size: 28px;
-}
-
-.launcher-choice-name {
-  font-size: 15px;
-  font-weight: 800;
-  color: var(--text-primary);
-}
-
-.launcher-choice-desc {
-  font-size: 12px;
-  line-height: 1.45;
-  color: var(--text-secondary);
-}
-
-.launcher-choice-cta {
-  margin-top: auto;
-  font-size: 12px;
-  font-weight: 800;
-  color: var(--accent-blue);
-}
-
-.launcher-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  flex-wrap: wrap;
-  font-size: 11.5px;
-  color: var(--text-muted);
-  border-top: 1px dashed var(--border-color);
-  padding-top: 10px;
-}
-
-/* Packet Tracer Modal */
 .pt-tab-bar {
   display: flex;
   gap: 6px;
@@ -2739,119 +2674,4 @@ body:not(.is-mobile-touch) #map-viewport:has(#hud-3d-avatar-bar:not(.hidden):not
   color: var(--text-primary);
   font-family: var(--font-mono);
   font-size: 12px;
-}
-
-/* Gamification Quest Modal */
-.quest-summary-banner {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-}
-
-.quest-lvl-pill {
-  padding: 6px 12px;
-  border-radius: 8px;
-  background: var(--accent-green);
-  color: #ffffff;
-  font-weight: 800;
-  font-size: 13px;
-}
-
-.quest-xp-bar {
-  margin-top: 5px;
-  height: 8px;
-  border-radius: 999px;
-  background: var(--bg-secondary);
-  overflow: hidden;
-  border: 1px solid var(--border-color);
-}
-
-.quest-xp-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--accent-green), #22c55e);
-}
-
-.quest-badges-strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.quest-badge-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: rgba(34, 197, 94, 0.14);
-  border: 1px solid rgba(34, 197, 94, 0.35);
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.quest-cards-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 10px;
-}
-
-.quest-item-card {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 11px;
-  border-radius: 10px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-primary);
-}
-
-.quest-item-card.is-done {
-  border-color: var(--accent-green);
-}
-
-.quest-item-head,
-.quest-item-foot {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-}
-
-.quest-item-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 12.5px;
-  font-weight: 800;
-  color: var(--text-primary);
-}
-
-.quest-item-xp {
-  font-size: 11px;
-  font-weight: 800;
-  color: #d97706;
-  font-family: var(--font-mono);
-}
-
-.quest-item-desc {
-  font-size: 11.5px;
-  color: var(--text-secondary);
-  line-height: 1.4;
-}
-
-.quest-item-prog {
-  font-size: 11px;
-  font-family: var(--font-mono);
-  color: var(--text-muted);
-}
-
-.quest-item-badge {
-  font-size: 10.5px;
-  font-weight: 700;
-  color: var(--accent-green);
 }

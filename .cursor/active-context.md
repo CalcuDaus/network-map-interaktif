@@ -1,20 +1,106 @@
 > **BrainSync Context Pumper** 🧠
-> Dynamically loaded for active file: `docker-compose.yml` (Domain: **Config/Infrastructure**)
+> Dynamically loaded for active file: `js\map\map-3d-models.js` (Domain: **Generic Logic**)
 
-### 📐 Config/Infrastructure Conventions & Fixes
-- **[what-changed] 🟢 Edited docker-compose.yml (72 changes, 57min)**: Active editing session on docker-compose.yml.
-72 content changes over 57 minutes.
-- **[what-changed] 🟢 Edited docker-compose.yml (150 changes, 28min)**: Active editing session on docker-compose.yml.
-150 content changes over 28 minutes.
-- **[convention] 🟢 Edited docker-compose.yml (73 changes, 8min) — confirmed 3x**: Active editing session on docker-compose.yml.
-73 content changes over 8 minutes.
-- **[what-changed] 🟢 Edited index.html (10 changes, 9min)**: Active editing session on index.html.
-10 content changes over 9 minutes.
-- **[what-changed] 🟢 Edited index.html (13 changes, 18min)**: Active editing session on index.html.
-13 content changes over 18 minutes.
-- **[what-changed] 🟢 Edited index.html (148 changes, 25min)**: Active editing session on index.html.
-148 content changes over 25 minutes.
-- **[convention] 🟢 Edited index.html (5 changes, 15min) — confirmed 3x**: Active editing session on index.html.
-5 content changes over 15 minutes.
-- **[what-changed] 🟢 Edited prd.md (12 changes, 13min)**: Active editing session on prd.md.
-12 content changes over 13 minutes.
+### 📐 Generic Logic Conventions & Fixes
+- **[what-changed] 🟢 Edited js/ui/port-picker-modal.js (162 changes, 103min)**: Active editing session on js/ui/port-picker-modal.js.
+162 content changes over 103 minutes.
+- **[convention] Fixed null crash in Quick — prevents XSS injection attacks — confirmed 4x**: -         <!-- Quick Row Actions (Focus & Open Properties) -->
++         <!-- Quick Row Actions (Detail, Focus & Open Properties) -->
+-         <!-- Quick Row Actions (Detail, Focus & Open Properties) -->
++         <div class="ps-layer-actions">
+-         <div class="ps-layer-actions">
++           <button type="button" class="ps-row-action-btn" data-dev-detail="${device.id}" title="Detail, Spesifikasi, Anggaran &amp; SSID">
+-           <button type="button" class="ps-row-action-btn" data-dev-detail="${device.id}" title="Detail, Spesifikasi, Anggaran &amp; SSID">
++             <i data-lucide="file-text" style="width: 12px; height: 12px;"></i>
+-             <i data-lucide="file-text" style="width: 12px; height: 12px;"></i>
++           </button>
+-           </button>
++           <button type="button" class="ps-row-action-btn" data-dev-focus="${device.id}" title="Fokus Kamera ke Perangkat Ini">
+-           <button type="button" class="ps-row-action-btn" data-dev-focus="${device.id}" title="Fokus Kamera ke Perangkat Ini">
++             <i data-lucide="crosshair" style="width: 12px; height: 12px;"></i>
+-             <i data-lucide="crosshair" style="width: 12px; height: 12px;"></i>
++           </button>
+-           </button>
++           <button type="button" class="ps-row-action-btn" data-dev-props="${device.id}" title="Edit Properti & Konfigurasi">
+-           <button type="button" class="ps-row-action-btn" data-dev-props="${device.id}" title="Edit Properti & Konfigurasi">
++             <i data-lucide="sliders" style="width: 12px; height: 12px;"></i>
+-             <i data-lucide="sliders" style="width: 12px; height: 12px;"></i>
++           </button>
+-           </button>
++         </div>
+-         </div>
++       </div>
+-       </div>
++     `;
+-     `;
++   }
+-   }
++ 
+- 
++   bindTreeInteractions(treeContainer) {
+-   bindTreeInteractions(treeContainer) {
++     // 1. Group Collapse / Expand Toggle
+-     // 1. Group Collapse / Expand Toggle
++     treeContainer.querySelectorAl
+… [diff truncated]
+
+📌 IDE AST Context: Modified symbols likely include [MIKROTIK_TYPES, RUIJIE_TYPES, TPLINK_TYPES, DeviceLayersPanel]
+- **[problem-fix] Patched security issue Detail — prevents XSS injection attacks**: -           <td style="padding: 10px 12px; text-align: right;">
++           <td style="padding: 10px 12px; text-align: right; white-space: nowrap;">
+-           <td style="padding: 10px 12px; text-align: right; white-space: nowrap;">
++             <button class="btn btn-secondary btn-sm" data-detail-id="${dev.id}" style="font-size: 11px; margin-right: 4px;">
+-             <button class="btn btn-secondary btn-sm" data-detail-id="${dev.id}" style="font-size: 11px; margin-right: 4px;">
++               Detail
+-               Detail
++             </button>
+-             </button>
++             <button class="btn btn-secondary btn-sm" data-goto-id="${dev.id}" style="font-size: 11px;">
+-             <button class="btn btn-secondary btn-sm" data-goto-id="${dev.id}" style="font-size: 11px;">
++               Fokus
+-               Fokus
++             </button>
+-             </button>
++           </td>
+-           </td>
++         </tr>
+-         </tr>
++       `;
+-       `;
++     });
+-     });
++ 
+- 
++     html += `</tbody></table>`;
+-     html += `</tbody></table>`;
++     container.innerHTML = html;
+-     container.innerHTML = html;
++ 
+- 
++     // Attach detail click
+-     // Attach detail click
++     container.querySelectorAll('[data-detail-id]').forEach((btn) => {
+-     container.querySelectorAll('[data-detail-id]').forEach((btn) => {
++       btn.addEventListener('click', () => {
+-       btn.addEventListener('click', () => {
++         const id = btn.getAttribute('data-detail-id');
+-         const id = btn.getAttribute('data-detail-id');
++         if (id) {
+-         if (id) {
++           this.hide();
+-           this.hide();
++           eventBus.emit('modal:open-device-detail', { deviceId: id, tab: 'network' });
+-           eventBus.emit('modal:open-device-detail', { deviceId: id, tab: 'network' });
++         }
+-         }
++       });
+-       });
++     });
+-     });
++ 
+- 
++     // Attach goto click
+-     // Attach goto click
++     container.querySelectorAll('[data-goto-id]').f
+… [diff truncated]
+
+📌 IDE AST Context: Modified symbols likely include [IpVlanModal]

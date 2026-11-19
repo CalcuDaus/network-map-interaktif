@@ -773,8 +773,17 @@ export function createDevice3DMesh(device, catColorHex = '#2a7c13', statusColorH
  * @returns {THREE.Sprite}
  */
 export function create3DLabelSprite(device, elevationMeters = 0) {
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
+  const canvas = typeof document !== 'undefined' ? document.createElement('canvas') : null;
+  const ctx = canvas?.getContext?.('2d') || null;
+  if (!ctx) {
+    const fallbackSprite = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true }));
+    fallbackSprite.scale.set(5.2, 1.5, 1);
+    fallbackSprite.renderOrder = 20;
+    fallbackSprite.userData = { isLabelSprite: true };
+    fallbackSprite.raycast = () => { };
+    return fallbackSprite;
+  }
+
   const width = 512;
   const height = 148;
   canvas.width = width;
@@ -820,6 +829,8 @@ export function create3DLabelSprite(device, elevationMeters = 0) {
   const sprite = new THREE.Sprite(mat);
   sprite.scale.set(5.2, 1.5, 1);
   sprite.renderOrder = 20;
+  sprite.userData = { isLabelSprite: true };
+  sprite.raycast = () => { };
   return sprite;
 }
 

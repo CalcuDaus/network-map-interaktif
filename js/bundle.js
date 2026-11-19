@@ -75,14 +75,6 @@
   // js/core/state-manager.js
   var StateManager = class {
     constructor() {
-      let savedWorkspace = "network";
-      try {
-        const stored = typeof localStorage !== "undefined" ? localStorage.getItem("netmap_workspace_mode_v1") : null;
-        if (stored === "build" || stored === "network") {
-          savedWorkspace = stored;
-        }
-      } catch {
-      }
       this.state = {
         project: {
           id: "proj-default",
@@ -102,8 +94,8 @@
           objects3d: [],
           roads3d: []
         },
-        // Active primary workspace mode: 'build' (Studio Bangunan 3D) | 'network' (Lab Engineering Jaringan)
-        workspaceMode: savedWorkspace,
+        // Active primary workspace mode: 'network' (Simulasi Jaringan, default) | 'build' (Edit Bangunan)
+        workspaceMode: "network",
         // Active viewport renderer mode: '2d' | '3d'
         viewMode: "2d",
         // Current interaction mode: 'navigate' | 'select' | 'add-device' | 'draw-cable' | 'edit' | 'delete'
@@ -180,7 +172,7 @@
       return this.state.viewMode;
     }
     /**
-     * Switch primary educational workspace mode ('build' = Studio Bangunan 3D | 'network' = Lab Jaringan)
+     * Switch primary educational workspace mode ('network' = Simulasi Jaringan [default] | 'build' = Edit Bangunan)
      * @param {'build'|'network'} workspaceMode
      * @returns {'build'|'network'}
      */
@@ -189,12 +181,6 @@
       if (this.state.workspaceMode === normalized) return normalized;
       const prevWorkspaceMode = this.state.workspaceMode || "network";
       this.state.workspaceMode = normalized;
-      try {
-        if (typeof localStorage !== "undefined") {
-          localStorage.setItem("netmap_workspace_mode_v1", normalized);
-        }
-      } catch {
-      }
       eventBus.emit("workspace:changed", {
         workspaceMode: normalized,
         prevWorkspaceMode
@@ -3333,9 +3319,16 @@
       this.btnExitWorkspaceFullscreen = document.getElementById("btn-exit-workspace-fullscreen");
       this.navbarMenuWrapper = document.getElementById("navbar-menu-wrapper");
       this.btnNavbarMenu = document.getElementById("btn-navbar-menu");
+      this.navbarViewFilterWrapper = document.getElementById("navbar-view-filter-wrapper");
+      this.btnNavbarViewFilter = document.getElementById("btn-navbar-view-filter");
       this.navbarSearchWrapper = document.getElementById("navbar-search-wrapper");
       this.btnToggleSearch = document.getElementById("btn-toggle-search");
       this.globalSearchInput = document.getElementById("global-search-input");
+      this.navbarSettingsWrapper = document.getElementById("navbar-settings-wrapper");
+      this.btnNavbarSettings = document.getElementById("btn-navbar-settings");
+      this.toggleSettingFooter = document.getElementById("toggle-setting-footer");
+      this.toggleSettingMapHud = document.getElementById("toggle-setting-map-hud");
+      this.btnSettingsMapScale = document.getElementById("btn-settings-map-scale");
       this.modeButtons = document.querySelectorAll("[data-mode]");
       this.hudZoomIn = document.getElementById("hud-zoom-in");
       this.hudZoomOut = document.getElementById("hud-zoom-out");
@@ -3411,6 +3404,18 @@
           this.closeNavbarDropdowns();
         });
       });
+      this.btnNavbarViewFilter?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const willOpen = !this.navbarViewFilterWrapper?.classList.contains("open");
+        this.closeNavbarDropdowns();
+        if (willOpen && this.navbarViewFilterWrapper) {
+          this.navbarViewFilterWrapper.classList.add("open");
+          this.btnNavbarViewFilter?.setAttribute("aria-expanded", "true");
+        }
+      });
+      this.navbarViewFilterWrapper?.addEventListener("click", (e) => {
+        e.stopPropagation();
+      });
       this.btnToggleSearch?.addEventListener("click", (e) => {
         e.stopPropagation();
         const willOpen = !this.navbarSearchWrapper?.classList.contains("open");
@@ -3422,9 +3427,22 @@
       this.navbarSearchWrapper?.addEventListener("click", (e) => {
         e.stopPropagation();
       });
+      this.btnNavbarSettings?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const willOpen = !this.navbarSettingsWrapper?.classList.contains("open");
+        this.closeNavbarDropdowns();
+        if (willOpen && this.navbarSettingsWrapper) {
+          this.navbarSettingsWrapper.classList.add("open");
+          this.btnNavbarSettings?.setAttribute("aria-expanded", "true");
+        }
+      });
+      this.navbarSettingsWrapper?.addEventListener("click", (e) => {
+        e.stopPropagation();
+      });
+      this.setupGeneralSettings();
       document.addEventListener("click", (e) => {
         const target = e.target;
-        if (!this.navbarMenuWrapper?.contains(target) && !this.navbarSearchWrapper?.contains(target)) {
+        if (!this.navbarMenuWrapper?.contains(target) && !this.navbarViewFilterWrapper?.contains(target) && !this.navbarSearchWrapper?.contains(target) && !this.navbarSettingsWrapper?.contains(target)) {
           this.closeNavbarDropdowns();
         }
       });
@@ -3439,6 +3457,67 @@
         }
       });
     }
+    /** Initializes General Settings UI preferences (hidden footer by default, map HUD, scale button). */
+    setupGeneralSettings() {
+      let showFooter = false;
+      let showMapHud = true;
+      try {
+        showFooter = localStorage.getItem("netmap_show_footer_v1") === "1";
+        showMapHud = localStorage.getItem("netmap_show_map_hud_v1") !== "0";
+      } catch {
+      }
+      this.setFooterVisible(showFooter, { persist: false, emitResize: false });
+      this.setMapInfoHudVisible(showMapHud, { persist: false });
+      this.toggleSettingFooter?.addEventListener("change", (e) => {
+        this.setFooterVisible(Boolean(e.target.checked));
+      });
+      this.toggleSettingMapHud?.addEventListener("change", (e) => {
+        this.setMapInfoHudVisible(Boolean(e.target.checked));
+      });
+      this.btnSettingsMapScale?.addEventListener("click", () => {
+        this.closeNavbarDropdowns();
+        eventBus.emit("modal:open-map-scale");
+      });
+    }
+    /** Shows or hides the bottom footer status bar cleanly & notifies canvases to resize. */
+    setFooterVisible(visible, { persist = true, emitResize = true } = {}) {
+      const show = Boolean(visible);
+      if (typeof document !== "undefined" && document.body?.classList) {
+        document.body.classList.toggle("hide-footer-status", !show);
+      }
+      if (this.toggleSettingFooter) {
+        this.toggleSettingFooter.checked = show;
+      }
+      if (persist) {
+        try {
+          localStorage.setItem("netmap_show_footer_v1", show ? "1" : "0");
+        } catch {
+        }
+      }
+      if (emitResize && typeof window !== "undefined") {
+        const dispatch = () => window.dispatchEvent(new Event("resize"));
+        if (typeof requestAnimationFrame === "function") requestAnimationFrame(dispatch);
+        else dispatch();
+      }
+      return show;
+    }
+    /** Shows or hides the bottom-left floating map scale/count HUD badge. */
+    setMapInfoHudVisible(visible, { persist = true } = {}) {
+      const show = Boolean(visible);
+      if (typeof document !== "undefined" && document.body?.classList) {
+        document.body.classList.toggle("hide-map-info-hud", !show);
+      }
+      if (this.toggleSettingMapHud) {
+        this.toggleSettingMapHud.checked = show;
+      }
+      if (persist) {
+        try {
+          localStorage.setItem("netmap_show_map_hud_v1", show ? "1" : "0");
+        } catch {
+        }
+      }
+      return show;
+    }
     openSearchDropdown() {
       if (!this.navbarSearchWrapper) return;
       this.navbarSearchWrapper.classList.add("open");
@@ -3451,8 +3530,12 @@
     closeNavbarDropdowns() {
       this.navbarMenuWrapper?.classList.remove("open");
       this.btnNavbarMenu?.setAttribute("aria-expanded", "false");
+      this.navbarViewFilterWrapper?.classList.remove("open");
+      this.btnNavbarViewFilter?.setAttribute("aria-expanded", "false");
       this.navbarSearchWrapper?.classList.remove("open");
       this.btnToggleSearch?.setAttribute("aria-expanded", "false");
+      this.navbarSettingsWrapper?.classList.remove("open");
+      this.btnNavbarSettings?.setAttribute("aria-expanded", "false");
     }
     initTheme() {
       const savedTheme = localStorage.getItem("netmap-theme") || "light";
@@ -3463,7 +3546,7 @@
       localStorage.setItem("netmap-theme", theme);
       if (this.btnToggleTheme) {
         const isDark = theme === "dark";
-        this.btnToggleTheme.innerHTML = `<i data-lucide="${isDark ? "sun" : "moon"}" id="theme-toggle-icon" style="width: 15px; height: 15px;"></i>`;
+        this.btnToggleTheme.innerHTML = `<i data-lucide="${isDark ? "sun" : "moon"}" id="theme-toggle-icon" style="width: 13px; height: 13px;"></i><span>${isDark ? "Mode Terang" : "Mode Gelap"}</span>`;
         this.btnToggleTheme.title = isDark ? "Beralih ke Tema Botanical Cream (Terang)" : "Beralih ke Tema Forest Pine (Gelap)";
         if (window.lucide && typeof window.lucide.createIcons === "function") {
           window.lucide.createIcons();
@@ -14117,18 +14200,25 @@ ${dev.network?.ip || ""}`,
      * @param {import('../devices/device-manager.js').DeviceManager} options.deviceManager
      * @param {import('../connections/cable-manager.js').CableManager} options.cableManager
      */
-    constructor({ mapLayers, mapEngine, deviceManager, cableManager }) {
+    constructor({ mapLayers, mapEngine, deviceManager, cableManager, map3DEngine = null }) {
       this.mapLayers = mapLayers;
       this.mapEngine = mapEngine;
       this.deviceManager = deviceManager;
       this.cableManager = cableManager;
+      this.map3DEngine = map3DEngine;
       this.filters = {
         showCctv: true,
         showFiber: true,
         showWireless: true,
-        showCoverage: true
+        showCoverage: true,
+        dimOnSelection: true
       };
       this.bindEvents();
+    }
+    /** Attach or update the 3D Map Engine instance so view filters & layers mirror to 3D mode. */
+    setMap3DEngine(engine) {
+      this.map3DEngine = engine || null;
+      this.map3DEngine?.setViewFilters?.({ ...this.filters });
     }
     bindEvents() {
       const layerCheckboxes = document.querySelectorAll("input[data-layer]");
@@ -14138,11 +14228,20 @@ ${dev.network?.ip || ""}`,
           stateManager.toggleLayer(layerName, e.target.checked);
         });
       });
+      eventBus.on("layer:visibility-changed", ({ layer, visible }) => {
+        const cb = document.querySelector(`#navbar-view-filter-dropdown input[data-layer="${layer}"]`);
+        if (cb && cb.checked !== Boolean(visible)) {
+          cb.checked = Boolean(visible);
+        }
+        this.syncViewFilterBadge();
+      });
       const toggleDim = document.getElementById("toggle-dim-bg-on-select");
       toggleDim?.addEventListener("change", (e) => {
+        const checked = Boolean(e.target.checked);
+        this.filters.dimOnSelection = checked;
         if (this.mapEngine) {
-          this.mapEngine.dimOnSelection = e.target.checked;
-          if (!e.target.checked) {
+          this.mapEngine.dimOnSelection = checked;
+          if (!checked) {
             this.mapEngine.restoreBackground();
           } else {
             const hasSelectedDevice = Boolean(this.deviceManager?.selectedDeviceId);
@@ -14152,27 +14251,83 @@ ${dev.network?.ip || ""}`,
             }
           }
         }
+        this.map3DEngine?.setViewFilters?.({ dimOnSelection: checked });
       });
       const filterCctv = document.getElementById("filter-toggle-cctv");
       filterCctv?.addEventListener("change", (e) => {
         this.filters.showCctv = e.target.checked;
         this.applyDeviceFilter();
+        this.map3DEngine?.setViewFilters?.({ showCctv: this.filters.showCctv });
       });
       const filterFiber = document.getElementById("filter-toggle-fiber");
       filterFiber?.addEventListener("change", (e) => {
         this.filters.showFiber = e.target.checked;
         this.applyCableFilter();
+        this.map3DEngine?.setViewFilters?.({ showFiber: this.filters.showFiber });
       });
       const filterWireless = document.getElementById("filter-toggle-wireless");
       filterWireless?.addEventListener("change", (e) => {
         this.filters.showWireless = e.target.checked;
         this.applyCableFilter();
+        this.map3DEngine?.setViewFilters?.({ showWireless: this.filters.showWireless });
       });
       const filterCoverage = document.getElementById("filter-toggle-coverage");
       filterCoverage?.addEventListener("change", (e) => {
         this.filters.showCoverage = e.target.checked;
         this.deviceManager.renderer.setCoverageVisibility(e.target.checked);
+        this.map3DEngine?.setViewFilters?.({ showCoverage: this.filters.showCoverage });
       });
+      const allViewCheckboxes = document.querySelectorAll('#navbar-view-filter-dropdown input[type="checkbox"]');
+      allViewCheckboxes.forEach((cb) => {
+        cb.addEventListener("change", () => this.syncViewFilterBadge());
+      });
+      const resetBtn = document.getElementById("btn-view-filter-reset");
+      resetBtn?.addEventListener("click", () => this.resetAllViewFilters());
+      this.syncViewFilterBadge();
+    }
+    /** Updates badge counter on top-bar View dropdown showing how many layers/filters are hidden. */
+    syncViewFilterBadge() {
+      const badge = document.getElementById("badge-navbar-view-filter");
+      if (!badge) return;
+      const boxes = document.querySelectorAll('#navbar-view-filter-dropdown input[type="checkbox"]');
+      let offCount = 0;
+      boxes.forEach((cb) => {
+        if (!cb.checked) offCount += 1;
+      });
+      badge.textContent = offCount > 0 ? String(offCount) : "";
+      badge.classList.toggle("hidden", offCount === 0);
+    }
+    /** Re-enables all visibility layers, sub-filters & focus mode in one click. */
+    resetAllViewFilters() {
+      document.querySelectorAll("input[data-layer]").forEach((cb) => {
+        if (!cb.checked) {
+          cb.checked = true;
+          stateManager.toggleLayer(cb.getAttribute("data-layer"), true);
+        }
+      });
+      ["filter-toggle-cctv", "filter-toggle-fiber", "filter-toggle-wireless", "filter-toggle-coverage", "toggle-dim-bg-on-select"].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el && !el.checked) {
+          el.checked = true;
+        }
+      });
+      this.filters.showCctv = true;
+      this.filters.showFiber = true;
+      this.filters.showWireless = true;
+      this.filters.showCoverage = true;
+      this.filters.dimOnSelection = true;
+      this.applyDeviceFilter();
+      this.applyCableFilter();
+      this.deviceManager?.renderer?.setCoverageVisibility?.(true);
+      if (this.mapEngine) {
+        this.mapEngine.dimOnSelection = true;
+        if (this.deviceManager?.selectedDeviceId || this.cableManager?.selectedCableId) {
+          this.mapEngine.dimBackground();
+        }
+      }
+      this.map3DEngine?.setShowLabels?.(true);
+      this.map3DEngine?.setViewFilters?.({ ...this.filters });
+      this.syncViewFilterBadge();
     }
     applyDeviceFilter() {
       this.deviceManager.renderer.markerMap.forEach((group, deviceId) => {
@@ -64679,8 +64834,17 @@ void main() {
     return group;
   }
   function create3DLabelSprite(device, elevationMeters = 0) {
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
+    const canvas = typeof document !== "undefined" ? document.createElement("canvas") : null;
+    const ctx = canvas?.getContext?.("2d") || null;
+    if (!ctx) {
+      const fallbackSprite = new Sprite(new SpriteMaterial({ transparent: true }));
+      fallbackSprite.scale.set(5.2, 1.5, 1);
+      fallbackSprite.renderOrder = 20;
+      fallbackSprite.userData = { isLabelSprite: true };
+      fallbackSprite.raycast = () => {
+      };
+      return fallbackSprite;
+    }
     const width = 512;
     const height = 148;
     canvas.width = width;
@@ -64713,6 +64877,9 @@ void main() {
     const sprite = new Sprite(mat);
     sprite.scale.set(5.2, 1.5, 1);
     sprite.renderOrder = 20;
+    sprite.userData = { isLabelSprite: true };
+    sprite.raycast = () => {
+    };
     return sprite;
   }
   var BUILTIN_ROOM_BUILDING_PRESETS = [
@@ -69096,8 +69263,15 @@ void main() {
       this.deviceScaleMultiplier = 3;
       this.cableDiameterMultiplier = 1;
       this.explodeStacks = false;
-      this.showLabels = true;
+      this.showLabels = stateManager.state?.layers?.annotations !== false;
       this.showCoverage = true;
+      this.viewFilters = {
+        showCctv: true,
+        showFiber: true,
+        showWireless: true,
+        showCoverage: true,
+        dimOnSelection: true
+      };
       this.animFrameId = null;
       this.resizeObserver = null;
       this.pointerDownScreen = { x: 0, y: 0 };
@@ -69368,8 +69542,10 @@ void main() {
           if (gizmoHit) {
             cancelLongPress();
             this.startObject3dGizmoDrag(e, dom, gizmoHit);
+          } else if (this.navTool === "box" || e.ctrlKey || e.metaKey) {
           } else if (this.navTool === "box" && !this.avatarMode || e.ctrlKey || e.metaKey) {
             this.startBoxSelect(e, dom);
+          } else if (this.navTool === "draw3d") {
           } else if (this.navTool === "draw3d" && !this.avatarMode) {
             this.startObject3dCreateDraw(e, dom);
           } else if (this.navTool === "look") {
@@ -69380,8 +69556,10 @@ void main() {
             this.lookYaw = Math.atan2(dir.x, dir.z);
             this.lookPitch = Math.asin(Math.max(-0.99, Math.min(0.99, dir.y)));
             dom.setPointerCapture?.(e.pointerId);
+          } else if (this.navTool === "move") {
           } else if (this.navTool === "move" && !this.avatarMode) {
             this.startDeviceDragMove(e, dom);
+          } else if (this.navTool === "rotate") {
           } else if (this.navTool === "rotate" && !this.avatarMode) {
             this.startRotateDrag(e, dom);
           }
@@ -69500,6 +69678,11 @@ void main() {
         if (!this.isActive || !this.avatarMode || this.simulatorFocusedDeviceId) return;
         e.preventDefault();
         e.stopPropagation();
+        if (e.shiftKey && (this.carriedObjects?.length > 0 || this.navTool === "move")) {
+          const step = e.deltaY < 0 ? 0.25 : -0.25;
+          this.adjustAvatarTargetOrCarriedElevation(step);
+          return;
+        }
         if (this.avatarPerspective === "fpp") {
           if (e.deltaY > 0) {
             this.avatarState.camDist = 2.6;
@@ -69548,6 +69731,7 @@ void main() {
       if (!this.groundTexture) {
         this.rebuildGround();
       }
+      this.apply3dViewFilters();
       this.syncRemoteAvatars(authManager.getRemotePeers());
       this.publishLocalPresence(true);
       this.lastFrameTime = performance.now();
@@ -69675,6 +69859,7 @@ void main() {
         const plane = new Mesh(geo, mat);
         plane.receiveShadow = true;
         this.groundGroup.add(plane);
+        this.apply3dViewFilters?.();
       };
       const isFileProtocol = typeof window !== "undefined" && window.location?.protocol === "file:";
       const isSafeDataOrBlob = typeof this.activeMapUrl === "string" && (this.activeMapUrl.startsWith("data:") || this.activeMapUrl.startsWith("blob:"));
@@ -69692,6 +69877,7 @@ void main() {
           geo.rotateX(-Math.PI / 2);
           const mat = new MeshStandardMaterial({ color: 14411471, roughness: 0.95 });
           this.groundGroup.add(new Mesh(geo, mat));
+          this.apply3dViewFilters?.();
         };
         img.src = url;
       };
@@ -69708,6 +69894,7 @@ void main() {
       grid.material.opacity = 0.18;
       grid.material.transparent = true;
       this.groundGroup.add(grid);
+      this.apply3dViewFilters?.();
     }
     syncAll() {
       if (!this.isActive || !this.isInitialized) return;
@@ -69716,6 +69903,7 @@ void main() {
       this.syncObjects3d();
       this.syncDevices();
       this.syncCables();
+      this.apply3dViewFilters?.();
     }
     _attachRoomFallbackMesh(room, roomGroup) {
       if (!roomGroup || roomGroup.userData?.hasFallbackRoomMesh) return;
@@ -69890,6 +70078,7 @@ void main() {
         this.room3dMeshMap.set(room.id, roomGroup);
         this._attachRoomCustomGlb(room, roomGroup);
       });
+      this.apply3dViewFilters?.();
     }
     rebuildSingleRoom3dMesh(room, isSelected = true) {
       if (!this.isInitialized || !room?.id) return null;
@@ -69912,6 +70101,7 @@ void main() {
       } else {
         this._attachRoomCustomGlb(room, next);
       }
+      this.apply3dViewFilters?.();
       return next;
     }
     focusOnRoom3d(roomId, { duration = 450 } = {}) {
@@ -69945,6 +70135,7 @@ void main() {
       }
       this.updateAvatarDeviceLabelsVisibility?.();
       this.syncTransformGizmo?.();
+      this.apply3dViewFilters?.();
     }
     rebuildSingleObject3dMesh(obj, isSelected = true) {
       if (!this.isInitialized || !obj?.id) return;
@@ -69956,6 +70147,7 @@ void main() {
       const next = createCustomObject3DGroup(obj, (nx, ny) => this.normToWorld(nx, ny), isSelected);
       this.objects3dGroup.add(next);
       this.object3dMeshMap.set(obj.id, next);
+      this.apply3dViewFilters?.();
       return next;
     }
     syncRoads() {
@@ -69975,6 +70167,7 @@ void main() {
         this.road3dMeshMap.set(road.id, meshGroup);
       });
       this.renderRoad3dHudBar?.();
+      this.apply3dViewFilters?.();
     }
     rebuildSingleRoad3dMesh(road, isSelected = true) {
       if (!this.isInitialized || !road?.id) return null;
@@ -69986,6 +70179,7 @@ void main() {
       const next = create3DRoadGroup(road, (nx, ny) => this.normToWorld(nx, ny), isSelected);
       this.roadsGroup.add(next);
       this.road3dMeshMap.set(road.id, next);
+      this.apply3dViewFilters?.();
       return next;
     }
     _snapRoadWorldPoint(wx, wz, { excludeRoadId = null, excludeNodeIdx = -1, anchorWorld = null, shiftKey = false } = {}) {
@@ -70673,18 +70867,17 @@ void main() {
           };
           holder.add(srcRing);
         }
-        if (this.showLabels) {
-          const label = create3DLabelSprite(dev, elev);
-          label.userData = { ...label.userData || {}, isDeviceLabel: true };
-          const labelScaleFactor = Math.max(0.75, Math.min(1.6, this.deviceScaleMultiplier * 0.42));
-          label.scale.multiplyScalar(labelScaleFactor);
-          label.position.set(0, 1.15 * userModelScale + 0.8, 0);
-          holder.add(label);
-        }
+        const label = create3DLabelSprite(dev, elev);
+        label.userData = { ...label.userData || {}, isDeviceLabel: true, isLabelSprite: true };
+        const labelScaleFactor = Math.max(0.75, Math.min(1.6, this.deviceScaleMultiplier * 0.42));
+        label.scale.multiplyScalar(labelScaleFactor);
+        label.position.set(0, 1.15 * userModelScale + 0.8, 0);
+        label.visible = Boolean(this.showLabels);
+        holder.add(label);
         this.tagDescendantDeviceId(holder, dev.id);
         this.devicesGroup.add(holder);
         this.deviceMeshMap.set(dev.id, holder);
-        if (this.showCoverage && dev.wirelessCoverage?.enabled) {
+        if (dev.wirelessCoverage?.enabled) {
           const covRadius = Math.max(2, Number(dev.wirelessCoverage.radiusMeters) || 25);
           const covColor = dev.wirelessCoverage.color || "#76c457";
           const covOpacity = typeof dev.wirelessCoverage.opacity === "number" ? dev.wirelessCoverage.opacity : 0.16;
@@ -70699,6 +70892,7 @@ void main() {
           });
           const disc = new Mesh(discGeo, discMat);
           disc.position.set(baseX, 0.06, baseZ);
+          disc.userData = { deviceId: dev.id, isCoverageOverlay: true };
           this.coverageGroup.add(disc);
           const ringGeo = new RingGeometry(covRadius - 0.35, covRadius, 48);
           ringGeo.rotateX(-Math.PI / 2);
@@ -70710,6 +70904,7 @@ void main() {
           });
           const ring = new Mesh(ringGeo, ringMat);
           ring.position.set(baseX, 0.08, baseZ);
+          ring.userData = { deviceId: dev.id, isCoverageOverlay: true };
           this.coverageGroup.add(ring);
         }
       });
@@ -70718,6 +70913,7 @@ void main() {
       }
       this.updateAvatarDeviceLabelsVisibility?.();
       this.syncTransformGizmo?.();
+      this.apply3dViewFilters?.();
     }
     isLegacyProceduralPortSet(ports) {
       if (!Array.isArray(ports) || ports.length === 0) return true;
@@ -71175,13 +71371,17 @@ void main() {
               new Vector3(wpVec.x, 0.01, wpVec.z),
               wpVec.clone()
             ]);
-            this.cablesGroup.add(new Line(stemGeo, stemMat));
+            const stemLine = new Line(stemGeo, stemMat);
+            stemLine.userData = { cableId: cable.id };
+            this.cablesGroup.add(stemLine);
           });
           if (!isWireless) {
             const ctrlPts = [srcBootTipWorld.clone(), ...waypointMarkers, dstBootTipWorld.clone()];
             const ctrlGeo = new BufferGeometry().setFromPoints(ctrlPts);
             const ctrlMat = new LineBasicMaterial({ color: 3718648, transparent: true, opacity: 0.55 });
-            this.cablesGroup.add(new Line(ctrlGeo, ctrlMat));
+            const ctrlLine = new Line(ctrlGeo, ctrlMat);
+            ctrlLine.userData = { cableId: cable.id };
+            this.cablesGroup.add(ctrlLine);
             const midGeo = new SphereGeometry(Math.max(0.065, radius * 1.9, 0.028 * avgPortScale), 10, 10);
             const midMat = new MeshBasicMaterial({ color: 3718648, transparent: true, opacity: 0.9 });
             const segCount = waypointMarkers.length + 1;
@@ -71224,6 +71424,7 @@ void main() {
           }
         }
       }
+      this.apply3dViewFilters?.();
     }
     tagDescendantDeviceId(obj, deviceId) {
       obj.traverse((child) => {
@@ -71263,8 +71464,8 @@ void main() {
         }
         return;
       }
-      const devHits = !this.workspaceGhostDevices ? this.raycaster.intersectObjects(this.devicesGroup.children, true) : [];
-      const cableHitsPre = !this.workspaceGhostDevices && stateManager.getMode() !== "draw-cable" ? this.raycaster.intersectObjects(this.cablesGroup.children, true) : [];
+      const devHits = !this.workspaceGhostDevices && this.devicesGroup?.visible ? this._filterVisibleRayHits(this.raycaster.intersectObjects(this.devicesGroup.children, true)) : [];
+      const cableHitsPre = !this.workspaceGhostDevices && this.cablesGroup?.visible && stateManager.getMode() !== "draw-cable" ? this._filterVisibleRayHits(this.raycaster.intersectObjects(this.cablesGroup.children, true)) : [];
       if (cableHitsPre.length > 0 && (devHits.length === 0 || cableHitsPre[0].distance <= devHits[0].distance + 0.25 || Boolean(cableHitsPre[0].object?.userData?.cableHandleType))) {
         const cabId = cableHitsPre[0].object.userData?.cableId;
         if (cabId) {
@@ -71456,7 +71657,7 @@ void main() {
           return;
         }
       }
-      const cableHits = this.raycaster.intersectObjects(this.cablesGroup.children, true);
+      const cableHits = !this.workspaceGhostDevices && this.cablesGroup?.visible ? this._filterVisibleRayHits(this.raycaster.intersectObjects(this.cablesGroup.children, true)) : [];
       if (cableHits.length > 0) {
         const cabId = cableHits[0].object.userData?.cableId;
         if (cabId) {
@@ -71535,8 +71736,8 @@ void main() {
         this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
       }
       this.raycaster.setFromCamera(this.pointer, this.camera);
-      const devHits = !this.workspaceGhostDevices ? this.raycaster.intersectObjects(this.devicesGroup.children, true) : [];
-      const cableHits = !this.workspaceGhostDevices ? this.raycaster.intersectObjects(this.cablesGroup.children, true) : [];
+      const devHits = !this.workspaceGhostDevices && this.devicesGroup?.visible ? this._filterVisibleRayHits(this.raycaster.intersectObjects(this.devicesGroup.children, true)) : [];
+      const cableHits = !this.workspaceGhostDevices && this.cablesGroup?.visible ? this._filterVisibleRayHits(this.raycaster.intersectObjects(this.cablesGroup.children, true)) : [];
       if (cableHits.length > 0 && (devHits.length === 0 || cableHits[0].distance <= devHits[0].distance + 0.25 || Boolean(cableHits[0].object?.userData?.cableHandleType))) {
         const cabId = cableHits[0].object.userData?.cableId;
         const cable = cabId ? this.cableManager.getConnectionById(cabId) : null;
@@ -71571,10 +71772,11 @@ void main() {
           return;
         }
       }
-      const envHits = this.raycaster.intersectObjects(
-        [...this.roomsGroup.children, ...this.objects3dGroup.children, ...this.groundGroup.children],
-        true
-      );
+      const envRoots = [];
+      if (this.roomsGroup?.visible) envRoots.push(...this.roomsGroup.children);
+      if (this.objects3dGroup?.visible) envRoots.push(...this.objects3dGroup.children);
+      if (this.groundGroup?.visible) envRoots.push(...this.groundGroup.children);
+      const envHits = this._filterVisibleRayHits(this.raycaster.intersectObjects(envRoots, true));
       let hitPoint = envHits.length > 0 ? envHits[0].point : null;
       if (!hitPoint) {
         const floorPlane = new Plane(new Vector3(0, 1, 0), 0);
@@ -71596,8 +71798,8 @@ void main() {
       this.pointer.x = (e.clientX - rect.left) / rect.width * 2 - 1;
       this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
       this.raycaster.setFromCamera(this.pointer, this.camera);
-      const devHits = !this.workspaceGhostDevices ? this.raycaster.intersectObjects(this.devicesGroup.children, true) : [];
-      const cableHits = !this.workspaceGhostDevices ? this.raycaster.intersectObjects(this.cablesGroup.children, true) : [];
+      const devHits = !this.workspaceGhostDevices && this.devicesGroup?.visible ? this._filterVisibleRayHits(this.raycaster.intersectObjects(this.devicesGroup.children, true)) : [];
+      const cableHits = !this.workspaceGhostDevices && this.cablesGroup?.visible ? this._filterVisibleRayHits(this.raycaster.intersectObjects(this.cablesGroup.children, true)) : [];
       if (cableHits.length > 0 && (devHits.length === 0 || cableHits[0].distance <= devHits[0].distance + 0.25 || Boolean(cableHits[0].object?.userData?.cableHandleType))) {
         const cabId = cableHits[0].object?.userData?.cableId;
         if (cabId) {
@@ -71853,10 +72055,22 @@ void main() {
       });
       return entries;
     }
+    _isObjectAndAncestorsVisible(obj) {
+      let cur = obj;
+      while (cur) {
+        if (cur.visible === false) return false;
+        cur = cur.parent;
+      }
+      return true;
+    }
+    _filterVisibleRayHits(hits) {
+      if (!Array.isArray(hits) || hits.length === 0) return hits;
+      return hits.filter((h) => h?.object && this._isObjectAndAncestorsVisible(h.object));
+    }
     findObject3dHit(raycaster = this.raycaster, { includeLocked = false } = {}) {
-      if (!this.objects3dGroup || this.objects3dGroup.children.length === 0) return null;
+      if (!this.objects3dGroup || !this.objects3dGroup.visible || this.objects3dGroup.children.length === 0) return null;
       if (!includeLocked && this.roomsLocked) return null;
-      const hits = raycaster.intersectObjects(this.objects3dGroup.children, true);
+      const hits = this._filterVisibleRayHits(raycaster.intersectObjects(this.objects3dGroup.children, true));
       for (let i = 0; i < hits.length; i++) {
         let curr = hits[i].object;
         let gizmoType = null;
@@ -71876,9 +72090,9 @@ void main() {
       return null;
     }
     findRoom3dHit(raycaster = this.raycaster, { includeLocked = false } = {}) {
-      if (!this.roomsGroup || this.roomsGroup.children.length === 0) return null;
+      if (!this.roomsGroup || !this.roomsGroup.visible || this.roomsGroup.children.length === 0) return null;
       if (!includeLocked && this.roomsLocked) return null;
-      const hits = raycaster.intersectObjects(this.roomsGroup.children, true);
+      const hits = this._filterVisibleRayHits(raycaster.intersectObjects(this.roomsGroup.children, true));
       for (let i = 0; i < hits.length; i++) {
         let curr = hits[i].object;
         let gizmoType = null;
@@ -71898,8 +72112,8 @@ void main() {
       return null;
     }
     findRoad3dHit(raycaster = this.raycaster) {
-      if (!this.roadsGroup || this.roadsGroup.children.length === 0) return null;
-      const hits = raycaster.intersectObjects(this.roadsGroup.children, true);
+      if (!this.roadsGroup || !this.roadsGroup.visible || this.roadsGroup.children.length === 0) return null;
+      const hits = this._filterVisibleRayHits(raycaster.intersectObjects(this.roadsGroup.children, true));
       for (let i = 0; i < hits.length; i++) {
         let curr = hits[i].object;
         let gizmoType = null;
@@ -72728,7 +72942,7 @@ void main() {
       this.pointer.x = (e.clientX - rect.left) / rect.width * 2 - 1;
       this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
       this.raycaster.setFromCamera(this.pointer, this.camera);
-      const devHits = !this.workspaceGhostDevices ? this.raycaster.intersectObjects(this.devicesGroup.children, true) : [];
+      const devHits = !this.workspaceGhostDevices && this.devicesGroup?.visible ? this._filterVisibleRayHits(this.raycaster.intersectObjects(this.devicesGroup.children, true)) : [];
       if (devHits.length === 0) {
         const objHit = this.findObject3dHit(this.raycaster);
         if (objHit?.object3dId) {
@@ -73133,7 +73347,7 @@ void main() {
       this.pointer.x = (e.clientX - rect.left) / rect.width * 2 - 1;
       this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
       this.raycaster.setFromCamera(this.pointer, this.camera);
-      const devHits = !this.workspaceGhostDevices ? this.raycaster.intersectObjects(this.devicesGroup.children, true) : [];
+      const devHits = !this.workspaceGhostDevices && this.devicesGroup?.visible ? this._filterVisibleRayHits(this.raycaster.intersectObjects(this.devicesGroup.children, true)) : [];
       if (devHits.length === 0) {
         const objHit = this.findObject3dHit(this.raycaster);
         if (objHit?.object3dId) {
@@ -74244,6 +74458,7 @@ void main() {
         heightMeters: h,
         tppScale,
         fppScale,
+        carryElevationOffset: 0,
         mountedPeers
       });
       this.avatarState.isCarrying = true;
@@ -74298,6 +74513,7 @@ void main() {
         heightMeters: h,
         tppScale,
         fppScale,
+        carryElevationOffset: 0,
         portInitials: this._collectDevicePortInitials?.(dev.id) || [],
         mountedPeers: []
       });
@@ -74513,7 +74729,9 @@ void main() {
           dropWorld = this.normToWorld ? this.normToWorld(dropNorm.normX, dropNorm.normY) : { x: rawDropX, z: rawDropZ };
           const defaultElev = Number(getDefaultSpatial3d(dev?.type)?.elevationMeters) || 1.65;
           const avatarBaseY = Math.max(0, Number(this.avatarState?.y) || 0);
-          dropElev = this.avatarPerspective === "fpp" || useAimTarget ? clamp(devHit.elevationMeters, 0.25, 11.5) : Number(clamp(avatarBaseY + Math.max(1.35, defaultElev), 0.35, 11.5).toFixed(2));
+          const rawWallElev = this.avatarPerspective === "fpp" || useAimTarget ? clamp(devHit.elevationMeters, 0.25, 11.5) : clamp(avatarBaseY + Math.max(1.35, defaultElev), 0.35, 11.5);
+          const carryZ = Number(item.carryElevationOffset) || 0;
+          dropElev = Number(clamp(rawWallElev + carryZ, 0, 20).toFixed(2));
           targetRotY = devHit.rotationY;
           wallMountedThisItem = true;
           mountedOnWallCount += 1;
@@ -74533,7 +74751,9 @@ void main() {
           }
           dropNorm = this.worldToNorm ? this.worldToNorm(rawDropX, rawDropZ) : { normX: 0.5, normY: 0.5 };
           dropWorld = this.normToWorld ? this.normToWorld(dropNorm.normX, dropNorm.normY) : { x: rawDropX, z: rawDropZ };
-          dropElev = surfaceSnapOn ? this.getCarriedDropSupportElevation(dropWorld.x, dropWorld.z, item.objId || item.devId) : Number(Math.max(0, Number(this.avatarState?.y) || 0).toFixed(2));
+          const carryZ = Number(item.carryElevationOffset) || 0;
+          const rawBaseElev = surfaceSnapOn ? this.getCarriedDropSupportElevation(dropWorld.x, dropWorld.z, item.objId || item.devId) : Math.max(0, Number(this.avatarState?.y) || 0);
+          dropElev = Number(clamp(rawBaseElev + carryZ, 0, 20).toFixed(2));
           if (!this.buildPlacementConfig?.allowClipping && this.resolveBuildPlacementCollision && item.kind === "device") {
             const colRes = this.resolveBuildPlacementCollision(dropWorld.x, dropWorld.z, dropElev, {
               halfW: (item.widthMeters || 0.9) * 0.5,
@@ -74544,9 +74764,8 @@ void main() {
             if (colRes.collided) {
               dropNorm = this.worldToNorm ? this.worldToNorm(colRes.x, colRes.z) : dropNorm;
               dropWorld = this.normToWorld ? this.normToWorld(dropNorm.normX, dropNorm.normY) : { x: colRes.x, z: colRes.z };
-              if (surfaceSnapOn) {
-                dropElev = this.getCarriedDropSupportElevation(dropWorld.x, dropWorld.z, item.objId || item.devId);
-              }
+              const bumpedBase = surfaceSnapOn ? this.getCarriedDropSupportElevation(dropWorld.x, dropWorld.z, item.objId || item.devId) : Math.max(0, Number(this.avatarState?.y) || 0);
+              dropElev = Number(clamp(bumpedBase + carryZ, 0, 20).toFixed(2));
             }
           }
         }
@@ -74754,27 +74973,49 @@ void main() {
       }
       return { devices: [], fromCarried: false };
     }
+    /** Resets any manual Z elevation offset on carried items back to surface-snap height (0 offset). */
+    resetCarriedElevationOffset() {
+      if (!Array.isArray(this.carriedObjects) || this.carriedObjects.length === 0) return false;
+      this.carriedObjects.forEach((item) => {
+        if (item) item.carryElevationOffset = 0;
+      });
+      this.syncSimplePlacementIndicator?.();
+      this.renderHouseFlipperPromptHud?.();
+      const aim = this.computeAvatarAimPlacementTarget?.({ item: this.carriedObjects[this.carriedObjects.length - 1] });
+      this.showStatusHint(`Tinggi Z direset ke permukaan (${Number(aim?.elevationMeters ?? 0).toFixed(2)}m)`);
+      return true;
+    }
     adjustAvatarTargetOrCarriedElevation(deltaMeters = 0.25) {
-      const carriedDevs = (this.carriedObjects || []).filter((c) => c?.kind === "device" && c.devId).map((c) => this.deviceManager?.getDeviceById?.(c.devId)).filter((d) => d && !d.layerLocked);
-      let targets = carriedDevs;
-      if (targets.length === 0) {
-        const targetId = (this.avatarState?.nearestDist <= 10 ? this.avatarState.nearestDeviceId : null) || this.deviceManager?.selectedDeviceId || this.avatarState?.nearestDeviceId;
-        const dev = targetId ? this.deviceManager?.getDeviceById?.(targetId) : null;
-        if (dev && !dev.layerLocked) targets = [dev];
+      const step = Number(deltaMeters) || 0;
+      if (Array.isArray(this.carriedObjects) && this.carriedObjects.length > 0) {
+        const topItem = this.carriedObjects[this.carriedObjects.length - 1];
+        const baseAim = this.computeAvatarAimPlacementTarget?.({ item: topItem, includeCarryOffset: false });
+        const baseElev = Math.max(0, Number(baseAim?.baseElevationMeters ?? baseAim?.elevationMeters) || 0);
+        let finalTargetElev = baseElev;
+        this.carriedObjects.forEach((item) => {
+          if (!item) return;
+          const prevOff = Number(item.carryElevationOffset) || 0;
+          const nextOff = clamp(prevOff + step, -baseElev, 20 - baseElev);
+          item.carryElevationOffset = Number(nextOff.toFixed(2));
+        });
+        const updatedAim = this.computeAvatarAimPlacementTarget?.({ item: topItem, includeCarryOffset: true });
+        finalTargetElev = Number(updatedAim?.elevationMeters ?? clamp(baseElev + (topItem?.carryElevationOffset || 0), 0, 20));
+        this.syncSimplePlacementIndicator?.();
+        this.renderHouseFlipperPromptHud?.();
+        this.showStatusHint(`Ketinggian Z penempatan: ${finalTargetElev.toFixed(2)}m`);
+        return true;
       }
-      if (targets.length === 0) {
+      const targetId = (this.avatarState?.nearestDist <= 10 ? this.avatarState.nearestDeviceId : null) || this.deviceManager?.selectedDeviceId || this.avatarState?.nearestDeviceId;
+      const dev = targetId ? this.deviceManager?.getDeviceById?.(targetId) : null;
+      if (!dev || dev.layerLocked) {
         this.showStatusHint("Dekati atau bawa perangkat terlebih dahulu untuk ubah ketinggian Z.");
         return false;
       }
-      let lastElev = 0;
-      targets.forEach((dev) => {
-        const baseSp = { ...getDefaultSpatial3d(dev.type), ...dev.spatial3d || {} };
-        const curElev = Number(baseSp.elevationMeters) || 0;
-        const nextElev = clamp(Number((curElev + deltaMeters).toFixed(2)), 0, 20);
-        lastElev = nextElev;
-        this.deviceManager?.updateDevice?.(dev.id, {
-          spatial3d: { ...baseSp, elevationMeters: nextElev }
-        });
+      const baseSp = { ...getDefaultSpatial3d(dev.type), ...dev.spatial3d || {} };
+      const curElev = Number(baseSp.elevationMeters) || 0;
+      const nextElev = clamp(Number((curElev + step).toFixed(2)), 0, 20);
+      this.deviceManager?.updateDevice?.(dev.id, {
+        spatial3d: { ...baseSp, elevationMeters: nextElev }
       });
       if (this.isActive && this.isInitialized) {
         this.syncDevices();
@@ -74782,9 +75023,9 @@ void main() {
       }
       this.updateAvatarProximityHud();
       this.renderAvatarSimDeckList?.();
-      this.showStatusHint(
-        targets.length === 1 ? `Ketinggian "${targets[0].name}": ${lastElev.toFixed(2)}m` : `Ketinggian ${targets.length} perangkat diubah (${lastElev.toFixed(2)}m)`
-      );
+      this.syncSimplePlacementIndicator?.();
+      this.renderHouseFlipperPromptHud?.();
+      this.showStatusHint(`Ketinggian "${dev.name}": ${nextElev.toFixed(2)}m`);
       return true;
     }
     rotateAvatarTargetOrCarriedToFace(deviceId = null) {
@@ -76087,7 +76328,7 @@ void main() {
       </div>
       <div id="avatar-sim-build-panel" class="avatar-sim-build-panel ${isBuildOpen ? "" : "hidden"}">
         <div class="build-mode-header">
-          <span class="avatar-sim-strip-label">${uiIcon("wrench", 12)} Build / Placement Mode (Gerak/seret mouse putar kamera \u2022 Alt jeda kursor)</span>
+          <span class="avatar-sim-strip-label">${uiIcon("wrench", 12)} Build Mode</span>
           <span id="build-mode-target-badge" class="sim-inspector-badge">Target: --</span>
         </div>
         <div class="build-mode-grid">
@@ -76210,8 +76451,8 @@ void main() {
           </select>
           <button type="button" id="btn-avatar-next-device" class="avatar-step-btn" title="Teleport ke perangkat berikutnya">${uiIcon("chevron-right", 12)}</button>
         </div>
-        <button type="button" id="btn-avatar-carry-pickup" class="sim-action-btn is-carry" title="Angkat / tambah objek 3D terdekat agar mudah dipindahkan (E)">Angkat (E)</button>
-        <button type="button" id="btn-avatar-carry-drop" class="sim-action-btn is-drop hidden" title="Taruh 1 objek (Q) \u2022 Taruh Semua (Shift+Q)">Taruh (Q)</button>
+        <button type="button" id="btn-avatar-carry-pickup" class="sim-action-btn is-carry" title="Angkat (E) \u2022 Tambah (Shift+E)">Angkat (E)</button>
+        <button type="button" id="btn-avatar-carry-drop" class="sim-action-btn is-drop hidden" title="Taruh (E / Q) \u2022 Taruh Semua (Shift+Q)">Taruh (E)</button>
         <button type="button" id="btn-avatar-inspect-nearest" class="sim-action-btn is-primary" title="Fokus & Inspeksi Port perangkat terdekat (F)">Inspeksi Port (F)</button>
         <button type="button" id="btn-avatar-exit" class="sim-action-btn is-exit" title="Keluar dari Mode Teknisi (G)">Keluar</button>
       </div>
@@ -76778,7 +77019,7 @@ void main() {
         const badge = hudEl?.querySelector("#build-mode-target-badge");
         if (badge) {
           const targetDev = this.getTransformGizmoTargetDevice();
-          badge.textContent = targetDev ? `Target: ${targetDev.name}` : "Target: (Dekati / Klik Perangkat)";
+          badge.textContent = targetDev ? `Target: ${targetDev.name}` : "Target: --";
         }
       }
       const studioBar = document.getElementById("hud-3d-build-studio");
@@ -76789,7 +77030,10 @@ void main() {
           sGrid.innerHTML = `${uiIcon("grid", 12)} <span>${cfg.gridSnapEnabled ? "Snap: ON" : "Bebas"}</span>`;
         }
         const sGridSz = studioBar.querySelector("#select-studio-grid-size");
-        if (sGridSz) sGridSz.value = String(cfg.gridSnapMeters);
+        if (sGridSz) {
+          sGridSz.value = String(cfg.gridSnapMeters);
+          sGridSz.style.display = cfg.gridSnapEnabled ? "" : "none";
+        }
         const sAngle = studioBar.querySelector("#select-studio-angle-snap");
         if (sAngle) sAngle.value = String(cfg.angleSnapDeg);
         const sCol = studioBar.querySelector("#btn-studio-collision");
@@ -76807,7 +77051,10 @@ void main() {
           sGiz.innerHTML = `${uiIcon("move", 12)} <span>${cfg.gizmoEnabled ? "Gizmo: ON" : "Gizmo: OFF"}</span>`;
         }
         const sGizMode = studioBar.querySelector("#select-studio-gizmo-mode");
-        if (sGizMode) sGizMode.value = cfg.gizmoMode;
+        if (sGizMode) {
+          sGizMode.value = cfg.gizmoMode;
+          sGizMode.style.display = cfg.gizmoEnabled ? "" : "none";
+        }
       }
     }
     applyBuildGridSnapWorld(wx, wz) {
@@ -76997,7 +77244,7 @@ void main() {
       this.transformGizmoGroup.userData = { deviceId, scaleBase, gizmoMode };
     }
     /** Compute where the held object will land along the crosshair/camera ray (House-Flipper aim target). */
-    computeAvatarAimPlacementTarget({ item = null } = {}) {
+    computeAvatarAimPlacementTarget({ item = null, includeCarryOffset = true } = {}) {
       const ax = Number(this.avatarState?.x) || 0;
       const ay = Math.max(0, Number(this.avatarState?.y) || 0);
       const az = Number(this.avatarState?.z) || 0;
@@ -77008,16 +77255,19 @@ void main() {
       const rayOrigin = pose?.endPos ? pose.endPos.clone() : new Vector3(ax, ay + 1.5 * scale, az);
       const rayDir = pose?.target && pose?.endPos ? pose.target.clone().sub(pose.endPos).normalize() : new Vector3(Math.sin(this.avatarState?.camYaw ?? yaw), -0.25, Math.cos(this.avatarState?.camYaw ?? yaw)).normalize();
       const activeItem = item || (Array.isArray(this.carriedObjects) && this.carriedObjects.length > 0 ? this.carriedObjects[this.carriedObjects.length - 1] : null);
+      const carryZOffset = includeCarryOffset ? Number(activeItem?.carryElevationOffset) || 0 : 0;
       if (activeItem?.kind === "device" && surfaceSnapOn && this.find3DWallMountTarget) {
         const dev = this.deviceManager?.getDeviceById?.(activeItem.devId);
         const wallOrigin = this.avatarPerspective === "fpp" ? rayOrigin.clone() : new Vector3(ax, ay + 1.42 * scale, az);
         const wallHit = dev ? this.find3DWallMountTarget(wallOrigin, rayDir, 6.8, { device: dev, minHitY: 0.25, maxHitY: 12 }) : null;
         if (wallHit) {
+          const rawWallElev = clamp(wallHit.elevationMeters, 0.25, 11.5);
           return {
             mode: "wall",
             worldX: wallHit.worldPos.x,
             worldZ: wallHit.worldPos.z,
-            elevationMeters: clamp(wallHit.elevationMeters, 0.25, 11.5),
+            baseElevationMeters: Number(rawWallElev.toFixed(2)),
+            elevationMeters: Number(clamp(rawWallElev + carryZOffset, 0, 20).toFixed(2)),
             rotationY: wallHit.rotationY,
             worldNormal: wallHit.worldNormal,
             hitPoint: wallHit.point
@@ -77029,15 +77279,18 @@ void main() {
       if (this.raycaster && this.scene) {
         const carriedIds = new Set((this.carriedObjects || []).map((c) => c.objId || c.devId));
         const surfaceRoots = [];
-        this.object3dMeshMap?.forEach((grp, id) => {
-          if (grp && !carriedIds.has(id)) surfaceRoots.push(grp);
-        });
-        if (this.roomsGroup?.children?.length > 0) {
+        if (this.objects3dGroup?.visible) {
+          this.object3dMeshMap?.forEach((grp, id) => {
+            if (grp && grp.visible !== false && !carriedIds.has(id)) surfaceRoots.push(grp);
+          });
+        }
+        if (this.roomsGroup?.visible && this.roomsGroup?.children?.length > 0) {
           surfaceRoots.push(...this.roomsGroup.children);
         }
         if (surfaceRoots.length > 0) {
+          if (this.camera) this.raycaster.camera = this.camera;
           this.raycaster.set(rayOrigin, rayDir);
-          const hits = this.raycaster.intersectObjects(surfaceRoots, true);
+          const hits = this._filterVisibleRayHits(this.raycaster.intersectObjects(surfaceRoots, true));
           const nMat = new Matrix3();
           const wNorm = new Vector3();
           for (const h of hits) {
@@ -77085,13 +77338,16 @@ void main() {
       hitWorldX = clamp(hitWorldX, -worldW * 0.49, worldW * 0.49);
       hitWorldZ = clamp(hitWorldZ, -worldD * 0.49, worldD * 0.49);
       const dropElev = surfaceSnapOn && this.getCarriedDropSupportElevation ? this.getCarriedDropSupportElevation(hitWorldX, hitWorldZ, activeItem?.objId || activeItem?.devId || "") : ay;
+      const baseElev = Math.max(0, Number(dropElev) || 0);
+      const finalElev = clamp(baseElev + carryZOffset, 0, 20);
       const worldRotY = yaw * 180 / Math.PI + (Number(activeItem?.relativeYawOffset) || 0);
       const normRotY = this.applyBuildAngleSnap ? this.applyBuildAngleSnap(worldRotY) : (Math.round(worldRotY) % 360 + 360) % 360;
       return {
         mode: "surface",
         worldX: Number(hitWorldX.toFixed(3)),
         worldZ: Number(hitWorldZ.toFixed(3)),
-        elevationMeters: Number(Math.max(0, dropElev).toFixed(2)),
+        baseElevationMeters: Number(baseElev.toFixed(2)),
+        elevationMeters: Number(finalElev.toFixed(2)),
         rotationY: normRotY
       };
     }
@@ -77134,7 +77390,29 @@ void main() {
       arrow.position.set(0, 0.02, 0.59);
       arrow.renderOrder = 951;
       arrow.userData = { isSimplePlacementIndicator: true, part: "arrow" };
-      this.simplePlacementIndicatorGroup.add(innerDisc, outerRing, arrow);
+      const stemMat = new MeshBasicMaterial({
+        color: 2278750,
+        transparent: true,
+        opacity: 0.55,
+        depthWrite: false
+      });
+      const elevStem = new Mesh(new CylinderGeometry(0.02, 0.02, 1, 8), stemMat);
+      elevStem.visible = false;
+      elevStem.renderOrder = 948;
+      elevStem.userData = { isSimplePlacementIndicator: true, part: "elevStem" };
+      const footMat = new MeshBasicMaterial({
+        color: 2278750,
+        transparent: true,
+        opacity: 0.45,
+        side: DoubleSide,
+        depthWrite: false
+      });
+      const elevFoot = new Mesh(new RingGeometry(0.16, 0.24, 24), footMat);
+      elevFoot.rotation.x = -Math.PI / 2;
+      elevFoot.visible = false;
+      elevFoot.renderOrder = 948;
+      elevFoot.userData = { isSimplePlacementIndicator: true, part: "elevFoot" };
+      this.simplePlacementIndicatorGroup.add(innerDisc, outerRing, arrow, elevStem, elevFoot);
       return this.simplePlacementIndicatorGroup;
     }
     /** Renders a subtle green House-Flipper footprint indicator instead of overwhelming RGB rings. */
@@ -77147,6 +77425,26 @@ void main() {
       if (!this.scene.children.includes(group)) {
         this.scene.add(group);
       }
+      const updatePlumbStem = (stemHeightMeters, radiusScaleVal) => {
+        const stemChild = group.children.find((c) => c?.userData?.part === "elevStem");
+        const footChild = group.children.find((c) => c?.userData?.part === "elevFoot");
+        const len = Math.max(0, Number(stemHeightMeters) || 0);
+        const rs = Math.max(0.1, Number(radiusScaleVal) || 1);
+        if (len > 0.05) {
+          if (stemChild) {
+            stemChild.visible = true;
+            stemChild.scale.set(1 / rs, len / rs, 1 / rs);
+            stemChild.position.set(0, -len * 0.5 / rs, 0);
+          }
+          if (footChild) {
+            footChild.visible = true;
+            footChild.position.set(0, -len / rs + 0.02, 0);
+          }
+        } else {
+          if (stemChild) stemChild.visible = false;
+          if (footChild) footChild.visible = false;
+        }
+      };
       if (this.avatarMode && !this.simulatorFocusedDeviceId && Array.isArray(this.carriedObjects) && this.carriedObjects.length > 0) {
         const topItem = this.carriedObjects[this.carriedObjects.length - 1];
         const aim = this.computeAvatarAimPlacementTarget({ item: topItem });
@@ -77155,13 +77453,17 @@ void main() {
         if (aim.mode === "wall" && aim.worldNormal) {
           group.position.set(aim.worldX, aim.elevationMeters, aim.worldZ);
           group.rotation.set(Math.PI / 2, aim.rotationY * Math.PI / 180, 0, "YXZ");
+          updatePlumbStem(0, radiusScale);
         } else {
           group.position.set(aim.worldX, aim.elevationMeters + 0.03, aim.worldZ);
           group.rotation.set(0, aim.rotationY * Math.PI / 180, 0, "YXZ");
+          const stemHeight = Math.max(0, aim.elevationMeters - (aim.baseElevationMeters ?? 0));
+          updatePlumbStem(stemHeight > 0.05 ? stemHeight : aim.elevationMeters, radiusScale);
         }
         group.visible = true;
         return;
       }
+      updatePlumbStem(0, 1);
       if (this.avatarMode && !this.simulatorFocusedDeviceId && this.navTool === "move") {
         const nearestPick = this.findNearestPickableObjectToAvatar?.();
         if (nearestPick?.obj) {
@@ -77218,6 +77520,7 @@ void main() {
       if (!tipEl) return;
       if (!tipEl.dataset.hfBound) {
         tipEl.dataset.hfBound = "1";
+        tipEl.addEventListener("pointerdown", (ev) => ev.stopPropagation());
         tipEl.addEventListener("click", (ev) => {
           const btn = ev.target?.closest?.("[data-hf-action]");
           if (!btn) return;
@@ -77225,6 +77528,12 @@ void main() {
           const act = btn.dataset.hfAction;
           if (act === "rotate") {
             this.rotateSelectedIn3D({ dY: 45 });
+          } else if (act === "z-up") {
+            this.adjustAvatarTargetOrCarriedElevation(ev.shiftKey ? 0.1 : 0.25);
+          } else if (act === "z-down") {
+            this.adjustAvatarTargetOrCarriedElevation(ev.shiftKey ? -0.1 : -0.25);
+          } else if (act === "z-reset") {
+            this.resetCarriedElevationOffset();
           } else if (act === "drop") {
             this.dropCarriedObjectsFromAvatar({ dropAll: Boolean(ev.shiftKey), useAimTarget: true });
           } else if (act === "pickup") {
@@ -77244,18 +77553,20 @@ void main() {
       if (this.avatarMode && Array.isArray(this.carriedObjects) && this.carriedObjects.length > 0) {
         const topItem = this.carriedObjects[this.carriedObjects.length - 1];
         const aim = this.computeAvatarAimPlacementTarget({ item: topItem });
-        const dropLabel = aim?.mode === "wall" ? "Tempel Dinding (Klik / Q)" : "Taruh di Sini (Klik / Q)";
-        const key = `carry:${topItem.name}:${this.carriedObjects.length}:${aim?.mode || "surface"}`;
+        const targetElevStr = Number(aim?.elevationMeters ?? 0).toFixed(2);
+        const hasCustomZ = Math.abs(Number(topItem?.carryElevationOffset) || 0) > 5e-3;
+        const countSuffix = this.carriedObjects.length > 1 ? ` (${this.carriedObjects.length})` : "";
+        const key = `carry:${this.carriedObjects.length}:${targetElevStr}:${hasCustomZ ? 1 : 0}`;
         if (this._lastHouseFlipperHudKey !== key) {
           this._lastHouseFlipperHudKey = key;
-          const escName = this.escapeHudHtml(topItem.name || "Alat");
           tipEl.className = "hud-3d-houseflipper-tip is-carrying";
           tipEl.style.display = "inline-flex";
           tipEl.innerHTML = `
-          <span class="hf-tip-name">${escName}${this.carriedObjects.length > 1 ? ` (+${this.carriedObjects.length - 1})` : ""}</span>
-          <span class="hf-tip-keys">Arahkan ke meja / lantai / dinding</span>
-          <button type="button" class="hf-tip-btn" data-hf-action="rotate">Putar 45\xB0 (R)</button>
-          <button type="button" class="hf-tip-btn is-primary" data-hf-action="drop">${dropLabel}</button>
+          <button type="button" class="hf-tip-btn" data-hf-action="z-down" title="Turun Z (-0.25m) \u2022 PgDn / \u2193 / Shift+Scroll">Z-</button>
+          <button type="button" class="hf-tip-zval ${hasCustomZ ? "is-custom" : ""}" data-hf-action="z-reset" title="Reset Z ke permukaan">Z ${targetElevStr}m</button>
+          <button type="button" class="hf-tip-btn" data-hf-action="z-up" title="Naik Z (+0.25m) \u2022 PgUp / \u2191 / Shift+Scroll">Z+</button>
+          <button type="button" class="hf-tip-btn" data-hf-action="rotate" title="Putar 45\xB0 (R)">Putar (R)</button>
+          <button type="button" class="hf-tip-btn is-primary" data-hf-action="drop" title="Taruh (Klik / E)">Taruh (Klik / E)${countSuffix}</button>
         `;
         }
         return;
@@ -77271,7 +77582,7 @@ void main() {
             tipEl.style.display = "inline-flex";
             tipEl.innerHTML = `
             <span class="hf-tip-name">${escName}</span>
-            <button type="button" class="hf-tip-btn is-primary" data-hf-action="pickup">Angkat &amp; Pindah (Klik / E)</button>
+            <button type="button" class="hf-tip-btn is-primary" data-hf-action="pickup">Angkat (Klik / E)</button>
           `;
           }
           return;
@@ -77288,8 +77599,7 @@ void main() {
             tipEl.style.display = "inline-flex";
             tipEl.innerHTML = `
             <span class="hf-tip-name">${this.escapeHudHtml(dev.name || "Alat")}</span>
-            <span class="hf-tip-keys">Seret langsung untuk memindah \u2022 Panah : Geser</span>
-            <button type="button" class="hf-tip-btn" data-hf-action="rotate">Putar 45\xB0 (R)</button>
+            <button type="button" class="hf-tip-btn" data-hf-action="rotate">Putar (R)</button>
           `;
           }
           return;
@@ -78134,16 +78444,177 @@ void main() {
       }
     }
     setShowLabels(enabled) {
-      this.showLabels = Boolean(enabled);
-      if (this.isActive) {
-        this.syncDevices();
+      const val = Boolean(enabled);
+      this.showLabels = val;
+      if (stateManager.state?.layers && stateManager.state.layers.annotations !== val) {
+        stateManager.toggleLayer("annotations", val);
       }
+      if (typeof document !== "undefined") {
+        const cb = document.getElementById("layer-toggle-annotations");
+        if (cb && cb.checked !== val) cb.checked = val;
+        document.getElementById("btn-3d-labels")?.classList.toggle("active", val);
+      }
+      this.apply3dViewFilters();
     }
     setShowCoverage(enabled) {
-      this.showCoverage = Boolean(enabled);
-      if (this.isActive) {
-        this.syncDevices();
+      const val = Boolean(enabled);
+      this.showCoverage = val;
+      this.viewFilters.showCoverage = val;
+      this.apply3dViewFilters();
+    }
+    /** Update 3D scene quick filters (CCTV, Fiber, Wireless, Coverage, Selection Dimming) and apply immediately. */
+    setViewFilters(partialFilters = {}) {
+      this.viewFilters = {
+        ...this.viewFilters,
+        ...partialFilters || {}
+      };
+      if (Object.prototype.hasOwnProperty.call(this.viewFilters, "showCoverage")) {
+        this.showCoverage = Boolean(this.viewFilters.showCoverage);
       }
+      this.apply3dViewFilters();
+      return { ...this.viewFilters };
+    }
+    _isBuildingStructureObject3d(obj) {
+      if (!obj) return false;
+      const shape = String(obj.shape || obj.preset || "").toLowerCase();
+      return shape === "wall" || String(obj.category || "").toLowerCase() === "building";
+    }
+    isDeviceVisibleIn3d(dev) {
+      if (!dev) return false;
+      const layers = stateManager.state?.layers || {};
+      if (layers.devices === false) return false;
+      if (dev.layerVisible === false) return false;
+      if (dev.type === "cctv" && this.viewFilters?.showCctv === false) return false;
+      return true;
+    }
+    isCableVisibleIn3d(cable) {
+      if (!cable) return false;
+      if (this.workspaceGhostDevices) return false;
+      const layers = stateManager.state?.layers || {};
+      if (layers.connections === false) return false;
+      const srcDev = this.deviceManager?.getDeviceById?.(cable.source);
+      const dstDev = this.deviceManager?.getDeviceById?.(cable.destination);
+      if (srcDev && !this.isDeviceVisibleIn3d(srcDev) && layers.devices !== false) return false;
+      if (dstDev && !this.isDeviceVisibleIn3d(dstDev) && layers.devices !== false) return false;
+      const isWireless = cable.type === "wireless" || cable.cableCategory === "wireless-ptp";
+      const isFiber = cable.type === "fiber" || String(cable.cableCategory || "").toLowerCase().startsWith("fiber");
+      if (isFiber && this.viewFilters?.showFiber === false) return false;
+      if (isWireless && this.viewFilters?.showWireless === false) return false;
+      return true;
+    }
+    _setMaterialDimState(material, shouldDim, { opacity = 0.42, tintHex = null } = {}) {
+      if (!material) return;
+      const mats = Array.isArray(material) ? material : [material];
+      mats.forEach((m) => {
+        if (!m) return;
+        if (!m.userData) m.userData = {};
+        if (!m.userData._origFilterState) {
+          m.userData._origFilterState = {
+            opacity: m.opacity ?? 1,
+            transparent: Boolean(m.transparent),
+            colorHex: typeof m.color?.getHex === "function" ? m.color.getHex() : null
+          };
+        }
+        const orig = m.userData._origFilterState;
+        if (shouldDim) {
+          m.transparent = true;
+          m.opacity = Math.min(opacity, orig.opacity);
+          if (tintHex !== null && typeof m.color?.setHex === "function") {
+            m.color.setHex(tintHex);
+          }
+        } else {
+          m.opacity = orig.opacity;
+          m.transparent = orig.transparent;
+          if (orig.colorHex !== null && typeof m.color?.setHex === "function") {
+            m.color.setHex(orig.colorHex);
+          }
+        }
+      });
+    }
+    /** Apply all 6 layer toggles and 5 component/focus filters to the 3D scene graph non-destructively. */
+    apply3dViewFilters() {
+      if (!this.isInitialized) return;
+      const layers = stateManager.state?.layers || {};
+      const showBg = layers.background !== false;
+      const showDevices = layers.devices !== false;
+      const showConnections = layers.connections !== false;
+      const showInfra = layers.infrastructure !== false;
+      const showBuildings = layers.buildings !== false;
+      const showAnnotations = layers.annotations !== false;
+      this.showLabels = showAnnotations;
+      if (typeof document !== "undefined") {
+        document.getElementById("btn-3d-labels")?.classList.toggle("active", showAnnotations);
+      }
+      const selDevId = !this.workspaceGhostDevices ? this.deviceManager?.selectedDeviceId || null : null;
+      const selCabId = !this.workspaceGhostDevices ? this.cableManager?.selectedCableId || null : null;
+      const shouldDimBg = Boolean((selDevId || selCabId) && this.viewFilters?.dimOnSelection !== false);
+      if (this.groundGroup) {
+        this.groundGroup.visible = true;
+        this.groundGroup.children.forEach((child) => {
+          if (child.type === "GridHelper") {
+            child.visible = true;
+            if (child.material) {
+              if (!child.material.userData) child.material.userData = {};
+              if (child.material.userData._origGridOpacity === void 0) {
+                child.material.userData._origGridOpacity = child.material.opacity ?? 0.18;
+              }
+              child.material.opacity = shouldDimBg ? 0.07 : showBg ? child.material.userData._origGridOpacity : 0.22;
+            }
+          } else if (child.isMesh) {
+            child.visible = showBg;
+            this._setMaterialDimState(child.material, shouldDimBg, { opacity: 0.42, tintHex: 9741240 });
+          }
+        });
+      }
+      if (this.roomsGroup) this.roomsGroup.visible = showBuildings;
+      if (this.roadsGroup) this.roadsGroup.visible = showBuildings;
+      if (this.objects3dGroup) {
+        this.objects3dGroup.visible = showInfra || showBuildings;
+        this.object3dMeshMap.forEach((meshGroup, objId) => {
+          const obj = stateManager.getObject3dById?.(objId);
+          const isBldg = this._isBuildingStructureObject3d(obj);
+          meshGroup.visible = isBldg ? showBuildings : showInfra;
+        });
+      }
+      if (this.devicesGroup) {
+        this.devicesGroup.visible = showDevices;
+        this.deviceMeshMap.forEach((holder, devId) => {
+          const dev = this.deviceManager?.getDeviceById?.(devId);
+          holder.visible = dev ? this.isDeviceVisibleIn3d(dev) : showDevices;
+        });
+      }
+      const cablesActive = !this.workspaceGhostDevices && showConnections;
+      if (this.cablesGroup) {
+        this.cablesGroup.visible = cablesActive;
+        this.cablesGroup.children.forEach((child) => {
+          const cabId = child.userData?.cableId;
+          if (!cabId) return;
+          const cable = this.cableManager?.getConnectionById?.(cabId);
+          const isVis = cable ? this.isCableVisibleIn3d(cable) : cablesActive;
+          child.visible = isVis;
+          if (isVis && child.isMesh && child.material) {
+            const isHighlighted = !shouldDimBg || cabId === selCabId || cable?.source === selDevId || cable?.destination === selDevId;
+            this._setMaterialDimState(child.material, !isHighlighted, { opacity: 0.26 });
+          }
+        });
+      }
+      const showCov = !this.workspaceGhostDevices && showDevices && this.viewFilters?.showCoverage !== false;
+      if (this.coverageGroup) {
+        this.coverageGroup.visible = showCov;
+        this.coverageGroup.children.forEach((child) => {
+          const devId = child.userData?.deviceId;
+          const dev = devId ? this.deviceManager?.getDeviceById?.(devId) : null;
+          child.visible = showCov && (!dev || this.isDeviceVisibleIn3d(dev));
+        });
+      }
+      this.updateAvatarDeviceLabelsVisibility?.();
+      [this.roomsGroup, this.objects3dGroup].forEach((grp) => {
+        grp?.traverse?.((child) => {
+          if (child?.userData?.isLabelSprite || child?.userData?.isDeviceLabel) {
+            child.visible = showAnnotations;
+          }
+        });
+      });
     }
     _disposeObject3DResources(root) {
       if (!root) return;
@@ -78198,6 +78669,7 @@ void main() {
       const handleSelectionVisuals = () => {
         if (!this.isActive) return;
         this.syncSelectionRings();
+        this.apply3dViewFilters();
         if (this.avatarMode) {
           this.syncBuildPlacementHudUI?.();
         }
@@ -78209,6 +78681,17 @@ void main() {
           }
         }
       };
+      eventBus.on("layer:visibility-changed", ({ layer, visible } = {}) => {
+        if (layer === "annotations") {
+          this.showLabels = Boolean(visible);
+          if (typeof document !== "undefined") {
+            document.getElementById("btn-3d-labels")?.classList.toggle("active", Boolean(visible));
+          }
+        }
+        if (this.isInitialized) {
+          this.apply3dViewFilters();
+        }
+      });
       eventBus.on("device:added", scheduleSyncDevAndCables);
       eventBus.on("device:updated", scheduleSyncDevAndCables);
       eventBus.on("device:deleted", scheduleSyncDevAndCables);
@@ -78414,9 +78897,6 @@ void main() {
      */
     setWorkspaceGhostDevices(enabled) {
       this.workspaceGhostDevices = Boolean(enabled);
-      if (this.cablesGroup) {
-        this.cablesGroup.visible = !this.workspaceGhostDevices;
-      }
       if (this.devicesGroup) {
         this.devicesGroup.traverse((obj) => {
           if (!obj.isMesh || !obj.material) return;
@@ -78436,6 +78916,7 @@ void main() {
           });
         });
       }
+      this.apply3dViewFilters?.();
       return this.workspaceGhostDevices;
     }
     /**
@@ -83057,342 +83538,29 @@ ${result.output}`);
     }
   };
 
-  // js/gamification/quest-manager.js
-  var GAMIFICATION_STORAGE_KEY = "netmap_gamification_v1";
-  var BUILTIN_QUESTS = [
-    {
-      id: "quest-build-campus",
-      title: "Arsitek Kampus Sekolah 3D",
-      description: "Buka Studio Bangunan, pasang minimal 2 gedung/properti 3D dan bangun 1 jalur jalan 3D kampus.",
-      workspace: "build",
-      xp: 150,
-      badge: "Arsitek Kampus",
-      check: ({ stateManager: sm }) => {
-        const rooms = sm.getRooms3d().length;
-        const roads = sm.getRoads3d().length;
-        return {
-          completed: rooms >= 2 && roads >= 1,
-          progressText: `Gedung ${Math.min(rooms, 2)}/2 \u2022 Jalan ${Math.min(roads, 1)}/1`
-        };
-      }
-    },
-    {
-      id: "quest-net-backbone",
-      title: "Rakit Backbone Lab Jaringan",
-      description: "Di Lab Jaringan, pasang minimal 3 perangkat jaringan dan hubungkan minimal 2 segmen kabel.",
-      workspace: "network",
-      xp: 200,
-      badge: "Teknisi Backbone",
-      check: ({ deviceManager: dm, cableManager: cm }) => {
-        const devs = dm?.getAllDevices?.().length || 0;
-        const cables = cm?.getAllConnections?.().length || 0;
-        return {
-          completed: devs >= 3 && cables >= 2,
-          progressText: `Perangkat ${Math.min(devs, 3)}/3 \u2022 Kabel ${Math.min(cables, 2)}/2`
-        };
-      }
-    },
-    {
-      id: "quest-pt-ping",
-      title: "Uji Koneksi Packet Tracer",
-      description: "Gunakan Simulasi & CLI untuk mengirim paket Ping antar perangkat hingga status REPLY berhasil.",
-      workspace: "network",
-      xp: 250,
-      badge: "Master Packet Tracer",
-      check: ({ progress }) => {
-        const ok = Boolean(progress.pingSucceeded);
-        return {
-          completed: ok,
-          progressText: ok ? "Ping REPLY 1/1" : "Ping REPLY 0/1"
-        };
-      }
-    },
-    {
-      id: "quest-avatar-inspect",
-      title: "Eksplorasi Teknisi Roblox 3D",
-      description: "Aktifkan karakter avatar 3D (TPP/FPP) untuk menjelajahi kampus atau memeriksa port perangkat.",
-      workspace: "any",
-      xp: 150,
-      badge: "Explorer Roblox",
-      check: ({ progress }) => {
-        const ok = Boolean(progress.avatarVisited);
-        return {
-          completed: ok,
-          progressText: ok ? "Avatar Aktif 1/1" : "Avatar Aktif 0/1"
-        };
-      }
-    }
-  ];
-  var QuestManager = class {
-    /**
-     * @param {Object} options
-     * @param {import('../devices/device-manager.js').DeviceManager} options.deviceManager
-     * @param {import('../connections/cable-manager.js').CableManager} options.cableManager
-     * @param {import('../map/map-3d-engine.js').Map3DEngine} [options.map3DEngine]
-     * @param {Function} [options.onSwitchWorkspace]
-     */
-    constructor({ deviceManager, cableManager, map3DEngine = null, onSwitchWorkspace = null } = {}) {
-      this.deviceManager = deviceManager;
-      this.cableManager = cableManager;
-      this.map3DEngine = map3DEngine;
-      this.onSwitchWorkspace = onSwitchWorkspace;
-      this.modalEl = null;
-      this.profile = this._loadProfile();
-      this._bindEventListeners();
-      if (typeof document !== "undefined" && document.body) {
-        this.createModalDOM();
-      }
-      this.syncNavbarUI();
-    }
-    _loadProfile() {
-      const defaults = {
-        xp: 0,
-        completedQuestIds: [],
-        badges: [],
-        progress: {
-          pingSucceeded: false,
-          avatarVisited: false
-        }
-      };
-      try {
-        if (typeof localStorage !== "undefined") {
-          const raw = localStorage.getItem(GAMIFICATION_STORAGE_KEY);
-          if (raw) {
-            const parsed = JSON.parse(raw);
-            return {
-              xp: Number(parsed.xp) || 0,
-              completedQuestIds: Array.isArray(parsed.completedQuestIds) ? parsed.completedQuestIds : [],
-              badges: Array.isArray(parsed.badges) ? parsed.badges : [],
-              progress: {
-                ...defaults.progress,
-                ...parsed.progress || {}
-              }
-            };
-          }
-        }
-      } catch {
-      }
-      return defaults;
-    }
-    _saveProfile() {
-      try {
-        if (typeof localStorage !== "undefined") {
-          localStorage.setItem(GAMIFICATION_STORAGE_KEY, JSON.stringify(this.profile));
-        }
-      } catch {
-      }
-    }
-    getLevel(xp = this.profile.xp) {
-      return Math.floor(Math.max(0, Number(xp) || 0) / 200) + 1;
-    }
-    _bindEventListeners() {
-      eventBus.on("simulator:ping-completed", (res) => {
-        if (res?.success) {
-          this.profile.progress.pingSucceeded = true;
-          this.evaluateQuests();
-        }
-      });
-      eventBus.on("map3d:avatar-toggled", ({ active }) => {
-        if (active) {
-          this.profile.progress.avatarVisited = true;
-          this.evaluateQuests();
-        }
-      });
-      const evalEvents = [
-        "room3d:changed",
-        "road3d:changed",
-        "device:added",
-        "device:deleted",
-        "connection:added",
-        "connection:deleted"
-      ];
-      evalEvents.forEach((ev) => eventBus.on(ev, () => this.evaluateQuests()));
-    }
-    recordAvatarActivity() {
-      if (!this.profile.progress.avatarVisited) {
-        this.profile.progress.avatarVisited = true;
-        this.evaluateQuests();
-      }
-    }
-    /**
-     * Evaluate all BUILTIN_QUESTS against live state and unlock newly completed quests/badges.
-     * @returns {{ xp: number, level: number, newlyCompleted: Array<Object>, questStates: Array<Object> }}
-     */
-    evaluateQuests() {
-      const newlyCompleted = [];
-      const questStates = BUILTIN_QUESTS.map((q) => {
-        const checkRes = q.check({
-          stateManager,
-          deviceManager: this.deviceManager,
-          cableManager: this.cableManager,
-          map3DEngine: this.map3DEngine,
-          progress: this.profile.progress
-        });
-        const alreadyDone = this.profile.completedQuestIds.includes(q.id);
-        if (checkRes.completed && !alreadyDone) {
-          this.profile.completedQuestIds.push(q.id);
-          this.profile.xp += q.xp;
-          if (!this.profile.badges.includes(q.badge)) {
-            this.profile.badges.push(q.badge);
-          }
-          newlyCompleted.push(q);
-        }
-        return {
-          ...q,
-          completed: alreadyDone || checkRes.completed,
-          progressText: checkRes.progressText
-        };
-      });
-      if (newlyCompleted.length > 0) {
-        this._saveProfile();
-        eventBus.emit("quest:completed", {
-          quests: newlyCompleted,
-          xp: this.profile.xp,
-          level: this.getLevel()
-        });
-        const top = newlyCompleted[0];
-        this.map3DEngine?.showStatusHint?.(
-          `Misi Selesai: "${top.title}" (+${top.xp} XP, Lencana ${top.badge})!`
-        );
-      }
-      this.syncNavbarUI();
-      if (this.modalEl && this.modalEl.style.display !== "none") {
-        this.renderQuestList(questStates);
-      }
-      return {
-        xp: this.profile.xp,
-        level: this.getLevel(),
-        newlyCompleted,
-        questStates
-      };
-    }
-    syncNavbarUI() {
-      if (typeof document === "undefined") return;
-      const lvlEl = document.getElementById("navbar-quest-level");
-      const xpEl = document.getElementById("navbar-quest-xp");
-      if (lvlEl) lvlEl.textContent = `Lv.${this.getLevel()}`;
-      if (xpEl) xpEl.textContent = `${this.profile.xp} XP`;
-    }
-    createModalDOM() {
-      this.modalEl = document.createElement("div");
-      this.modalEl.id = "quest-gamification-modal";
-      this.modalEl.className = "modal-overlay quest-gamification-modal";
-      this.modalEl.style.display = "none";
-      this.modalEl.innerHTML = `
-      <div class="modal-card quest-modal-card">
-        <div class="modal-header">
-          <div style="display:flex;align-items:center;gap:8px;">
-            ${uiIcon("award", 18)}
-            <div>
-              <div style="font-size:14px;font-weight:700;color:var(--text-primary);">Misi Belajar, XP &amp; Lencana Roblox</div>
-              <div style="font-size:11px;color:var(--text-muted);">Selesaikan misi Studio Bangunan &amp; Lab Jaringan untuk menaikkan Level Teknisi</div>
-            </div>
-          </div>
-          <button type="button" id="btn-quest-close" class="btn btn-icon btn-sm" title="Tutup">${uiIcon("x", 14)}</button>
-        </div>
-        <div id="quest-summary-banner" class="quest-summary-banner"></div>
-        <div id="quest-badges-strip" class="quest-badges-strip"></div>
-        <div id="quest-cards-list" class="quest-cards-list"></div>
-      </div>
-    `;
-      document.body.appendChild(this.modalEl);
-      this.modalEl.querySelector("#btn-quest-close")?.addEventListener("click", () => this.hide());
-      this.modalEl.addEventListener("click", (ev) => {
-        if (ev.target === this.modalEl) this.hide();
-      });
-    }
-    renderQuestList(questStates = null) {
-      if (!this.modalEl) return;
-      const evaluated = questStates || this.evaluateQuests().questStates;
-      const lvl = this.getLevel();
-      const xpIntoLevel = this.profile.xp % 200;
-      const banner = this.modalEl.querySelector("#quest-summary-banner");
-      if (banner) {
-        banner.innerHTML = `
-        <div class="quest-lvl-pill">Level ${lvl}</div>
-        <div style="flex:1;">
-          <div style="display:flex;justify-content:space-between;font-size:11.5px;font-weight:700;">
-            <span>Total XP: ${this.profile.xp}</span>
-            <span>${xpIntoLevel}/200 XP ke Level ${lvl + 1}</span>
-          </div>
-          <div class="quest-xp-bar"><div class="quest-xp-fill" style="width:${Math.round(xpIntoLevel / 200 * 100)}%;"></div></div>
-        </div>
-      `;
-      }
-      const badgeStrip = this.modalEl.querySelector("#quest-badges-strip");
-      if (badgeStrip) {
-        badgeStrip.innerHTML = this.profile.badges.length === 0 ? '<span style="font-size:11px;color:var(--text-muted);">Belum ada lencana terbuka \u2014 selesaikan misi pertamamu!</span>' : this.profile.badges.map((b) => `<span class="quest-badge-chip">${uiIcon("award", 11)} ${escapeHtml(b)}</span>`).join("");
-      }
-      const listEl = this.modalEl.querySelector("#quest-cards-list");
-      if (listEl) {
-        listEl.innerHTML = evaluated.map((q) => `
-        <div class="quest-item-card ${q.completed ? "is-done" : ""}">
-          <div class="quest-item-head">
-            <span class="quest-item-title">${q.completed ? uiIcon("check", 13) : uiIcon("target", 13)} ${escapeHtml(q.title)}</span>
-            <span class="quest-item-xp">+${q.xp} XP</span>
-          </div>
-          <div class="quest-item-desc">${escapeHtml(q.description)}</div>
-          <div class="quest-item-foot">
-            <span class="quest-item-prog">${escapeHtml(q.progressText)}</span>
-            ${q.workspace !== "any" && !q.completed ? `<button type="button" class="btn btn-secondary btn-sm btn-quest-go" data-go-ws="${q.workspace}">Buka ${q.workspace === "build" ? "Studio Bangunan" : "Lab Jaringan"}</button>` : `<span class="quest-item-badge">${escapeHtml(q.badge)}</span>`}
-          </div>
-        </div>
-      `).join("");
-        listEl.querySelectorAll(".btn-quest-go")?.forEach((btn) => {
-          btn.addEventListener("click", () => {
-            const ws = btn.getAttribute("data-go-ws");
-            this.hide();
-            if (ws && typeof this.onSwitchWorkspace === "function") {
-              this.onSwitchWorkspace(ws);
-            } else if (ws) {
-              stateManager.setWorkspaceMode(ws);
-            }
-          });
-        });
-      }
-    }
-    show() {
-      if (!this.modalEl) return;
-      this.evaluateQuests();
-      this.renderQuestList();
-      this.modalEl.style.display = "flex";
-    }
-    hide() {
-      if (this.modalEl) {
-        this.modalEl.style.display = "none";
-      }
-    }
-  };
-
   // js/core/workspace-controller.js
-  var ONBOARDING_DISMISSED_KEY = "netmap_workspace_onboarding_seen_v1";
   var WorkspaceController = class {
     /**
      * @param {Object} options
      * @param {import('../map/map-3d-engine.js').Map3DEngine} [options.map3DEngine]
      * @param {import('../ui/build-studio-palette.js').BuildStudioPalette} [options.buildStudioPalette]
      * @param {import('../ui/packet-tracer-panel.js').PacketTracerPanel} [options.packetTracerPanel]
-     * @param {import('../gamification/quest-manager.js').QuestManager} [options.questManager]
      * @param {import('../devices/device-manager.js').DeviceManager} [options.deviceManager]
      */
     constructor({
       map3DEngine = null,
       buildStudioPalette = null,
       packetTracerPanel = null,
-      questManager = null,
       deviceManager = null
     } = {}) {
       this.map3DEngine = map3DEngine;
       this.buildStudioPalette = buildStudioPalette;
       this.packetTracerPanel = packetTracerPanel;
-      this.questManager = questManager;
       this.deviceManager = deviceManager;
-      this.launcherModalEl = null;
       this._applying = false;
     }
     init() {
       if (typeof document !== "undefined" && document.body) {
-        this._createLauncherModal();
         this._bindControls();
       }
       eventBus.on("workspace:changed", ({ workspaceMode }) => {
@@ -83405,16 +83573,6 @@ ${result.output}`);
       });
       const initialMode = stateManager.getWorkspaceMode();
       this._applyWorkspaceEffects(initialMode, { open3D: false, silent: true });
-      if (typeof document !== "undefined") {
-        let seen = false;
-        try {
-          seen = typeof localStorage !== "undefined" && localStorage.getItem(ONBOARDING_DISMISSED_KEY) === "1";
-        } catch {
-        }
-        if (!seen && !document.body?.classList?.contains("is-mobile-touch")) {
-          this.showLauncherModal();
-        }
-      }
     }
     /**
      * Switch between 'build' (Studio Bangunan 3D) and 'network' (Lab Engineering Jaringan).
@@ -83430,12 +83588,6 @@ ${result.output}`);
         this._applyWorkspaceEffects(normalized, { open3D, silent });
       } finally {
         this._applying = false;
-      }
-      try {
-        if (typeof localStorage !== "undefined") {
-          localStorage.setItem(ONBOARDING_DISMISSED_KEY, "1");
-        }
-      } catch {
       }
       return normalized;
     }
@@ -83460,7 +83612,7 @@ ${result.output}`);
         this.map3DEngine?.setWorkspaceGhostDevices?.(true);
         if (!silent) {
           this.map3DEngine?.showStatusHint?.(
-            "Studio Bangunan 3D aktif \u2014 Tambah/geser/putar gedung, fasilitas & jalan sekolah. Perangkat jaringan digelapkan."
+            "Edit Bangunan aktif \u2014 Tambah/geser/putar gedung, fasilitas & jalan sekolah. Perangkat jaringan digelapkan."
           );
         }
       } else {
@@ -83469,7 +83621,7 @@ ${result.output}`);
         this.map3DEngine?.setWorkspaceGhostDevices?.(false);
         if (!silent) {
           this.map3DEngine?.showStatusHint?.(
-            "Lab Jaringan (Packet Tracer) aktif \u2014 Bangunan terkunci otomatis; fokus pasang perangkat, kabel, CLI & Ping."
+            "Simulasi Jaringan aktif \u2014 Bangunan terkunci otomatis; fokus pasang perangkat, kabel, CLI & Ping."
           );
         }
       }
@@ -83551,9 +83703,6 @@ ${result.output}`);
           if (ws) this.switchWorkspace(ws, { open3D: ws === "build" });
         });
       });
-      document.getElementById("btn-open-workspace-launcher")?.addEventListener("click", () => {
-        this.showLauncherModal();
-      });
       document.getElementById("btn-open-packet-tracer")?.addEventListener("click", () => {
         if (stateManager.getWorkspaceMode() !== "network") {
           this.switchWorkspace("network", { open3D: false, silent: true });
@@ -83565,9 +83714,6 @@ ${result.output}`);
           this.switchWorkspace("network", { open3D: false, silent: true });
         }
         this.packetTracerPanel?.show("sim");
-      });
-      document.getElementById("navbar-quest-btn")?.addEventListener("click", () => {
-        this.questManager?.show();
       });
       document.getElementById("btn-studio-grid-snap")?.addEventListener("click", () => {
         const cur = this.map3DEngine?.getBuildPlacementConfig?.();
@@ -83615,81 +83761,6 @@ ${result.output}`);
         this.switchWorkspace("network", { open3D: false });
       });
     }
-    _createLauncherModal() {
-      this.launcherModalEl = document.createElement("div");
-      this.launcherModalEl.id = "workspace-launcher-modal";
-      this.launcherModalEl.className = "modal-overlay workspace-launcher-modal";
-      this.launcherModalEl.style.display = "none";
-      this.launcherModalEl.innerHTML = `
-      <div class="modal-card launcher-modal-card">
-        <div class="launcher-header">
-          <div>
-            <div class="launcher-eyebrow">SmartSchool NetMap \u2022 Platform Belajar 3D</div>
-            <h2 class="launcher-title">Pilih Mode Belajar Hari Ini</h2>
-            <p class="launcher-subtitle">Dua lingkungan terpisah agar lebih fokus &amp; mudah dipahami \u2014 dilengkapi Avatar Jelajah Roblox &amp; Misi XP.</p>
-          </div>
-          <button type="button" id="btn-launcher-close" class="btn btn-icon btn-sm" title="Tutup">${uiIcon("x", 14)}</button>
-        </div>
-
-        <div class="launcher-cards">
-          <button type="button" class="launcher-choice-card is-build" data-pick-workspace="build">
-            <div class="launcher-choice-icon">${uiIcon("building", 26)}</div>
-            <div class="launcher-choice-name">Studio Bangunan 3D</div>
-            <div class="launcher-choice-desc">Susun gedung kelas PPLG, perpustakaan, taman, tandon air, tiang &amp; jalan kampus dengan Snap Grid, Gizmo RGB, serta jelajahi dengan Avatar.</div>
-            <span class="launcher-choice-cta">Mulai Membangun -></span>
-          </button>
-
-          <button type="button" class="launcher-choice-card is-network" data-pick-workspace="network">
-            <div class="launcher-choice-icon">${uiIcon("network", 26)}</div>
-            <div class="launcher-choice-name">Lab Engineering Jaringan</div>
-            <div class="launcher-choice-desc">Ala Cisco Packet Tracer 3D: pasang Router/Switch/AP, sambungkan kabel antar port, konfigurasi CLI Cisco &amp; MikroTik, serta animasi paket Ping.</div>
-            <span class="launcher-choice-cta">Masuk Lab Jaringan -></span>
-          </button>
-        </div>
-
-        <div class="launcher-footer">
-          <span>Gedung terkunci otomatis saat berada di Lab Jaringan agar tidak tergeser.</span>
-          <button type="button" id="btn-launcher-quests" class="btn btn-secondary btn-sm">${uiIcon("award", 13)} Lihat Misi Belajar</button>
-        </div>
-      </div>
-    `;
-      document.body.appendChild(this.launcherModalEl);
-      this.launcherModalEl.querySelector("#btn-launcher-close")?.addEventListener("click", () => {
-        this.hideLauncherModal(true);
-      });
-      this.launcherModalEl.addEventListener("click", (ev) => {
-        if (ev.target === this.launcherModalEl) this.hideLauncherModal(true);
-      });
-      this.launcherModalEl.querySelectorAll("[data-pick-workspace]")?.forEach((card) => {
-        card.addEventListener("click", () => {
-          const ws = card.getAttribute("data-pick-workspace") || "network";
-          this.hideLauncherModal(true);
-          this.switchWorkspace(ws, { open3D: ws === "build" });
-        });
-      });
-      this.launcherModalEl.querySelector("#btn-launcher-quests")?.addEventListener("click", () => {
-        this.hideLauncherModal(true);
-        this.questManager?.show();
-      });
-    }
-    showLauncherModal() {
-      if (this.launcherModalEl) {
-        this.launcherModalEl.style.display = "flex";
-      }
-    }
-    hideLauncherModal(markSeen = true) {
-      if (this.launcherModalEl) {
-        this.launcherModalEl.style.display = "none";
-      }
-      if (markSeen) {
-        try {
-          if (typeof localStorage !== "undefined") {
-            localStorage.setItem(ONBOARDING_DISMISSED_KEY, "1");
-          }
-        } catch {
-        }
-      }
-    }
   };
 
   // js/app.js
@@ -83728,7 +83799,6 @@ ${result.output}`);
       this.buildStudioPalette = null;
       this.networkSimulator = null;
       this.packetTracerPanel = null;
-      this.questManager = null;
       this.workspaceController = null;
     }
     async init() {
@@ -83861,6 +83931,7 @@ ${result.output}`);
         deviceManager: this.deviceManager,
         cableManager: this.cableManager
       });
+      this.layerControls?.setMap3DEngine?.(this.map3DEngine);
       this.room3DModal = new Room3DModal({
         deviceManager: this.deviceManager,
         map3DEngine: this.map3DEngine
@@ -83910,17 +83981,10 @@ ${result.output}`);
         deviceManager: this.deviceManager,
         map3DEngine: this.map3DEngine
       });
-      this.questManager = new QuestManager({
-        deviceManager: this.deviceManager,
-        cableManager: this.cableManager,
-        map3DEngine: this.map3DEngine,
-        onSwitchWorkspace: (ws) => this.workspaceController?.switchWorkspace(ws, { open3D: ws === "build" })
-      });
       this.workspaceController = new WorkspaceController({
         map3DEngine: this.map3DEngine,
         buildStudioPalette: this.buildStudioPalette,
         packetTracerPanel: this.packetTracerPanel,
-        questManager: this.questManager,
         deviceManager: this.deviceManager
       });
       this.workspaceController.init();
@@ -83974,7 +84038,6 @@ ${result.output}`);
       window.addEventListener("resize", runSync);
       eventBus.on("workspace:changed", () => requestAnimationFrame(runSync));
       eventBus.on("auth:changed", () => requestAnimationFrame(runSync));
-      eventBus.on("quest:completed", () => requestAnimationFrame(runSync));
       if (typeof ResizeObserver !== "undefined") {
         this._toolbarResizeObserver = new ResizeObserver(() => {
           const w = toolbar.clientWidth;
@@ -84006,10 +84069,10 @@ ${result.output}`);
       toolbar.classList.remove(...stages);
       const available = toolbar.clientWidth;
       if (!available) return;
-      const fsBtn = document.getElementById("btn-toggle-fullscreen");
+      const rightEdgeBtn = document.getElementById("btn-toggle-fullscreen") || document.getElementById("btn-navbar-settings");
       const isOverflowing = () => {
         if (toolbar.scrollWidth > available + 1) return true;
-        if (fsBtn && fsBtn.getBoundingClientRect().right > available - 2) return true;
+        if (rightEdgeBtn && rightEdgeBtn.getBoundingClientRect().right > available - 2) return true;
         return false;
       };
       for (const cls of stages) {
@@ -84213,9 +84276,6 @@ ${result.output}`);
       eventBus.on("viewmode:changed", ({ viewMode }) => {
         applyViewMode(viewMode);
       });
-      document.getElementById("filter-toggle-coverage")?.addEventListener("change", (e) => {
-        this.map3DEngine?.setShowCoverage(Boolean(e.target.checked));
-      });
       const navToolButtons = [
         { id: "btn-3d-tool-orbit", tool: "orbit" },
         { id: "btn-3d-tool-pan", tool: "pan" },
@@ -84280,13 +84340,20 @@ ${result.output}`);
         btnExplode.classList.toggle("active", exploded);
         this.map3DEngine?.setExplodeStacks(exploded);
       });
-      let showLabels = true;
       const btnLabels = document.getElementById("btn-3d-labels");
-      btnLabels?.addEventListener("click", () => {
-        showLabels = !showLabels;
-        btnLabels.classList.toggle("active", showLabels);
-        this.map3DEngine?.setShowLabels(showLabels);
-      });
+      if (btnLabels) {
+        btnLabels.classList.toggle("active", stateManager.state?.layers?.annotations !== false);
+        btnLabels.addEventListener("click", () => {
+          const cur = this.map3DEngine ? Boolean(this.map3DEngine.showLabels) : stateManager.state?.layers?.annotations !== false;
+          const next = !cur;
+          btnLabels.classList.toggle("active", next);
+          if (this.map3DEngine) {
+            this.map3DEngine.setShowLabels(next);
+          } else {
+            stateManager.toggleLayer("annotations", next);
+          }
+        });
+      }
       const btnAvatar = document.getElementById("btn-3d-avatar");
       const btnFpp = document.getElementById("btn-3d-fpp");
       btnAvatar?.addEventListener("click", () => {
@@ -84428,6 +84495,17 @@ ${result.output}`);
         if (this.deviceDetailModal?.isOpen() || this.authModal?.isOpen()) {
           return;
         }
+        if (stateManager.getViewMode() === "3d" && this.map3DEngine?.avatarMode && !e.ctrlKey && !e.metaKey) {
+          const isPgUpDn = e.key === "PageUp" || e.key === "PageDown";
+          const isCarryingArrowZ = (e.key === "ArrowUp" || e.key === "ArrowDown") && Array.isArray(this.map3DEngine.carriedObjects) && this.map3DEngine.carriedObjects.length > 0;
+          if (isPgUpDn || isCarryingArrowZ) {
+            e.preventDefault();
+            const mag = e.shiftKey ? 0.1 : e.altKey ? 0.5 : 0.25;
+            const sign2 = e.key === "PageUp" || e.key === "ArrowUp" ? 1 : -1;
+            this.map3DEngine.adjustAvatarTargetOrCarriedElevation(sign2 * mag);
+            return;
+          }
+        }
         if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key) && !e.ctrlKey && !e.metaKey && this.nudgeSelectionByArrowKey(e)) {
           e.preventDefault();
           return;
@@ -84543,7 +84621,11 @@ ${result.output}`);
           }
           if (lower === "e" && this.map3DEngine?.avatarMode && !e.ctrlKey && !e.metaKey) {
             e.preventDefault();
-            this.map3DEngine.pickupNearestObjectFromAvatar();
+            if (this.map3DEngine.carriedObjects?.length > 0 && !e.shiftKey) {
+              this.map3DEngine.dropCarriedObjectsFromAvatar({ dropAll: false, useAimTarget: true });
+            } else {
+              this.map3DEngine.pickupNearestObjectFromAvatar();
+            }
             return;
           }
           if (lower === "q" && this.map3DEngine?.avatarMode && !e.ctrlKey && !e.metaKey) {
@@ -84884,8 +84966,7 @@ ${result.output}`);
         updatePwaUI();
         this.map3DEngine?.showStatusHint?.("Aplikasi SmartSchool NetMap berhasil dipasang!");
       });
-      document.getElementById("btn-install-pwa")?.addEventListener("click", () => this.triggerPwaInstall());
-      document.getElementById("btn-menu-install-pwa")?.addEventListener("click", () => {
+      document.getElementById("btn-install-pwa")?.addEventListener("click", () => {
         this.toolbar?.closeNavbarDropdowns?.();
         this.triggerPwaInstall();
       });

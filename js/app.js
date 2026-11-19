@@ -41,7 +41,6 @@ import { DeviceDetailModal } from './ui/device-detail-modal.js';
 import { BuildStudioPalette } from './ui/build-studio-palette.js';
 import { NetworkSimulator } from './simulation/network-simulator.js';
 import { PacketTracerPanel } from './ui/packet-tracer-panel.js';
-import { QuestManager } from './gamification/quest-manager.js';
 import { WorkspaceController } from './core/workspace-controller.js';
 import { clamp, isMobileTouchDevice } from './utils/helpers.js';
 
@@ -80,7 +79,6 @@ class NetMapApp {
     this.buildStudioPalette = null;
     this.networkSimulator = null;
     this.packetTracerPanel = null;
-    this.questManager = null;
     this.workspaceController = null;
   }
 
@@ -259,6 +257,7 @@ class NetMapApp {
       deviceManager: this.deviceManager,
       cableManager: this.cableManager
     });
+    this.layerControls?.setMap3DEngine?.(this.map3DEngine);
     this.room3DModal = new Room3DModal({
       deviceManager: this.deviceManager,
       map3DEngine: this.map3DEngine
@@ -290,7 +289,7 @@ class NetMapApp {
     });
     this.setup3DControls();
 
-    // 14f. Initialize Dual-Workspace Mode (Studio Bangunan 3D vs Lab Engineering Jaringan), Packet Tracer & Gamification
+    // 14f. Initialize Dual-Workspace Mode (Studio Bangunan 3D vs Lab Engineering Jaringan) & Packet Tracer
     const buildStudioContainer = document.getElementById('build-studio-palette-container');
     if (buildStudioContainer) {
       this.buildStudioPalette = new BuildStudioPalette({
@@ -310,17 +309,10 @@ class NetMapApp {
       deviceManager: this.deviceManager,
       map3DEngine: this.map3DEngine
     });
-    this.questManager = new QuestManager({
-      deviceManager: this.deviceManager,
-      cableManager: this.cableManager,
-      map3DEngine: this.map3DEngine,
-      onSwitchWorkspace: (ws) => this.workspaceController?.switchWorkspace(ws, { open3D: ws === 'build' })
-    });
     this.workspaceController = new WorkspaceController({
       map3DEngine: this.map3DEngine,
       buildStudioPalette: this.buildStudioPalette,
       packetTracerPanel: this.packetTracerPanel,
-      questManager: this.questManager,
       deviceManager: this.deviceManager
     });
     this.workspaceController.init();
@@ -397,7 +389,6 @@ class NetMapApp {
     window.addEventListener('resize', runSync);
     eventBus.on('workspace:changed', () => requestAnimationFrame(runSync));
     eventBus.on('auth:changed', () => requestAnimationFrame(runSync));
-    eventBus.on('quest:completed', () => requestAnimationFrame(runSync));
     if (typeof ResizeObserver !== 'undefined') {
       this._toolbarResizeObserver = new ResizeObserver(() => {
         const w = toolbar.clientWidth;
@@ -432,10 +423,12 @@ class NetMapApp {
     const available = toolbar.clientWidth;
     if (!available) return;
 
-    const fsBtn = document.getElementById('btn-toggle-fullscreen');
+    const rightEdgeBtn =
+      document.getElementById('btn-toggle-fullscreen') ||
+      document.getElementById('btn-navbar-settings');
     const isOverflowing = () => {
       if (toolbar.scrollWidth > available + 1) return true;
-      if (fsBtn && fsBtn.getBoundingClientRect().right > available - 2) return true;
+      if (rightEdgeBtn && rightEdgeBtn.getBoundingClientRect().right > available - 2) return true;
       return false;
     };
 
@@ -690,11 +683,6 @@ class NetMapApp {
       applyViewMode(viewMode);
     });
 
-    // Coverage filter sync for 3D scene
-    document.getElementById('filter-toggle-coverage')?.addEventListener('change', (e) => {
-      this.map3DEngine?.setShowCoverage(Boolean(e.target.checked));
-    });
-
     // SketchUp Navigation Tool Buttons (Orbit, Pan, Zoom, Look, Move, Rotate, Box Select, Draw 3D)
     const navToolButtons = [
       { id: 'btn-3d-tool-orbit', tool: 'orbit' },
@@ -772,14 +760,23 @@ class NetMapApp {
       this.map3DEngine?.setExplodeStacks(exploded);
     });
 
-    // Labels toggle
-    let showLabels = true;
+    // Labels toggle (synced bidirectionally with layer:annotations)
     const btnLabels = document.getElementById('btn-3d-labels');
-    btnLabels?.addEventListener('click', () => {
-      showLabels = !showLabels;
-      btnLabels.classList.toggle('active', showLabels);
-      this.map3DEngine?.setShowLabels(showLabels);
-    });
+    if (btnLabels) {
+      btnLabels.classList.toggle('active', stateManager.state?.layers?.annotations !== false);
+      btnLabels.addEventListener('click', () => {
+        const cur = this.map3DEngine
+          ? Boolean(this.map3DEngine.showLabels)
+          : stateManager.state?.layers?.annotations !== false;
+        const next = !cur;
+        btnLabels.classList.toggle('active', next);
+        if (this.map3DEngine) {
+          this.map3DEngine.setShowLabels(next);
+        } else {
+          stateManager.toggleLayer('annotations', next);
+        }
+      });
+    }
 
     // Mode Teknisi (Roblox-like 3D character walker) & FPP toggles
     const btnAvatar = document.getElementById('btn-3d-avatar');
@@ -948,6 +945,22 @@ class NetMapApp {
         return;
       }
 
+      // Live Z elevation shortcuts in Mode Teknisi (PageUp/PageDown always, or ArrowUp/ArrowDown while carrying)
+      if (stateManager.getViewMode() === '3d' && this.map3DEngine?.avatarMode && !e.ctrlKey && !e.metaKey) {
+        const isPgUpDn = e.key === 'PageUp' || e.key === 'PageDown';
+        const isCarryingArrowZ =
+          (e.key === 'ArrowUp' || e.key === 'ArrowDown') &&
+          Array.isArray(this.map3DEngine.carriedObjects) &&
+          this.map3DEngine.carriedObjects.length > 0;
+        if (isPgUpDn || isCarryingArrowZ) {
+          e.preventDefault();
+          const mag = e.shiftKey ? 0.1 : (e.altKey ? 0.5 : 0.25);
+          const sign = (e.key === 'PageUp' || e.key === 'ArrowUp') ? 1 : -1;
+          this.map3DEngine.adjustAvatarTargetOrCarriedElevation(sign * mag);
+          return;
+        }
+      }
+
       // Arrow key nudging for selected device(s) (or selected 3D object/room) in both 2D and 3D mode (including Mode Teknisi)
       if (
         ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) &&
@@ -1070,7 +1083,11 @@ class NetMapApp {
         }
         if (lower === 'e' && this.map3DEngine?.avatarMode && !e.ctrlKey && !e.metaKey) {
           e.preventDefault();
-          this.map3DEngine.pickupNearestObjectFromAvatar();
+          if (this.map3DEngine.carriedObjects?.length > 0 && !e.shiftKey) {
+            this.map3DEngine.dropCarriedObjectsFromAvatar({ dropAll: false, useAimTarget: true });
+          } else {
+            this.map3DEngine.pickupNearestObjectFromAvatar();
+          }
           return;
         }
         if (lower === 'q' && this.map3DEngine?.avatarMode && !e.ctrlKey && !e.metaKey) {
@@ -1449,8 +1466,7 @@ class NetMapApp {
       this.map3DEngine?.showStatusHint?.('Aplikasi SmartSchool NetMap berhasil dipasang!');
     });
 
-    document.getElementById('btn-install-pwa')?.addEventListener('click', () => this.triggerPwaInstall());
-    document.getElementById('btn-menu-install-pwa')?.addEventListener('click', () => {
+    document.getElementById('btn-install-pwa')?.addEventListener('click', () => {
       this.toolbar?.closeNavbarDropdowns?.();
       this.triggerPwaInstall();
     });

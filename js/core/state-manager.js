@@ -7,14 +7,6 @@ import { eventBus } from './event-bus.js';
 
 class StateManager {
   constructor() {
-    let savedWorkspace = 'network';
-    try {
-      const stored = typeof localStorage !== 'undefined' ? localStorage.getItem('netmap_workspace_mode_v1') : null;
-      if (stored === 'build' || stored === 'network') {
-        savedWorkspace = stored;
-      }
-    } catch { /* ignore storage restrictions */ }
-
     this.state = {
       project: {
         id: 'proj-default',
@@ -34,8 +26,8 @@ class StateManager {
         objects3d: [],
         roads3d: []
       },
-      // Active primary workspace mode: 'build' (Studio Bangunan 3D) | 'network' (Lab Engineering Jaringan)
-      workspaceMode: savedWorkspace,
+      // Active primary workspace mode: 'network' (Simulasi Jaringan, default) | 'build' (Edit Bangunan)
+      workspaceMode: 'network',
       // Active viewport renderer mode: '2d' | '3d'
       viewMode: '2d',
       // Current interaction mode: 'navigate' | 'select' | 'add-device' | 'draw-cable' | 'edit' | 'delete'
@@ -118,7 +110,7 @@ class StateManager {
   }
 
   /**
-   * Switch primary educational workspace mode ('build' = Studio Bangunan 3D | 'network' = Lab Jaringan)
+   * Switch primary educational workspace mode ('network' = Simulasi Jaringan [default] | 'build' = Edit Bangunan)
    * @param {'build'|'network'} workspaceMode
    * @returns {'build'|'network'}
    */
@@ -127,11 +119,6 @@ class StateManager {
     if (this.state.workspaceMode === normalized) return normalized;
     const prevWorkspaceMode = this.state.workspaceMode || 'network';
     this.state.workspaceMode = normalized;
-    try {
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem('netmap_workspace_mode_v1', normalized);
-      }
-    } catch { /* ignore storage restrictions */ }
     eventBus.emit('workspace:changed', {
       workspaceMode: normalized,
       prevWorkspaceMode

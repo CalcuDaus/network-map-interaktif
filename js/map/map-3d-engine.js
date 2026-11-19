@@ -138,8 +138,15 @@ export class Map3DEngine {
     this.deviceScaleMultiplier = 3.0; // Balanced default visibility on campus/building map
     this.cableDiameterMultiplier = 1.0; // 1.0 = matched to 3D port socket size
     this.explodeStacks = false;
-    this.showLabels = true;
+    this.showLabels = stateManager.state?.layers?.annotations !== false;
     this.showCoverage = true;
+    this.viewFilters = {
+      showCctv: true,
+      showFiber: true,
+      showWireless: true,
+      showCoverage: true,
+      dimOnSelection: true
+    };
 
     this.animFrameId = null;
     this.resizeObserver = null;
@@ -503,66 +510,6 @@ export class Map3DEngine {
         this.updateRoad3dBuildHover(e);
       }
       if (this.avatarMode && !this.simulatorFocusedDeviceId) {
-        if (e.pointerType === 'touch') {
-          const prevTouch = this._avatarTouchPointers.get(e.pointerId);
-          this._avatarTouchPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-          if (this._avatarTouchPointers.size >= 2) {
-            const pts = Array.from(this._avatarTouchPointers.values());
-            const dist = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y) || 0;
-            if (this._avatarTouchPinchDist > 0 && dist > 0) {
-              const pinchDelta = this._avatarTouchPinchDist - dist;
-              if (this.avatarPerspective === 'fpp' && pinchDelta > 16) {
-                this.avatarState.camDist = 2.6;
-                this.setAvatarPerspective('tpp');
-              } else if (this.avatarPerspective === 'tpp' && Math.abs(pinchDelta) > 1.5) {
-                const nextDist = (this.avatarState.camDist || 5.8) + pinchDelta * 0.032;
-                if (nextDist <= 1.7) {
-                  this.avatarState.camDist = 2.0;
-                  this.setAvatarPerspective('fpp');
-                } else {
-                  this.avatarState.camDist = clamp(nextDist, 2.0, 22.0);
-                  this.syncAvatarCameraFromAngles();
-                }
-              }
-            }
-            this._avatarTouchPinchDist = dist;
-            return;
-          }
-          if (prevTouch) {
-            const dx = e.clientX - prevTouch.x;
-            const dy = e.clientY - prevTouch.y;
-            if (dx !== 0 || dy !== 0) {
-              this.applyAvatarMouseLookDelta(dx, dy);
-            }
-          }
-          return;
-        }
-        const isLocked = typeof document !== 'undefined' && document.pointerLockElement === dom;
-        if (isLocked) {
-          this.avatarState._lastMouseClient = null;
-          const dx = Math.abs(e.movementX || 0) <= 250 ? (e.movementX || 0) : 0;
-          const dy = Math.abs(e.movementY || 0) <= 250 ? (e.movementY || 0) : 0;
-          if (dx !== 0 || dy !== 0) {
-            this.applyAvatarMouseLookDelta(dx, dy);
-          }
-          return;
-        }
-        const isBuildMode = Boolean(this.buildPlacementConfig?.buildModeEnabled);
-        const allowHoverLook = !isBuildMode && e.buttons === 0 && !e.altKey;
-        const allowBuildOrbitDrag = isBuildMode && (((e.buttons & 2) !== 0) || ((e.buttons & 4) !== 0));
-        if (allowHoverLook || allowBuildOrbitDrag) {
-          const prev = this.avatarState._lastMouseClient;
-          this.avatarState._lastMouseClient = { x: e.clientX, y: e.clientY };
-          if (prev) {
-            const dx = e.clientX - prev.x;
-            const dy = e.clientY - prev.y;
-            if ((dx !== 0 || dy !== 0) && Math.abs(dx) <= 200 && Math.abs(dy) <= 200) {
-              this.applyAvatarMouseLookDelta(dx, dy);
-            }
-          }
-          return;
-        }
-        this.avatarState._lastMouseClient = null;
         this.handleAvatarPointerMove(e, dom);
         return;
       }
@@ -648,6 +595,11 @@ export class Map3DEngine {
       if (!this.isActive || !this.avatarMode || this.simulatorFocusedDeviceId) return;
       e.preventDefault();
       e.stopPropagation();
+      if (e.shiftKey && (this.carriedObjects?.length > 0 || this.navTool === 'move')) {
+        const step = e.deltaY < 0 ? 0.25 : -0.25;
+        this.adjustAvatarTargetOrCarriedElevation(step);
+        return;
+      }
       if (this.avatarPerspective === 'fpp') {
         if (e.deltaY > 0) {
           this.avatarState.camDist = 2.6;
@@ -703,6 +655,7 @@ export class Map3DEngine {
     if (!this.groundTexture) {
       this.rebuildGround();
     }
+    this.apply3dViewFilters();
     this.syncRemoteAvatars(authManager.getRemotePeers());
     this.publishLocalPresence(true);
     this.lastFrameTime = performance.now();
@@ -842,6 +795,7 @@ export class Map3DEngine {
       const plane = new THREE.Mesh(geo, mat);
       plane.receiveShadow = true;
       this.groundGroup.add(plane);
+      this.apply3dViewFilters?.();
     };
 
     const isFileProtocol = typeof window !== 'undefined' && window.location?.protocol === 'file:';
@@ -862,6 +816,7 @@ export class Map3DEngine {
         geo.rotateX(-Math.PI / 2);
         const mat = new THREE.MeshStandardMaterial({ color: 0xdbe6cf, roughness: 0.95 });
         this.groundGroup.add(new THREE.Mesh(geo, mat));
+        this.apply3dViewFilters?.();
       };
       img.src = url;
     };
@@ -881,6 +836,7 @@ export class Map3DEngine {
     grid.material.opacity = 0.18;
     grid.material.transparent = true;
     this.groundGroup.add(grid);
+    this.apply3dViewFilters?.();
   }
 
   syncAll() {
@@ -890,6 +846,7 @@ export class Map3DEngine {
     this.syncObjects3d();
     this.syncDevices();
     this.syncCables();
+    this.apply3dViewFilters?.();
   }
 
   _attachRoomFallbackMesh(room, roomGroup) {
@@ -1090,6 +1047,7 @@ export class Map3DEngine {
       this.room3dMeshMap.set(room.id, roomGroup);
       this._attachRoomCustomGlb(room, roomGroup);
     });
+    this.apply3dViewFilters?.();
   }
 
   rebuildSingleRoom3dMesh(room, isSelected = true) {
@@ -1117,6 +1075,7 @@ export class Map3DEngine {
     } else {
       this._attachRoomCustomGlb(room, next);
     }
+    this.apply3dViewFilters?.();
     return next;
   }
 
@@ -1153,6 +1112,7 @@ export class Map3DEngine {
     }
     this.updateAvatarDeviceLabelsVisibility?.();
     this.syncTransformGizmo?.();
+    this.apply3dViewFilters?.();
   }
 
   rebuildSingleObject3dMesh(obj, isSelected = true) {
@@ -1165,6 +1125,7 @@ export class Map3DEngine {
     const next = createCustomObject3DGroup(obj, (nx, ny) => this.normToWorld(nx, ny), isSelected);
     this.objects3dGroup.add(next);
     this.object3dMeshMap.set(obj.id, next);
+    this.apply3dViewFilters?.();
     return next;
   }
 
@@ -1186,6 +1147,7 @@ export class Map3DEngine {
       this.road3dMeshMap.set(road.id, meshGroup);
     });
     this.renderRoad3dHudBar?.();
+    this.apply3dViewFilters?.();
   }
 
   rebuildSingleRoad3dMesh(road, isSelected = true) {
@@ -1198,6 +1160,7 @@ export class Map3DEngine {
     const next = create3DRoadGroup(road, (nx, ny) => this.normToWorld(nx, ny), isSelected);
     this.roadsGroup.add(next);
     this.road3dMeshMap.set(road.id, next);
+    this.apply3dViewFilters?.();
     return next;
   }
 
@@ -1972,22 +1935,21 @@ export class Map3DEngine {
         holder.add(srcRing);
       }
 
-      // Floating Label Sprite
-      if (this.showLabels) {
-        const label = create3DLabelSprite(dev, elev);
-        label.userData = { ...(label.userData || {}), isDeviceLabel: true };
-        const labelScaleFactor = Math.max(0.75, Math.min(1.6, this.deviceScaleMultiplier * 0.42));
-        label.scale.multiplyScalar(labelScaleFactor);
-        label.position.set(0, 1.15 * userModelScale + 0.8, 0);
-        holder.add(label);
-      }
+      // Floating Label Sprite (always attach so layer:annotations toggle works without rebuild)
+      const label = create3DLabelSprite(dev, elev);
+      label.userData = { ...(label.userData || {}), isDeviceLabel: true, isLabelSprite: true };
+      const labelScaleFactor = Math.max(0.75, Math.min(1.6, this.deviceScaleMultiplier * 0.42));
+      label.scale.multiplyScalar(labelScaleFactor);
+      label.position.set(0, 1.15 * userModelScale + 0.8, 0);
+      label.visible = Boolean(this.showLabels);
+      holder.add(label);
 
       this.tagDescendantDeviceId(holder, dev.id);
       this.devicesGroup.add(holder);
       this.deviceMeshMap.set(dev.id, holder);
 
       // Wireless Coverage 3D Volume (Dome + Ground Footprint)
-      if (this.showCoverage && dev.wirelessCoverage?.enabled) {
+      if (dev.wirelessCoverage?.enabled) {
         const covRadius = Math.max(2, Number(dev.wirelessCoverage.radiusMeters) || 25);
         const covColor = dev.wirelessCoverage.color || '#76c457';
         const covOpacity = typeof dev.wirelessCoverage.opacity === 'number' ? dev.wirelessCoverage.opacity : 0.16;
@@ -2003,6 +1965,7 @@ export class Map3DEngine {
         });
         const disc = new THREE.Mesh(discGeo, discMat);
         disc.position.set(baseX, 0.06, baseZ);
+        disc.userData = { deviceId: dev.id, isCoverageOverlay: true };
         this.coverageGroup.add(disc);
 
         const ringGeo = new THREE.RingGeometry(covRadius - 0.35, covRadius, 48);
@@ -2015,6 +1978,7 @@ export class Map3DEngine {
         });
         const ring = new THREE.Mesh(ringGeo, ringMat);
         ring.position.set(baseX, 0.08, baseZ);
+        ring.userData = { deviceId: dev.id, isCoverageOverlay: true };
         this.coverageGroup.add(ring);
       }
     });
@@ -2023,6 +1987,7 @@ export class Map3DEngine {
     }
     this.updateAvatarDeviceLabelsVisibility?.();
     this.syncTransformGizmo?.();
+    this.apply3dViewFilters?.();
   }
 
   isLegacyProceduralPortSet(ports) {
@@ -2558,7 +2523,9 @@ export class Map3DEngine {
             new THREE.Vector3(wpVec.x, 0.01, wpVec.z),
             wpVec.clone()
           ]);
-          this.cablesGroup.add(new THREE.Line(stemGeo, stemMat));
+          const stemLine = new THREE.Line(stemGeo, stemMat);
+          stemLine.userData = { cableId: cable.id };
+          this.cablesGroup.add(stemLine);
         });
 
         // Translucent Pen-Tool control polygon + per-segment "+" add-waypoint handles
@@ -2566,7 +2533,9 @@ export class Map3DEngine {
           const ctrlPts = [srcBootTipWorld.clone(), ...waypointMarkers, dstBootTipWorld.clone()];
           const ctrlGeo = new THREE.BufferGeometry().setFromPoints(ctrlPts);
           const ctrlMat = new THREE.LineBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.55 });
-          this.cablesGroup.add(new THREE.Line(ctrlGeo, ctrlMat));
+          const ctrlLine = new THREE.Line(ctrlGeo, ctrlMat);
+          ctrlLine.userData = { cableId: cable.id };
+          this.cablesGroup.add(ctrlLine);
 
           const midGeo = new THREE.SphereGeometry(Math.max(0.065, radius * 1.9, 0.028 * avgPortScale), 10, 10);
           const midMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.9 });
@@ -2615,6 +2584,7 @@ export class Map3DEngine {
         }
       }
     }
+    this.apply3dViewFilters?.();
   }
 
   tagDescendantDeviceId(obj, deviceId) {
@@ -2671,12 +2641,12 @@ export class Map3DEngine {
       return;
     }
 
-    // 1. Raycast Devices & Cables (skipped when Studio Bangunan dims/ghosts devices)
-    const devHits = !this.workspaceGhostDevices
-      ? this.raycaster.intersectObjects(this.devicesGroup.children, true)
+    // 1. Raycast Devices & Cables (skipped when Studio Bangunan dims/ghosts devices or layer hidden)
+    const devHits = !this.workspaceGhostDevices && this.devicesGroup?.visible
+      ? this._filterVisibleRayHits(this.raycaster.intersectObjects(this.devicesGroup.children, true))
       : [];
-    const cableHitsPre = !this.workspaceGhostDevices && stateManager.getMode() !== 'draw-cable'
-      ? this.raycaster.intersectObjects(this.cablesGroup.children, true)
+    const cableHitsPre = !this.workspaceGhostDevices && this.cablesGroup?.visible && stateManager.getMode() !== 'draw-cable'
+      ? this._filterVisibleRayHits(this.raycaster.intersectObjects(this.cablesGroup.children, true))
       : [];
 
     if (cableHitsPre.length > 0 && (
@@ -2909,7 +2879,9 @@ export class Map3DEngine {
     }
 
     // 3. Check Cable selection
-    const cableHits = this.raycaster.intersectObjects(this.cablesGroup.children, true);
+    const cableHits = !this.workspaceGhostDevices && this.cablesGroup?.visible
+      ? this._filterVisibleRayHits(this.raycaster.intersectObjects(this.cablesGroup.children, true))
+      : [];
     if (cableHits.length > 0) {
       const cabId = cableHits[0].object.userData?.cableId;
       if (cabId) {
@@ -2997,11 +2969,11 @@ export class Map3DEngine {
     }
     this.raycaster.setFromCamera(this.pointer, this.camera);
 
-    const devHits = !this.workspaceGhostDevices
-      ? this.raycaster.intersectObjects(this.devicesGroup.children, true)
+    const devHits = !this.workspaceGhostDevices && this.devicesGroup?.visible
+      ? this._filterVisibleRayHits(this.raycaster.intersectObjects(this.devicesGroup.children, true))
       : [];
-    const cableHits = !this.workspaceGhostDevices
-      ? this.raycaster.intersectObjects(this.cablesGroup.children, true)
+    const cableHits = !this.workspaceGhostDevices && this.cablesGroup?.visible
+      ? this._filterVisibleRayHits(this.raycaster.intersectObjects(this.cablesGroup.children, true))
       : [];
 
     // 1. Prioritize Right-click on foreground 3D Cable / Handle -> Cable Context Menu
@@ -3049,10 +3021,11 @@ export class Map3DEngine {
     }
 
     // 3. Right-click on Room / Ground -> Canvas Context Menu with converted 2D norm coords
-    const envHits = this.raycaster.intersectObjects(
-      [...this.roomsGroup.children, ...this.objects3dGroup.children, ...this.groundGroup.children],
-      true
-    );
+    const envRoots = [];
+    if (this.roomsGroup?.visible) envRoots.push(...this.roomsGroup.children);
+    if (this.objects3dGroup?.visible) envRoots.push(...this.objects3dGroup.children);
+    if (this.groundGroup?.visible) envRoots.push(...this.groundGroup.children);
+    const envHits = this._filterVisibleRayHits(this.raycaster.intersectObjects(envRoots, true));
     let hitPoint = envHits.length > 0 ? envHits[0].point : null;
     if (!hitPoint) {
       const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -3080,11 +3053,11 @@ export class Map3DEngine {
     this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
     this.raycaster.setFromCamera(this.pointer, this.camera);
 
-    const devHits = !this.workspaceGhostDevices
-      ? this.raycaster.intersectObjects(this.devicesGroup.children, true)
+    const devHits = !this.workspaceGhostDevices && this.devicesGroup?.visible
+      ? this._filterVisibleRayHits(this.raycaster.intersectObjects(this.devicesGroup.children, true))
       : [];
-    const cableHits = !this.workspaceGhostDevices
-      ? this.raycaster.intersectObjects(this.cablesGroup.children, true)
+    const cableHits = !this.workspaceGhostDevices && this.cablesGroup?.visible
+      ? this._filterVisibleRayHits(this.raycaster.intersectObjects(this.cablesGroup.children, true))
       : [];
 
     // Priority: Double-click on Cable / Waypoint -> Delete Waypoint or Insert Smart Pen-Tool Point
@@ -3361,10 +3334,24 @@ export class Map3DEngine {
     return entries;
   }
 
+  _isObjectAndAncestorsVisible(obj) {
+    let cur = obj;
+    while (cur) {
+      if (cur.visible === false) return false;
+      cur = cur.parent;
+    }
+    return true;
+  }
+
+  _filterVisibleRayHits(hits) {
+    if (!Array.isArray(hits) || hits.length === 0) return hits;
+    return hits.filter((h) => h?.object && this._isObjectAndAncestorsVisible(h.object));
+  }
+
   findObject3dHit(raycaster = this.raycaster, { includeLocked = false } = {}) {
-    if (!this.objects3dGroup || this.objects3dGroup.children.length === 0) return null;
+    if (!this.objects3dGroup || !this.objects3dGroup.visible || this.objects3dGroup.children.length === 0) return null;
     if (!includeLocked && this.roomsLocked) return null;
-    const hits = raycaster.intersectObjects(this.objects3dGroup.children, true);
+    const hits = this._filterVisibleRayHits(raycaster.intersectObjects(this.objects3dGroup.children, true));
     for (let i = 0; i < hits.length; i++) {
       let curr = hits[i].object;
       let gizmoType = null;
@@ -3385,9 +3372,9 @@ export class Map3DEngine {
   }
 
   findRoom3dHit(raycaster = this.raycaster, { includeLocked = false } = {}) {
-    if (!this.roomsGroup || this.roomsGroup.children.length === 0) return null;
+    if (!this.roomsGroup || !this.roomsGroup.visible || this.roomsGroup.children.length === 0) return null;
     if (!includeLocked && this.roomsLocked) return null;
-    const hits = raycaster.intersectObjects(this.roomsGroup.children, true);
+    const hits = this._filterVisibleRayHits(raycaster.intersectObjects(this.roomsGroup.children, true));
     for (let i = 0; i < hits.length; i++) {
       let curr = hits[i].object;
       let gizmoType = null;
@@ -3408,8 +3395,8 @@ export class Map3DEngine {
   }
 
   findRoad3dHit(raycaster = this.raycaster) {
-    if (!this.roadsGroup || this.roadsGroup.children.length === 0) return null;
-    const hits = raycaster.intersectObjects(this.roadsGroup.children, true);
+    if (!this.roadsGroup || !this.roadsGroup.visible || this.roadsGroup.children.length === 0) return null;
+    const hits = this._filterVisibleRayHits(raycaster.intersectObjects(this.roadsGroup.children, true));
     for (let i = 0; i < hits.length; i++) {
       let curr = hits[i].object;
       let gizmoType = null;
@@ -4311,8 +4298,8 @@ export class Map3DEngine {
     this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
     this.raycaster.setFromCamera(this.pointer, this.camera);
 
-    const devHits = !this.workspaceGhostDevices
-      ? this.raycaster.intersectObjects(this.devicesGroup.children, true)
+    const devHits = !this.workspaceGhostDevices && this.devicesGroup?.visible
+      ? this._filterVisibleRayHits(this.raycaster.intersectObjects(this.devicesGroup.children, true))
       : [];
     if (devHits.length === 0) {
       // If user clicked a 3D Builder object in Move mode, drag that object (+ mounted devices)
@@ -4776,8 +4763,8 @@ export class Map3DEngine {
     this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
     this.raycaster.setFromCamera(this.pointer, this.camera);
 
-    const devHits = !this.workspaceGhostDevices
-      ? this.raycaster.intersectObjects(this.devicesGroup.children, true)
+    const devHits = !this.workspaceGhostDevices && this.devicesGroup?.visible
+      ? this._filterVisibleRayHits(this.raycaster.intersectObjects(this.devicesGroup.children, true))
       : [];
     if (devHits.length === 0) {
       const objHit = this.findObject3dHit(this.raycaster);
@@ -5171,7 +5158,6 @@ export class Map3DEngine {
   }
 
   tryLockAvatarPointer() {
-    if (this.buildPlacementConfig?.buildModeEnabled) return;
     if (this._touchActiveInSession || isMobileTouchDevice()) return;
     if (typeof document === 'undefined' || !this.renderer?.domElement) return;
     if (document.pointerLockElement === this.renderer.domElement) return;
@@ -6039,6 +6025,7 @@ export class Map3DEngine {
       heightMeters: h,
       tppScale,
       fppScale,
+      carryElevationOffset: 0,
       mountedPeers
     });
 
@@ -6102,6 +6089,7 @@ export class Map3DEngine {
       heightMeters: h,
       tppScale,
       fppScale,
+      carryElevationOffset: 0,
       portInitials: this._collectDevicePortInitials?.(dev.id) || [],
       mountedPeers: []
     });
@@ -6363,9 +6351,11 @@ export class Map3DEngine {
         dropWorld = this.normToWorld ? this.normToWorld(dropNorm.normX, dropNorm.normY) : { x: rawDropX, z: rawDropZ };
         const defaultElev = Number(getDefaultSpatial3d(dev?.type)?.elevationMeters) || 1.65;
         const avatarBaseY = Math.max(0, Number(this.avatarState?.y) || 0);
-        dropElev = (this.avatarPerspective === 'fpp' || useAimTarget)
+        const rawWallElev = (this.avatarPerspective === 'fpp' || useAimTarget)
           ? clamp(devHit.elevationMeters, 0.25, 11.5)
-          : Number(clamp(avatarBaseY + Math.max(1.35, defaultElev), 0.35, 11.5).toFixed(2));
+          : clamp(avatarBaseY + Math.max(1.35, defaultElev), 0.35, 11.5);
+        const carryZ = Number(item.carryElevationOffset) || 0;
+        dropElev = Number(clamp(rawWallElev + carryZ, 0, 20).toFixed(2));
         targetRotY = devHit.rotationY;
         wallMountedThisItem = true;
         mountedOnWallCount += 1;
@@ -6388,9 +6378,11 @@ export class Map3DEngine {
         }
         dropNorm = this.worldToNorm ? this.worldToNorm(rawDropX, rawDropZ) : { normX: 0.5, normY: 0.5 };
         dropWorld = this.normToWorld ? this.normToWorld(dropNorm.normX, dropNorm.normY) : { x: rawDropX, z: rawDropZ };
-        dropElev = surfaceSnapOn
+        const carryZ = Number(item.carryElevationOffset) || 0;
+        const rawBaseElev = surfaceSnapOn
           ? this.getCarriedDropSupportElevation(dropWorld.x, dropWorld.z, item.objId || item.devId)
-          : Number(Math.max(0, Number(this.avatarState?.y) || 0).toFixed(2));
+          : Math.max(0, Number(this.avatarState?.y) || 0);
+        dropElev = Number(clamp(rawBaseElev + carryZ, 0, 20).toFixed(2));
 
         if (!this.buildPlacementConfig?.allowClipping && this.resolveBuildPlacementCollision && item.kind === 'device') {
           const colRes = this.resolveBuildPlacementCollision(dropWorld.x, dropWorld.z, dropElev, {
@@ -6402,9 +6394,10 @@ export class Map3DEngine {
           if (colRes.collided) {
             dropNorm = this.worldToNorm ? this.worldToNorm(colRes.x, colRes.z) : dropNorm;
             dropWorld = this.normToWorld ? this.normToWorld(dropNorm.normX, dropNorm.normY) : { x: colRes.x, z: colRes.z };
-            if (surfaceSnapOn) {
-              dropElev = this.getCarriedDropSupportElevation(dropWorld.x, dropWorld.z, item.objId || item.devId);
-            }
+            const bumpedBase = surfaceSnapOn
+              ? this.getCarriedDropSupportElevation(dropWorld.x, dropWorld.z, item.objId || item.devId)
+              : Math.max(0, Number(this.avatarState?.y) || 0);
+            dropElev = Number(clamp(bumpedBase + carryZ, 0, 20).toFixed(2));
           }
         }
       }
@@ -6643,35 +6636,54 @@ export class Map3DEngine {
     return { devices: [], fromCarried: false };
   }
 
-  adjustAvatarTargetOrCarriedElevation(deltaMeters = 0.25) {
-    const carriedDevs = (this.carriedObjects || [])
-      .filter((c) => c?.kind === 'device' && c.devId)
-      .map((c) => this.deviceManager?.getDeviceById?.(c.devId))
-      .filter((d) => d && !d.layerLocked);
+  /** Resets any manual Z elevation offset on carried items back to surface-snap height (0 offset). */
+  resetCarriedElevationOffset() {
+    if (!Array.isArray(this.carriedObjects) || this.carriedObjects.length === 0) return false;
+    this.carriedObjects.forEach((item) => {
+      if (item) item.carryElevationOffset = 0;
+    });
+    this.syncSimplePlacementIndicator?.();
+    this.renderHouseFlipperPromptHud?.();
+    const aim = this.computeAvatarAimPlacementTarget?.({ item: this.carriedObjects[this.carriedObjects.length - 1] });
+    this.showStatusHint(`Tinggi Z direset ke permukaan (${Number(aim?.elevationMeters ?? 0).toFixed(2)}m)`);
+    return true;
+  }
 
-    let targets = carriedDevs;
-    if (targets.length === 0) {
-      const targetId = (this.avatarState?.nearestDist <= 10 ? this.avatarState.nearestDeviceId : null)
-        || this.deviceManager?.selectedDeviceId
-        || this.avatarState?.nearestDeviceId;
-      const dev = targetId ? this.deviceManager?.getDeviceById?.(targetId) : null;
-      if (dev && !dev.layerLocked) targets = [dev];
+  adjustAvatarTargetOrCarriedElevation(deltaMeters = 0.25) {
+    const step = Number(deltaMeters) || 0;
+    if (Array.isArray(this.carriedObjects) && this.carriedObjects.length > 0) {
+      const topItem = this.carriedObjects[this.carriedObjects.length - 1];
+      const baseAim = this.computeAvatarAimPlacementTarget?.({ item: topItem, includeCarryOffset: false });
+      const baseElev = Math.max(0, Number(baseAim?.baseElevationMeters ?? baseAim?.elevationMeters) || 0);
+      let finalTargetElev = baseElev;
+      this.carriedObjects.forEach((item) => {
+        if (!item) return;
+        const prevOff = Number(item.carryElevationOffset) || 0;
+        const nextOff = clamp(prevOff + step, -baseElev, 20 - baseElev);
+        item.carryElevationOffset = Number(nextOff.toFixed(2));
+      });
+      const updatedAim = this.computeAvatarAimPlacementTarget?.({ item: topItem, includeCarryOffset: true });
+      finalTargetElev = Number(updatedAim?.elevationMeters ?? clamp(baseElev + (topItem?.carryElevationOffset || 0), 0, 20));
+      this.syncSimplePlacementIndicator?.();
+      this.renderHouseFlipperPromptHud?.();
+      this.showStatusHint(`Ketinggian Z penempatan: ${finalTargetElev.toFixed(2)}m`);
+      return true;
     }
 
-    if (targets.length === 0) {
+    const targetId = (this.avatarState?.nearestDist <= 10 ? this.avatarState.nearestDeviceId : null)
+      || this.deviceManager?.selectedDeviceId
+      || this.avatarState?.nearestDeviceId;
+    const dev = targetId ? this.deviceManager?.getDeviceById?.(targetId) : null;
+    if (!dev || dev.layerLocked) {
       this.showStatusHint('Dekati atau bawa perangkat terlebih dahulu untuk ubah ketinggian Z.');
       return false;
     }
 
-    let lastElev = 0;
-    targets.forEach((dev) => {
-      const baseSp = { ...getDefaultSpatial3d(dev.type), ...(dev.spatial3d || {}) };
-      const curElev = Number(baseSp.elevationMeters) || 0;
-      const nextElev = clamp(Number((curElev + deltaMeters).toFixed(2)), 0, 20);
-      lastElev = nextElev;
-      this.deviceManager?.updateDevice?.(dev.id, {
-        spatial3d: { ...baseSp, elevationMeters: nextElev }
-      });
+    const baseSp = { ...getDefaultSpatial3d(dev.type), ...(dev.spatial3d || {}) };
+    const curElev = Number(baseSp.elevationMeters) || 0;
+    const nextElev = clamp(Number((curElev + step).toFixed(2)), 0, 20);
+    this.deviceManager?.updateDevice?.(dev.id, {
+      spatial3d: { ...baseSp, elevationMeters: nextElev }
     });
 
     if (this.isActive && this.isInitialized) {
@@ -6680,11 +6692,9 @@ export class Map3DEngine {
     }
     this.updateAvatarProximityHud();
     this.renderAvatarSimDeckList?.();
-    this.showStatusHint(
-      targets.length === 1
-        ? `Ketinggian "${targets[0].name}": ${lastElev.toFixed(2)}m`
-        : `Ketinggian ${targets.length} perangkat diubah (${lastElev.toFixed(2)}m)`
-    );
+    this.syncSimplePlacementIndicator?.();
+    this.renderHouseFlipperPromptHud?.();
+    this.showStatusHint(`Ketinggian "${dev.name}": ${nextElev.toFixed(2)}m`);
     return true;
   }
 
@@ -8162,8 +8172,7 @@ export class Map3DEngine {
       </div>
       <div id="avatar-sim-build-panel" class="avatar-sim-build-panel ${isBuildOpen ? '' : 'hidden'}">
         <div class="build-mode-header">
-          <span class="avatar-sim-strip-label">${uiIcon('wrench', 12)} Build / Placement Mode (Klik kanan+seret untuk putar kamera)</span>
-          <span class="avatar-sim-strip-label">${uiIcon('wrench', 12)} Build / Placement Mode (Gerak/seret mouse putar kamera • Alt jeda kursor)</span>
+          <span class="avatar-sim-strip-label">${uiIcon('wrench', 12)} Build Mode</span>
           <span id="build-mode-target-badge" class="sim-inspector-badge">Target: --</span>
         </div>
         <div class="build-mode-grid">
@@ -8286,8 +8295,8 @@ export class Map3DEngine {
           </select>
           <button type="button" id="btn-avatar-next-device" class="avatar-step-btn" title="Teleport ke perangkat berikutnya">${uiIcon('chevron-right', 12)}</button>
         </div>
-        <button type="button" id="btn-avatar-carry-pickup" class="sim-action-btn is-carry" title="Angkat / tambah objek 3D terdekat agar mudah dipindahkan (E)">Angkat (E)</button>
-        <button type="button" id="btn-avatar-carry-drop" class="sim-action-btn is-drop hidden" title="Taruh 1 objek (Q) • Taruh Semua (Shift+Q)">Taruh (Q)</button>
+        <button type="button" id="btn-avatar-carry-pickup" class="sim-action-btn is-carry" title="Angkat (E) • Tambah (Shift+E)">Angkat (E)</button>
+        <button type="button" id="btn-avatar-carry-drop" class="sim-action-btn is-drop hidden" title="Taruh (E / Q) • Taruh Semua (Shift+Q)">Taruh (E)</button>
         <button type="button" id="btn-avatar-inspect-nearest" class="sim-action-btn is-primary" title="Fokus & Inspeksi Port perangkat terdekat (F)">Inspeksi Port (F)</button>
         <button type="button" id="btn-avatar-exit" class="sim-action-btn is-exit" title="Keluar dari Mode Teknisi (G)">Keluar</button>
       </div>
@@ -8961,11 +8970,11 @@ export class Map3DEngine {
       const badge = hudEl?.querySelector('#build-mode-target-badge');
       if (badge) {
         const targetDev = this.getTransformGizmoTargetDevice();
-        badge.textContent = targetDev ? `Target: ${targetDev.name}` : 'Target: (Dekati / Klik Perangkat)';
+        badge.textContent = targetDev ? `Target: ${targetDev.name}` : 'Target: --';
       }
     }
 
-    // Sync dedicated Studio Bangunan 3D floating bar when rendered in DOM
+    // Sync dedicated Edit Bangunan 3D floating bar when rendered in DOM
     const studioBar = document.getElementById('hud-3d-build-studio');
     if (studioBar) {
       const sGrid = studioBar.querySelector('#btn-studio-grid-snap');
@@ -8974,7 +8983,10 @@ export class Map3DEngine {
         sGrid.innerHTML = `${uiIcon('grid', 12)} <span>${cfg.gridSnapEnabled ? 'Snap: ON' : 'Bebas'}</span>`;
       }
       const sGridSz = studioBar.querySelector('#select-studio-grid-size');
-      if (sGridSz) sGridSz.value = String(cfg.gridSnapMeters);
+      if (sGridSz) {
+        sGridSz.value = String(cfg.gridSnapMeters);
+        sGridSz.style.display = cfg.gridSnapEnabled ? '' : 'none';
+      }
       const sAngle = studioBar.querySelector('#select-studio-angle-snap');
       if (sAngle) sAngle.value = String(cfg.angleSnapDeg);
       const sCol = studioBar.querySelector('#btn-studio-collision');
@@ -8992,7 +9004,10 @@ export class Map3DEngine {
         sGiz.innerHTML = `${uiIcon('move', 12)} <span>${cfg.gizmoEnabled ? 'Gizmo: ON' : 'Gizmo: OFF'}</span>`;
       }
       const sGizMode = studioBar.querySelector('#select-studio-gizmo-mode');
-      if (sGizMode) sGizMode.value = cfg.gizmoMode;
+      if (sGizMode) {
+        sGizMode.value = cfg.gizmoMode;
+        sGizMode.style.display = cfg.gizmoEnabled ? '' : 'none';
+      }
     }
   }
 
@@ -9212,7 +9227,7 @@ export class Map3DEngine {
   }
 
   /** Compute where the held object will land along the crosshair/camera ray (House-Flipper aim target). */
-  computeAvatarAimPlacementTarget({ item = null } = {}) {
+  computeAvatarAimPlacementTarget({ item = null, includeCarryOffset = true } = {}) {
     const ax = Number(this.avatarState?.x) || 0;
     const ay = Math.max(0, Number(this.avatarState?.y) || 0);
     const az = Number(this.avatarState?.z) || 0;
@@ -9233,6 +9248,7 @@ export class Map3DEngine {
     const activeItem = item || (Array.isArray(this.carriedObjects) && this.carriedObjects.length > 0
       ? this.carriedObjects[this.carriedObjects.length - 1]
       : null);
+    const carryZOffset = includeCarryOffset ? (Number(activeItem?.carryElevationOffset) || 0) : 0;
 
     // 1) Check direct 3D Wall mount if carrying a network device and surface snap is active
     if (activeItem?.kind === 'device' && surfaceSnapOn && this.find3DWallMountTarget) {
@@ -9244,11 +9260,13 @@ export class Map3DEngine {
         ? this.find3DWallMountTarget(wallOrigin, rayDir, 6.8, { device: dev, minHitY: 0.25, maxHitY: 12.0 })
         : null;
       if (wallHit) {
+        const rawWallElev = clamp(wallHit.elevationMeters, 0.25, 11.5);
         return {
           mode: 'wall',
           worldX: wallHit.worldPos.x,
           worldZ: wallHit.worldPos.z,
-          elevationMeters: clamp(wallHit.elevationMeters, 0.25, 11.5),
+          baseElevationMeters: Number(rawWallElev.toFixed(2)),
+          elevationMeters: Number(clamp(rawWallElev + carryZOffset, 0, 20).toFixed(2)),
           rotationY: wallHit.rotationY,
           worldNormal: wallHit.worldNormal,
           hitPoint: wallHit.point
@@ -9263,16 +9281,19 @@ export class Map3DEngine {
     if (this.raycaster && this.scene) {
       const carriedIds = new Set((this.carriedObjects || []).map((c) => c.objId || c.devId));
       const surfaceRoots = [];
-      this.object3dMeshMap?.forEach((grp, id) => {
-        if (grp && !carriedIds.has(id)) surfaceRoots.push(grp);
-      });
-      if (this.roomsGroup?.children?.length > 0) {
+      if (this.objects3dGroup?.visible) {
+        this.object3dMeshMap?.forEach((grp, id) => {
+          if (grp && grp.visible !== false && !carriedIds.has(id)) surfaceRoots.push(grp);
+        });
+      }
+      if (this.roomsGroup?.visible && this.roomsGroup?.children?.length > 0) {
         surfaceRoots.push(...this.roomsGroup.children);
       }
 
       if (surfaceRoots.length > 0) {
+        if (this.camera) this.raycaster.camera = this.camera;
         this.raycaster.set(rayOrigin, rayDir);
-        const hits = this.raycaster.intersectObjects(surfaceRoots, true);
+        const hits = this._filterVisibleRayHits(this.raycaster.intersectObjects(surfaceRoots, true));
         const nMat = new THREE.Matrix3();
         const wNorm = new THREE.Vector3();
         for (const h of hits) {
@@ -9327,6 +9348,8 @@ export class Map3DEngine {
     const dropElev = surfaceSnapOn && this.getCarriedDropSupportElevation
       ? this.getCarriedDropSupportElevation(hitWorldX, hitWorldZ, activeItem?.objId || activeItem?.devId || '')
       : ay;
+    const baseElev = Math.max(0, Number(dropElev) || 0);
+    const finalElev = clamp(baseElev + carryZOffset, 0, 20);
     const worldRotY = ((yaw * 180) / Math.PI) + (Number(activeItem?.relativeYawOffset) || 0);
     const normRotY = this.applyBuildAngleSnap
       ? this.applyBuildAngleSnap(worldRotY)
@@ -9336,7 +9359,8 @@ export class Map3DEngine {
       mode: 'surface',
       worldX: Number(hitWorldX.toFixed(3)),
       worldZ: Number(hitWorldZ.toFixed(3)),
-      elevationMeters: Number(Math.max(0, dropElev).toFixed(2)),
+      baseElevationMeters: Number(baseElev.toFixed(2)),
+      elevationMeters: Number(finalElev.toFixed(2)),
       rotationY: normRotY
     };
   }
@@ -9384,7 +9408,32 @@ export class Map3DEngine {
     arrow.renderOrder = 951;
     arrow.userData = { isSimplePlacementIndicator: true, part: 'arrow' };
 
-    this.simplePlacementIndicatorGroup.add(innerDisc, outerRing, arrow);
+    // Plumb-line stem & floor reference ring when elevated above ground/surface
+    const stemMat = new THREE.MeshBasicMaterial({
+      color: 0x22c55e,
+      transparent: true,
+      opacity: 0.55,
+      depthWrite: false
+    });
+    const elevStem = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1, 8), stemMat);
+    elevStem.visible = false;
+    elevStem.renderOrder = 948;
+    elevStem.userData = { isSimplePlacementIndicator: true, part: 'elevStem' };
+
+    const footMat = new THREE.MeshBasicMaterial({
+      color: 0x22c55e,
+      transparent: true,
+      opacity: 0.45,
+      side: THREE.DoubleSide,
+      depthWrite: false
+    });
+    const elevFoot = new THREE.Mesh(new THREE.RingGeometry(0.16, 0.24, 24), footMat);
+    elevFoot.rotation.x = -Math.PI / 2;
+    elevFoot.visible = false;
+    elevFoot.renderOrder = 948;
+    elevFoot.userData = { isSimplePlacementIndicator: true, part: 'elevFoot' };
+
+    this.simplePlacementIndicatorGroup.add(innerDisc, outerRing, arrow, elevStem, elevFoot);
     return this.simplePlacementIndicatorGroup;
   }
 
@@ -9399,6 +9448,27 @@ export class Map3DEngine {
       this.scene.add(group);
     }
 
+    const updatePlumbStem = (stemHeightMeters, radiusScaleVal) => {
+      const stemChild = group.children.find((c) => c?.userData?.part === 'elevStem');
+      const footChild = group.children.find((c) => c?.userData?.part === 'elevFoot');
+      const len = Math.max(0, Number(stemHeightMeters) || 0);
+      const rs = Math.max(0.1, Number(radiusScaleVal) || 1);
+      if (len > 0.05) {
+        if (stemChild) {
+          stemChild.visible = true;
+          stemChild.scale.set(1 / rs, len / rs, 1 / rs);
+          stemChild.position.set(0, (-len * 0.5) / rs, 0);
+        }
+        if (footChild) {
+          footChild.visible = true;
+          footChild.position.set(0, -len / rs + 0.02, 0);
+        }
+      } else {
+        if (stemChild) stemChild.visible = false;
+        if (footChild) footChild.visible = false;
+      }
+    };
+
     // 1) Carrying items in Mode Teknisi -> show live landing target under crosshair/camera aim
     if (this.avatarMode && !this.simulatorFocusedDeviceId && Array.isArray(this.carriedObjects) && this.carriedObjects.length > 0) {
       const topItem = this.carriedObjects[this.carriedObjects.length - 1];
@@ -9408,13 +9478,18 @@ export class Map3DEngine {
       if (aim.mode === 'wall' && aim.worldNormal) {
         group.position.set(aim.worldX, aim.elevationMeters, aim.worldZ);
         group.rotation.set(Math.PI / 2, (aim.rotationY * Math.PI) / 180, 0, 'YXZ');
+        updatePlumbStem(0, radiusScale);
       } else {
         group.position.set(aim.worldX, aim.elevationMeters + 0.03, aim.worldZ);
         group.rotation.set(0, (aim.rotationY * Math.PI) / 180, 0, 'YXZ');
+        const stemHeight = Math.max(0, aim.elevationMeters - (aim.baseElevationMeters ?? 0));
+        updatePlumbStem(stemHeight > 0.05 ? stemHeight : aim.elevationMeters, radiusScale);
       }
       group.visible = true;
       return;
     }
+
+    updatePlumbStem(0, 1);
 
     // 2) Hovering / within easy grab reach in Mode Teknisi + Move tool -> highlight target floor ring
     if (this.avatarMode && !this.simulatorFocusedDeviceId && this.navTool === 'move') {
@@ -9478,6 +9553,7 @@ export class Map3DEngine {
 
     if (!tipEl.dataset.hfBound) {
       tipEl.dataset.hfBound = '1';
+      tipEl.addEventListener('pointerdown', (ev) => ev.stopPropagation());
       tipEl.addEventListener('click', (ev) => {
         const btn = ev.target?.closest?.('[data-hf-action]');
         if (!btn) return;
@@ -9485,6 +9561,12 @@ export class Map3DEngine {
         const act = btn.dataset.hfAction;
         if (act === 'rotate') {
           this.rotateSelectedIn3D({ dY: 45 });
+        } else if (act === 'z-up') {
+          this.adjustAvatarTargetOrCarriedElevation(ev.shiftKey ? 0.1 : 0.25);
+        } else if (act === 'z-down') {
+          this.adjustAvatarTargetOrCarriedElevation(ev.shiftKey ? -0.1 : -0.25);
+        } else if (act === 'z-reset') {
+          this.resetCarriedElevationOffset();
         } else if (act === 'drop') {
           this.dropCarriedObjectsFromAvatar({ dropAll: Boolean(ev.shiftKey), useAimTarget: true });
         } else if (act === 'pickup') {
@@ -9506,18 +9588,20 @@ export class Map3DEngine {
     if (this.avatarMode && Array.isArray(this.carriedObjects) && this.carriedObjects.length > 0) {
       const topItem = this.carriedObjects[this.carriedObjects.length - 1];
       const aim = this.computeAvatarAimPlacementTarget({ item: topItem });
-      const dropLabel = aim?.mode === 'wall' ? 'Tempel Dinding (Klik / Q)' : 'Taruh di Sini (Klik / Q)';
-      const key = `carry:${topItem.name}:${this.carriedObjects.length}:${aim?.mode || 'surface'}`;
+      const targetElevStr = Number(aim?.elevationMeters ?? 0).toFixed(2);
+      const hasCustomZ = Math.abs(Number(topItem?.carryElevationOffset) || 0) > 0.005;
+      const countSuffix = this.carriedObjects.length > 1 ? ` (${this.carriedObjects.length})` : '';
+      const key = `carry:${this.carriedObjects.length}:${targetElevStr}:${hasCustomZ ? 1 : 0}`;
       if (this._lastHouseFlipperHudKey !== key) {
         this._lastHouseFlipperHudKey = key;
-        const escName = this.escapeHudHtml(topItem.name || 'Alat');
         tipEl.className = 'hud-3d-houseflipper-tip is-carrying';
         tipEl.style.display = 'inline-flex';
         tipEl.innerHTML = `
-          <span class="hf-tip-name">${escName}${this.carriedObjects.length > 1 ? ` (+${this.carriedObjects.length - 1})` : ''}</span>
-          <span class="hf-tip-keys">Arahkan ke meja / lantai / dinding</span>
-          <button type="button" class="hf-tip-btn" data-hf-action="rotate">Putar 45° (R)</button>
-          <button type="button" class="hf-tip-btn is-primary" data-hf-action="drop">${dropLabel}</button>
+          <button type="button" class="hf-tip-btn" data-hf-action="z-down" title="Turun Z (-0.25m) • PgDn / ↓ / Shift+Scroll">Z-</button>
+          <button type="button" class="hf-tip-zval ${hasCustomZ ? 'is-custom' : ''}" data-hf-action="z-reset" title="Reset Z ke permukaan">Z ${targetElevStr}m</button>
+          <button type="button" class="hf-tip-btn" data-hf-action="z-up" title="Naik Z (+0.25m) • PgUp / ↑ / Shift+Scroll">Z+</button>
+          <button type="button" class="hf-tip-btn" data-hf-action="rotate" title="Putar 45° (R)">Putar (R)</button>
+          <button type="button" class="hf-tip-btn is-primary" data-hf-action="drop" title="Taruh (Klik / E)">Taruh (Klik / E)${countSuffix}</button>
         `;
       }
       return;
@@ -9534,7 +9618,7 @@ export class Map3DEngine {
           tipEl.style.display = 'inline-flex';
           tipEl.innerHTML = `
             <span class="hf-tip-name">${escName}</span>
-            <button type="button" class="hf-tip-btn is-primary" data-hf-action="pickup">Angkat &amp; Pindah (Klik / E)</button>
+            <button type="button" class="hf-tip-btn is-primary" data-hf-action="pickup">Angkat (Klik / E)</button>
           `;
         }
         return;
@@ -9552,8 +9636,7 @@ export class Map3DEngine {
           tipEl.style.display = 'inline-flex';
           tipEl.innerHTML = `
             <span class="hf-tip-name">${this.escapeHudHtml(dev.name || 'Alat')}</span>
-            <span class="hf-tip-keys">Seret langsung untuk memindah • Panah : Geser</span>
-            <button type="button" class="hf-tip-btn" data-hf-action="rotate">Putar 45° (R)</button>
+            <button type="button" class="hf-tip-btn" data-hf-action="rotate">Putar (R)</button>
           `;
         }
         return;
@@ -10558,17 +10641,205 @@ export class Map3DEngine {
   }
 
   setShowLabels(enabled) {
-    this.showLabels = Boolean(enabled);
-    if (this.isActive) {
-      this.syncDevices();
+    const val = Boolean(enabled);
+    this.showLabels = val;
+    if (stateManager.state?.layers && stateManager.state.layers.annotations !== val) {
+      stateManager.toggleLayer('annotations', val);
     }
+    if (typeof document !== 'undefined') {
+      const cb = document.getElementById('layer-toggle-annotations');
+      if (cb && cb.checked !== val) cb.checked = val;
+      document.getElementById('btn-3d-labels')?.classList.toggle('active', val);
+    }
+    this.apply3dViewFilters();
   }
 
   setShowCoverage(enabled) {
-    this.showCoverage = Boolean(enabled);
-    if (this.isActive) {
-      this.syncDevices();
+    const val = Boolean(enabled);
+    this.showCoverage = val;
+    this.viewFilters.showCoverage = val;
+    this.apply3dViewFilters();
+  }
+
+  /** Update 3D scene quick filters (CCTV, Fiber, Wireless, Coverage, Selection Dimming) and apply immediately. */
+  setViewFilters(partialFilters = {}) {
+    this.viewFilters = {
+      ...this.viewFilters,
+      ...(partialFilters || {})
+    };
+    if (Object.prototype.hasOwnProperty.call(this.viewFilters, 'showCoverage')) {
+      this.showCoverage = Boolean(this.viewFilters.showCoverage);
     }
+    this.apply3dViewFilters();
+    return { ...this.viewFilters };
+  }
+
+  _isBuildingStructureObject3d(obj) {
+    if (!obj) return false;
+    const shape = String(obj.shape || obj.preset || '').toLowerCase();
+    return shape === 'wall' || String(obj.category || '').toLowerCase() === 'building';
+  }
+
+  isDeviceVisibleIn3d(dev) {
+    if (!dev) return false;
+    const layers = stateManager.state?.layers || {};
+    if (layers.devices === false) return false;
+    if (dev.layerVisible === false) return false;
+    if (dev.type === 'cctv' && this.viewFilters?.showCctv === false) return false;
+    return true;
+  }
+
+  isCableVisibleIn3d(cable) {
+    if (!cable) return false;
+    if (this.workspaceGhostDevices) return false;
+    const layers = stateManager.state?.layers || {};
+    if (layers.connections === false) return false;
+    const srcDev = this.deviceManager?.getDeviceById?.(cable.source);
+    const dstDev = this.deviceManager?.getDeviceById?.(cable.destination);
+    if (srcDev && !this.isDeviceVisibleIn3d(srcDev) && layers.devices !== false) return false;
+    if (dstDev && !this.isDeviceVisibleIn3d(dstDev) && layers.devices !== false) return false;
+    const isWireless = cable.type === 'wireless' || cable.cableCategory === 'wireless-ptp';
+    const isFiber = cable.type === 'fiber' || String(cable.cableCategory || '').toLowerCase().startsWith('fiber');
+    if (isFiber && this.viewFilters?.showFiber === false) return false;
+    if (isWireless && this.viewFilters?.showWireless === false) return false;
+    return true;
+  }
+
+  _setMaterialDimState(material, shouldDim, { opacity = 0.42, tintHex = null } = {}) {
+    if (!material) return;
+    const mats = Array.isArray(material) ? material : [material];
+    mats.forEach((m) => {
+      if (!m) return;
+      if (!m.userData) m.userData = {};
+      if (!m.userData._origFilterState) {
+        m.userData._origFilterState = {
+          opacity: m.opacity ?? 1,
+          transparent: Boolean(m.transparent),
+          colorHex: typeof m.color?.getHex === 'function' ? m.color.getHex() : null
+        };
+      }
+      const orig = m.userData._origFilterState;
+      if (shouldDim) {
+        m.transparent = true;
+        m.opacity = Math.min(opacity, orig.opacity);
+        if (tintHex !== null && typeof m.color?.setHex === 'function') {
+          m.color.setHex(tintHex);
+        }
+      } else {
+        m.opacity = orig.opacity;
+        m.transparent = orig.transparent;
+        if (orig.colorHex !== null && typeof m.color?.setHex === 'function') {
+          m.color.setHex(orig.colorHex);
+        }
+      }
+    });
+  }
+
+  /** Apply all 6 layer toggles and 5 component/focus filters to the 3D scene graph non-destructively. */
+  apply3dViewFilters() {
+    if (!this.isInitialized) return;
+    const layers = stateManager.state?.layers || {};
+    const showBg = layers.background !== false;
+    const showDevices = layers.devices !== false;
+    const showConnections = layers.connections !== false;
+    const showInfra = layers.infrastructure !== false;
+    const showBuildings = layers.buildings !== false;
+    const showAnnotations = layers.annotations !== false;
+
+    this.showLabels = showAnnotations;
+    if (typeof document !== 'undefined') {
+      document.getElementById('btn-3d-labels')?.classList.toggle('active', showAnnotations);
+    }
+
+    const selDevId = !this.workspaceGhostDevices ? (this.deviceManager?.selectedDeviceId || null) : null;
+    const selCabId = !this.workspaceGhostDevices ? (this.cableManager?.selectedCableId || null) : null;
+    const shouldDimBg = Boolean((selDevId || selCabId) && this.viewFilters?.dimOnSelection !== false);
+
+    // 1. Background ground image plane (keep GridHelper visible for 3D orientation) + selection dim
+    if (this.groundGroup) {
+      this.groundGroup.visible = true;
+      this.groundGroup.children.forEach((child) => {
+        if (child.type === 'GridHelper') {
+          child.visible = true;
+          if (child.material) {
+            if (!child.material.userData) child.material.userData = {};
+            if (child.material.userData._origGridOpacity === undefined) {
+              child.material.userData._origGridOpacity = child.material.opacity ?? 0.18;
+            }
+            child.material.opacity = shouldDimBg
+              ? 0.07
+              : (showBg ? child.material.userData._origGridOpacity : 0.22);
+          }
+        } else if (child.isMesh) {
+          child.visible = showBg;
+          this._setMaterialDimState(child.material, shouldDimBg, { opacity: 0.42, tintHex: 0x94a3b8 });
+        }
+      });
+    }
+
+    // 2. Buildings layer (Rooms, Roads & Wall 3D objects)
+    if (this.roomsGroup) this.roomsGroup.visible = showBuildings;
+    if (this.roadsGroup) this.roadsGroup.visible = showBuildings;
+
+    // 3. Infrastructure & Building objects inside objects3dGroup
+    if (this.objects3dGroup) {
+      this.objects3dGroup.visible = showInfra || showBuildings;
+      this.object3dMeshMap.forEach((meshGroup, objId) => {
+        const obj = stateManager.getObject3dById?.(objId);
+        const isBldg = this._isBuildingStructureObject3d(obj);
+        meshGroup.visible = isBldg ? showBuildings : showInfra;
+      });
+    }
+
+    // 4. Devices layer + CCTV quick filter
+    if (this.devicesGroup) {
+      this.devicesGroup.visible = showDevices;
+      this.deviceMeshMap.forEach((holder, devId) => {
+        const dev = this.deviceManager?.getDeviceById?.(devId);
+        holder.visible = dev ? this.isDeviceVisibleIn3d(dev) : showDevices;
+      });
+    }
+
+    // 5. Connections layer + Fiber / Wireless filters + non-selected cable focus dimming
+    const cablesActive = !this.workspaceGhostDevices && showConnections;
+    if (this.cablesGroup) {
+      this.cablesGroup.visible = cablesActive;
+      this.cablesGroup.children.forEach((child) => {
+        const cabId = child.userData?.cableId;
+        if (!cabId) return;
+        const cable = this.cableManager?.getConnectionById?.(cabId);
+        const isVis = cable ? this.isCableVisibleIn3d(cable) : cablesActive;
+        child.visible = isVis;
+        if (isVis && child.isMesh && child.material) {
+          const isHighlighted = !shouldDimBg ||
+            cabId === selCabId ||
+            cable?.source === selDevId ||
+            cable?.destination === selDevId;
+          this._setMaterialDimState(child.material, !isHighlighted, { opacity: 0.26 });
+        }
+      });
+    }
+
+    // 6. WiFi Coverage overlay filter
+    const showCov = !this.workspaceGhostDevices && showDevices && (this.viewFilters?.showCoverage !== false);
+    if (this.coverageGroup) {
+      this.coverageGroup.visible = showCov;
+      this.coverageGroup.children.forEach((child) => {
+        const devId = child.userData?.deviceId;
+        const dev = devId ? this.deviceManager?.getDeviceById?.(devId) : null;
+        child.visible = showCov && (!dev || this.isDeviceVisibleIn3d(dev));
+      });
+    }
+
+    // 7. Annotations layer (devices, rooms & 3D objects floating sprites)
+    this.updateAvatarDeviceLabelsVisibility?.();
+    [this.roomsGroup, this.objects3dGroup].forEach((grp) => {
+      grp?.traverse?.((child) => {
+        if (child?.userData?.isLabelSprite || child?.userData?.isDeviceLabel) {
+          child.visible = showAnnotations;
+        }
+      });
+    });
   }
 
   _disposeObject3DResources(root) {
@@ -10629,6 +10900,7 @@ export class Map3DEngine {
     const handleSelectionVisuals = () => {
       if (!this.isActive) return;
       this.syncSelectionRings();
+      this.apply3dViewFilters();
       if (this.avatarMode) {
         this.syncBuildPlacementHudUI?.();
       }
@@ -10640,6 +10912,18 @@ export class Map3DEngine {
         }
       }
     };
+
+    eventBus.on('layer:visibility-changed', ({ layer, visible } = {}) => {
+      if (layer === 'annotations') {
+        this.showLabels = Boolean(visible);
+        if (typeof document !== 'undefined') {
+          document.getElementById('btn-3d-labels')?.classList.toggle('active', Boolean(visible));
+        }
+      }
+      if (this.isInitialized) {
+        this.apply3dViewFilters();
+      }
+    });
 
     eventBus.on('device:added', scheduleSyncDevAndCables);
     eventBus.on('device:updated', scheduleSyncDevAndCables);
@@ -10870,9 +11154,6 @@ export class Map3DEngine {
    */
   setWorkspaceGhostDevices(enabled) {
     this.workspaceGhostDevices = Boolean(enabled);
-    if (this.cablesGroup) {
-      this.cablesGroup.visible = !this.workspaceGhostDevices;
-    }
     if (this.devicesGroup) {
       this.devicesGroup.traverse((obj) => {
         if (!obj.isMesh || !obj.material) return;
@@ -10892,6 +11173,7 @@ export class Map3DEngine {
         });
       });
     }
+    this.apply3dViewFilters?.();
     return this.workspaceGhostDevices;
   }
 

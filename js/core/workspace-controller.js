@@ -1,14 +1,12 @@
 /**
  * NetMap — Dual-Workspace Controller
- * Memisahkan Studio Bangunan 3D ('build') dan Lab Engineering Jaringan ('network')
+ * Memisahkan Edit Bangunan 3D ('build') dan Simulasi Jaringan ('network')
  * sehingga toolbar, sidebar, raycast lock, dan HUD edukasi tidak saling tumpang tindih.
  */
 
 import { eventBus } from './event-bus.js';
 import { stateManager } from './state-manager.js';
-import { generateId, uiIcon } from '../utils/helpers.js';
-
-const ONBOARDING_DISMISSED_KEY = 'netmap_workspace_onboarding_seen_v1';
+import { generateId } from '../utils/helpers.js';
 
 export class WorkspaceController {
   /**
@@ -16,28 +14,23 @@ export class WorkspaceController {
    * @param {import('../map/map-3d-engine.js').Map3DEngine} [options.map3DEngine]
    * @param {import('../ui/build-studio-palette.js').BuildStudioPalette} [options.buildStudioPalette]
    * @param {import('../ui/packet-tracer-panel.js').PacketTracerPanel} [options.packetTracerPanel]
-   * @param {import('../gamification/quest-manager.js').QuestManager} [options.questManager]
    * @param {import('../devices/device-manager.js').DeviceManager} [options.deviceManager]
    */
   constructor({
     map3DEngine = null,
     buildStudioPalette = null,
     packetTracerPanel = null,
-    questManager = null,
     deviceManager = null
   } = {}) {
     this.map3DEngine = map3DEngine;
     this.buildStudioPalette = buildStudioPalette;
     this.packetTracerPanel = packetTracerPanel;
-    this.questManager = questManager;
     this.deviceManager = deviceManager;
-    this.launcherModalEl = null;
     this._applying = false;
   }
 
   init() {
     if (typeof document !== 'undefined' && document.body) {
-      this._createLauncherModal();
       this._bindControls();
     }
 
@@ -53,16 +46,6 @@ export class WorkspaceController {
 
     const initialMode = stateManager.getWorkspaceMode();
     this._applyWorkspaceEffects(initialMode, { open3D: false, silent: true });
-
-    if (typeof document !== 'undefined') {
-      let seen = false;
-      try {
-        seen = typeof localStorage !== 'undefined' && localStorage.getItem(ONBOARDING_DISMISSED_KEY) === '1';
-      } catch { /* ignore */ }
-      if (!seen && !document.body?.classList?.contains('is-mobile-touch')) {
-        this.showLauncherModal();
-      }
-    }
   }
 
   /**
@@ -80,12 +63,6 @@ export class WorkspaceController {
     } finally {
       this._applying = false;
     }
-
-    try {
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem(ONBOARDING_DISMISSED_KEY, '1');
-      }
-    } catch { /* ignore */ }
 
     return normalized;
   }
@@ -113,7 +90,7 @@ export class WorkspaceController {
       this.map3DEngine?.setWorkspaceGhostDevices?.(true);
       if (!silent) {
         this.map3DEngine?.showStatusHint?.(
-          'Studio Bangunan 3D aktif — Tambah/geser/putar gedung, fasilitas & jalan sekolah. Perangkat jaringan digelapkan.'
+          'Edit Bangunan aktif — Tambah/geser/putar gedung, fasilitas & jalan sekolah. Perangkat jaringan digelapkan.'
         );
       }
     } else {
@@ -122,7 +99,7 @@ export class WorkspaceController {
       this.map3DEngine?.setWorkspaceGhostDevices?.(false);
       if (!silent) {
         this.map3DEngine?.showStatusHint?.(
-          'Lab Jaringan (Packet Tracer) aktif — Bangunan terkunci otomatis; fokus pasang perangkat, kabel, CLI & Ping.'
+          'Simulasi Jaringan aktif — Bangunan terkunci otomatis; fokus pasang perangkat, kabel, CLI & Ping.'
         );
       }
     }
@@ -215,10 +192,6 @@ export class WorkspaceController {
       });
     });
 
-    document.getElementById('btn-open-workspace-launcher')?.addEventListener('click', () => {
-      this.showLauncherModal();
-    });
-
     document.getElementById('btn-open-packet-tracer')?.addEventListener('click', () => {
       if (stateManager.getWorkspaceMode() !== 'network') {
         this.switchWorkspace('network', { open3D: false, silent: true });
@@ -231,10 +204,6 @@ export class WorkspaceController {
         this.switchWorkspace('network', { open3D: false, silent: true });
       }
       this.packetTracerPanel?.show('sim');
-    });
-
-    document.getElementById('navbar-quest-btn')?.addEventListener('click', () => {
-      this.questManager?.show();
     });
 
     document.getElementById('btn-studio-grid-snap')?.addEventListener('click', () => {
@@ -282,83 +251,5 @@ export class WorkspaceController {
     document.getElementById('btn-studio-to-network')?.addEventListener('click', () => {
       this.switchWorkspace('network', { open3D: false });
     });
-  }
-
-  _createLauncherModal() {
-    this.launcherModalEl = document.createElement('div');
-    this.launcherModalEl.id = 'workspace-launcher-modal';
-    this.launcherModalEl.className = 'modal-overlay workspace-launcher-modal';
-    this.launcherModalEl.style.display = 'none';
-    this.launcherModalEl.innerHTML = `
-      <div class="modal-card launcher-modal-card">
-        <div class="launcher-header">
-          <div>
-            <div class="launcher-eyebrow">SmartSchool NetMap • Platform Belajar 3D</div>
-            <h2 class="launcher-title">Pilih Mode Belajar Hari Ini</h2>
-            <p class="launcher-subtitle">Dua lingkungan terpisah agar lebih fokus &amp; mudah dipahami — dilengkapi Avatar Jelajah Roblox &amp; Misi XP.</p>
-          </div>
-          <button type="button" id="btn-launcher-close" class="btn btn-icon btn-sm" title="Tutup">${uiIcon('x', 14)}</button>
-        </div>
-
-        <div class="launcher-cards">
-          <button type="button" class="launcher-choice-card is-build" data-pick-workspace="build">
-            <div class="launcher-choice-icon">${uiIcon('building', 26)}</div>
-            <div class="launcher-choice-name">Studio Bangunan 3D</div>
-            <div class="launcher-choice-desc">Susun gedung kelas PPLG, perpustakaan, taman, tandon air, tiang &amp; jalan kampus dengan Snap Grid, Gizmo RGB, serta jelajahi dengan Avatar.</div>
-            <span class="launcher-choice-cta">Mulai Membangun -></span>
-          </button>
-
-          <button type="button" class="launcher-choice-card is-network" data-pick-workspace="network">
-            <div class="launcher-choice-icon">${uiIcon('network', 26)}</div>
-            <div class="launcher-choice-name">Lab Engineering Jaringan</div>
-            <div class="launcher-choice-desc">Ala Cisco Packet Tracer 3D: pasang Router/Switch/AP, sambungkan kabel antar port, konfigurasi CLI Cisco &amp; MikroTik, serta animasi paket Ping.</div>
-            <span class="launcher-choice-cta">Masuk Lab Jaringan -></span>
-          </button>
-        </div>
-
-        <div class="launcher-footer">
-          <span>Gedung terkunci otomatis saat berada di Lab Jaringan agar tidak tergeser.</span>
-          <button type="button" id="btn-launcher-quests" class="btn btn-secondary btn-sm">${uiIcon('award', 13)} Lihat Misi Belajar</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(this.launcherModalEl);
-
-    this.launcherModalEl.querySelector('#btn-launcher-close')?.addEventListener('click', () => {
-      this.hideLauncherModal(true);
-    });
-    this.launcherModalEl.addEventListener('click', (ev) => {
-      if (ev.target === this.launcherModalEl) this.hideLauncherModal(true);
-    });
-    this.launcherModalEl.querySelectorAll('[data-pick-workspace]')?.forEach((card) => {
-      card.addEventListener('click', () => {
-        const ws = card.getAttribute('data-pick-workspace') || 'network';
-        this.hideLauncherModal(true);
-        this.switchWorkspace(ws, { open3D: ws === 'build' });
-      });
-    });
-    this.launcherModalEl.querySelector('#btn-launcher-quests')?.addEventListener('click', () => {
-      this.hideLauncherModal(true);
-      this.questManager?.show();
-    });
-  }
-
-  showLauncherModal() {
-    if (this.launcherModalEl) {
-      this.launcherModalEl.style.display = 'flex';
-    }
-  }
-
-  hideLauncherModal(markSeen = true) {
-    if (this.launcherModalEl) {
-      this.launcherModalEl.style.display = 'none';
-    }
-    if (markSeen) {
-      try {
-        if (typeof localStorage !== 'undefined') {
-          localStorage.setItem(ONBOARDING_DISMISSED_KEY, '1');
-        }
-      } catch { /* ignore */ }
-    }
   }
 }
