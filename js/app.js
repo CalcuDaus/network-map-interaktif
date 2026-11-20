@@ -800,6 +800,12 @@ class NetMapApp {
     const btnToggleHints = document.getElementById('btn-3d-toggle-hints');
     const btnMenuToggle3dNav = document.getElementById('btn-menu-toggle-3d-nav');
     const btnMenuToggle3dHints = document.getElementById('btn-menu-toggle-3d-hints');
+    document.getElementById('btn-settings-open-doors')?.addEventListener('click', () => {
+      this.map3DEngine?.setAllInteractiveDoorsOpen?.(true);
+    });
+    document.getElementById('btn-settings-close-doors')?.addEventListener('click', () => {
+      this.map3DEngine?.setAllInteractiveDoorsOpen?.(false);
+    });
     const badgeMenu3dNav = document.getElementById('badge-menu-3d-nav');
     const badgeMenu3dHints = document.getElementById('badge-menu-3d-hints');
 

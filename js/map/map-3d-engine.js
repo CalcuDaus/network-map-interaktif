@@ -511,7 +511,22 @@ export class Map3DEngine {
         this.handleAvatarPointerMove(e, dom);
         return;
       }
-      if (!this.isLookDragging) return;
+      if (!this.isLookDragging) {
+        // Subtle pointer cursor cue when hovering over an interactive 3D building door
+        if (this.navTool === 'orbit' && this.activeDoorRigs?.size > 0 && (e.buttons || 0) === 0) {
+          const nowHover = performance.now();
+          if (nowHover - (this._lastDoorHoverCheck || 0) > 65) {
+            this._lastDoorHoverCheck = nowHover;
+            const rect = dom.getBoundingClientRect();
+            this.pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+            this.raycaster.setFromCamera(this.pointer, this.camera);
+            const overDoor = Boolean(this.findInteractiveDoorHit(this.raycaster, 140));
+            dom.style.cursor = overDoor ? 'pointer' : '';
+          }
+        }
+        return;
+      }
       const dx = e.clientX - this.lookPrevPointer.x;
       const dy = e.clientY - this.lookPrevPointer.y;
       this.lookPrevPointer = { x: e.clientX, y: e.clientY };
@@ -950,6 +965,7 @@ export class Map3DEngine {
         closedAngle: Number(meta.closedAngle) || 0,
         openAngle: Number(meta.openAngle) || 0,
         labelKind: meta.labelKind || 'Pintu',
+        localCenterOffset: meta.localCenterOffset || { x: 0, y: 1.0, z: 0 },
         pivotGroup: node,
         roomGroup,
         isOpen,
@@ -1037,6 +1053,17 @@ export class Map3DEngine {
     return count;
   }
 
+  _getDoorRigWorldCenter(rig, outVec = new THREE.Vector3()) {
+    if (!rig?.pivotGroup) return outVec.set(0, 0, 0);
+    const off = rig.localCenterOffset || { x: 0, y: 1.0, z: 0 };
+    outVec.set(Number(off.x) || 0, Number(off.y) || 1.0, Number(off.z) || 0);
+    if (typeof rig.pivotGroup.localToWorld === 'function') {
+      rig.pivotGroup.updateWorldMatrix?.(true, false);
+      return rig.pivotGroup.localToWorld(outVec);
+    }
+    return rig.pivotGroup.getWorldPosition(outVec);
+  }
+
   updateInteractiveDoors(dt = 0.016) {
     if (!this.activeDoorRigs || this.activeDoorRigs.size === 0) return;
     const step = Math.min(0.25, Math.max(0.004, Number(dt) || 0.016)) * 4.8;
@@ -1044,7 +1071,7 @@ export class Map3DEngine {
       this.avatarMode && !this.simulatorFocusedDeviceId && Array.isArray(this.carriedObjects) && this.carriedObjects.length > 0
     );
     const avX = Number(this.avatarState?.x) || 0;
-    const avY = (Number(this.avatarState?.y) || 0) + 1.0;
+    const avY = Number(this.avatarState?.y) || 0;
     const avZ = Number(this.avatarState?.z) || 0;
     const doorWorldPos = isCarryingInAvatar ? new THREE.Vector3() : null;
 
@@ -1062,11 +1089,11 @@ export class Map3DEngine {
 
       // Smart auto-open when carrying network devices up to a closed doorway
       if (isCarryingInAvatar && !rig.isOpen && doorWorldPos) {
-        rig.pivotGroup.getWorldPosition(doorWorldPos);
-        const dy = Math.abs(doorWorldPos.y - (avY - 1.0));
+        this._getDoorRigWorldCenter(rig, doorWorldPos);
+        const dy = Math.abs((doorWorldPos.y - 1.0) - avY);
         if (dy <= 1.8) {
           const distXZ = Math.hypot(doorWorldPos.x - avX, doorWorldPos.z - avZ);
-          if (distXZ <= 1.95) {
+          if (distXZ <= 2.25) {
             this.toggleInteractiveDoor(rig.key, { forceOpen: true, silent: true });
           }
         }
@@ -1080,21 +1107,27 @@ export class Map3DEngine {
     }
     const hits = this._filterVisibleRayHits(raycaster.intersectObjects(this.roomsGroup.children, true));
     if (!hits || hits.length === 0) return null;
-    // Only consider the closest visible room hit so walls occlude doors behind them
-    const first = hits[0];
-    if (!Number.isFinite(first.distance) || first.distance > maxDist) return null;
-    let curr = first.object;
-    while (curr && curr !== this.roomsGroup) {
-      const key = curr.userData?.interactiveDoorKey;
-      if (key && this.activeDoorRigs?.has(key)) {
-        return {
-          doorKey: key,
-          rig: this.activeDoorRigs.get(key),
-          distance: first.distance,
-          point: first.point.clone()
-        };
+    const firstDist = hits[0].distance;
+    if (!Number.isFinite(firstDist) || firstDist > maxDist) return null;
+
+    // Allow a small 0.18m tolerance past the first room hit so thin door frames/mullions
+    // right beside the leaf never block clicking or aiming through glass doors.
+    const maxOcclusionDist = Math.min(maxDist, firstDist + 0.18);
+    for (const h of hits) {
+      if (!Number.isFinite(h.distance) || h.distance > maxOcclusionDist) break;
+      let curr = h.object;
+      while (curr && curr !== this.roomsGroup) {
+        const key = curr.userData?.interactiveDoorKey;
+        if (key && this.activeDoorRigs?.has(key)) {
+          return {
+            doorKey: key,
+            rig: this.activeDoorRigs.get(key),
+            distance: h.distance,
+            point: h.point.clone()
+          };
+        }
+        curr = curr.parent;
       }
-      curr = curr.parent;
     }
     return null;
   }
@@ -1102,19 +1135,19 @@ export class Map3DEngine {
   findTargetInteractiveDoorForAvatar() {
     if (!this.avatarMode || !this.activeDoorRigs || this.activeDoorRigs.size === 0) return null;
 
-    // 1) Crosshair direct 3D raycast to a door within 4.6m
+    // 1) Crosshair direct 3D raycast to any door (inside or outside) within 5.4m
     if (this.camera && this.raycaster && (this.camera.isPerspectiveCamera || this.camera.isOrthographicCamera)) {
       try {
         this.camera.updateMatrixWorld?.();
         this.raycaster.setFromCamera({ x: 0, y: 0 }, this.camera);
-        const aimed = this.findInteractiveDoorHit(this.raycaster, 4.6);
+        const aimed = this.findInteractiveDoorHit(this.raycaster, 5.4);
         if (aimed?.rig) {
           return { ...aimed, fromAim: true };
         }
       } catch { /* ignore mock camera */ }
     }
 
-    // 2) Proximity fallback within 2.5m horizontally & same floor level
+    // 2) Proximity fallback to center of doorway within 3.4m horizontally & same floor level
     const ax = Number(this.avatarState?.x) || 0;
     const ay = Number(this.avatarState?.y) || 0;
     const az = Number(this.avatarState?.z) || 0;
@@ -1126,14 +1159,14 @@ export class Map3DEngine {
 
     for (const rig of this.activeDoorRigs.values()) {
       if (!rig?.pivotGroup || rig.roomGroup?.visible === false) continue;
-      rig.pivotGroup.getWorldPosition(wPos);
-      if (Math.abs(wPos.y - ay) > 1.7) continue;
+      this._getDoorRigWorldCenter(rig, wPos);
+      if (Math.abs((wPos.y - 1.0) - ay) > 1.8) continue;
       const dx = wPos.x - ax;
       const dz = wPos.z - az;
       const dist = Math.hypot(dx, dz);
-      if (dist > 2.55) continue;
+      if (dist > 3.4) continue;
       const dot = dist > 0.01 ? (dx * fwdX + dz * fwdZ) / dist : 1;
-      const score = dist - (dot > 0.35 ? 0.5 : 0);
+      const score = dist - (dot > 0.35 ? 0.65 : 0);
       if (!best || score < best.score) {
         best = { doorKey: rig.key, rig, distance: dist, score, fromAim: false };
       }

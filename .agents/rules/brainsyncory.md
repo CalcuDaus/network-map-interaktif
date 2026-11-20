@@ -1,7 +1,7 @@
 
 
 # Project Memory — network-map-interaktif
-> 71 notes | Score threshold: >40
+> 74 notes | Score threshold: >40
 
 ## Safety — Never Run Destructive Commands
 
@@ -18,18 +18,22 @@
 
 **Stack:** JavaScript · DB: MySQL
 
-## 📝 NOTE: 1 uncommitted file(s) in working tree.\n\n## Project Standards
+## 📝 NOTE: 1 uncommitted file(s) in working tree.\n\n## Active: `js/map`
+
+- **🟢 Edited js/map/map-3d-engine.js (8 changes, 73min)**
+
+## Project Standards
 
 - Fixed null crash in Quick — prevents XSS injection attacks — confirmed 4x
-- Git Commit: feat: implement interactive 3D map engine and models — confirmed 3x
+- Git Commit: feat: implement interactive 3D map engine, models, and UI co — confirmed 3x
 - 🟢 Edited docker-compose.yml (73 changes, 8min) — confirmed 3x
-- 🟢 Edited index.html (5 changes, 15min) — confirmed 3x
-- convention in .gitignore
-- Git Commit: feat: implement project management and authentication featur — confirmed 3x
+- Git Commit: feat: add interactive 3D network map application with core U — confirmed 3x
+- Git Commit: feat: implement interactive 3D map engine and models — confirmed 3x
 
 ## Learned Patterns
 
 - When encountering this, fix by: Fixed null crash in Displays — prevents null/undefined runtime crashes (seen 2x)
+- Always: Git Commit: feat: implement interactive 3D map engine, models, and UI co — confirmed 3x (seen 2x)
 - Agent generates new migration for every change (squash related changes)
 - Agent installs packages without checking if already installed
 

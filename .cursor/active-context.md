@@ -1,7 +1,9 @@
 > **BrainSync Context Pumper** 🧠
-> Dynamically loaded for active file: `js\map\map-3d-engine.js` (Domain: **Generic Logic**)
+> Dynamically loaded for active file: `js\map\map-3d-models.js` (Domain: **Generic Logic**)
 
 ### 📐 Generic Logic Conventions & Fixes
+- **[what-changed] 🟢 Edited js/map/map-3d-engine.js (8 changes, 73min)**: Active editing session on js/map/map-3d-engine.js.
+8 content changes over 73 minutes.
 - **[what-changed] 🟢 Edited js/ui/port-picker-modal.js (162 changes, 103min)**: Active editing session on js/ui/port-picker-modal.js.
 162 content changes over 103 minutes.
 - **[convention] Fixed null crash in Quick — prevents XSS injection attacks — confirmed 4x**: -         <!-- Quick Row Actions (Focus & Open Properties) -->

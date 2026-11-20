@@ -64212,8 +64212,8 @@ void main() {
   var glbCollisionCache = /* @__PURE__ */ new Map();
   var ROOM_ROOF_RE = /atap|plafon|kanopi|lisplang|roof|ceiling/i;
   var ROOM_FLOOR_RE = /lantai|selasar|koridor|beranda|panggung|umpak|floor/i;
-  var DOOR_MESH_CANDIDATE_RE = /pintu|door|shutter|kusen_jendela_biruabu|kaca_jendela_transparan/i;
-  var DOOR_MESH_EXCLUDE_RE = /atap|lantai|plafon|tanaman|ac_|papan|signage|ornamen|plat_pintu|list_batu|handle|grendel|daun_hijau|daun_jarum|pohon/i;
+  var DOOR_MESH_CANDIDATE_RE = /pintu|door|shutter|kusen|kaca_jendela|kaca.*pintu/i;
+  var DOOR_MESH_EXCLUDE_RE = /atap|lantai|plafon|tanaman|ac_|papan|signage|ornamen|plat_pintu|list_batu|handle|grendel|daun_hijau|daun_jarum|pohon|etalase/i;
   function _buildSubGeometryFromTriangles(mesh, triIndices, pivotWorld = null) {
     const srcGeo = mesh.geometry;
     const posAttr = srcGeo.attributes.position;
@@ -64294,6 +64294,16 @@ void main() {
     if (candidateMeshes.length === 0) return [];
     const frames = [];
     const meshIslandEntries = [];
+    const meshAllIslandsMap = /* @__PURE__ */ new Map();
+    const removedTrisByMesh = /* @__PURE__ */ new Map();
+    const markRemoved = (mesh, tris) => {
+      let s = removedTrisByMesh.get(mesh);
+      if (!s) {
+        s = /* @__PURE__ */ new Set();
+        removedTrisByMesh.set(mesh, s);
+      }
+      for (const t of tris) s.add(t);
+    };
     const tmpV = new Vector3();
     for (const mesh of candidateMeshes) {
       mesh.updateWorldMatrix(true, false);
@@ -64367,6 +64377,7 @@ void main() {
       const meshName = String(mesh.name || "");
       const isGlassMesh = /kaca_jendela|kaca.*pintu/i.test(meshName);
       const doorIslands = [];
+      const allIslandsForMesh = [];
       for (const comp of compMap.values()) {
         const w = comp.mxX - comp.mnX;
         const h = comp.mxY - comp.mnY;
@@ -64378,19 +64389,7 @@ void main() {
         const cy = (comp.mnY + comp.mxY) * 0.5;
         const cz = (comp.mnZ + comp.mxZ) * 0.5;
         const nearFloor = comp.mnY >= rootBox.min.y - 0.05 && comp.mnY <= rootBox.min.y + 0.58 || comp.mnY >= rootBox.min.y + 3.05 && comp.mnY <= rootBox.min.y + 4.15;
-        if (tLen >= 28 && tLen <= 44 && h >= 1.75 && h <= 2.75 && span >= 0.65 && span <= 2.4 && thick <= 0.28 && nearFloor) {
-          frames.push({ mnX: comp.mnX, mxX: comp.mxX, mnY: comp.mnY, mxY: comp.mxY, mnZ: comp.mnZ, mxZ: comp.mxZ, w, h, d, cx, cz });
-          continue;
-        }
-        if (!nearFloor) continue;
-        if (tLen < 2 || tLen > 20) continue;
-        if (h < 1.68 || h > 2.42) continue;
-        if (span < 0.5 || span > 2.25) continue;
-        if (thick > 0.18) continue;
-        if (isGlassMesh) {
-          if (h < 1.95 || comp.mnY > rootBox.min.y + 0.45 || span < 1.1) continue;
-        }
-        doorIslands.push({
+        const rec = {
           mesh,
           meshName,
           mnX: comp.mnX,
@@ -64407,21 +64406,197 @@ void main() {
           cx,
           cy,
           cz,
+          tLen,
           tris: comp.tris,
-          paired: false,
-          pairIdx: -1
-        });
+          used: false
+        };
+        allIslandsForMesh.push(rec);
+        if (tLen >= 28 && tLen <= 44 && h >= 1.75 && h <= 2.75 && span >= 0.65 && span <= 2.45 && thick <= 0.28 && nearFloor) {
+          frames.push({
+            ...rec,
+            frameMat: Array.isArray(mesh.material) ? mesh.material[0] : mesh.material
+          });
+          continue;
+        }
+        if (!nearFloor) continue;
+        if (tLen < 2 || tLen > 20) continue;
+        if (h < 1.65 || h > 2.65) continue;
+        if (span < 0.48 || span > 2.35) continue;
+        const isAngledAjar = thick > 0.18 && thick <= 0.44 && span >= 0.72 && span / Math.max(0.01, thick) >= 2.2 && tLen <= 16;
+        if (thick > 0.18 && !isAngledAjar) continue;
+        if (isGlassMesh) {
+          if (h < 1.9 || comp.mnY > rootBox.min.y + 0.45 || span < 1.1) continue;
+        }
+        rec.used = true;
+        rec.paired = false;
+        rec.pairIdx = -1;
+        rec.extraParts = [];
+        doorIslands.push(rec);
       }
+      meshAllIslandsMap.set(mesh, { triCount, islands: allIslandsForMesh });
       if (doorIslands.length > 0) {
         meshIslandEntries.push({ mesh, triCount, doorIslands });
       }
     }
-    const allDoors = [];
+    const rawDoors = [];
     for (const entry of meshIslandEntries) {
       for (const isl of entry.doorIslands) {
-        isl.doorIdx = allDoors.length;
-        allDoors.push(isl);
+        const twinFace = rawDoors.find(
+          (existing) => existing.mesh === isl.mesh && existing.tLen <= 4 && isl.tLen <= 4 && Math.abs(existing.cx - isl.cx) < 0.12 && Math.abs(existing.cz - isl.cz) < 0.12 && Math.abs(existing.mnY - isl.mnY) < 0.12 && Math.abs(existing.h - isl.h) < 0.15
+        );
+        if (twinFace) {
+          twinFace.tris = twinFace.tris.concat(isl.tris);
+          twinFace.mnX = Math.min(twinFace.mnX, isl.mnX);
+          twinFace.mxX = Math.max(twinFace.mxX, isl.mxX);
+          twinFace.mnY = Math.min(twinFace.mnY, isl.mnY);
+          twinFace.mxY = Math.max(twinFace.mxY, isl.mxY);
+          twinFace.mnZ = Math.min(twinFace.mnZ, isl.mnZ);
+          twinFace.mxZ = Math.max(twinFace.mxZ, isl.mxZ);
+          twinFace.w = twinFace.mxX - twinFace.mnX;
+          twinFace.h = twinFace.mxY - twinFace.mnY;
+          twinFace.d = twinFace.mxZ - twinFace.mnZ;
+          twinFace.cx = (twinFace.mnX + twinFace.mxX) * 0.5;
+          twinFace.cy = (twinFace.mnY + twinFace.mxY) * 0.5;
+          twinFace.cz = (twinFace.mnZ + twinFace.mxZ) * 0.5;
+        } else {
+          rawDoors.push(isl);
+        }
       }
+    }
+    const allUnclaimedIslands = [];
+    for (const { islands } of meshAllIslandsMap.values()) {
+      for (const rec of islands) {
+        if (!rec.used && !(rec.tLen >= 28 && rec.tLen <= 44)) {
+          allUnclaimedIslands.push(rec);
+        }
+      }
+    }
+    for (const fr of frames) {
+      const frSpanX = fr.w >= fr.d;
+      const isInsideFrame = (rec) => {
+        if (rec.used || rec === fr) return false;
+        const inY = rec.mnY >= fr.mnY - 0.05 && rec.mxY <= fr.mxY - 0.01;
+        if (!inY) return false;
+        if (frSpanX) {
+          return rec.mnX >= fr.mnX + 0.01 && rec.mxX <= fr.mxX - 0.01 && rec.mnZ >= fr.mnZ - 0.06 && rec.mxZ <= fr.mxZ + 0.06;
+        }
+        return rec.mnZ >= fr.mnZ + 0.01 && rec.mxZ <= fr.mxZ - 0.01 && rec.mnX >= fr.mnX - 0.06 && rec.mxX <= fr.mxX + 0.06;
+      };
+      const innerParts = allUnclaimedIslands.filter(isInsideFrame);
+      const existingInside = rawDoors.find((d) => {
+        const gapX = Math.max(0, Math.max(fr.mnX - d.mxX, d.mnX - fr.mxX));
+        const gapZ = Math.max(0, Math.max(fr.mnZ - d.mxZ, d.mnZ - fr.mxZ));
+        return Math.abs(d.mnY - fr.mnY) < 0.3 && gapX <= 0.18 && gapZ <= 0.18;
+      });
+      if (existingInside) {
+        if (innerParts.length > 0 && /kaca/i.test(existingInside.meshName)) {
+          for (const part of innerParts) {
+            part.used = true;
+            existingInside.extraParts.push({ mesh: part.mesh, tris: part.tris });
+            existingInside.mnX = Math.min(existingInside.mnX, part.mnX);
+            existingInside.mxX = Math.max(existingInside.mxX, part.mxX);
+            existingInside.mnY = Math.min(existingInside.mnY, part.mnY);
+            existingInside.mxY = Math.max(existingInside.mxY, part.mxY);
+            existingInside.mnZ = Math.min(existingInside.mnZ, part.mnZ);
+            existingInside.mxZ = Math.max(existingInside.mxZ, part.mxZ);
+          }
+          existingInside.w = existingInside.mxX - existingInside.mnX;
+          existingInside.h = existingInside.mxY - existingInside.mnY;
+          existingInside.d = existingInside.mxZ - existingInside.mnZ;
+          existingInside.span = Math.max(existingInside.w, existingInside.d);
+          existingInside.cx = (existingInside.mnX + existingInside.mxX) * 0.5;
+          existingInside.cy = (existingInside.mnY + existingInside.mxY) * 0.5;
+          existingInside.cz = (existingInside.mnZ + existingInside.mxZ) * 0.5;
+        }
+        continue;
+      }
+      if (innerParts.length > 0) {
+        let mnX = Infinity, mnY = Infinity, mnZ = Infinity;
+        let mxX = -Infinity, mxY = -Infinity, mxZ = -Infinity;
+        for (const part of innerParts) {
+          if (part.mnX < mnX) mnX = part.mnX;
+          if (part.mxX > mxX) mxX = part.mxX;
+          if (part.mnY < mnY) mnY = part.mnY;
+          if (part.mxY > mxY) mxY = part.mxY;
+          if (part.mnZ < mnZ) mnZ = part.mnZ;
+          if (part.mxZ > mxZ) mxZ = part.mxZ;
+        }
+        const cw = mxX - mnX;
+        const ch = mxY - mnY;
+        const cd = mxZ - mnZ;
+        const cSpan = Math.max(cw, cd);
+        if (ch >= fr.h * 0.65 && cSpan >= fr.span * 0.65) {
+          innerParts.forEach((p) => {
+            p.used = true;
+          });
+          const primary = innerParts[0];
+          rawDoors.push({
+            mesh: primary.mesh,
+            meshName: innerParts.some((p) => /kaca/i.test(p.meshName)) ? "Pintu_Kaca_Bingkai" : primary.meshName,
+            mnX,
+            mxX,
+            mnY,
+            mxY,
+            mnZ,
+            mxZ,
+            w: cw,
+            h: ch,
+            d: cd,
+            span: cSpan,
+            thick: Math.min(cw, cd),
+            cx: (mnX + mxX) * 0.5,
+            cy: (mnY + mxY) * 0.5,
+            cz: (mnZ + mxZ) * 0.5,
+            tLen: primary.tLen,
+            tris: primary.tris,
+            extraParts: innerParts.slice(1).map((p) => ({ mesh: p.mesh, tris: p.tris })),
+            paired: false,
+            pairIdx: -1
+          });
+          continue;
+        }
+      }
+      if (fr.h >= 1.85 && fr.h <= 2.65 && fr.span >= 0.72 && fr.span <= 1.85 && !/etalase/i.test(fr.meshName)) {
+        const leafW = frSpanX ? Math.max(0.6, fr.w - 0.12) : 0.05;
+        const leafD = frSpanX ? 0.05 : Math.max(0.6, fr.d - 0.12);
+        const leafH = Math.max(1.78, fr.h - 0.1);
+        const mnX = frSpanX ? fr.mnX + 0.06 : fr.cx - 0.025;
+        const mxX = mnX + leafW;
+        const mnZ = frSpanX ? fr.cz - 0.025 : fr.mnZ + 0.06;
+        const mxZ = mnZ + leafD;
+        const mnY = fr.mnY;
+        const mxY = fr.mnY + leafH;
+        rawDoors.push({
+          isProceduralLeaf: true,
+          proceduralColor: fr.frameMat?.color ? fr.frameMat.color.clone().offsetHSL(0, -0.05, 0.08) : new Color("#6b4423"),
+          mesh: null,
+          meshName: "Pintu_Ruangan_Procedural",
+          mnX,
+          mxX,
+          mnY,
+          mxY,
+          mnZ,
+          mxZ,
+          w: leafW,
+          h: leafH,
+          d: leafD,
+          span: Math.max(leafW, leafD),
+          thick: Math.min(leafW, leafD),
+          cx: (mnX + mxX) * 0.5,
+          cy: (mnY + mxY) * 0.5,
+          cz: (mnZ + mxZ) * 0.5,
+          tris: [],
+          extraParts: [],
+          paired: false,
+          pairIdx: -1,
+          defaultStartOpen: true
+        });
+      }
+    }
+    const allDoors = [];
+    for (const isl of rawDoors) {
+      isl.doorIdx = allDoors.length;
+      allDoors.push(isl);
     }
     if (allDoors.length === 0) return [];
     const findTouchingPerpFrame = (isl) => {
@@ -64432,16 +64607,16 @@ void main() {
         if (frameSpanX === leafSpanX) continue;
         const gapX = Math.max(0, Math.max(fr.mnX - isl.mxX, isl.mnX - fr.mxX));
         const gapZ = Math.max(0, Math.max(fr.mnZ - isl.mxZ, isl.mnZ - fr.mxZ));
-        if (gapX <= 0.22 && gapZ <= 0.22) return fr;
+        if (gapX <= 0.28 && gapZ <= 0.28) return fr;
       }
       return null;
     };
     for (let i = 0; i < allDoors.length; i++) {
       const a = allDoors[i];
-      if (a.paired) continue;
+      if (a.paired || a.isProceduralLeaf) continue;
       for (let j = i + 1; j < allDoors.length; j++) {
         const b = allDoors[j];
-        if (b.paired) continue;
+        if (b.paired || b.isProceduralLeaf) continue;
         if (Math.abs(a.mnY - b.mnY) > 0.25 || Math.abs(a.h - b.h) > 0.16) continue;
         if (Math.abs(a.span - b.span) > 0.16) continue;
         const aSpanX = a.w >= a.d;
@@ -64479,10 +64654,22 @@ void main() {
         }
       }
     }
+    const handleMat = new MeshStandardMaterial({
+      color: 14271116,
+      metalness: 0.78,
+      roughness: 0.28
+    });
+    const hitboxMat = new MeshBasicMaterial({
+      color: 16777215,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      side: DoubleSide
+    });
     const extractedMeta = [];
     for (const isl of allDoors) {
       let doorType = "swing";
-      let initialOpen = false;
+      let initialOpen = Boolean(isl.defaultStartOpen);
       let hinge = new Vector3(isl.mnX, isl.mnY, isl.cz);
       let closedAngle = 0;
       let openAngle = Math.PI * 0.52;
@@ -64494,7 +64681,7 @@ void main() {
         closedAngle = 0;
         openAngle = 0;
         labelKind = "Rolling Shutter";
-      } else if (isl.span >= 1.65 && /kaca|lipat|geser|sliding/i.test(isl.meshName)) {
+      } else if (isl.span >= 1.55 && /kaca|lipat|geser|sliding/i.test(isl.meshName)) {
         doorType = "slide";
         slideAxis = isl.w >= isl.d ? "x" : "z";
         hinge.set(slideAxis === "x" ? isl.mnX : isl.cx, isl.mnY, slideAxis === "x" ? isl.cz : isl.mnZ);
@@ -64533,7 +64720,7 @@ void main() {
         }
         labelKind = "Pintu Ganda";
       } else {
-        const touchFrame = findTouchingPerpFrame(isl);
+        const touchFrame = !isl.isProceduralLeaf ? findTouchingPerpFrame(isl) : null;
         if (touchFrame) {
           initialOpen = true;
           openAngle = 0;
@@ -64551,15 +64738,13 @@ void main() {
             closedAngle = (extendsPosX === closeToPosZ ? -1 : 1) * Math.PI * 0.48;
           }
         } else if (isl.w >= isl.d) {
-          initialOpen = false;
           hinge.set(isl.mnX, isl.mnY, isl.cz);
           closedAngle = 0;
-          openAngle = (isl.cz >= rootCenter.z ? 1 : -1) * Math.PI * 0.52;
+          openAngle = (isl.cz >= rootCenter.z ? 1 : -1) * Math.PI * 0.5;
         } else {
-          initialOpen = false;
           hinge.set(isl.cx, isl.mnY, isl.mnZ);
           closedAngle = 0;
-          openAngle = (isl.cx < rootCenter.x ? 1 : -1) * Math.PI * 0.52;
+          openAngle = (isl.cx < rootCenter.x ? 1 : -1) * Math.PI * 0.5;
         }
         labelKind = isl.span >= 1.25 ? "Pintu Ganda" : "Pintu";
       }
@@ -64576,37 +64761,97 @@ void main() {
         closedAngle,
         openAngle,
         labelKind,
-        localCenter: { x: isl.cx, y: isl.cy, z: isl.cz },
+        localCenterOffset: {
+          x: isl.cx - hinge.x,
+          y: isl.cy - hinge.y,
+          z: isl.cz - hinge.z
+        },
         span: Number(isl.span.toFixed(2)),
         height: Number(isl.h.toFixed(2))
       };
-      const leafGeo = _buildSubGeometryFromTriangles(isl.mesh, isl.tris, hinge);
-      const leafMat = Array.isArray(isl.mesh.material) ? isl.mesh.material[0] : isl.mesh.material;
-      const leafMesh = new Mesh(leafGeo, leafMat);
-      leafMesh.name = `InteractiveDoorLeaf_${isl.doorIdx}`;
-      leafMesh.castShadow = true;
-      leafMesh.receiveShadow = true;
-      leafMesh.userData.isInteractiveDoorMesh = true;
-      leafMesh.userData.doorIdx = isl.doorIdx;
-      pivotGroup.add(leafMesh);
+      const addLeafPart = (srcMesh, tris) => {
+        const partGeo = _buildSubGeometryFromTriangles(srcMesh, tris, hinge);
+        const srcMat = Array.isArray(srcMesh.material) ? srcMesh.material[0] : srcMesh.material;
+        const partMat = srcMat && srcMat.side !== DoubleSide ? srcMat.clone() : srcMat;
+        if (partMat) partMat.side = DoubleSide;
+        const partMesh = new Mesh(partGeo, partMat);
+        partMesh.name = `InteractiveDoorLeaf_${isl.doorIdx}`;
+        partMesh.castShadow = true;
+        partMesh.receiveShadow = true;
+        partMesh.userData.isInteractiveDoorMesh = true;
+        partMesh.userData.doorIdx = isl.doorIdx;
+        pivotGroup.add(partMesh);
+        markRemoved(srcMesh, tris);
+      };
+      if (isl.isProceduralLeaf) {
+        const pMat = new MeshStandardMaterial({
+          color: isl.proceduralColor || 7029795,
+          roughness: 0.62,
+          metalness: 0.08,
+          side: DoubleSide
+        });
+        const pGeo = new BoxGeometry(isl.w, isl.h, isl.d);
+        pGeo.translate(isl.cx - hinge.x, isl.cy - hinge.y, isl.cz - hinge.z);
+        const pMesh = new Mesh(pGeo, pMat);
+        pMesh.name = `InteractiveDoorLeaf_${isl.doorIdx}`;
+        pMesh.castShadow = true;
+        pMesh.receiveShadow = true;
+        pMesh.userData.isInteractiveDoorMesh = true;
+        pMesh.userData.doorIdx = isl.doorIdx;
+        pivotGroup.add(pMesh);
+      } else {
+        addLeafPart(isl.mesh, isl.tris);
+        if (Array.isArray(isl.extraParts)) {
+          for (const ep of isl.extraParts) {
+            addLeafPart(ep.mesh, ep.tris);
+          }
+        }
+      }
+      const hitGeo = new BoxGeometry(
+        Math.max(0.08, isl.w + 0.04),
+        Math.max(0.2, isl.h),
+        Math.max(0.08, isl.d + 0.04)
+      );
+      hitGeo.translate(isl.cx - hinge.x, isl.cy - hinge.y, isl.cz - hinge.z);
+      const hitMesh = new Mesh(hitGeo, hitboxMat);
+      hitMesh.name = `InteractiveDoorHitbox_${isl.doorIdx}`;
+      hitMesh.userData.isInteractiveDoorMesh = true;
+      hitMesh.userData.isDoorHitbox = true;
+      hitMesh.userData.doorIdx = isl.doorIdx;
+      pivotGroup.add(hitMesh);
+      if (doorType !== "shutter") {
+        const spanX = isl.w >= isl.d;
+        const farX = isl.cx - hinge.x + (spanX ? isl.cx >= hinge.x ? isl.w * 0.36 : -isl.w * 0.36 : 0);
+        const farZ = isl.cz - hinge.z + (!spanX ? isl.cz >= hinge.z ? isl.d * 0.36 : -isl.d * 0.36 : 0);
+        const handleY = Math.min(isl.h * 0.56, 0.98);
+        const handleGeo = new BoxGeometry(
+          spanX ? 0.11 : Math.max(0.11, isl.w + 0.08),
+          0.04,
+          spanX ? Math.max(0.11, isl.d + 0.08) : 0.11
+        );
+        const handleMesh = new Mesh(handleGeo, handleMat);
+        handleMesh.position.set(farX, handleY, farZ);
+        handleMesh.name = `InteractiveDoorHandle_${isl.doorIdx}`;
+        handleMesh.userData.isInteractiveDoorMesh = true;
+        handleMesh.userData.isDoorHandle = true;
+        handleMesh.userData.doorIdx = isl.doorIdx;
+        pivotGroup.add(handleMesh);
+      }
       root.add(pivotGroup);
       extractedMeta.push({ pivotGroup, meta: pivotGroup.userData.doorMeta });
     }
-    for (const entry of meshIslandEntries) {
-      const removedSet = /* @__PURE__ */ new Set();
-      for (const isl of entry.doorIslands) {
-        for (const t of isl.tris) removedSet.add(t);
-      }
+    for (const [mesh, removedSet] of removedTrisByMesh.entries()) {
+      const info = meshAllIslandsMap.get(mesh);
+      if (!info || removedSet.size === 0) continue;
       const keepTris = [];
-      for (let t = 0; t < entry.triCount; t++) {
+      for (let t = 0; t < info.triCount; t++) {
         if (!removedSet.has(t)) keepTris.push(t);
       }
       if (keepTris.length === 0) {
-        entry.mesh.visible = false;
-        entry.mesh.parent?.remove(entry.mesh);
+        mesh.visible = false;
+        mesh.parent?.remove(mesh);
       } else {
-        const nextStaticGeo = _buildSubGeometryFromTriangles(entry.mesh, keepTris, null);
-        entry.mesh.geometry = nextStaticGeo;
+        mesh.geometry = _buildSubGeometryFromTriangles(mesh, keepTris, null);
       }
     }
     root.updateMatrixWorld(true);
@@ -64677,6 +64922,7 @@ void main() {
     }
     root.traverse((obj) => {
       if (!obj?.isMesh || !obj.geometry?.attributes?.position) return;
+      if (obj.userData?.isDoorHitbox || obj.userData?.isDoorHandle) return;
       const meshName = String(obj.name || "");
       const doorIdx = Number.isInteger(obj.userData?.doorIdx) ? obj.userData.doorIdx : -1;
       const isFloorNamed = ROOM_FLOOR_RE.test(meshName);
@@ -70328,7 +70574,21 @@ void main() {
           this.handleAvatarPointerMove(e, dom);
           return;
         }
-        if (!this.isLookDragging) return;
+        if (!this.isLookDragging) {
+          if (this.navTool === "orbit" && this.activeDoorRigs?.size > 0 && (e.buttons || 0) === 0) {
+            const nowHover = performance.now();
+            if (nowHover - (this._lastDoorHoverCheck || 0) > 65) {
+              this._lastDoorHoverCheck = nowHover;
+              const rect = dom.getBoundingClientRect();
+              this.pointer.x = (e.clientX - rect.left) / rect.width * 2 - 1;
+              this.pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+              this.raycaster.setFromCamera(this.pointer, this.camera);
+              const overDoor = Boolean(this.findInteractiveDoorHit(this.raycaster, 140));
+              dom.style.cursor = overDoor ? "pointer" : "";
+            }
+          }
+          return;
+        }
         const dx = e.clientX - this.lookPrevPointer.x;
         const dy = e.clientY - this.lookPrevPointer.y;
         this.lookPrevPointer = { x: e.clientX, y: e.clientY };
@@ -70721,6 +70981,7 @@ void main() {
           closedAngle: Number(meta.closedAngle) || 0,
           openAngle: Number(meta.openAngle) || 0,
           labelKind: meta.labelKind || "Pintu",
+          localCenterOffset: meta.localCenterOffset || { x: 0, y: 1, z: 0 },
           pivotGroup: node,
           roomGroup,
           isOpen,
@@ -70797,6 +71058,16 @@ void main() {
       );
       return count;
     }
+    _getDoorRigWorldCenter(rig, outVec = new Vector3()) {
+      if (!rig?.pivotGroup) return outVec.set(0, 0, 0);
+      const off = rig.localCenterOffset || { x: 0, y: 1, z: 0 };
+      outVec.set(Number(off.x) || 0, Number(off.y) || 1, Number(off.z) || 0);
+      if (typeof rig.pivotGroup.localToWorld === "function") {
+        rig.pivotGroup.updateWorldMatrix?.(true, false);
+        return rig.pivotGroup.localToWorld(outVec);
+      }
+      return rig.pivotGroup.getWorldPosition(outVec);
+    }
     updateInteractiveDoors(dt = 0.016) {
       if (!this.activeDoorRigs || this.activeDoorRigs.size === 0) return;
       const step = Math.min(0.25, Math.max(4e-3, Number(dt) || 0.016)) * 4.8;
@@ -70804,7 +71075,7 @@ void main() {
         this.avatarMode && !this.simulatorFocusedDeviceId && Array.isArray(this.carriedObjects) && this.carriedObjects.length > 0
       );
       const avX = Number(this.avatarState?.x) || 0;
-      const avY = (Number(this.avatarState?.y) || 0) + 1;
+      const avY = Number(this.avatarState?.y) || 0;
       const avZ = Number(this.avatarState?.z) || 0;
       const doorWorldPos = isCarryingInAvatar ? new Vector3() : null;
       for (const rig of this.activeDoorRigs.values()) {
@@ -70819,11 +71090,11 @@ void main() {
           this._applyDoorRigPose(rig);
         }
         if (isCarryingInAvatar && !rig.isOpen && doorWorldPos) {
-          rig.pivotGroup.getWorldPosition(doorWorldPos);
-          const dy = Math.abs(doorWorldPos.y - (avY - 1));
+          this._getDoorRigWorldCenter(rig, doorWorldPos);
+          const dy = Math.abs(doorWorldPos.y - 1 - avY);
           if (dy <= 1.8) {
             const distXZ = Math.hypot(doorWorldPos.x - avX, doorWorldPos.z - avZ);
-            if (distXZ <= 1.95) {
+            if (distXZ <= 2.25) {
               this.toggleInteractiveDoor(rig.key, { forceOpen: true, silent: true });
             }
           }
@@ -70836,20 +71107,24 @@ void main() {
       }
       const hits = this._filterVisibleRayHits(raycaster.intersectObjects(this.roomsGroup.children, true));
       if (!hits || hits.length === 0) return null;
-      const first = hits[0];
-      if (!Number.isFinite(first.distance) || first.distance > maxDist) return null;
-      let curr = first.object;
-      while (curr && curr !== this.roomsGroup) {
-        const key = curr.userData?.interactiveDoorKey;
-        if (key && this.activeDoorRigs?.has(key)) {
-          return {
-            doorKey: key,
-            rig: this.activeDoorRigs.get(key),
-            distance: first.distance,
-            point: first.point.clone()
-          };
+      const firstDist = hits[0].distance;
+      if (!Number.isFinite(firstDist) || firstDist > maxDist) return null;
+      const maxOcclusionDist = Math.min(maxDist, firstDist + 0.18);
+      for (const h of hits) {
+        if (!Number.isFinite(h.distance) || h.distance > maxOcclusionDist) break;
+        let curr = h.object;
+        while (curr && curr !== this.roomsGroup) {
+          const key = curr.userData?.interactiveDoorKey;
+          if (key && this.activeDoorRigs?.has(key)) {
+            return {
+              doorKey: key,
+              rig: this.activeDoorRigs.get(key),
+              distance: h.distance,
+              point: h.point.clone()
+            };
+          }
+          curr = curr.parent;
         }
-        curr = curr.parent;
       }
       return null;
     }
@@ -70859,7 +71134,7 @@ void main() {
         try {
           this.camera.updateMatrixWorld?.();
           this.raycaster.setFromCamera({ x: 0, y: 0 }, this.camera);
-          const aimed = this.findInteractiveDoorHit(this.raycaster, 4.6);
+          const aimed = this.findInteractiveDoorHit(this.raycaster, 5.4);
           if (aimed?.rig) {
             return { ...aimed, fromAim: true };
           }
@@ -70876,14 +71151,14 @@ void main() {
       let best = null;
       for (const rig of this.activeDoorRigs.values()) {
         if (!rig?.pivotGroup || rig.roomGroup?.visible === false) continue;
-        rig.pivotGroup.getWorldPosition(wPos);
-        if (Math.abs(wPos.y - ay) > 1.7) continue;
+        this._getDoorRigWorldCenter(rig, wPos);
+        if (Math.abs(wPos.y - 1 - ay) > 1.8) continue;
         const dx = wPos.x - ax;
         const dz = wPos.z - az;
         const dist = Math.hypot(dx, dz);
-        if (dist > 2.55) continue;
+        if (dist > 3.4) continue;
         const dot = dist > 0.01 ? (dx * fwdX + dz * fwdZ) / dist : 1;
-        const score = dist - (dot > 0.35 ? 0.5 : 0);
+        const score = dist - (dot > 0.35 ? 0.65 : 0);
         if (!best || score < best.score) {
           best = { doorKey: rig.key, rig, distance: dist, score, fromAim: false };
         }
@@ -85585,6 +85860,12 @@ ${result.output}`);
       const btnToggleHints = document.getElementById("btn-3d-toggle-hints");
       const btnMenuToggle3dNav = document.getElementById("btn-menu-toggle-3d-nav");
       const btnMenuToggle3dHints = document.getElementById("btn-menu-toggle-3d-hints");
+      document.getElementById("btn-settings-open-doors")?.addEventListener("click", () => {
+        this.map3DEngine?.setAllInteractiveDoorsOpen?.(true);
+      });
+      document.getElementById("btn-settings-close-doors")?.addEventListener("click", () => {
+        this.map3DEngine?.setAllInteractiveDoorsOpen?.(false);
+      });
       const badgeMenu3dNav = document.getElementById("badge-menu-3d-nav");
       const badgeMenu3dHints = document.getElementById("badge-menu-3d-hints");
       let isControlsMinimized = false;
