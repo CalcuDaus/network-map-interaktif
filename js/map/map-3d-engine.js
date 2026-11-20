@@ -29,6 +29,7 @@ import {
   createFppHandsViewmodelGroup,
   createFppCableSpoolViewmodelGroup,
   createCableClip3DMesh,
+  createConduitSegmentMesh
   createConduitSegmentMesh,
   findCutawayPairPreset,
   createBuildingSignboard3DGroup
@@ -11530,16 +11531,16 @@ export class Map3DEngine {
     const selectedLinkEntry = [...portConnMap.entries()].find(([, l]) => l.cable.id === selectedCableId);
     const selectedCableBarHtml = selectedLinkEntry
       ? (() => {
-          const [selPortName, selLink] = selectedLinkEntry;
-          const peerId = selLink.cable.source === deviceId ? selLink.cable.destination : selLink.cable.source;
-          return `<div class="sim-selected-cable-bar">
+        const [selPortName, selLink] = selectedLinkEntry;
+        const peerId = selLink.cable.source === deviceId ? selLink.cable.destination : selLink.cable.source;
+        return `<div class="sim-selected-cable-bar">
             <span>Port <strong>${this.escapeHudHtml(selPortName)}</strong> → <strong>${this.escapeHudHtml(selLink.peerName)}</strong></span>
             <div style="display:flex;gap:6px;flex-wrap:wrap;">
               <button type="button" class="sim-action-btn" data-sim-jump-peer="${this.escapeHudHtml(peerId)}">Lihat Perangkat Tujuan</button>
               <button type="button" class="sim-action-btn is-exit" data-sim-disconnect-cable="${this.escapeHudHtml(selLink.cable.id)}">Lepas Kabel</button>
             </div>
           </div>`;
-        })()
+      })()
       : '';
 
     hudEl.innerHTML = `
@@ -12313,4 +12314,119 @@ export class Map3DEngine {
         if (!dev) return null;
         const w = this.normToWorld?.(dev.position?.x ?? 0.5, dev.position?.y ?? 0.5) || { x: 0, z: 0 };
         const elev = Number(dev.spatial3d?.elevationMeters) || 0.4;
-... [truncated for diff preview]
+        return new THREE.Vector3(w.x, elev + 0.35, w.z);
+      })
+      .filter(Boolean);
+
+    if (waypoints.length === 0) {
+      return { hopCount: 0, success: Boolean(success) };
+    }
+
+    const color = success ? 0x22c55e : 0xef4444;
+    const sphere = new THREE.Mesh(
+      new THREE.SphereGeometry(0.32, 16, 16),
+      new THREE.MeshBasicMaterial({ color })
+    );
+    sphere.position.copy(waypoints[0]);
+    sphere.userData.isPacketProbe = true;
+    this.packetFlowGroup?.add(sphere);
+
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    this.activePacketFlows.push({
+      mesh: sphere,
+      waypoints,
+      startTime: now,
+      duration: Math.max(400, Number(durationMs) || 1500)
+    });
+
+    return { hopCount: waypoints.length, success: Boolean(success) };
+  }
+
+  updatePacketFlows3D(now = typeof performance !== 'undefined' ? performance.now() : Date.now()) {
+    if (!Array.isArray(this.activePacketFlows) || this.activePacketFlows.length === 0) return;
+    const remaining = [];
+    for (const flow of this.activePacketFlows) {
+      const elapsed = now - flow.startTime;
+      const t = Math.min(1, Math.max(0, elapsed / flow.duration));
+      if (t >= 1 || !flow.mesh) {
+        this.packetFlowGroup?.remove(flow.mesh);
+        flow.mesh?.geometry?.dispose?.();
+        flow.mesh?.material?.dispose?.();
+        continue;
+      }
+      const pts = flow.waypoints;
+      if (pts.length === 1) {
+        flow.mesh.position.copy(pts[0]);
+      } else {
+        const segFloat = t * (pts.length - 1);
+        const idx = Math.min(pts.length - 2, Math.floor(segFloat));
+        const alpha = segFloat - idx;
+        flow.mesh.position.lerpVectors(pts[idx], pts[idx + 1], alpha);
+        flow.mesh.position.y += Math.sin(alpha * Math.PI) * 0.45;
+      }
+      remaining.push(flow);
+    }
+    this.activePacketFlows = remaining;
+  }
+
+  // ===========================================================================
+  // Phase 7B–7E: First-Person / Third-Person Physical Cable Spool Pulling
+  // ===========================================================================
+
+  /**
+   * Pick the first unoccupied port name on a device (for effortless 1-tap cable start/finish).
+   */
+  _findFirstFreePortName(deviceId) {
+    const dev = this.deviceManager?.getDeviceById?.(deviceId);
+    if (!dev) return '';
+    const ports = (Array.isArray(dev.ports) && dev.ports.length > 0)
+      ? dev.ports
+      : getDefaultDevicePorts(dev.type, dev.model, dev.spatial3d?.customModelUrl);
+    const used = new Set();
+    (this.cableManager?.getAllConnections?.() || []).forEach((cab) => {
+      if (cab.source === deviceId && cab.details?.portSource) used.add(cab.details.portSource);
+      if (cab.destination === deviceId && cab.details?.portDestination) used.add(cab.details.portDestination);
+    });
+    const free = ports.find((p) => !used.has(p.name));
+    return free?.name || ports[0]?.name || '';
+  }
+
+  /**
+   * Start physical 3D cable pulling from a source device/port in Mode Teknisi (FPP/TPP).
+   * @param {string} [deviceId]
+   * @param {string} [portName]
+   * @param {{ cableCategory?: string, conduitType?: string, orthoLock?: boolean }} [options]
+   */
+  startAvatarCablePull(deviceId = null, portName = '', options = {}) {
+    let targetId = deviceId;
+    if (!targetId) {
+      const pick = this.findNearestPickableObjectToAvatar?.();
+      if (pick?.id && this.deviceManager?.getDeviceById?.(pick.id)) {
+        targetId = pick.id;
+      } else {
+        targetId = this.deviceManager?.selectedDeviceId || null;
+      }
+    }
+    const srcDev = targetId ? this.deviceManager?.getDeviceById?.(targetId) : null;
+    if (!srcDev) {
+      this.showStatusHint('Arahkan crosshair ke perangkat jaringan terlebih dahulu lalu tekan C untuk menarik kabel.');
+      return null;
+    }
+
+    // Drop any carried items first so technician holds only the cable spool
+    if (Array.isArray(this.carriedObjects) && this.carriedObjects.length > 0) {
+      this.dropCarriedObjectsFromAvatar?.({ dropAll: true, silent: true });
+    }
+
+    const chosenPort = portName || this._findFirstFreePortName(srcDev.id);
+    const cableCategory = options.cableCategory || this.pen3dCategory || 'cat6';
+    const orthoLock = options.orthoLock !== undefined ? Boolean(options.orthoLock) : true;
+
+    this.activeCablePull = {
+      sourceDeviceId: srcDev.id,
+      sourcePort: chosenPort,
+      cableCategory,
+      pathStyle: orthoLock ? 'orthogonal' : 'curve',
+      conduitType: options.conduitType || 'none',
+      waypoints: [],
+      ...[truncated for diff preview]
