@@ -106,6 +106,11 @@ export class LayerControls {
       this.map3DEngine?.setViewFilters?.({ showCoverage: this.filters.showCoverage });
     });
 
+    const toggleBuildingLabels = document.getElementById('layer-toggle-building-labels');
+    toggleBuildingLabels?.addEventListener('change', (e) => {
+      this.map3DEngine?.setShowBuildingSignboards?.(Boolean(e.target.checked));
+    });
+
     // Track hidden-layer / filter badge & quick reset inside Top Bar dropdown
     const allViewCheckboxes = document.querySelectorAll('#navbar-view-filter-dropdown input[type="checkbox"]');
     allViewCheckboxes.forEach((cb) => {
@@ -139,7 +144,7 @@ export class LayerControls {
         stateManager.toggleLayer(cb.getAttribute('data-layer'), true);
       }
     });
-    ['filter-toggle-cctv', 'filter-toggle-fiber', 'filter-toggle-wireless', 'filter-toggle-coverage', 'toggle-dim-bg-on-select'].forEach((id) => {
+    ['filter-toggle-cctv', 'filter-toggle-fiber', 'filter-toggle-wireless', 'filter-toggle-coverage', 'toggle-dim-bg-on-select', 'layer-toggle-building-labels'].forEach((id) => {
       const el = document.getElementById(id);
       if (el && !el.checked) {
         el.checked = true;
@@ -160,6 +165,7 @@ export class LayerControls {
       }
     }
     this.map3DEngine?.setShowLabels?.(true);
+    this.map3DEngine?.setShowBuildingSignboards?.(true);
     this.map3DEngine?.setViewFilters?.({ ...this.filters });
     this.syncViewFilterBadge();
   }

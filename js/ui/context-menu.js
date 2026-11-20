@@ -325,6 +325,24 @@ export class ContextMenu {
         }
       },
       {
+        id: 'auto-tidy-cable-ceiling',
+        icon: 'route',
+        label: 'Rapikan Kabel Otomatis (Plafon 90°)',
+        action: () => {
+          this.hide();
+          const map3d = window.__netmapApp?.map3DEngine;
+          const wallSnapFn = (map3d && map3d.isActive && typeof map3d.snapNormalizedPointToNearestWall3D === 'function')
+            ? (nx, ny, z) => map3d.snapNormalizedPointToNearestWall3D(nx, ny, z)
+            : null;
+          const updated = this.cableManager.applyAutoTidy?.(cable.id, { preset: 'ceiling-run', wallSnapFn });
+          if (updated) {
+            if (map3d?.isActive) map3d.syncCables?.();
+            const score = updated.details?.neatnessReport?.score ?? '--';
+            this.showToast(`Kabel dirapikan ke jalur plafon 90° (Skor Kerapian: ${score}/100).`);
+          }
+        }
+      },
+      {
         id: 'bake-cable-pen-points',
         icon: 'git-commit',
         label: 'Buat 3 Titik Lengkung Dinamis (Pen Tool)',

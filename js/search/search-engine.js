@@ -1,7 +1,13 @@
 /**
  * NetMap — Multi-Criteria Search Engine
- * Indexes devices and connections for fast real-time search & filtering
+ * Indexes devices, connections, and 3D buildings/notes/maintenance logs for fast real-time search & filtering
  */
+
+import { stateManager } from '../core/state-manager.js';
+import {
+  isDecorationRoom,
+  buildBuildingDocumentationSummary
+} from '../map/room-spatial-index.js';
 
 export class SearchEngine {
   /**
@@ -230,6 +236,114 @@ export class SearchEngine {
       if (filterOptions.type && dev.type !== filterOptions.type) return false;
       return true;
     });
+  }
+
+  /**
+   * Search 3D buildings / rooms by name, roomCode, zone, PIC, technician notes, and maintenance logs.
+   * @param {string} query
+   * @param {Object} [options={}]
+   * @param {boolean} [options.browseWhenEmpty=false]
+   * @param {boolean} [options.includeDecorations=false]
+   * @param {number} [options.limit=15]
+   * @param {Object[]} [options.rooms]
+   * @returns {Array<{ room: Object, matchedSnippet: string, deviceCount: number, vlans: number[], score: number }>}
+   */
+  searchRooms(query, options = {}) {
+    const browseWhenEmpty = Boolean(options.browseWhenEmpty);
+    const includeDecorations = Boolean(options.includeDecorations);
+    const limit = Number.isFinite(options.limit) ? options.limit : 15;
+    const allRooms = Array.isArray(options.rooms)
+      ? options.rooms
+      : (stateManager.getRooms3d?.() || []);
+    const candidateRooms = includeDecorations
+      ? allRooms
+      : allRooms.filter((r) => !isDecorationRoom(r));
+
+    if (candidateRooms.length === 0) return [];
+
+    const devices = this.deviceManager?.getAllDevices?.() || [];
+    const connections = this.cableManager?.getAllConnections?.() || [];
+    const objects3d = stateManager.getObjects3d?.() || [];
+    const projectMap = stateManager.getState?.()?.project?.map || {};
+    const spatialOpts = {
+      mapWidthMeters: this.cableManager?.mapWidthMeters || 170,
+      naturalWidth: projectMap.naturalWidth || 1024,
+      naturalHeight: projectMap.naturalHeight || 1024,
+      allRooms: candidateRooms
+    };
+
+    const cleanQuery = String(query || '').trim().toLowerCase();
+    if (!cleanQuery) {
+      if (!browseWhenEmpty) return [];
+      const entries = candidateRooms.map((room) => {
+        const sum = buildBuildingDocumentationSummary(room, devices, connections, objects3d, spatialOpts);
+        return {
+          room,
+          matchedSnippet: sum.doc.notes ? sum.doc.notes.slice(0, 90) : (sum.doc.zone || ''),
+          deviceCount: sum.devicesInside.length,
+          vlans: sum.networkSummary.vlans,
+          score: sum.devicesInside.length * 10
+        };
+      });
+      entries.sort((a, b) => (b.deviceCount - a.deviceCount) || String(a.room.name || '').localeCompare(String(b.room.name || '')));
+      return entries.slice(0, limit);
+    }
+
+    const tokens = cleanQuery.split(/\s+/).filter(Boolean);
+    const matched = [];
+
+    for (const room of candidateRooms) {
+      const doc = room.doc || {};
+      const logs = Array.isArray(doc.maintenanceLogs) ? doc.maintenanceLogs : [];
+      const logTexts = logs.map((l) => `${l.date || ''} ${l.technician || ''} ${l.category || ''} ${l.summary || ''}`.trim());
+
+      const searchable = [
+        room.name,
+        room.id,
+        doc.roomCode,
+        doc.zone,
+        doc.picName,
+        doc.notes,
+        ...logTexts
+      ].filter(Boolean).join(' ').toLowerCase();
+
+      if (!tokens.every((t) => searchable.includes(t))) continue;
+
+      const nameL = String(room.name || '').toLowerCase();
+      const codeL = String(doc.roomCode || '').toLowerCase();
+      const zoneL = String(doc.zone || '').toLowerCase();
+      const notesStr = String(doc.notes || '');
+      let score = 100;
+
+      if (nameL === cleanQuery || (codeL && codeL === cleanQuery)) score += 1000;
+      else if (nameL.startsWith(cleanQuery) || (codeL && codeL.startsWith(cleanQuery))) score += 550;
+      else if (nameL.includes(cleanQuery) || (codeL && codeL.includes(cleanQuery))) score += 320;
+      else if (zoneL.includes(cleanQuery)) score += 220;
+
+      let matchedSnippet = '';
+      const matchedLog = logs.find((l) => tokens.some((t) => String(l.summary || '').toLowerCase().includes(t) || String(l.technician || '').toLowerCase().includes(t)));
+      if (notesStr && tokens.some((t) => notesStr.toLowerCase().includes(t))) {
+        matchedSnippet = notesStr.length > 95 ? `${notesStr.slice(0, 92)}...` : notesStr;
+        score += 180;
+      } else if (matchedLog) {
+        matchedSnippet = `${matchedLog.date ? `${matchedLog.date} — ` : ''}${matchedLog.summary}`;
+        score += 170;
+      } else if (doc.zone) {
+        matchedSnippet = doc.zone;
+      }
+
+      const sum = buildBuildingDocumentationSummary(room, devices, connections, objects3d, spatialOpts);
+      matched.push({
+        room,
+        matchedSnippet,
+        deviceCount: sum.devicesInside.length,
+        vlans: sum.networkSummary.vlans,
+        score: score + sum.devicesInside.length * 5
+      });
+    }
+
+    matched.sort((a, b) => (b.score - a.score) || String(a.room.name || '').localeCompare(String(b.room.name || '')));
+    return matched.slice(0, limit);
   }
 }
 

@@ -24,10 +24,10 @@
     rel="stylesheet">
 
   <!-- Core Stylesheets -->
-  <link rel="stylesheet" href="css/main.css?v=20261119-alldoors-v28">
-  <link rel="stylesheet" href="css/layout.css?v=20261119-alldoors-v28">
-  <link rel="stylesheet" href="css/components.css?v=20261119-alldoors-v28">
-  <link rel="stylesheet" href="css/map.css?v=20261119-alldoors-v28">
+  <link rel="stylesheet" href="css/main.css?v=20261120-uxlabs-v32">
+  <link rel="stylesheet" href="css/layout.css?v=20261120-uxlabs-v32">
+  <link rel="stylesheet" href="css/components.css?v=20261120-uxlabs-v32">
+  <link rel="stylesheet" href="css/map.css?v=20261120-uxlabs-v32">
 
   <!-- Vendor Libraries (Offline-First with CDN fallback) -->
   <script src="assets/vendor/konva.min.js"></script>
@@ -199,6 +199,21 @@
               <i data-lucide="folder" style="width: 14px; height: 14px; color: var(--status-warning);"></i>
               <span>Proyek</span>
             </button>
+            <button id="btn-open-jobsheet" class="navbar-dropdown-item" role="menuitem"
+              title="Buka Katalog Jobsheet Praktikum SMK &amp; Tugas Guru">
+              <i data-lucide="clipboard-list" style="width: 14px; height: 14px; color: var(--accent-green);"></i>
+              <span>Jobsheet Praktikum</span>
+            </button>
+            <button id="btn-open-welcome" class="navbar-dropdown-item" role="menuitem"
+              title="Buka Menu Mulai Cepat (Quick-Start)">
+              <i data-lucide="sparkles" style="width: 14px; height: 14px; color: var(--accent-blue);"></i>
+              <span>Mulai Cepat</span>
+            </button>
+            <button id="btn-open-shortcuts" class="navbar-dropdown-item" role="menuitem"
+              title="Panduan Kontrol &amp; Pintasan Keyboard/Sentuh (?)">
+              <i data-lucide="help-circle" style="width: 14px; height: 14px; color: var(--text-secondary);"></i>
+              <span>Panduan Kontrol (?)</span>
+            </button>
           </div>
         </div>
 
@@ -255,6 +270,11 @@
                     style="accent-color: var(--accent-blue);">
                   <span>Label &amp; Anotasi</span>
                 </label>
+                <label class="vf-check-row" title="Tampilkan papan nama gedung mengambang di atas atap bangunan 3D">
+                  <input type="checkbox" id="layer-toggle-building-labels" checked
+                    style="accent-color: var(--accent-green);">
+                  <span>Label Nama Gedung 3D</span>
+                </label>
               </div>
 
               <div class="vf-col">
@@ -308,7 +328,7 @@
           <div id="navbar-search-dropdown" class="navbar-dropdown-panel navbar-search-panel">
             <div class="search-box">
               <i data-lucide="search" style="width: 15px; height: 15px; color: var(--text-muted);"></i>
-              <input type="text" id="global-search-input" placeholder="Cari perangkat / IP / VLAN..."
+              <input type="text" id="global-search-input" placeholder="Cari gedung / catatan / IP / VLAN..."
                 autocomplete="off">
             </div>
           </div>
@@ -368,6 +388,14 @@
                     <span>Panduan 3D</span>
                   </span>
                   <span id="badge-menu-3d-hints" class="gs-status-badge">Tampil</span>
+                </button>
+                <button id="btn-settings-3d-quality" type="button" class="gs-action-item"
+                  title="Pilih Preset Performa 3D: Hemat HP (tanpa bayangan, DPR rendah) atau Standar">
+                  <span class="gs-action-label">
+                    <i data-lucide="gauge" style="width: 12px; height: 12px; color: var(--accent-green);"></i>
+                    <span>Kualitas 3D</span>
+                  </span>
+                  <span id="badge-menu-3d-quality" class="gs-status-badge">Standar</span>
                 </button>
                 <div class="gs-zoom-presets" style="margin-top: 4px;" title="Buka atau tutup semua pintu ruangan 3D sekaligus">
                   <button id="btn-settings-open-doors" type="button" class="btn btn-secondary btn-sm"
@@ -435,6 +463,38 @@
         </button>
       </div>
     </header>
+
+    <!-- ====================================================================
+         Phase 9B: Master Read-Only / Student Practice Sandbox Guard Banner
+         ==================================================================== -->
+    <div id="session-guard-banner" class="session-guard-banner is-readonly" role="status" aria-live="polite">
+      <div class="session-banner-left">
+        <i data-lucide="shield-check" style="width: 14px; height: 14px; flex-shrink: 0;"></i>
+        <span id="session-banner-text">Peta Master SMKN 1 Beringin (Mode Baca Aman) — Ingin praktik rakit jaringan?</span>
+      </div>
+      <div class="session-banner-actions">
+        <button type="button" id="btn-banner-fork-sandbox" class="session-banner-btn is-primary"
+          title="Salin peta sekolah ke ruang praktik lokal yang aman">
+          <i data-lucide="flask-conical" style="width: 12px; height: 12px;"></i>
+          <span>Praktik di Salinan Sandbox</span>
+        </button>
+        <button type="button" id="btn-banner-open-jobsheet" class="session-banner-btn"
+          title="Buka katalog Jobsheet praktikum jaringan SMK auto-graded">
+          <i data-lucide="clipboard-list" style="width: 12px; height: 12px;"></i>
+          <span>Buka Jobsheet</span>
+        </button>
+        <button type="button" id="btn-banner-reset-sandbox" class="session-banner-btn" style="display: none;"
+          title="Kembalikan Sandbox ke kondisi awal">
+          <i data-lucide="rotate-ccw" style="width: 12px; height: 12px;"></i>
+          <span>Reset Sandbox</span>
+        </button>
+        <button type="button" id="btn-banner-return-master" class="session-banner-btn is-master" style="display: none;"
+          title="Keluar dari Sandbox dan pulihkan Peta Master SMKN 1 Beringin">
+          <i data-lucide="building-2" style="width: 12px; height: 12px;"></i>
+          <span>Kembali ke Peta Master</span>
+        </button>
+      </div>
+    </div>
 
     <!-- ====================================================================
          Main Workspace: Left Sidebar, Map Viewport, Right Sidebar
@@ -564,49 +624,30 @@
         <!-- Three.js 3D Map Container -->
         <div id="map-3d-container" class="hidden" style="display: none;" aria-label="Peta Infrastruktur 3D"></div>
 
-        <!-- Floating 3D Controls HUD (SketchUp-Style Navigation Bar) -->
+        <!-- Floating 3D Controls HUD (Phase 9A Compact Contextual 1-Row Bar + 2 Popovers) -->
         <div id="hud-3d-controls" class="hud-3d-controls hidden" style="display: none;">
           <button id="btn-3d-toggle-controls" class="hud-3d-btn hud-3d-toggle-btn" type="button"
             title="Minimize Bar Navigasi 3D" aria-expanded="true">
             <i data-lucide="chevron-up" style="width: 13px; height: 13px;"></i>
             <span class="hud-3d-toggle-label">Navigasi 3D</span>
           </button>
-          <!-- SketchUp Camera Tool Selector -->
-          <div class="hud-3d-group" title="Alat Navigasi ala SketchUp">
+
+          <!-- Core Interaction Tools (Always 1-Click Visible) -->
+          <div class="hud-3d-group" title="Alat Interaksi Utama 3D">
             <button id="btn-3d-tool-orbit" class="hud-3d-btn active" data-tool3d="orbit"
               title="Orbit (O) — Drag kiri/tengah putar kamera, Shift+Drag/Kanan untuk Pan">
               <i data-lucide="rotate-3d" style="width: 13px; height: 13px;"></i>
               <span>Orbit</span>
             </button>
-            <button id="btn-3d-tool-pan" class="hud-3d-btn" data-tool3d="pan"
-              title="Pan / Geser (H) — Drag kiri geser layar mulus sejajar pandangan">
-              <i data-lucide="hand" style="width: 13px; height: 13px;"></i>
-              <span>Pan</span>
-            </button>
-            <button id="btn-3d-tool-zoom" class="hud-3d-btn" data-tool3d="zoom"
-              title="Zoom (Z) — Drag naik/turun atau Scroll ke arah kursor">
-              <i data-lucide="zoom-in" style="width: 13px; height: 13px;"></i>
-              <span>Zoom</span>
-            </button>
-            <button id="btn-3d-tool-look" class="hud-3d-btn" data-tool3d="look"
-              title="Look Around (L) — Putar pandangan di tempat (bagus di dalam ruangan) + WASD/QE">
-              <i data-lucide="eye" style="width: 13px; height: 13px;"></i>
-              <span>Look</span>
-            </button>
             <button id="btn-3d-tool-move" class="hud-3d-btn" data-tool3d="move"
-              title="Move Objek X/Y (M) — Drag perangkat di atas lantai untuk memindah posisi X & Y">
+              title="Move Objek X/Y (M) — Drag perangkat di atas lantai untuk memindah posisi X &amp; Y">
               <i data-lucide="move" style="width: 13px; height: 13px;"></i>
               <span>Move</span>
             </button>
             <button id="btn-3d-tool-rotate" class="hud-3d-btn" data-tool3d="rotate"
-              title="Rotate 3D (R) — Drag=Putar Y • Shift+Drag=Miring X (Tempel Dinding) • Alt+Drag=Roll Z • [ / ]=Step 15°">
+              title="Rotate 3D (R) — Drag=Putar Y • Shift+Drag=Miring X (Tempel Dinding) • [ / ]=Step 15°">
               <i data-lucide="rotate-cw" style="width: 13px; height: 13px;"></i>
               <span>Rotate</span>
-            </button>
-            <button id="btn-3d-tool-box" class="hud-3d-btn" data-tool3d="box"
-              title="Box Select Multi-Perangkat (B) — Drag kotak (atau Ctrl+Drag di Orbit) untuk memilih banyak perangkat 3D">
-              <i data-lucide="box-select" style="width: 13px; height: 13px;"></i>
-              <span>Pilih Box</span>
             </button>
             <button id="btn-3d-tool-draw3d" class="hud-3d-btn ws-build-only" data-tool3d="draw3d"
               title="Buat Objek 3D ala SketchUp (P) — Klik/Drag di lantai untuk buat Tiang CCTV, Rak Server, Box, dll">
@@ -622,95 +663,170 @@
 
           <div class="hud-3d-divider"></div>
 
-          <!-- Standard Camera Views & Extents -->
-          <div class="hud-3d-group">
-            <button id="btn-3d-extents" class="hud-3d-btn"
-              title="Zoom Extents (Shift+Z) — Paskan semua perangkat & ruangan ke layar">
-              <i data-lucide="maximize-2" style="width: 12px; height: 12px;"></i>
-              <span>Extents</span>
+          <!-- Smart Mode Teknisi + Contextual FPP Pill & 1-Click X-Ray -->
+          <div class="hud-3d-group hud-3d-avatar-pill">
+            <button id="btn-3d-avatar" class="hud-3d-btn"
+              title="Mode Teknisi 3D ala Simulator (G) — Jalan-jalan dengan karakter di denah (WASD + Spasi Lompat)">
+              <i data-lucide="user" style="width: 13px; height: 13px;"></i>
+              <span>Mode Teknisi</span>
             </button>
-            <button id="btn-3d-iso" class="hud-3d-btn active" title="Sudut Isometrik">Iso</button>
-            <button id="btn-3d-top" class="hud-3d-btn" title="Tampak Atas">Atas</button>
-            <button id="btn-3d-front" class="hud-3d-btn" title="Tampak Depan">Depan</button>
-            <button id="btn-3d-side" class="hud-3d-btn" title="Tampak Samping (Lihat Tumpukan)">Samping</button>
-            <button id="btn-3d-focus" class="hud-3d-btn" title="Fokus ke Perangkat Terpilih">Fokus</button>
-            <button id="btn-3d-autofocus" class="hud-3d-btn active ws-network-only"
-              title="Auto-Fokus Simulator saat Perangkat Diklik">
-              <i data-lucide="crosshair" style="width: 12px; height: 12px;"></i>
-              <span>Auto-Fokus</span>
+            <button id="btn-3d-fpp" class="hud-3d-btn hud-3d-fpp-sub"
+              title="Mode FPP / Orang Pertama (V) — Sudut pandang mata teknisi langsung">
+              <i data-lucide="eye" style="width: 13px; height: 13px;"></i>
+              <span>FPP</span>
             </button>
+          </div>
+
+          <button id="btn-3d-xray" class="hud-3d-btn" type="button"
+            title="Mode X-Ray Gedung (X) — Tembus pandang dinding &amp; atap untuk audit jalur backbone FO &amp; UTP">
+            <i data-lucide="scan-eye" style="width: 13px; height: 13px;"></i>
+            <span>X-Ray</span>
+          </button>
+
+          <div class="hud-3d-divider"></div>
+
+          <!-- Popover 1: Kamera (Secondary Nav Tools + Camera Presets) -->
+          <div id="hud-3d-pop-camera-wrap" class="hud-3d-popover-wrap">
+            <button id="btn-3d-pop-camera" class="hud-3d-btn hud-3d-pop-trigger" type="button"
+              aria-expanded="false" aria-haspopup="true" title="Alat Kamera &amp; Sudut Pandang 3D">
+              <i data-lucide="camera" style="width: 13px; height: 13px;"></i>
+              <span>Kamera</span>
+              <i data-lucide="chevron-down" style="width: 11px; height: 11px; opacity: 0.75;"></i>
+            </button>
+            <div id="hud-3d-popover-camera" class="hud-3d-popover-panel" role="menu">
+              <div class="hud-3d-pop-title">Alat Navigasi Tambahan</div>
+              <div class="hud-3d-pop-grid">
+                <button id="btn-3d-tool-pan" class="hud-3d-btn" data-tool3d="pan"
+                  title="Pan / Geser (H) — Drag kiri geser layar mulus sejajar pandangan">
+                  <i data-lucide="hand" style="width: 13px; height: 13px;"></i>
+                  <span>Pan (H)</span>
+                </button>
+                <button id="btn-3d-tool-zoom" class="hud-3d-btn" data-tool3d="zoom"
+                  title="Zoom (Z) — Drag naik/turun atau Scroll ke arah kursor">
+                  <i data-lucide="zoom-in" style="width: 13px; height: 13px;"></i>
+                  <span>Zoom (Z)</span>
+                </button>
+                <button id="btn-3d-tool-look" class="hud-3d-btn" data-tool3d="look"
+                  title="Look Around (L) — Putar pandangan di tempat (bagus di dalam ruangan) + WASD/QE">
+                  <i data-lucide="eye" style="width: 13px; height: 13px;"></i>
+                  <span>Look (L)</span>
+                </button>
+                <button id="btn-3d-tool-box" class="hud-3d-btn" data-tool3d="box"
+                  title="Box Select Multi-Perangkat (B) — Drag kotak untuk memilih banyak perangkat 3D">
+                  <i data-lucide="box-select" style="width: 13px; height: 13px;"></i>
+                  <span>Pilih Box (B)</span>
+                </button>
+              </div>
+              <div class="hud-3d-pop-title">Sudut Pandang Preset</div>
+              <div class="hud-3d-pop-grid">
+                <button id="btn-3d-extents" class="hud-3d-btn"
+                  title="Zoom Extents (Shift+Z) — Paskan semua perangkat &amp; ruangan ke layar">
+                  <i data-lucide="maximize-2" style="width: 12px; height: 12px;"></i>
+                  <span>Extents</span>
+                </button>
+                <button id="btn-3d-iso" class="hud-3d-btn active" title="Sudut Isometrik">Iso</button>
+                <button id="btn-3d-top" class="hud-3d-btn" title="Tampak Atas">Atas</button>
+                <button id="btn-3d-front" class="hud-3d-btn" title="Tampak Depan">Depan</button>
+                <button id="btn-3d-side" class="hud-3d-btn" title="Tampak Samping (Lihat Tumpukan)">Samping</button>
+                <button id="btn-3d-focus" class="hud-3d-btn" title="Fokus ke Perangkat Terpilih">Fokus</button>
+              </div>
+              <button id="btn-3d-autofocus" class="hud-3d-btn active ws-network-only hud-3d-pop-keep-open" style="width:100%;justify-content:center;"
+                title="Auto-Fokus Simulator saat Perangkat Diklik">
+                <i data-lucide="crosshair" style="width: 12px; height: 12px;"></i>
+                <span>Auto-Fokus Perangkat</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Popover 2: Tampilan 3D (Scale, Cable Size, Explode, Labels, Models, Mobile Quality) -->
+          <div id="hud-3d-pop-display-wrap" class="hud-3d-popover-wrap">
+            <button id="btn-3d-pop-display" class="hud-3d-btn hud-3d-pop-trigger" type="button"
+              aria-expanded="false" aria-haspopup="true" title="Pengaturan Skala, Label &amp; Tampilan 3D">
+              <i data-lucide="sliders-horizontal" style="width: 13px; height: 13px;"></i>
+              <span>Tampilan 3D</span>
+              <i data-lucide="chevron-down" style="width: 11px; height: 11px; opacity: 0.75;"></i>
+            </button>
+            <div id="hud-3d-popover-display" class="hud-3d-popover-panel" role="menu">
+              <div class="hud-3d-pop-title">Skala &amp; Geometri</div>
+              <div class="hud-3d-pop-row ws-network-only">
+                <label class="hud-3d-inline" style="width:100%;justify-content:space-between;" title="Perbesar/perkecil ukuran objek 3D">
+                  <span>Skala Perangkat</span>
+                  <select id="select-3d-scale" class="hud-3d-select">
+                    <option value="0.6">0.6x</option>
+                    <option value="1">1.0x</option>
+                    <option value="1.5">1.5x</option>
+                    <option value="2">2.0x</option>
+                    <option value="3" selected>3.0x</option>
+                  </select>
+                </label>
+              </div>
+              <div class="hud-3d-pop-row ws-network-only">
+                <label class="hud-3d-inline" style="width:100%;justify-content:space-between;"
+                  title="Ukuran diameter kabel 3D (1.0x = otomatis pas dengan ukuran lubang Port)">
+                  <span>Ukuran Kabel</span>
+                  <select id="select-3d-cable-size" class="hud-3d-select">
+                    <option value="0.6">0.6x Port</option>
+                    <option value="1" selected>1.0x Port</option>
+                    <option value="1.5">1.5x Port</option>
+                    <option value="2.5">2.5x Port</option>
+                    <option value="5">5.0x (Tebal)</option>
+                  </select>
+                </label>
+              </div>
+              <div class="hud-3d-pop-title">Label &amp; Visual</div>
+              <div class="hud-3d-pop-grid">
+                <button id="btn-3d-labels" class="hud-3d-btn active hud-3d-pop-keep-open" title="Tampilkan / Sembunyikan Label Perangkat 3D">
+                  <i data-lucide="tag" style="width: 13px; height: 13px;"></i>
+                  <span>Label Device</span>
+                </button>
+                <button id="btn-3d-building-labels-quick" class="hud-3d-btn active hud-3d-pop-keep-open" type="button"
+                  title="Tampilkan / Sembunyikan Papan Nama Gedung 3D di Atap">
+                  <i data-lucide="building-2" style="width: 13px; height: 13px;"></i>
+                  <span>Label Gedung</span>
+                </button>
+                <button id="btn-3d-explode" class="hud-3d-btn ws-network-only hud-3d-pop-keep-open"
+                  title="Regangkan perangkat yang bertumpuk agar terlihat semua">
+                  <i data-lucide="layers" style="width: 13px; height: 13px;"></i>
+                  <span>Regangkan</span>
+                </button>
+                <button id="btn-3d-quality-quick" class="hud-3d-btn hud-3d-pop-keep-open" type="button"
+                  title="Tukar kualitas 3D Standar / Hemat HP">
+                  <i data-lucide="gauge" style="width: 13px; height: 13px;"></i>
+                  <span>Kualitas: Standar</span>
+                </button>
+              </div>
+              <button id="btn-3d-device-models" class="hud-3d-btn hud-3d-btn-accent ws-network-only" style="width:100%;justify-content:center;"
+                title="Pasang Model 3D Kustom (.glb/.gltf) untuk Perangkat">
+                <i data-lucide="cpu" style="width: 13px; height: 13px;"></i>
+                <span>Model 3D Device (.GLB)</span>
+              </button>
+            </div>
           </div>
 
           <div class="hud-3d-divider"></div>
 
-          <label class="hud-3d-inline ws-network-only" title="Perbesar/perkecil ukuran objek 3D">
-            <span>Skala</span>
-            <select id="select-3d-scale" class="hud-3d-select">
-              <option value="0.6">0.6x</option>
-              <option value="1">1.0x</option>
-              <option value="1.5">1.5x</option>
-              <option value="2">2.0x</option>
-              <option value="3" selected>3.0x</option>
-            </select>
-          </label>
-
-          <label class="hud-3d-inline ws-network-only"
-            title="Ukuran diameter kabel 3D (1.0x = otomatis pas dengan ukuran lubang Port)">
-            <span>Kabel</span>
-            <select id="select-3d-cable-size" class="hud-3d-select">
-              <option value="0.6">0.6x Port</option>
-              <option value="1" selected>1.0x Port</option>
-              <option value="1.5">1.5x Port</option>
-              <option value="2.5">2.5x Port</option>
-              <option value="5">5.0x (Tebal)</option>
-            </select>
-          </label>
-
-          <button id="btn-3d-explode" class="hud-3d-btn ws-network-only"
-            title="Regangkan perangkat yang bertumpuk agar terlihat semua">
-            <i data-lucide="layers" style="width: 13px; height: 13px;"></i>
-            <span>Regangkan</span>
-          </button>
-
-          <button id="btn-3d-labels" class="hud-3d-btn active" title="Tampilkan / Sembunyikan Label 3D">
-            <i data-lucide="tag" style="width: 13px; height: 13px;"></i>
-            <span>Label</span>
-          </button>
-
-          <button id="btn-3d-avatar" class="hud-3d-btn"
-            title="Mode Teknisi 3D ala Simulator (G) — Jalan-jalan dengan karakter di denah (WASD + Spasi Lompat)">
-            <i data-lucide="user" style="width: 13px; height: 13px;"></i>
-            <span>Mode Teknisi</span>
-          </button>
-
-          <button id="btn-3d-fpp" class="hud-3d-btn"
-            title="Mode FPP / Orang Pertama (V) — Sudut pandang mata teknisi langsung">
-            <i data-lucide="eye" style="width: 13px; height: 13px;"></i>
-            <span>Mode FPP</span>
-          </button>
-
-          <div class="hud-3d-divider"></div>
-
+          <!-- Build Workspace Core Actions -->
           <button id="btn-3d-rooms" class="hud-3d-btn hud-3d-btn-accent ws-build-only"
-            title="Kelola Ruangan 3D & Model Custom (.glb/.gltf)">
+            title="Kelola Ruangan 3D &amp; Model Custom (.glb/.gltf)">
             <i data-lucide="building-2" style="width: 13px; height: 13px;"></i>
             <span>Ruangan 3D</span>
           </button>
-
           <button id="btn-3d-lock-rooms" class="hud-3d-btn ws-build-only" type="button"
             title="Kunci Posisi Semua Ruangan 3D — Cegah ruangan ikut terklik/bergeser saat menggeser perangkat">
             <i data-lucide="unlock" style="width: 13px; height: 13px;"></i>
             <span>Kunci Ruangan</span>
           </button>
           <button id="btn-3d-objects" class="hud-3d-btn hud-3d-btn-accent ws-build-only"
-            title="3D Object Studio (P) — Buat Tiang CCTV, Rak Server Custom, Tower & Bangun 3D Sederhana">
+            title="3D Object Studio (P) — Buat Tiang CCTV, Rak Server Custom, Tower &amp; Bangun 3D Sederhana">
             <i data-lucide="boxes" style="width: 13px; height: 13px;"></i>
             <span>Objek 3D</span>
           </button>
-          <button id="btn-3d-device-models" class="hud-3d-btn hud-3d-btn-accent ws-network-only"
-            title="Pasang Model 3D Kustom (.glb/.gltf) untuk Perangkat">
-            <i data-lucide="cpu" style="width: 13px; height: 13px;"></i>
-            <span>Model 3D Device</span>
+
+          <!-- Network Workspace Core Educational Actions -->
+          <button id="btn-3d-jobsheet" class="hud-3d-btn ws-network-only" type="button"
+            title="Buka Katalog Jobsheet Praktikum SMK Auto-Graded (5 Lab SMKN 1 Beringin)">
+            <i data-lucide="clipboard-list" style="width: 13px; height: 13px;"></i>
+            <span>Jobsheet</span>
           </button>
           <button id="btn-3d-packet-tracer" class="hud-3d-btn hud-3d-btn-accent ws-network-only" type="button"
             title="Simulasi Ping 3D &amp; Terminal CLI Cisco / MikroTik">
@@ -872,6 +988,20 @@
               </button>
               <button type="button" id="btn-mob-drop-all" class="mob-action-pill is-warn" title="Taruh Semua Benda">
                 <span>Semua</span>
+              </button>
+            </div>
+            <div id="mob-cable-pull-cluster" class="mob-cable-pull-cluster hidden" style="display: none;">
+              <button type="button" id="btn-mob-cable-clip" class="mob-action-btn is-cable-clip" title="Pasang Klem Kabel 3D di titik bidik">
+                <i data-lucide="pin" style="width: 16px; height: 16px;"></i>
+                <span>Klem</span>
+              </button>
+              <button type="button" id="btn-mob-cable-undo" class="mob-action-btn is-cable-undo" title="Lepas Klem Terakhir">
+                <i data-lucide="undo-2" style="width: 16px; height: 16px;"></i>
+                <span>Undo</span>
+              </button>
+              <button type="button" id="btn-mob-cable-plug" class="mob-action-btn is-cable-plug" title="Colok Kabel ke Perangkat Tujuan">
+                <i data-lucide="plug" style="width: 16px; height: 16px;"></i>
+                <span>Colok</span>
               </button>
             </div>
             <div class="mob-action-row">
@@ -1068,7 +1198,7 @@
   </div>
 
   <!-- Application Bootstrap (Bundled for file:// and http:// compatibility) -->
-  <script src="js/bundle.js?v=20261119-alldoors-v28"></script>
+  <script src="js/bundle.js?v=20261120-uxlabs-v32"></script>
 </body>
 
 </html>

@@ -2276,6 +2276,7 @@ export function createBuildingRoomPresetData(presetOrId, { x = 0.5, y = 0.5, exi
   return {
     id: id || `room3d-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
     name: countSame > 0 ? `${preset.name} #${countSame + 1}` : preset.name,
+    presetId: preset.id,
     x,
     y,
     widthMeters: preset.widthMeters,
@@ -2292,6 +2293,258 @@ export function createBuildingRoomPresetData(presetOrId, { x = 0.5, y = 0.5, exi
     opacity: preset.opacity ?? 0.18,
     customModelUrl: preset.customModelUrl
   };
+}
+
+/**
+ * Find the paired cutaway / full-roof preset for a building room, presetId, or GLB URL.
+ * Automatically matches `foo.glb` <-> `foo_cutaway.glb` across BUILTIN_ROOM_BUILDING_PRESETS.
+ * @param {Object|string} roomOrPresetOrUrl
+ * @returns {{ currentPreset: Object|null, pairPreset: Object, isCurrentlyCutaway: boolean }|null}
+ */
+export function findCutawayPairPreset(roomOrPresetOrUrl) {
+  if (!roomOrPresetOrUrl) return null;
+  const rawUrl = typeof roomOrPresetOrUrl === 'string'
+    ? roomOrPresetOrUrl
+    : (roomOrPresetOrUrl.customModelUrl || '');
+  const rawId = typeof roomOrPresetOrUrl === 'string'
+    ? roomOrPresetOrUrl
+    : (roomOrPresetOrUrl.presetId || '');
+
+  const currentPreset = BUILTIN_ROOM_BUILDING_PRESETS.find((b) =>
+    (rawUrl && b.customModelUrl === rawUrl) || (rawId && b.id === rawId)
+  ) || null;
+
+  const probeUrl = currentPreset?.customModelUrl || rawUrl;
+  if (!probeUrl) return null;
+
+  const normalizedUrl = String(probeUrl).trim();
+  const isCurrentlyCutaway = Boolean(currentPreset?.isCutaway) || /_cutaway\.glb$/i.test(normalizedUrl);
+  const baseUrl = normalizedUrl.replace(/_cutaway(\.glb)$/i, '$1');
+  const targetUrl = isCurrentlyCutaway
+    ? baseUrl
+    : baseUrl.replace(/(\.glb)$/i, '_cutaway$1');
+
+  const pairPreset = BUILTIN_ROOM_BUILDING_PRESETS.find((b) =>
+    b.customModelUrl === targetUrl && b !== currentPreset
+  ) || null;
+
+  if (!pairPreset) return null;
+  return {
+    currentPreset,
+    pairPreset,
+    isCurrentlyCutaway
+  };
+}
+
+/**
+ * Create a floating, raycast-clickable 3D Building Signboard (High-DPI 512x160 Canvas Sprite + Pin Stem).
+ * Displays Building Name, optional roomCode, device count status dot, active VLAN pills, and alert badge.
+ * @param {Object} room
+ * @param {Object} summary - Output of buildBuildingDocumentationSummary()
+ * @param {Object} [options]
+ * @param {boolean} [options.isDark=false]
+ * @param {Function} [options.normToWorldFn]
+ * @param {boolean} [options.isInspected=false]
+ * @returns {THREE.Group}
+ */
+export function createBuildingSignboard3DGroup(room, summary = null, {
+  isDark = false,
+  normToWorldFn = null,
+  isInspected = false
+} = {}) {
+  const group = new THREE.Group();
+  const wPos = normToWorldFn ? normToWorldFn(room?.x ?? 0.5, room?.y ?? 0.5) : { x: 0, z: 0 };
+  const roofY = Math.max(2.6, Number(room?.heightMeters) || 4.5);
+  const pinHeight = 2.6;
+
+  group.position.set(wPos.x, roofY, wPos.z);
+  group.name = `BuildingSignboard_${room?.id || 'room'}`;
+  group.userData = {
+    isBuildingSignboard: true,
+    isLabelSprite: true,
+    signboardRoomId: room?.id || ''
+  };
+
+  const statusCounts = summary?.statusCounts || { online: 0, warning: 0, offline: 0, total: 0 };
+  const vlans = Array.isArray(summary?.networkSummary?.vlans) ? summary.networkSummary.vlans : [];
+  const doc = summary?.doc || room?.doc || {};
+  const hasOffline = statusCounts.offline > 0;
+  const hasWarning = statusCounts.warning > 0;
+  const accentColor = hasOffline
+    ? '#ef4444'
+    : (hasWarning ? '#f59e0b' : (isInspected ? '#2563eb' : (isDark ? '#76c457' : '#2a7c13')));
+
+  // Vertical pin stem connecting roof to floating signboard
+  const stemGeo = new THREE.CylinderGeometry(0.055, 0.055, pinHeight, 6);
+  const stemMat = new THREE.MeshBasicMaterial({
+    color: accentColor,
+    transparent: true,
+    opacity: 0.72
+  });
+  const stemMesh = new THREE.Mesh(stemGeo, stemMat);
+  stemMesh.position.y = pinHeight * 0.5;
+  stemMesh.userData = {
+    isBuildingSignboard: true,
+    signboardRoomId: room?.id || ''
+  };
+  group.add(stemMesh);
+
+  // Small anchor dot on roof
+  const capGeo = new THREE.SphereGeometry(0.16, 8, 8);
+  const capMat = new THREE.MeshBasicMaterial({ color: accentColor });
+  const capMesh = new THREE.Mesh(capGeo, capMat);
+  capMesh.position.y = 0.08;
+  capMesh.userData = {
+    isBuildingSignboard: true,
+    signboardRoomId: room?.id || ''
+  };
+  group.add(capMesh);
+
+  const width = 512;
+  const height = 160;
+  const canvas = typeof document !== 'undefined' ? document.createElement('canvas') : null;
+  const ctx = canvas?.getContext?.('2d') || null;
+  let spriteMat;
+
+  if (ctx) {
+    canvas.width = width;
+    canvas.height = height;
+
+    // Pill background (Botanical Cream / Forest Dark)
+    ctx.fillStyle = isDark ? 'rgba(13, 27, 15, 0.93)' : 'rgba(255, 252, 238, 0.95)';
+    roundRect(ctx, 8, 8, width - 16, height - 16, 22);
+    ctx.fill();
+
+    // Accent border
+    ctx.lineWidth = isInspected ? 6 : 4;
+    ctx.strokeStyle = accentColor;
+    roundRect(ctx, 8, 8, width - 16, height - 16, 22);
+    ctx.stroke();
+
+    // Top row: Building Name + optional roomCode pill
+    const roomTitle = String(room?.name || 'Gedung 3D');
+    const codeText = String(doc.roomCode || '').trim();
+
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+
+    // Building badge marker circle
+    ctx.fillStyle = accentColor;
+    ctx.beginPath();
+    ctx.arc(36, 54, 10, 0, Math.PI * 2);
+    ctx.fill();
+
+    const maxTitleWidth = codeText ? (width - 190) : (width - 78);
+    ctx.font = '700 32px Poppins, system-ui, sans-serif';
+    ctx.fillStyle = isDark ? '#f4f9ee' : '#1b2b18';
+    ctx.fillText(truncateText(ctx, roomTitle, maxTitleWidth), 58, 54);
+
+    if (codeText) {
+      ctx.font = '700 20px Consolas, monospace';
+      const codeLabel = truncateText(ctx, codeText, 118);
+      const codeW = Math.min(126, ctx.measureText(codeLabel).width + 20);
+      const codeX = width - 24 - codeW;
+      ctx.fillStyle = isDark ? 'rgba(118, 196, 87, 0.22)' : 'rgba(42, 124, 19, 0.14)';
+      roundRect(ctx, codeX, 36, codeW, 34, 10);
+      ctx.fill();
+      ctx.fillStyle = isDark ? '#a7e38c' : '#1f6410';
+      ctx.textAlign = 'center';
+      ctx.fillText(codeLabel, codeX + codeW * 0.5, 54);
+    }
+
+    // Divider line
+    ctx.strokeStyle = isDark ? 'rgba(148, 185, 134, 0.22)' : 'rgba(142, 116, 72, 0.24)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(24, 86);
+    ctx.lineTo(width - 24, 86);
+    ctx.stroke();
+
+    // Bottom row: device count + VLAN chips + alert badge
+    ctx.textAlign = 'left';
+    let cursorX = 28;
+    const rowY = 118;
+
+    // Status dot + unit count
+    const dotColor = statusCounts.total === 0
+      ? '#94a3b8'
+      : (hasOffline ? '#ef4444' : (hasWarning ? '#f59e0b' : '#22c55e'));
+    ctx.fillStyle = dotColor;
+    ctx.beginPath();
+    ctx.arc(cursorX + 8, rowY, 7, 0, Math.PI * 2);
+    ctx.fill();
+    cursorX += 24;
+
+    ctx.font = '700 23px Poppins, system-ui, sans-serif';
+    ctx.fillStyle = isDark ? '#dcfce7' : '#263823';
+    const unitLabel = `${statusCounts.total} Unit`;
+    ctx.fillText(unitLabel, cursorX, rowY);
+    cursorX += ctx.measureText(unitLabel).width + 16;
+
+    // VLAN chip
+    if (vlans.length > 0) {
+      const vlanText = `VLAN ${vlans.slice(0, 3).join(', ')}${vlans.length > 3 ? '+' : ''}`;
+      ctx.font = '600 20px Consolas, monospace';
+      const vW = Math.min(200, ctx.measureText(vlanText).width + 20);
+      ctx.fillStyle = isDark ? 'rgba(56, 189, 248, 0.2)' : 'rgba(37, 99, 235, 0.12)';
+      roundRect(ctx, cursorX, rowY - 16, vW, 32, 9);
+      ctx.fill();
+      ctx.fillStyle = isDark ? '#7dd3fc' : '#1d4ed8';
+      ctx.fillText(truncateText(ctx, vlanText, vW - 16), cursorX + 10, rowY);
+      cursorX += vW + 10;
+    } else if (doc.zone) {
+      ctx.font = '600 20px Poppins, system-ui, sans-serif';
+      ctx.fillStyle = isDark ? '#9fb598' : '#5e6b57';
+      ctx.fillText(truncateText(ctx, doc.zone, width - cursorX - 28), cursorX, rowY);
+    }
+
+    // Alert badge on bottom-right if any device offline/warning
+    if (hasOffline || hasWarning) {
+      const alertText = hasOffline ? `${statusCounts.offline} OFF` : `${statusCounts.warning} WARN`;
+      ctx.font = '700 19px Consolas, monospace';
+      const aW = ctx.measureText(alertText).width + 24;
+      const aX = width - 24 - aW;
+      ctx.fillStyle = hasOffline ? 'rgba(239, 68, 68, 0.2)' : 'rgba(245, 158, 11, 0.22)';
+      roundRect(ctx, aX, rowY - 16, aW, 32, 9);
+      ctx.fill();
+      ctx.fillStyle = hasOffline ? '#dc2626' : '#d97706';
+      ctx.textAlign = 'center';
+      ctx.fillText(alertText, aX + aW * 0.5, rowY);
+    }
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.minFilter = THREE.LinearFilter;
+    spriteMat = new THREE.SpriteMaterial({
+      map: texture,
+      transparent: true,
+      depthTest: true,
+      depthWrite: false
+    });
+  } else {
+    spriteMat = new THREE.SpriteMaterial({
+      color: accentColor,
+      transparent: true,
+      depthWrite: false
+    });
+  }
+
+  const sprite = new THREE.Sprite(spriteMat);
+  sprite.position.set(0, pinHeight + 1.15, 0);
+  const baseScaleW = Math.min(11.5, Math.max(6.8, (Number(room?.widthMeters) || 12) * 0.42));
+  const baseScaleH = baseScaleW * (height / width);
+  sprite.scale.set(baseScaleW, baseScaleH, 1);
+  sprite.renderOrder = 22;
+  sprite.userData = {
+    isBuildingSignboard: true,
+    isLabelSprite: true,
+    signboardRoomId: room?.id || '',
+    baseScaleW,
+    baseScaleH
+  };
+  group.add(sprite);
+  group.userData.sprite = sprite;
+
+  return group;
 }
 
 /**
@@ -3242,6 +3495,207 @@ export function createFppHandsViewmodelGroup() {
 
   root.userData.swayRoot = swayRoot;
   return root;
+}
+
+/**
+ * Create first-person (FPP) Roblox technician Cable Spool + RJ45/LC connector viewmodel.
+ * Displayed when technician is actively pulling a physical 3D cable through rooms & walls.
+ * @param {string|number} [cableColorHex='#2563eb']
+ * @returns {THREE.Group}
+ */
+export function createFppCableSpoolViewmodelGroup(cableColorHex = '#2563eb') {
+  const root = new THREE.Group();
+  root.name = 'FppCableSpoolViewmodel';
+
+  const swayRoot = new THREE.Group();
+  swayRoot.name = 'FppCableSpoolSwayRoot';
+  swayRoot.position.set(0.30, -0.26, -0.50);
+  swayRoot.rotation.set(0.14, -0.28, 0.05);
+  root.add(swayRoot);
+
+  const sleeveMat = makeMat(0x1e293b, { roughness: 0.55, metalness: 0.1 });
+  const vestCuffMat = makeMat(0x2a7c13, { roughness: 0.45 });
+  const skinMat = makeMat(0xfacc15, { roughness: 0.42 });
+  const flangeMat = makeMat(0x334155, { roughness: 0.35, metalness: 0.42 });
+  const hubMat = makeMat(0x94a3b8, { roughness: 0.28, metalness: 0.65 });
+  const cableMat = makeMat(cableColorHex, { roughness: 0.38, metalness: 0.08, emissive: cableColorHex, emissiveIntensity: 0.18 });
+  const plugBodyMat = makeMat(0xe2e8f0, { roughness: 0.2, metalness: 0.25, transparent: true, opacity: 0.88 });
+  const goldPinMat = makeMat(0xf59e0b, { roughness: 0.2, metalness: 0.85 });
+
+  // Right arm holding the rotating cable spool drum
+  const sleeve = addBox(swayRoot, 0.10, 0.10, 0.22, 0.09, -0.05, 0.14, sleeveMat);
+  sleeve.rotation.x = -0.22;
+  addBox(swayRoot, 0.105, 0.105, 0.036, 0.09, -0.02, 0.04, vestCuffMat);
+  addBox(swayRoot, 0.095, 0.095, 0.11, 0.05, 0.01, -0.03, skinMat);
+
+  const spoolGroup = new THREE.Group();
+  spoolGroup.name = 'CableSpoolDrum';
+  spoolGroup.position.set(-0.02, 0.055, -0.06);
+  spoolGroup.rotation.z = Math.PI * 0.5;
+  swayRoot.add(spoolGroup);
+
+  // Spool flanges (left & right discs) + coiled cable core + metal axle
+  const flangeGeo = new THREE.CylinderGeometry(0.115, 0.115, 0.012, 20);
+  const f1 = new THREE.Mesh(flangeGeo, flangeMat);
+  f1.position.y = -0.055;
+  const f2 = new THREE.Mesh(flangeGeo, flangeMat);
+  f2.position.y = 0.055;
+  const coilGeo = new THREE.CylinderGeometry(0.092, 0.092, 0.096, 20);
+  const coilMesh = new THREE.Mesh(coilGeo, cableMat);
+  const axleGeo = new THREE.CylinderGeometry(0.024, 0.024, 0.132, 12);
+  const axleMesh = new THREE.Mesh(axleGeo, hubMat);
+  spoolGroup.add(f1, f2, coilMesh, axleMesh);
+
+  // Left-side connector tip (RJ45 / LC plug) aimed slightly forward
+  const plugGroup = new THREE.Group();
+  plugGroup.name = 'CableSpoolConnectorTip';
+  plugGroup.position.set(-0.46, -0.02, -0.05);
+  plugGroup.rotation.set(0.12, 0.26, -0.05);
+  swayRoot.add(plugGroup);
+
+  addBox(plugGroup, 0.09, 0.09, 0.11, -0.03, -0.04, 0.08, skinMat);
+  addBox(plugGroup, 0.026, 0.022, 0.052, 0, 0.01, -0.01, cableMat); // strain-relief boot
+  addBox(plugGroup, 0.030, 0.024, 0.038, 0, 0.01, -0.052, plugBodyMat); // translucent RJ45 head
+  addBox(plugGroup, 0.022, 0.008, 0.014, 0, 0.021, -0.062, goldPinMat); // gold contacts
+
+  root.traverse((child) => {
+    child.userData.isAvatarMesh = true;
+    child.raycast = () => { };
+    if (child.isMesh) child.castShadow = false;
+  });
+
+  root.userData.swayRoot = swayRoot;
+  root.userData.spoolDrum = spoolGroup;
+  root.userData.cableMat = cableMat;
+  root.userData.setCableColor = (hex) => {
+    try {
+      cableMat.color.set(hex || '#2563eb');
+      cableMat.emissive.set(hex || '#2563eb');
+    } catch { /* ignore invalid hex */ }
+  };
+  return root;
+}
+
+// Shared geometry / material cache for 3D cable clips & conduit segments (keeps HP GPU light!)
+const _cableClipCache = {
+  uClipMat: null,
+  pClampMat: null,
+  tieMat: null,
+  nailMat: null,
+  pvcDuctMat: null,
+  trayMetalMat: null,
+  trayRailMat: null
+};
+
+function _ensureCableHardwareMats() {
+  if (!_cableClipCache.uClipMat) {
+    _cableClipCache.uClipMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.42, metalness: 0.06 });
+    _cableClipCache.pClampMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.36, metalness: 0.65 });
+    _cableClipCache.tieMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.5, metalness: 0.1 });
+    _cableClipCache.nailMat = new THREE.MeshStandardMaterial({ color: 0xcbd5e1, roughness: 0.25, metalness: 0.85 });
+    _cableClipCache.pvcDuctMat = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.35, metalness: 0.04 });
+    _cableClipCache.trayMetalMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.38, metalness: 0.68 });
+    _cableClipCache.trayRailMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.35, metalness: 0.72 });
+  }
+  return _cableClipCache;
+}
+
+/**
+ * Create a lightweight physical 3D Cable Clip (U-Clip, P-Clamp, or Cable Tie).
+ * Local +Y points away from the mounting surface (wall/ceiling/floor/pole).
+ * @param {{ clipType?: 'u-clip'|'p-clamp'|'cable-tie', radius?: number, isSelected?: boolean }} [options]
+ * @returns {THREE.Group}
+ */
+export function createCableClip3DMesh({ clipType = 'u-clip', radius = 0.012, isSelected = false } = {}) {
+  const mats = _ensureCableHardwareMats();
+  const group = new THREE.Group();
+  const r = Math.max(0.012, Math.min(0.08, Number(radius) || 0.014));
+  const bodyMat = isSelected
+    ? new THREE.MeshStandardMaterial({ color: 0xfacc15, emissive: 0xeab308, emissiveIntensity: 0.45, roughness: 0.3 })
+    : (clipType === 'p-clamp' ? mats.pClampMat : (clipType === 'cable-tie' ? mats.tieMat : mats.uClipMat));
+
+  if (clipType === 'cable-tie') {
+    const bandGeo = new THREE.TorusGeometry(r * 1.45, r * 0.28, 6, 14);
+    const band = new THREE.Mesh(bandGeo, bodyMat);
+    group.add(band);
+    const lockHead = new THREE.Mesh(new THREE.BoxGeometry(r * 0.9, r * 0.7, r * 0.9), bodyMat);
+    lockHead.position.set(0, r * 1.5, 0);
+    group.add(lockHead);
+  } else if (clipType === 'p-clamp') {
+    const ringGeo = new THREE.TorusGeometry(r * 1.55, r * 0.36, 8, 16);
+    const ring = new THREE.Mesh(ringGeo, bodyMat);
+    group.add(ring);
+    const tab = new THREE.Mesh(new THREE.BoxGeometry(r * 2.2, r * 0.55, r * 1.4), bodyMat);
+    tab.position.set(r * 1.2, -r * 0.85, 0);
+    group.add(tab);
+    const bolt = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.36, r * 0.36, r * 0.9, 8), mats.nailMat);
+    bolt.position.set(r * 1.8, -r * 0.85, 0);
+    group.add(bolt);
+  } else {
+    // Classic white plastic U-Clip with side steel nail
+    const archGeo = new THREE.TorusGeometry(r * 1.5, r * 0.42, 8, 14, Math.PI * 1.15);
+    const arch = new THREE.Mesh(archGeo, bodyMat);
+    arch.rotation.z = -Math.PI * 0.075;
+    group.add(arch);
+
+    const basePlate = new THREE.Mesh(new THREE.BoxGeometry(r * 3.8, r * 0.55, r * 1.45), bodyMat);
+    basePlate.position.set(r * 0.35, -r * 1.05, 0);
+    group.add(basePlate);
+
+    const nailHead = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.42, r * 0.32, r * 0.9, 8), mats.nailMat);
+    nailHead.position.set(r * 1.65, -r * 0.7, 0);
+    group.add(nailHead);
+  }
+
+  group.userData.isCableClip3d = true;
+  group.userData.clipType = clipType;
+  return group;
+}
+
+/**
+ * Create a realistic 3D Conduit (PVC Trunking Duct or Perforated Steel Cable Tray) along a straight segment.
+ * @param {{ startVec: THREE.Vector3, endVec: THREE.Vector3, conduitType: 'pvc-duct'|'cable-tray', radius?: number }} options
+ * @returns {THREE.Group|null}
+ */
+export function createConduitSegmentMesh({ startVec, endVec, conduitType = 'pvc-duct', radius = 0.015 } = {}) {
+  if (!startVec || !endVec || conduitType === 'none') return null;
+  const dir = new THREE.Vector3().subVectors(endVec, startVec);
+  const segLen = dir.length();
+  if (segLen < 0.06) return null;
+
+  const mats = _ensureCableHardwareMats();
+  const group = new THREE.Group();
+  const mid = new THREE.Vector3().addVectors(startVec, endVec).multiplyScalar(0.5);
+  group.position.copy(mid);
+
+  const up = new THREE.Vector3(0, 1, 0);
+  const dirNorm = dir.clone().normalize();
+  group.quaternion.setFromUnitVectors(up, dirNorm);
+
+  if (conduitType === 'cable-tray') {
+    const trayW = Math.max(0.11, radius * 5.2);
+    const trayH = Math.max(0.026, radius * 1.8);
+    // Base metal bed slightly offset below cable centerline
+    const base = new THREE.Mesh(new THREE.BoxGeometry(trayW, segLen, 0.012), mats.trayMetalMat);
+    base.position.set(0, 0, -trayH * 0.48);
+    group.add(base);
+    // Raised left & right side flanges
+    const railL = new THREE.Mesh(new THREE.BoxGeometry(0.012, segLen, trayH), mats.trayRailMat);
+    railL.position.set(-trayW * 0.48, 0, 0);
+    const railR = new THREE.Mesh(new THREE.BoxGeometry(0.012, segLen, trayH), mats.trayRailMat);
+    railR.position.set(trayW * 0.48, 0, 0);
+    group.add(railL, railR);
+  } else {
+    // White PVC Wall/Ceiling Ducting Trunking
+    const ductW = Math.max(0.036, radius * 2.9);
+    const ductD = Math.max(0.024, radius * 2.2);
+    const casing = new THREE.Mesh(new THREE.BoxGeometry(ductW, segLen + ductW * 0.45, ductD), mats.pvcDuctMat);
+    group.add(casing);
+  }
+
+  group.userData.isCableConduit3d = true;
+  group.userData.conduitType = conduitType;
+  return group;
 }
 
 function roundRect(ctx, x, y, w, h, r) {

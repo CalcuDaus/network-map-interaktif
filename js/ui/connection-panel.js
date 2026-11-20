@@ -15,6 +15,7 @@ import {
   calculateAccurateCableLength,
   calculateNetworkPerformanceMetrics
 } from '../connections/cable-library.js';
+import { evaluateCableNeatness } from '../connections/cable-routing-engine.js';
 
 export class ConnectionPanel {
   /**
@@ -436,6 +437,52 @@ export class ConnectionPanel {
               </div>
             </div>
 
+            <!-- Phase 7: Kerapian Fisik 3D, Auto-Rapikan 90°, Ducting/Tray & Skor Praktikum -->
+            ${(() => {
+              const neatness = details.neatnessReport || evaluateCableNeatness(cable, sourceDev, destDev, {
+                mapWidthMeters: this.cableManager?.mapWidthMeters || 170
+              });
+              const scoreCls = neatness.score >= 85 ? 'is-great' : (neatness.score >= 65 ? 'is-mid' : 'is-low');
+              const conduitVal = details.conduitType || 'none';
+              const clipsChecked = details.showClips3d !== false;
+              return `
+                <div class="cable-neatness-card" style="grid-column: span 2;">
+                  <div class="cable-neatness-head">
+                    <span class="cable-neatness-title">${uiIcon('route', 13)} Kerapian &amp; Jalur Fisik 3D</span>
+                    <span class="cable-neatness-badge ${scoreCls}">Skor ${neatness.score}/100 (${neatness.grade})</span>
+                  </div>
+                  <div class="cable-tidy-btn-row">
+                    <button type="button" class="btn btn-secondary btn-sm btn-cable-auto-tidy" data-tidy-preset="ceiling-run" title="Rapikan jalur naik ke plafon 2.75m siku 90° dengan klem otomatis">Rapikan Plafon 90°</button>
+                    <button type="button" class="btn btn-secondary btn-sm btn-cable-auto-tidy" data-tidy-preset="skirting-run" title="Rapikan jalur menyusuri skirting lantai 0.25m siku 90°">Skirting Lantai</button>
+                    <button type="button" class="btn btn-secondary btn-sm btn-cable-auto-tidy" data-tidy-preset="snap-90-existing" title="Luruskan titik klem yang sudah ditarik ke siku 90°">Siku 90° Klem</button>
+                  </div>
+                  <div style="display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center;">
+                    <div style="display: flex; flex-direction: column; gap: 2px;">
+                      <label style="font-size: 10px; color: var(--text-muted); font-weight: 600;">Ducting / Jalur Pelindung 3D</label>
+                      <select id="prop-cable-conduit-type" style="background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px; font-size: 11px; padding: 4px 6px;">
+                        <option value="none" ${conduitVal === 'none' ? 'selected' : ''}>Tanpa Ducting (Klem Langsung)</option>
+                        <option value="pvc-duct" ${conduitVal === 'pvc-duct' ? 'selected' : ''}>PVC Trunking Duct (Putih)</option>
+                        <option value="cable-tray" ${conduitVal === 'cable-tray' ? 'selected' : ''}>Cable Tray Besi (Plafon/Backbone)</option>
+                      </select>
+                    </div>
+                    <label style="display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; color: var(--text-primary); font-weight: 600; cursor: pointer; padding-top: 14px;">
+                      <input type="checkbox" id="prop-cable-show-clips" ${clipsChecked ? 'checked' : ''} style="accent-color: var(--accent-blue);">
+                      <span>Klem 3D</span>
+                    </label>
+                  </div>
+                  <div class="cable-neatness-checks">
+                    ${(neatness.checks || []).map((ck) => `
+                      <div class="cable-check-item ${ck.ok ? 'is-ok' : 'is-warn'}">
+                        <span>${uiIcon(ck.ok ? 'check' : 'alert', 11)} ${this.escapeHtml(ck.label)}</span>
+                        <span class="cable-check-pts">${ck.score}/${ck.max}</span>
+                      </div>
+                    `).join('')}
+                  </div>
+                  ${neatness.tips?.length ? `<div class="cable-neatness-tip">${this.escapeHtml(neatness.tips[0])}</div>` : ''}
+                </div>
+              `;
+            })()}
+
             <!-- Per-Segment Breakdown & Per-Waypoint 3D Z Control -->
             ${segments.length > 1 ? `
               <div style="grid-column: span 2; display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; background: var(--bg-tertiary); border-radius: 6px; border: 1px solid var(--border-color);">
@@ -797,6 +844,47 @@ export class ConnectionPanel {
       }
     });
 
+    // Phase 7: Auto-Tidy 90°, Conduit/Ducting & 3D Clips Handlers
+    document.querySelectorAll('.btn-cable-auto-tidy').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const preset = btn.getAttribute('data-tidy-preset') || 'ceiling-run';
+        const map3d = window.__netmapApp?.map3DEngine;
+        const wallSnapFn = (map3d && map3d.isActive && typeof map3d.snapNormalizedPointToNearestWall3D === 'function')
+          ? (nx, ny, z) => map3d.snapNormalizedPointToNearestWall3D(nx, ny, z)
+          : null;
+        const updated = this.cableManager.applyAutoTidy?.(cableId, { preset, wallSnapFn });
+        if (updated) {
+          this.currentCable = updated;
+          if (map3d?.isActive) map3d.syncCables?.();
+          this.renderCableForm(updated);
+        }
+      });
+    });
+
+    document.getElementById('prop-cable-conduit-type')?.addEventListener('change', (e) => {
+      const conduitType = e.target.value || 'none';
+      const curCab = this.cableManager.getConnectionById(cableId) || this.currentCable;
+      const updated = this.cableManager.updateConnection(cableId, {
+        details: { ...(curCab?.details || {}), conduitType }
+      });
+      if (updated) {
+        this.currentCable = updated;
+        if (window.__netmapApp?.map3DEngine?.isActive) window.__netmapApp.map3DEngine.syncCables?.();
+      }
+    });
+
+    document.getElementById('prop-cable-show-clips')?.addEventListener('change', (e) => {
+      const showClips3d = Boolean(e.target.checked);
+      const curCab = this.cableManager.getConnectionById(cableId) || this.currentCable;
+      const updated = this.cableManager.updateConnection(cableId, {
+        details: { ...(curCab?.details || {}), showClips3d }
+      });
+      if (updated) {
+        this.currentCable = updated;
+        if (window.__netmapApp?.map3DEngine?.isActive) window.__netmapApp.map3DEngine.syncCables?.();
+      }
+    });
+
     // Straighten cable (clear waypoints)
     document.getElementById('btn-straighten-cable')?.addEventListener('click', () => {
       this.cableManager.updateConnection(cableId, { route: [] });
@@ -1091,6 +1179,7 @@ export class ConnectionPanel {
 
   bindEvents() {
     eventBus.on('connection:selected', (cable) => {
+      stateManager.clearInspectedRoom3d?.({ silent: true });
       this.renderCableForm(cable);
     });
 
@@ -1122,7 +1211,8 @@ export class ConnectionPanel {
     });
 
     eventBus.on('connection:deselected', () => {
-      if (!this.deviceManager.selectedDeviceId) {
+      this.currentCable = null;
+      if (!this.deviceManager.selectedDeviceId && !stateManager.getInspectedRoom3dId?.()) {
         this.renderEmpty();
       }
     });
@@ -1130,7 +1220,9 @@ export class ConnectionPanel {
     eventBus.on('connection:deleted', ({ connectionId }) => {
       if (this.currentCable?.id === connectionId) {
         this.currentCable = null;
-        this.renderEmpty();
+        if (!stateManager.getInspectedRoom3dId?.()) {
+          this.renderEmpty();
+        }
       }
     });
 

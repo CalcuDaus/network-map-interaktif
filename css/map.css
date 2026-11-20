@@ -8,7 +8,7 @@
    -------------------------------------------------------------------------- */
 #map-viewport {
   background-color: #f7eed7;
-  background-image: 
+  background-image:
     radial-gradient(rgba(42, 124, 19, 0.12) 1px, transparent 0),
     radial-gradient(rgba(42, 124, 19, 0.05) 1px, transparent 0);
   background-size: 24px 24px, 120px 120px;
@@ -24,7 +24,7 @@
 
 [data-theme="dark"] #map-viewport {
   background-color: #0b1408;
-  background-image: 
+  background-image:
     radial-gradient(rgba(118, 196, 87, 0.15) 1px, transparent 0),
     radial-gradient(rgba(118, 196, 87, 0.08) 1px, transparent 0);
   background-size: 24px 24px, 120px 120px;
@@ -91,7 +91,7 @@
   background-color: var(--bg-active);
 }
 
-.hud-btn + .hud-btn {
+.hud-btn+.hud-btn {
   border-top: 1px solid var(--border-color);
 }
 
@@ -183,7 +183,9 @@
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .loading-text {
@@ -211,14 +213,37 @@
   display: none !important;
 }
 
-#map-3d-container.tool-orbit { cursor: grab; }
-#map-3d-container.tool-orbit.is-dragging { cursor: grabbing; }
-#map-3d-container.tool-pan { cursor: move; }
-#map-3d-container.tool-zoom { cursor: ns-resize; }
-#map-3d-container.tool-look { cursor: crosshair; }
-#map-3d-container.tool-move { cursor: move; }
-#map-3d-container.tool-rotate { cursor: ew-resize; }
-#map-3d-container.mode-draw-cable { cursor: crosshair !important; }
+#map-3d-container.tool-orbit {
+  cursor: grab;
+}
+
+#map-3d-container.tool-orbit.is-dragging {
+  cursor: grabbing;
+}
+
+#map-3d-container.tool-pan {
+  cursor: move;
+}
+
+#map-3d-container.tool-zoom {
+  cursor: ns-resize;
+}
+
+#map-3d-container.tool-look {
+  cursor: crosshair;
+}
+
+#map-3d-container.tool-move {
+  cursor: move;
+}
+
+#map-3d-container.tool-rotate {
+  cursor: ew-resize;
+}
+
+#map-3d-container.mode-draw-cable {
+  cursor: crosshair !important;
+}
 
 .hud-3d-hints {
   position: absolute;
@@ -276,7 +301,7 @@
   gap: 0;
 }
 
-.hud-3d-hints.is-minimized > span {
+.hud-3d-hints.is-minimized>span {
   display: none;
 }
 
@@ -305,7 +330,7 @@
   gap: 6px;
 }
 
-#hud-3d-controls.is-minimized > :not(#btn-3d-toggle-controls):not(#btn-3d-exit-fullscreen) {
+#hud-3d-controls.is-minimized> :not(#btn-3d-toggle-controls):not(#btn-3d-exit-fullscreen) {
   display: none !important;
 }
 
@@ -1865,10 +1890,12 @@ body.is-mobile-touch #hud-3d-controls .hud-3d-select {
     font-size: 9.5px;
     gap: 3px;
   }
+
   #hud-3d-controls .hud-3d-inline,
   #hud-3d-controls .hud-3d-select {
     font-size: 9.5px;
   }
+
   #hud-3d-controls .hud-3d-select {
     height: 22px;
     padding: 0 4px;
@@ -2674,4 +2701,502 @@ body.is-mobile-touch .hud-3d-houseflipper-tip {
   color: var(--text-primary);
   font-family: var(--font-mono);
   font-size: 12px;
+}
+
+
+/* ==========================================================================
+   Phase 6 — Touch-Friendly LED Port Faceplate Strip & Quick WinBox/Ping Actions
+   ========================================================================== */
+.sim-action-btn.is-sim-winbox {
+  background: rgba(42, 124, 19, 0.16);
+  border-color: rgba(42, 124, 19, 0.45);
+  color: var(--accent-green);
+  font-weight: 700;
+}
+
+.sim-action-btn.is-sim-ping {
+  background: rgba(2, 132, 199, 0.14);
+  border-color: rgba(2, 132, 199, 0.42);
+  color: #0369a1;
+  font-weight: 700;
+}
+
+[data-theme="dark"] .sim-action-btn.is-sim-ping {
+  color: #7dd3fc;
+}
+
+.sim-port-socket-glyph {
+  display: inline-flex;
+  align-items: center;
+  opacity: 0.78;
+}
+
+.sim-port-led.is-pulling {
+  background: #38bdf8;
+  box-shadow: 0 0 8px #38bdf8;
+  animation: simLedPulseBlue 0.9s infinite ease-in-out;
+}
+
+@keyframes simLedPulseBlue {
+
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.45;
+    transform: scale(1.25);
+  }
+}
+
+.sim-port-card.is-admin-down {
+  opacity: 0.65;
+  border-style: dashed;
+}
+
+.sim-selected-cable-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(2, 132, 199, 0.1);
+  border: 1px solid rgba(2, 132, 199, 0.3);
+  font-size: 11px;
+  color: var(--text-primary);
+}
+
+body.is-mobile-touch .hud-3d-sim-inspector .sim-port-grid {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  overflow-x: auto !important;
+  gap: 7px !important;
+  padding-bottom: 4px;
+  -webkit-overflow-scrolling: touch;
+}
+
+body.is-mobile-touch .hud-3d-sim-inspector .sim-port-card {
+  flex: 0 0 auto;
+  min-width: 96px;
+  min-height: 46px;
+  padding: 7px 9px;
+}
+
+body.is-mobile-touch .hud-3d-sim-inspector .sim-action-btn {
+  min-height: 38px;
+  padding: 6px 10px;
+}
+
+
+/* ==========================================================================
+   Phase 7 — Physical 3D Cable Spool HUD, Live IEEE Meter & Touch Controls
+   ========================================================================== */
+.hud-3d-houseflipper-tip.is-pulling-cable {
+  border-color: #2563eb;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: min(94vw, 760px);
+}
+
+.hud-3d-houseflipper-tip.is-pulling-cable.is-len-warning {
+  border-color: #f59e0b;
+}
+
+.hud-3d-houseflipper-tip.is-pulling-cable.is-len-exceeded {
+  border-color: #ef4444;
+}
+
+.hf-cable-meter {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: rgba(34, 197, 94, 0.2);
+  color: #86efac;
+  white-space: nowrap;
+}
+
+.hf-cable-meter.is-warning {
+  background: rgba(245, 158, 11, 0.25);
+  color: #fde047;
+}
+
+.hf-cable-meter.is-exceeded {
+  background: rgba(239, 68, 68, 0.28);
+  color: #fca5a5;
+}
+
+.hf-tip-btn.is-cable {
+  background: rgba(37, 99, 235, 0.85);
+  border-color: rgba(96, 165, 250, 0.7);
+  color: #ffffff;
+}
+
+.hf-tip-btn.is-active {
+  background: rgba(2, 132, 199, 0.85);
+  border-color: #38bdf8;
+  color: #ffffff;
+}
+
+.hf-tip-btn.is-warn {
+  background: #d97706;
+  border-color: #fbbf24;
+  color: #ffffff;
+}
+
+.hf-tip-btn.is-danger {
+  background: rgba(220, 38, 38, 0.82);
+  border-color: rgba(248, 113, 113, 0.65);
+  color: #ffffff;
+}
+
+.mob-cable-pull-cluster {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.mob-cable-pull-cluster .mob-action-btn {
+  min-width: 56px;
+  min-height: 52px;
+  font-weight: 800;
+}
+
+.mob-action-btn.is-cable-clip {
+  background: rgba(22, 163, 74, 0.92);
+  border-color: #86efac;
+  color: #ffffff;
+}
+
+.mob-action-btn.is-cable-undo {
+  background: rgba(71, 85, 105, 0.92);
+  border-color: #cbd5e1;
+  color: #ffffff;
+}
+
+.mob-action-btn.is-cable-plug {
+  background: rgba(2, 132, 199, 0.94);
+  border-color: #7dd3fc;
+  color: #ffffff;
+}
+
+
+/* ============================================================================
+   Phase 8C — 1-Click Building X-Ray Mode Toolbar Button Highlight
+   ============================================================================ */
+#btn-3d-xray.active {
+  background: linear-gradient(135deg, #0284c7, #2563eb) !important;
+  border-color: #0369a1 !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.32);
+}
+
+
+/* ============================================================================
+   Phase 9A & 9D — Compact 3D Toolbar Popovers & Floating Jobsheet Tracker HUD
+   ============================================================================ */
+.hud-3d-popover-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.hud-3d-popover-panel {
+  display: none;
+  position: absolute;
+  top: calc(100% + 7px);
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 245px;
+  max-width: min(310px, calc(100vw - 24px));
+  max-height: 70dvh;
+  overflow-y: auto;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  padding: 10px;
+  box-shadow: var(--shadow-lg);
+  z-index: 120;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hud-3d-popover-wrap.open .hud-3d-popover-panel {
+  display: flex;
+}
+
+.hud-3d-popover-wrap.open .hud-3d-pop-trigger {
+  background: var(--bg-tertiary);
+  border-color: var(--accent-green);
+}
+
+.hud-3d-pop-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.hud-3d-pop-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.hud-3d-pop-grid .hud-3d-btn {
+  justify-content: center;
+  width: 100%;
+}
+
+.hud-3d-pop-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.hud-3d-avatar-pill {
+  gap: 2px;
+}
+
+/* Floating Live Jobsheet Checklist HUD */
+.hud-jobsheet-tracker {
+  position: absolute;
+  bottom: 58px;
+  left: 14px;
+  width: min(335px, calc(100vw - 28px));
+  max-height: min(56dvh, 420px);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 88;
+}
+
+.hud-jobsheet-tracker.is-minimized {
+  width: auto;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.js-tracker-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: var(--accent-green);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  font-size: 11.5px;
+  font-weight: 600;
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+}
+
+.js-tracker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.js-tracker-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.js-tracker-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.js-tracker-head-right {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.js-tracker-score {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.16);
+  color: #b45309;
+}
+
+.js-tracker-score.is-complete {
+  background: rgba(34, 197, 94, 0.18);
+  color: #15803d;
+}
+
+.js-tracker-icon-btn {
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  border-radius: 6px;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.js-tracker-progress-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg-primary);
+  overflow: hidden;
+}
+
+.js-tracker-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #2a7c13, #22c55e);
+  transition: width 0.25s ease;
+}
+
+.js-tracker-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.js-tracker-task {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+
+.js-tracker-task.is-passed {
+  border-color: rgba(34, 197, 94, 0.45);
+  background: rgba(34, 197, 94, 0.08);
+}
+
+.js-task-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+}
+
+.js-task-check {
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  border: 2px solid var(--border-color);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.js-tracker-task.is-passed .js-task-check {
+  background: #22c55e;
+  border-color: #22c55e;
+  color: #ffffff;
+}
+
+.js-task-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.js-task-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+
+.js-task-detail {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.js-hint-toggle {
+  border: none;
+  background: transparent;
+  color: #d97706;
+  cursor: pointer;
+  padding: 2px;
+  flex-shrink: 0;
+}
+
+.js-task-hint {
+  margin-top: 5px;
+  padding: 5px 7px;
+  border-radius: 6px;
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--text-primary);
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
+.js-tracker-actions {
+  display: flex;
+  gap: 5px;
+}
+
+/* FPP Micro-Coachmark */
+.onb-fpp-coachmark {
+  position: absolute;
+  top: 66px;
+  right: 14px;
+  width: min(320px, calc(100vw - 28px));
+  background: var(--bg-secondary);
+  border: 1px solid var(--accent-green);
+  border-radius: 10px;
+  padding: 10px 12px;
+  box-shadow: var(--shadow-lg);
+  z-index: 95;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.onb-coach-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11.5px;
+  color: var(--accent-green);
+}
+
+.onb-coach-steps {
+  margin: 0;
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-primary);
+  line-height: 1.35;
 }

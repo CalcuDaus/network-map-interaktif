@@ -42,10 +42,104 @@ export class WorkspaceController {
 
     eventBus.on('viewmode:changed', () => {
       this._syncWorkspaceDOM();
+      this.close3dPopovers();
+    });
+
+    eventBus.on('session:mode-changed', () => {
+      this.syncSessionGuardBanner();
+    });
+
+    eventBus.on('jobsheet:active-changed', () => {
+      this.syncSessionGuardBanner();
+    });
+
+    eventBus.on('auth:changed', () => {
+      this.syncSessionGuardBanner();
+    });
+
+    eventBus.on('map3d:avatar-toggled', ({ active } = {}) => {
+      this.syncAvatarGroupUI(Boolean(active));
     });
 
     const initialMode = stateManager.getWorkspaceMode();
     this._applyWorkspaceEffects(initialMode, { open3D: false, silent: true });
+    this.syncSessionGuardBanner();
+  }
+
+  /**
+   * Close compact 3D HUD popovers ('Kamera' & 'Tampilan 3D').
+   */
+  close3dPopovers() {
+    if (typeof document === 'undefined') return;
+    document.querySelectorAll('.hud-3d-popover-wrap.open')?.forEach((w) => {
+      w.classList.remove('open');
+      w.querySelector('.hud-3d-pop-trigger')?.setAttribute?.('aria-expanded', 'false');
+    });
+  }
+
+  /**
+   * Show contextual TPP/FPP toggle pill cleanly when Mode Teknisi is active.
+   */
+  syncAvatarGroupUI(avatarActive = false) {
+    if (typeof document === 'undefined') return;
+    const fppBtn = document.getElementById('btn-3d-fpp');
+    if (fppBtn) {
+      fppBtn.classList.toggle('is-contextual-active', Boolean(avatarActive));
+    }
+  }
+
+  /**
+   * Sync Master Read-Only / Student Practice Sandbox Guard Banner under top navbar.
+   */
+  syncSessionGuardBanner() {
+    if (typeof document === 'undefined') return;
+    const banner = document.getElementById('session-guard-banner');
+    if (!banner) return;
+
+    const sessionMode = stateManager.getSessionMode?.() || 'master-readonly';
+    const isSandbox = sessionMode === 'student-sandbox';
+    const isAdmin = sessionMode === 'master-admin';
+    const activeJsId = stateManager.getActiveJobsheetId?.() || null;
+
+    banner.classList.remove('is-readonly', 'is-sandbox', 'is-admin', 'hidden');
+    banner.style.display = 'flex';
+
+    const titleEl = document.getElementById('session-banner-text');
+    const btnFork = document.getElementById('btn-banner-fork-sandbox');
+    const btnJobsheet = document.getElementById('btn-banner-open-jobsheet');
+    const btnReset = document.getElementById('btn-banner-reset-sandbox');
+    const btnMaster = document.getElementById('btn-banner-return-master');
+
+    if (isSandbox) {
+      banner.classList.add('is-sandbox');
+      if (titleEl) {
+        titleEl.textContent = activeJsId
+          ? 'Mode Sandbox Praktikum Jobsheet Aktif — Peta Master SMKN 1 Beringin Terlindungi 100%'
+          : 'Mode Sandbox Praktik (Aman — Perubahan Lokal, Master SMKN 1 Beringin Terlindungi)';
+      }
+      if (btnFork) btnFork.style.display = 'none';
+      if (btnJobsheet) btnJobsheet.style.display = 'inline-flex';
+      if (btnReset) btnReset.style.display = 'inline-flex';
+      if (btnMaster) btnMaster.style.display = 'inline-flex';
+    } else if (isAdmin) {
+      banner.classList.add('is-admin');
+      if (titleEl) {
+        titleEl.textContent = 'Mode Master Admin SMKN 1 Beringin — Perubahan tersimpan ke dokumentasi resmi sekolah';
+      }
+      if (btnFork) btnFork.style.display = 'inline-flex';
+      if (btnJobsheet) btnJobsheet.style.display = 'inline-flex';
+      if (btnReset) btnReset.style.display = 'none';
+      if (btnMaster) btnMaster.style.display = 'none';
+    } else {
+      banner.classList.add('is-readonly');
+      if (titleEl) {
+        titleEl.textContent = 'Peta Master SMKN 1 Beringin (Mode Baca Aman) — Ingin praktik rakit jaringan?';
+      }
+      if (btnFork) btnFork.style.display = 'inline-flex';
+      if (btnJobsheet) btnJobsheet.style.display = 'inline-flex';
+      if (btnReset) btnReset.style.display = 'none';
+      if (btnMaster) btnMaster.style.display = 'none';
+    }
   }
 
   /**
@@ -250,6 +344,34 @@ export class WorkspaceController {
     });
     document.getElementById('btn-studio-to-network')?.addEventListener('click', () => {
       this.switchWorkspace('network', { open3D: false });
+    });
+
+    // Compact 3D HUD Popovers ('Kamera' & 'Tampilan 3D')
+    const popWraps = document.querySelectorAll('.hud-3d-popover-wrap');
+    popWraps.forEach((wrap) => {
+      const trigger = wrap.querySelector('.hud-3d-pop-trigger');
+      const panel = wrap.querySelector('.hud-3d-popover-panel');
+      trigger?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const willOpen = !wrap.classList.contains('open');
+        this.close3dPopovers();
+        if (willOpen) {
+          wrap.classList.add('open');
+          trigger.setAttribute('aria-expanded', 'true');
+        }
+      });
+      panel?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (e.target?.closest?.('button') && !e.target.closest('.hud-3d-pop-keep-open')) {
+          this.close3dPopovers();
+        }
+      });
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!e.target?.closest?.('.hud-3d-popover-wrap')) {
+        this.close3dPopovers();
+      }
     });
   }
 }

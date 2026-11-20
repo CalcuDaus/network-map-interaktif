@@ -10,6 +10,7 @@ import { DEVICE_CATEGORIES, DEVICE_STATUSES } from '../devices/device-library.js
 
 const FILTER_OPTIONS = [
   { id: 'all', label: 'Semua' },
+  { id: 'building', label: 'Gedung' },
   { id: 'ip', label: 'IP Address' },
   { id: 'device', label: 'Perangkat' },
   { id: 'vlan', label: 'VLAN/SSID' }
@@ -118,9 +119,9 @@ export class SearchUI {
       } else if (e.key === 'Enter') {
         e.preventDefault();
         if (this.selectedIndex >= 0 && this.results[this.selectedIndex]) {
-          this.selectDevice(this.results[this.selectedIndex]);
+          this.activateResultItem(this.results[this.selectedIndex]);
         } else if (this.results.length > 0) {
-          this.selectDevice(this.results[0]);
+          this.activateResultItem(this.results[0]);
         }
       } else if (e.key === 'Escape') {
         this.hideDropdown();
@@ -133,7 +134,7 @@ export class SearchUI {
       this.refreshResults();
     });
 
-    // Refresh live results if device metadata changes while dropdown is visible
+    // Refresh live results if device or building metadata changes while dropdown is visible
     const refreshIfOpen = () => {
       if (this.dropdown && this.dropdown.style.display === 'flex') {
         this.refreshResults();
@@ -142,6 +143,8 @@ export class SearchUI {
     eventBus.on('device:added', refreshIfOpen);
     eventBus.on('device:updated', refreshIfOpen);
     eventBus.on('device:deleted', refreshIfOpen);
+    eventBus.on('room3d:changed', refreshIfOpen);
+    eventBus.on('room3d:doc-updated', refreshIfOpen);
 
     // Close when clicking outside search box & dropdown
     document.addEventListener('click', (e) => {
@@ -162,11 +165,34 @@ export class SearchUI {
       this.clearBtn.classList.toggle('visible', trimmed.length > 0);
     }
 
-    this.results = this.searchEngine.searchDevices(query, {
-      filterMode: this.filterMode,
-      browseWhenEmpty: true,
-      limit: 25
-    });
+    if (this.filterMode === 'building') {
+      const rooms = this.searchEngine.searchRooms?.(query, {
+        browseWhenEmpty: true,
+        limit: 15
+      }) || [];
+      this.results = rooms.map((entry) => ({ kind: 'room', ...entry }));
+    } else if (this.filterMode === 'all') {
+      const rooms = this.searchEngine.searchRooms?.(query, {
+        browseWhenEmpty: false,
+        limit: 5
+      }) || [];
+      const devs = this.searchEngine.searchDevices(query, {
+        filterMode: 'all',
+        browseWhenEmpty: true,
+        limit: 20
+      });
+      this.results = [
+        ...rooms.map((entry) => ({ kind: 'room', ...entry })),
+        ...devs.map((device) => ({ kind: 'device', device }))
+      ];
+    } else {
+      const devs = this.searchEngine.searchDevices(query, {
+        filterMode: this.filterMode,
+        browseWhenEmpty: true,
+        limit: 25
+      });
+      this.results = devs.map((device) => ({ kind: 'device', device }));
+    }
 
     if (this.selectedIndex >= Math.min(this.results.length, 15)) {
       this.selectedIndex = -1;
@@ -185,20 +211,55 @@ export class SearchUI {
     `).join('');
 
     const trimmed = String(query || '').trim();
+    const emptyUnitLabel = this.filterMode === 'building' ? 'gedung' : 'perangkat';
     const countText = trimmed
       ? `${results.length} cocok`
-      : `${results.length} perangkat${results.length > 15 ? ' (tampil 15 teratas)' : ''}`;
+      : `${results.length} ${emptyUnitLabel}${results.length > 15 ? ' (tampil 15 teratas)' : ''}`;
 
     let bodyHtml = '';
     if (results.length === 0) {
       bodyHtml = `
         <div class="search-empty-state">
-          Tidak ada perangkat atau IP yang cocok${trimmed ? ` untuk "<strong>${this.escapeHtml(trimmed)}</strong>"` : ''}.<br>
+          Tidak ada gedung, perangkat, atau IP yang cocok${trimmed ? ` untuk "<strong>${this.escapeHtml(trimmed)}</strong>"` : ''}.<br>
           Coba ubah kata kunci atau pilih tab filter <strong>Semua</strong>.
         </div>
       `;
     } else {
-      bodyHtml = results.slice(0, 15).map((dev, idx) => {
+      bodyHtml = results.slice(0, 15).map((item, idx) => {
+        if (item.kind === 'room' && item.room) {
+          const room = item.room;
+          const doc = room.doc || {};
+          const subText = item.matchedSnippet || doc.zone || `${Number(room.widthMeters || 0).toFixed(0)}x${Number(room.depthMeters || 0).toFixed(0)}m`;
+          const vlanBadges = (item.vlans || []).slice(0, 3)
+            .map((v) => `<span class="search-vlan-pill">VLAN ${v}</span>`)
+            .join('');
+          return `
+            <div class="search-item-card is-room-card ${idx === this.selectedIndex ? 'active' : ''}" data-index="${idx}" title="Klik untuk fokus gedung di 3D &amp; buka Kartu Dokumentasi Gedung">
+              <div class="search-item-main">
+                <span class="search-cat-tag" style="color: var(--accent-green);">GDG</span>
+                <div class="search-item-info">
+                  <div class="search-item-title-row">
+                    <span class="search-item-name">${this.highlightText(room.name || room.id, query)}</span>
+                  </div>
+                  ${subText ? `<div class="search-item-sub">${this.highlightText(subText, query)}</div>` : ''}
+                  <div class="search-item-badges">
+                    ${doc.roomCode ? `<span class="search-ip-pill">${this.highlightText(doc.roomCode, query)}</span>` : ''}
+                    <span class="search-ssid-pill">${item.deviceCount} Unit</span>
+                    ${vlanBadges}
+                  </div>
+                </div>
+              </div>
+              <div class="search-item-side">
+                <span class="search-status-dot" style="color: var(--accent-green);">Gedung 3D</span>
+                <div class="search-item-actions">
+                  <button type="button" class="search-action-btn" data-focus-index="${idx}" title="Fokus 3D &amp; Buka Dokumentasi Gedung">Kartu</button>
+                </div>
+              </div>
+            </div>
+          `;
+        }
+
+        const dev = item.device || item;
         const cat = DEVICE_CATEGORIES[dev.category] || DEVICE_CATEGORIES.core;
         const statusDef = DEVICE_STATUSES[dev.status] || DEVICE_STATUSES.online;
         const ip = dev.network?.ip || dev.ip || '';
@@ -250,7 +311,7 @@ export class SearchUI {
         <div class="search-filter-pills">${filterPillsHtml}</div>
         <div class="search-meta-hint">
           <span>${countText}</span>
-          <span>Klik IP / perangkat → Fokus Peta 2D/3D</span>
+          <span>Cari Gedung / Catatan ODP / IP / VLAN</span>
         </div>
       </div>
       <div class="search-results-list">
@@ -270,14 +331,14 @@ export class SearchUI {
       });
     });
 
-    // Item click -> Focus & Select
+    // Item click -> Focus & Select (device or building)
     this.dropdown.querySelectorAll('.search-item-card').forEach((itemEl) => {
       itemEl.addEventListener('click', (e) => {
         e.stopPropagation();
         if (e.target?.closest?.('[data-detail-index]')) return;
         const idx = parseInt(itemEl.getAttribute('data-index'), 10);
         if (results[idx]) {
-          this.selectDevice(results[idx]);
+          this.activateResultItem(results[idx]);
         }
       });
     });
@@ -288,10 +349,39 @@ export class SearchUI {
         e.stopPropagation();
         const idx = parseInt(btn.getAttribute('data-detail-index'), 10);
         if (results[idx]) {
-          this.selectDevice(results[idx], { openDetail: true });
+          this.activateResultItem(results[idx], { openDetail: true });
         }
       });
     });
+  }
+
+  activateResultItem(item, options = {}) {
+    if (!item) return;
+    if (item.kind === 'room' && item.room) {
+      this.selectRoom(item.room);
+      return;
+    }
+    this.selectDevice(item.device || item, options);
+  }
+
+  /**
+   * Switch to 3D view if needed, focus camera on the building, and open its Documentation Card.
+   * @param {Object} room
+   */
+  selectRoom(room) {
+    if (!room?.id) return;
+    this.hideDropdown();
+    this.closeNavbarSearchWrapper();
+
+    if (this.input) this.input.value = '';
+    if (this.clearBtn?.classList) this.clearBtn.classList.remove('visible');
+
+    this.deviceManager?.deselectDevice?.();
+    if (stateManager.getViewMode() !== '3d') {
+      stateManager.setViewMode('3d');
+    }
+    stateManager.inspectRoom3d?.(room.id);
+    eventBus.emit('map3d:focus-room', { roomId: room.id });
   }
 
   updateActiveItem() {

@@ -22,6 +22,12 @@ export class ProjectStorage {
     this.isAutoSaveEnabled = true;
     this.hasPendingSave = false;
 
+    // Phase 9B: Master Read-Only Protection vs Isolated Practice Sandbox
+    this._masterSnapshot = null;
+    this._sandboxInitialSnapshot = null;
+    this._sandboxId = null;
+    this._sandboxMeta = null;
+
     // Fast debounced auto-save (300ms) so edits persist quickly to Server / Account
     this.debouncedSave = debounce(() => {
       this.saveCurrentProject();
@@ -74,6 +80,17 @@ export class ProjectStorage {
   initMutationListeners() {
     const handleMutation = () => {
       if (!this.isAutoSaveEnabled) return;
+      if (stateManager.isStudentSandbox?.()) {
+        this.hasPendingSave = true;
+        this.updateStatusIndicator('sandbox');
+        this.debouncedSave();
+        return;
+      }
+      if (stateManager.isMasterReadOnly?.()) {
+        this.hasPendingSave = false;
+        this.updateStatusIndicator('public-readonly');
+        return;
+      }
       if (this.authManager && !this.authManager.isAuthenticated()) {
         this.hasPendingSave = false;
         this.updateStatusIndicator(this.authManager.isPublicPreviewActive?.() ? 'public-readonly' : 'guest');
@@ -241,6 +258,40 @@ export class ProjectStorage {
    * @returns {Promise<boolean>}
    */
   async saveCurrentProject() {
+    // 1. Isolated Student Practice Sandbox -> persist ONLY to sandbox localStorage key, never touch Master!
+    if (stateManager.isStudentSandbox?.()) {
+      try {
+        const sandboxData = this.serializeProject();
+        const keyId = this._sandboxId || 'default';
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem(`netmap_sandbox_${keyId}`, JSON.stringify(sandboxData));
+        }
+        this.hasPendingSave = false;
+        this.updateStatusIndicator('sandbox');
+        eventBus.emit('sandbox:saved', { sandboxId: keyId });
+        return true;
+      } catch (err) {
+        console.warn('[ProjectStorage] Sandbox save warning:', err);
+        return false;
+      }
+    }
+
+    // 2. Explicit Master Read-Only Guard -> refuse overwriting Master documentation
+    if (stateManager.isMasterReadOnly?.()) {
+      const canWritableAuth = Boolean(
+        this.authManager
+        && this.authManager.isAuthenticated?.()
+        && this.authManager.canWriteActiveWorkspace?.()
+      );
+      if (canWritableAuth) {
+        stateManager.setSessionMode?.('master-admin');
+      } else {
+        this.hasPendingSave = false;
+        this.updateStatusIndicator('public-readonly');
+        return false;
+      }
+    }
+
     if (this.authManager && !this.authManager.isAuthenticated()) {
       this.hasPendingSave = false;
       this.updateStatusIndicator(this.authManager.isPublicPreviewActive?.() ? 'public-readonly' : 'guest');
@@ -377,9 +428,152 @@ export class ProjectStorage {
     }
   }
 
+  /**
+   * Synchronize stateManager.sessionMode based on current auth state (unless already in Student Sandbox).
+   */
+  syncSessionModeFromAuth() {
+    if (stateManager.isStudentSandbox?.()) {
+      this.updateStatusIndicator('sandbox');
+      return 'student-sandbox';
+    }
+    const canWriteMaster = Boolean(
+      this.authManager
+      && this.authManager.isAuthenticated?.()
+      && this.authManager.canWriteActiveWorkspace?.()
+    );
+    const nextMode = canWriteMaster ? 'master-admin' : 'master-readonly';
+    stateManager.setSessionMode?.(nextMode);
+    return nextMode;
+  }
+
+  /**
+   * Fork current Master school map into an isolated local Student Practice Sandbox.
+   * Master data snapshot is preserved in memory so returning to Master restores it 100% intact.
+   * @param {Object} [options={}]
+   * @param {boolean} [options.keepDevices=true] - Keep school devices/cables (true) or buildings only (false)
+   * @param {string} [options.sandboxId='practice']
+   * @param {string} [options.label='Sandbox Praktik']
+   * @param {string|null} [options.jobsheetId=null]
+   * @returns {Object} The forked sandbox project data
+   */
+  forkToPracticeSandbox({
+    keepDevices = true,
+    sandboxId = 'practice',
+    label = 'Sandbox Praktik',
+    jobsheetId = null
+  } = {}) {
+    // Capture clean Master snapshot only when transitioning out of Master (never overwrite Master with dirty sandbox)
+    if (!stateManager.isStudentSandbox?.() || !this._masterSnapshot) {
+      this._masterSnapshot = JSON.parse(JSON.stringify(this.serializeProject()));
+    }
+
+    const baseMaster = JSON.parse(JSON.stringify(this._masterSnapshot));
+    const safeId = String(sandboxId || 'practice').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const sandboxProject = {
+      ...baseMaster,
+      id: `sandbox_${safeId}`,
+      name: `${baseMaster.name || 'SMKN 1 Beringin'} (${label})`,
+      devices: keepDevices ? (baseMaster.devices || []) : [],
+      connections: keepDevices ? (baseMaster.connections || []) : []
+    };
+
+    this._sandboxId = safeId;
+    this._sandboxMeta = { keepDevices: Boolean(keepDevices), label, jobsheetId: jobsheetId || null };
+    this._sandboxInitialSnapshot = JSON.parse(JSON.stringify(sandboxProject));
+
+    stateManager.setSessionMode?.('student-sandbox', {
+      sandboxId: safeId,
+      keepDevices: Boolean(keepDevices),
+      jobsheetId: jobsheetId || null
+    });
+
+    this.deserializeProject(sandboxProject);
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(`netmap_sandbox_${safeId}`, JSON.stringify(sandboxProject));
+      }
+    } catch { /* ignore quota */ }
+
+    this.updateStatusIndicator('sandbox');
+    eventBus.emit('sandbox:forked', {
+      sandboxId: safeId,
+      keepDevices: Boolean(keepDevices),
+      jobsheetId: jobsheetId || null
+    });
+    return sandboxProject;
+  }
+
+  /**
+   * Update the Sandbox reset baseline (e.g. right after JobsheetEngine seeds starter devices).
+   */
+  captureSandboxBaseline() {
+    if (!stateManager.isStudentSandbox?.()) return;
+    this._sandboxInitialSnapshot = JSON.parse(JSON.stringify(this.serializeProject()));
+  }
+
+  /**
+   * Reset current Student Practice Sandbox back to its initial forked state without affecting Master.
+   * @returns {boolean}
+   */
+  resetPracticeSandbox() {
+    if (!stateManager.isStudentSandbox?.() || !this._sandboxInitialSnapshot) {
+      return false;
+    }
+    const fresh = JSON.parse(JSON.stringify(this._sandboxInitialSnapshot));
+    this.deserializeProject(fresh);
+    try {
+      if (typeof localStorage !== 'undefined' && this._sandboxId) {
+        localStorage.setItem(`netmap_sandbox_${this._sandboxId}`, JSON.stringify(fresh));
+      }
+    } catch { /* ignore */ }
+    this.updateStatusIndicator('sandbox');
+    eventBus.emit('sandbox:reset', { sandboxId: this._sandboxId });
+    return true;
+  }
+
+  /**
+   * Exit Practice Sandbox and restore the untouched Master SMKN 1 Beringin project snapshot.
+   * @returns {boolean}
+   */
+  returnToMasterProject() {
+    const masterData = this._masterSnapshot ? JSON.parse(JSON.stringify(this._masterSnapshot)) : null;
+    stateManager.setActiveJobsheetId?.(null);
+
+    const canWriteMaster = Boolean(
+      this.authManager
+      && this.authManager.isAuthenticated?.()
+      && this.authManager.canWriteActiveWorkspace?.()
+    );
+    const nextMode = canWriteMaster ? 'master-admin' : 'master-readonly';
+    stateManager.setSessionMode?.(nextMode);
+
+    this._sandboxInitialSnapshot = null;
+    this._sandboxId = null;
+    this._sandboxMeta = null;
+
+    if (masterData) {
+      this.deserializeProject(masterData);
+      eventBus.emit('sandbox:exited', { restoredMaster: true, sessionMode: nextMode });
+      return true;
+    }
+
+    if (this.authManager) {
+      this.loadActiveWorkspaceProject();
+    }
+    eventBus.emit('sandbox:exited', { restoredMaster: false, sessionMode: nextMode });
+    return false;
+  }
+
   updateStatusIndicator(status) {
     const statusPill = document.querySelector('#app-status-bar .status-pill');
     if (!statusPill) return;
+
+    if (status === 'sandbox' || stateManager.isStudentSandbox?.()) {
+      statusPill.textContent = '● MODE SANDBOX PRAKTIK (MASTER TERLINDUNGI)';
+      statusPill.style.color = '#16a34a';
+      statusPill.style.background = 'rgba(34, 197, 94, 0.14)';
+      return;
+    }
 
     const isAuthed = Boolean(this.authManager?.isAuthenticated?.());
     if (status === 'public-readonly' || (!isAuthed && this.authManager?.isPublicPreviewActive?.())) {

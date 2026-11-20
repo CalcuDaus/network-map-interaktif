@@ -1143,6 +1143,7 @@ export class PropertiesPanel {
   bindEvents() {
     eventBus.on('device:selected', (device) => {
       if (!device) return;
+      stateManager.clearInspectedRoom3d?.({ silent: true });
       const selectedDevices = this.deviceManager.getSelectedDevices?.() || [device];
       const unlockedCount = selectedDevices.filter((d) => !d.layerLocked).length;
       const sig = `${device.id}:${selectedDevices.length}:${unlockedCount}`;
@@ -1155,6 +1156,7 @@ export class PropertiesPanel {
     eventBus.on('device:selection-changed', ({ primaryId, devices }) => {
       const primary = primaryId ? this.deviceManager.getDeviceById(primaryId) : null;
       if (!primary) return;
+      stateManager.clearInspectedRoom3d?.({ silent: true });
       const list = Array.isArray(devices) ? devices : (this.deviceManager.getSelectedDevices?.() || [primary]);
       const unlockedCount = list.filter((d) => !d.layerLocked).length;
       const sig = `${primary.id}:${list.length}:${unlockedCount}`;
@@ -1166,14 +1168,18 @@ export class PropertiesPanel {
     eventBus.on('device:deselected', () => {
       this._lastRenderedSig = null;
       this.currentDevice = null;
-      this.renderEmpty();
+      if (!stateManager.getInspectedRoom3dId?.()) {
+        this.renderEmpty();
+      }
     });
 
     eventBus.on('device:deleted', ({ deviceId }) => {
       if (this.currentDevice?.id === deviceId && !this.deviceManager?.selectedDeviceId) {
         this._lastRenderedSig = null;
         this.currentDevice = null;
-        this.renderEmpty();
+        if (!stateManager.getInspectedRoom3dId?.()) {
+          this.renderEmpty();
+        }
       }
     });
 

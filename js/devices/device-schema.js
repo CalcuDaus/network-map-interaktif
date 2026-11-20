@@ -882,7 +882,60 @@ export const DeviceSchema = {
         managementAccess: params.network?.managementAccess || '',
         managementUser: params.network?.managementUser || '',
         services: params.network?.services || '',
-        configSnippet: params.network?.configSnippet || ''
+        configSnippet: params.network?.configSnippet || '',
+        interfaces: (params.network?.interfaces && typeof params.network.interfaces === 'object')
+          ? Object.fromEntries(
+              Object.entries(params.network.interfaces).map(([k, v]) => [
+                k,
+                {
+                  ip: String(v?.ip || ''),
+                  prefix: typeof v?.prefix === 'number' ? v.prefix : 24,
+                  subnet: String(v?.subnet || '255.255.255.0'),
+                  status: v?.status === 'down' ? 'down' : 'up',
+                  mode: (v?.mode === 'access' || v?.mode === 'trunk' || v?.mode === 'routed') ? v.mode : 'routed',
+                  vlan: v?.vlan !== undefined && v?.vlan !== '' ? Number(v.vlan) : 1,
+                  allowedVlans: Array.isArray(v?.allowedVlans) ? v.allowedVlans.map(Number).filter((n) => n >= 1 && n <= 4094) : [1],
+                  dhcpClient: Boolean(v?.dhcpClient),
+                  natMasquerade: Boolean(v?.natMasquerade)
+                }
+              ])
+            )
+          : {},
+        routes: Array.isArray(params.network?.routes)
+          ? params.network.routes.map((r) => ({
+              dstNetwork: String(r?.dstNetwork || '0.0.0.0'),
+              prefix: typeof r?.prefix === 'number' ? r.prefix : 0,
+              gateway: String(r?.gateway || ''),
+              interfaceName: String(r?.interfaceName || '')
+            }))
+          : [],
+        dhcp: (params.network?.dhcp && typeof params.network.dhcp === 'object')
+          ? {
+              servers: (params.network.dhcp.servers && typeof params.network.dhcp.servers === 'object')
+                ? Object.fromEntries(
+                    Object.entries(params.network.dhcp.servers).map(([ifName, cfg]) => [
+                      ifName,
+                      {
+                        enabled: Boolean(cfg?.enabled),
+                        poolStart: String(cfg?.poolStart || ''),
+                        poolEnd: String(cfg?.poolEnd || ''),
+                        gateway: String(cfg?.gateway || ''),
+                        dns: String(cfg?.dns || '8.8.8.8'),
+                        prefix: typeof cfg?.prefix === 'number' ? cfg.prefix : 24
+                      }
+                    ])
+                  )
+                : {},
+              clientEnabled: Boolean(params.network.dhcp.clientEnabled),
+              clientInterface: String(params.network.dhcp.clientInterface || '')
+            }
+          : { servers: {}, clientEnabled: false, clientInterface: '' },
+        nat: (params.network?.nat && typeof params.network.nat === 'object')
+          ? {
+              masquerade: Boolean(params.network.nat.masquerade),
+              outInterface: String(params.network.nat.outInterface || '')
+            }
+          : { masquerade: false, outInterface: '' }
       },
       status: params.status || 'unknown',      // online, offline, warning, unknown
       layerVisible: params.layerVisible !== undefined ? Boolean(params.layerVisible) : true,

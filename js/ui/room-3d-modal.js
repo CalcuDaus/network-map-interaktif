@@ -167,6 +167,23 @@ export class Room3DModal {
               <span>Kunci posisi ruangan ini (tidak ikut tergeser saat klik perangkat)</span>
             </label>
 
+            <!-- Documentation Metadata (Phase 8: School Digital Twin) -->
+            <div style="display: flex; flex-direction: column; gap: 6px; border-top: 1px dashed var(--border-color); padding-top: 8px;">
+              <span style="font-size: 10.5px; font-weight: 700; text-transform: uppercase; color: var(--accent-blue, #2a7c13);">Dokumentasi Gedung (Opsional)</span>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                <input type="text" id="r3d-doc-code" placeholder="Kode Ruang (mis. GDG-PPLG-01)"
+                       style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 5px 8px; font-size: 11px; color: var(--text-primary);">
+                <input type="text" id="r3d-doc-zone" placeholder="Zona / Jurusan (mis. TJKT / PPLG)"
+                       style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 5px 8px; font-size: 11px; color: var(--text-primary);">
+              </div>
+              <input type="text" id="r3d-doc-pic" placeholder="Penanggung Jawab / PIC (mis. Tim Teknisi TKJ)"
+                     style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 5px 8px; font-size: 11px; color: var(--text-primary);">
+              <label style="display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; color: var(--text-primary); cursor: pointer;">
+                <input type="checkbox" id="r3d-doc-signboard" checked>
+                <span>Tampilkan Papan Nama Gedung 3D di atas atap</span>
+              </label>
+            </div>
+
             <!-- Custom .GLB/.GLTF Room Model Upload -->
             <div style="display: flex; flex-direction: column; gap: 4px; border-top: 1px dashed var(--border-color); padding-top: 8px;">
               <label style="font-size: 11px; font-weight: 600; color: var(--text-primary);">Model 3D Ruangan Kustom (.glb / .gltf - Opsional)</label>
@@ -532,6 +549,14 @@ export class Room3DModal {
     if (rotInput) rotInput.value = '0';
     const lockedCb = this.modalEl.querySelector('#r3d-locked');
     if (lockedCb) lockedCb.checked = false;
+    const codeInp = this.modalEl.querySelector('#r3d-doc-code');
+    if (codeInp) codeInp.value = '';
+    const zoneInp = this.modalEl.querySelector('#r3d-doc-zone');
+    if (zoneInp) zoneInp.value = '';
+    const picInp = this.modalEl.querySelector('#r3d-doc-pic');
+    if (picInp) picInp.value = '';
+    const signCb = this.modalEl.querySelector('#r3d-doc-signboard');
+    if (signCb) signCb.checked = true;
     this.modalEl.querySelector('#r3d-glb-url').value = '';
     this.modalEl.querySelector('#btn-r3d-clear-glb').style.display = 'none';
   }
@@ -554,6 +579,11 @@ export class Room3DModal {
     const heightMeters = clamp(parseFloat(this.modalEl.querySelector('#r3d-height')?.value) || 4.5, minH, 40);
     const scaleVal = clamp(parseFloat(this.modalEl.querySelector('#r3d-scale-input')?.value) || 1, 0.2, 5);
     const lockAspectRatio = Boolean(this.modalEl.querySelector('#r3d-lock-aspect')?.checked);
+    const prevDoc = existingItem?.doc && typeof existingItem.doc === 'object' ? existingItem.doc : {};
+    const roomCodeVal = String(this.modalEl.querySelector('#r3d-doc-code')?.value || '').trim();
+    const zoneVal = String(this.modalEl.querySelector('#r3d-doc-zone')?.value || '').trim();
+    const picVal = String(this.modalEl.querySelector('#r3d-doc-pic')?.value || '').trim();
+    const showSignboardVal = Boolean(this.modalEl.querySelector('#r3d-doc-signboard')?.checked);
 
     const roomData = {
       ...(existingItem || {}),
@@ -574,7 +604,14 @@ export class Room3DModal {
       floorColor: this.modalEl.querySelector('#r3d-floor-color')?.value || '#1e293b',
       opacity: clamp((parseFloat(this.modalEl.querySelector('#r3d-opacity')?.value) || 20) / 100, 0.05, 0.85),
       locked: Boolean(this.modalEl.querySelector('#r3d-locked')?.checked),
-      customModelUrl
+      customModelUrl,
+      doc: {
+        ...prevDoc,
+        roomCode: roomCodeVal,
+        zone: zoneVal,
+        picName: picVal,
+        showSignboard: showSignboardVal
+      }
     };
 
     const idx = existing.findIndex((r) => r.id === roomData.id);
@@ -684,33 +721,7 @@ export class Room3DModal {
       btn.addEventListener('click', () => {
         const room = rooms.find((r) => r.id === btn.getAttribute('data-id'));
         if (!room) return;
-        this.editingRoomId = room.id;
-        this.uploadedRoomGlbUrl = room.customModelUrl?.startsWith('data:') ? room.customModelUrl : '';
-        this.modalEl.querySelector('#room3d-form-title').textContent = `Edit Ruangan: ${room.name}`;
-        this.modalEl.querySelector('#r3d-name').value = room.name;
-        this.modalEl.querySelector('#r3d-x').value = room.x;
-        this.modalEl.querySelector('#r3d-y').value = room.y;
-        this.modalEl.querySelector('#r3d-width').value = room.widthMeters;
-        this.modalEl.querySelector('#r3d-depth').value = room.depthMeters;
-        this.modalEl.querySelector('#r3d-height').value = room.heightMeters;
-        this.modalEl.querySelector('#r3d-glb-url').value = this.uploadedRoomGlbUrl ? '[File GLB Lokal Terpilih]' : (room.customModelUrl || '');
-        this.modalEl.querySelector('#btn-r3d-clear-glb').style.display = room.customModelUrl ? 'inline-flex' : 'none';
-        const baseW = Number(room.baseWidthMeters) || Number(room.widthMeters) || 20;
-        const baseD = Number(room.baseDepthMeters) || Number(room.depthMeters) || 16;
-        const baseH = Number(room.baseHeightMeters) || Number(room.heightMeters) || 4.5;
-        const curScale = Number(room.modelScale) || (baseW > 0 ? Number(room.widthMeters) / baseW : 1);
-        this.setFormBaseAndScale(
-          { widthMeters: baseW, depthMeters: baseD, heightMeters: baseH },
-          curScale,
-          room.lockAspectRatio !== false
-        );
-        const rotInput = this.modalEl.querySelector('#r3d-rot-y');
-        if (rotInput) rotInput.value = Number(room.rotationY ?? room.rotationDeg) || 0;
-        this.modalEl.querySelector('#r3d-wall-color').value = room.wallColor || '#2a7c13';
-        this.modalEl.querySelector('#r3d-floor-color').value = room.floorColor || '#1e293b';
-        this.modalEl.querySelector('#r3d-opacity').value = Math.round((room.opacity ?? 0.2) * 100);
-        const lockedCb = this.modalEl.querySelector('#r3d-locked');
-        if (lockedCb) lockedCb.checked = Boolean(room.locked);
+        this.populateFormForRoom(room);
       });
     });
 
@@ -721,6 +732,53 @@ export class Room3DModal {
         this.renderRoomList();
       });
     });
+  }
+
+  populateFormForRoom(room) {
+    if (!room || !this.modalEl) return;
+    this.editingRoomId = room.id;
+    this.uploadedRoomGlbUrl = room.customModelUrl?.startsWith('data:') ? room.customModelUrl : '';
+    this.modalEl.querySelector('#room3d-form-title').textContent = `Edit Ruangan: ${room.name}`;
+    this.modalEl.querySelector('#r3d-name').value = room.name;
+    this.modalEl.querySelector('#r3d-x').value = room.x;
+    this.modalEl.querySelector('#r3d-y').value = room.y;
+    this.modalEl.querySelector('#r3d-width').value = room.widthMeters;
+    this.modalEl.querySelector('#r3d-depth').value = room.depthMeters;
+    this.modalEl.querySelector('#r3d-height').value = room.heightMeters;
+    this.modalEl.querySelector('#r3d-glb-url').value = this.uploadedRoomGlbUrl ? '[File GLB Lokal Terpilih]' : (room.customModelUrl || '');
+    this.modalEl.querySelector('#btn-r3d-clear-glb').style.display = room.customModelUrl ? 'inline-flex' : 'none';
+    const baseW = Number(room.baseWidthMeters) || Number(room.widthMeters) || 20;
+    const baseD = Number(room.baseDepthMeters) || Number(room.depthMeters) || 16;
+    const baseH = Number(room.baseHeightMeters) || Number(room.heightMeters) || 4.5;
+    const curScale = Number(room.modelScale) || (baseW > 0 ? Number(room.widthMeters) / baseW : 1);
+    this.setFormBaseAndScale(
+      { widthMeters: baseW, depthMeters: baseD, heightMeters: baseH },
+      curScale,
+      room.lockAspectRatio !== false
+    );
+    const rotInput = this.modalEl.querySelector('#r3d-rot-y');
+    if (rotInput) rotInput.value = Number(room.rotationY ?? room.rotationDeg) || 0;
+    this.modalEl.querySelector('#r3d-wall-color').value = room.wallColor || '#2a7c13';
+    this.modalEl.querySelector('#r3d-floor-color').value = room.floorColor || '#1e293b';
+    this.modalEl.querySelector('#r3d-opacity').value = Math.round((room.opacity ?? 0.2) * 100);
+    const lockedCb = this.modalEl.querySelector('#r3d-locked');
+    if (lockedCb) lockedCb.checked = Boolean(room.locked);
+    const codeInp = this.modalEl.querySelector('#r3d-doc-code');
+    if (codeInp) codeInp.value = room.doc?.roomCode || '';
+    const zoneInp = this.modalEl.querySelector('#r3d-doc-zone');
+    if (zoneInp) zoneInp.value = room.doc?.zone || '';
+    const picInp = this.modalEl.querySelector('#r3d-doc-pic');
+    if (picInp) picInp.value = room.doc?.picName || '';
+    const signCb = this.modalEl.querySelector('#r3d-doc-signboard');
+    if (signCb) signCb.checked = room.doc?.showSignboard !== false;
+  }
+
+  openForRoom(roomId) {
+    const room = stateManager.getRoom3dById?.(roomId);
+    this.show();
+    if (room) {
+      this.populateFormForRoom(room);
+    }
   }
 
   show() {

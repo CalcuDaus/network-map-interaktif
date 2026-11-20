@@ -28,6 +28,10 @@ class StateManager {
       },
       // Active primary workspace mode: 'network' (Simulasi Jaringan, default) | 'build' (Edit Bangunan)
       workspaceMode: 'network',
+      // Session protection mode: 'master-readonly' | 'master-admin' | 'student-sandbox'
+      sessionMode: 'master-readonly',
+      // Active guided jobsheet ID when practicing in Sandbox
+      activeJobsheetId: null,
       // Active viewport renderer mode: '2d' | '3d'
       viewMode: '2d',
       // Current interaction mode: 'navigate' | 'select' | 'add-device' | 'draw-cable' | 'edit' | 'delete'
@@ -36,6 +40,8 @@ class StateManager {
       selectedObject3dId: null,
       // Selected 3D room ID
       selectedRoom3dId: null,
+      // Inspected 3D room ID (for Building Documentation Card, works even when room is locked)
+      inspectedRoom3dId: null,
       // Selected 3D road ID
       selectedRoad3dId: null,
       // Viewport transform
@@ -130,6 +136,50 @@ class StateManager {
     return this.state.workspaceMode === 'build' ? 'build' : 'network';
   }
 
+  /**
+   * Set session protection mode: 'master-readonly' | 'master-admin' | 'student-sandbox'
+   * @param {'master-readonly'|'master-admin'|'student-sandbox'} mode
+   * @param {Object} [meta={}]
+   */
+  setSessionMode(mode, meta = {}) {
+    const allowed = ['master-readonly', 'master-admin', 'student-sandbox'];
+    const normalized = allowed.includes(mode) ? mode : 'master-readonly';
+    const prevSessionMode = this.state.sessionMode || 'master-readonly';
+    if (prevSessionMode === normalized && Object.keys(meta).length === 0) return normalized;
+    this.state.sessionMode = normalized;
+    eventBus.emit('session:mode-changed', {
+      sessionMode: normalized,
+      prevSessionMode,
+      ...meta
+    });
+    return normalized;
+  }
+
+  getSessionMode() {
+    return this.state.sessionMode || 'master-readonly';
+  }
+
+  isMasterReadOnly() {
+    return this.getSessionMode() === 'master-readonly';
+  }
+
+  isStudentSandbox() {
+    return this.getSessionMode() === 'student-sandbox';
+  }
+
+  setActiveJobsheetId(jobsheetId) {
+    const next = jobsheetId ? String(jobsheetId) : null;
+    if (this.state.activeJobsheetId === next) return next;
+    const prev = this.state.activeJobsheetId || null;
+    this.state.activeJobsheetId = next;
+    eventBus.emit('jobsheet:active-changed', { jobsheetId: next, prevJobsheetId: prev });
+    return next;
+  }
+
+  getActiveJobsheetId() {
+    return this.state.activeJobsheetId || null;
+  }
+
   setRooms3d(rooms) {
     this.state.project.rooms3d = Array.isArray(rooms) ? rooms : [];
     if (
@@ -138,6 +188,14 @@ class StateManager {
     ) {
       this.state.selectedRoom3dId = null;
       eventBus.emit('room3d:deselected', {});
+    }
+    if (
+      this.state.inspectedRoom3dId &&
+      !this.state.project.rooms3d.some((r) => r.id === this.state.inspectedRoom3dId)
+    ) {
+      const prevInsp = this.state.inspectedRoom3dId;
+      this.state.inspectedRoom3dId = null;
+      eventBus.emit('room3d:inspect-closed', { id: prevInsp });
     }
     eventBus.emit('room3d:changed', { rooms: this.state.project.rooms3d });
   }
@@ -161,7 +219,52 @@ class StateManager {
     if (this.state.selectedRoom3dId === id) {
       eventBus.emit('room3d:selected', updated);
     }
+    if (this.state.inspectedRoom3dId === id) {
+      eventBus.emit('room3d:doc-updated', updated);
+    }
     return updated;
+  }
+
+  updateRoom3dDoc(id, docPatch = {}) {
+    const room = this.getRoom3dById(id);
+    if (!room) return null;
+    const nextDoc = {
+      ...(room.doc && typeof room.doc === 'object' ? room.doc : {}),
+      ...(docPatch && typeof docPatch === 'object' ? docPatch : {})
+    };
+    const updated = this.updateRoom3d(id, { doc: nextDoc });
+    if (updated) {
+      eventBus.emit('room3d:doc-updated', updated);
+    }
+    return updated;
+  }
+
+  addRoom3dMaintenanceLog(id, logEntry = {}) {
+    const room = this.getRoom3dById(id);
+    if (!room) return null;
+    const prevLogs = Array.isArray(room.doc?.maintenanceLogs) ? [...room.doc.maintenanceLogs] : [];
+    const entry = {
+      id: logEntry.id || `mlog-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+      date: String(logEntry.date || new Date().toISOString().slice(0, 10)).trim(),
+      technician: String(logEntry.technician || 'Teknisi').trim(),
+      category: String(logEntry.category || 'general').trim(),
+      status: String(logEntry.status || 'ok').trim(),
+      summary: String(logEntry.summary || '').trim()
+    };
+    if (!entry.summary) return null;
+    const nextLogs = [entry, ...prevLogs];
+    const updated = this.updateRoom3dDoc(id, { maintenanceLogs: nextLogs });
+    return updated ? { room: updated, log: entry } : null;
+  }
+
+  deleteRoom3dMaintenanceLog(id, logId) {
+    const room = this.getRoom3dById(id);
+    if (!room) return false;
+    const prevLogs = Array.isArray(room.doc?.maintenanceLogs) ? room.doc.maintenanceLogs : [];
+    const nextLogs = prevLogs.filter((l) => l.id !== logId);
+    if (nextLogs.length === prevLogs.length) return false;
+    this.updateRoom3dDoc(id, { maintenanceLogs: nextLogs });
+    return true;
   }
 
   deleteRoom3d(id) {
@@ -169,10 +272,15 @@ class StateManager {
     const next = list.filter((r) => r.id !== id);
     if (next.length === list.length) return false;
     const wasSelected = this.state.selectedRoom3dId === id;
+    const wasInspected = this.state.inspectedRoom3dId === id;
     this.state.project.rooms3d = next;
     if (wasSelected) {
       this.state.selectedRoom3dId = null;
       eventBus.emit('room3d:deselected', { id });
+    }
+    if (wasInspected) {
+      this.state.inspectedRoom3dId = null;
+      eventBus.emit('room3d:inspect-closed', { id });
     }
     eventBus.emit('room3d:changed', { rooms: next });
     return true;
@@ -181,9 +289,14 @@ class StateManager {
   selectRoom3d(id) {
     const room = this.getRoom3dById(id);
     if (!room) return;
-    if (this.state.selectedRoom3dId === id) return;
+    this.state.inspectedRoom3dId = id;
+    if (this.state.selectedRoom3dId === id) {
+      eventBus.emit('room3d:inspect', room);
+      return;
+    }
     this.state.selectedRoom3dId = id;
     eventBus.emit('room3d:selected', room);
+    eventBus.emit('room3d:inspect', room);
   }
 
   deselectRoom3d() {
@@ -195,6 +308,27 @@ class StateManager {
 
   getSelectedRoom3dId() {
     return this.state.selectedRoom3dId || null;
+  }
+
+  inspectRoom3d(id) {
+    const room = this.getRoom3dById(id);
+    if (!room) return null;
+    this.state.inspectedRoom3dId = id;
+    eventBus.emit('room3d:inspect', room);
+    return room;
+  }
+
+  clearInspectedRoom3d({ silent = false } = {}) {
+    if (!this.state.inspectedRoom3dId) return;
+    const prevId = this.state.inspectedRoom3dId;
+    this.state.inspectedRoom3dId = null;
+    if (!silent) {
+      eventBus.emit('room3d:inspect-closed', { id: prevId });
+    }
+  }
+
+  getInspectedRoom3dId() {
+    return this.state.inspectedRoom3dId || null;
   }
 
   getObjects3d() {

@@ -1,7 +1,8 @@
 /**
- * NetMap — Cisco Packet Tracer-Style Port Picker Modal
+ * NetMap — Cisco Packet Tracer-Style Port Picker Modal (Mobile Portrait Wizard + Desktop 2-Column)
  * Muncul saat menarik kabel baru (2D/3D) atau dari panel properti kabel
  * untuk memetakan kabel ke port fisik spesifik (beserta validasi port terpakai & anchor 3D).
+ * Di layar HP portrait (<= 680px), berubah otomatis menjadi Wizard 2-Langkah ramah jari (>= 44px).
  */
 
 import { eventBus } from '../core/event-bus.js';
@@ -21,6 +22,7 @@ export class PortPickerModal {
     this.activeCableId = null;
     this.selectedSrcPort = '';
     this.selectedDstPort = '';
+    this.activeMobileStep = 'src'; // 'src' | 'dst'
 
     this.createModalDOM();
     this.bindEvents();
@@ -30,30 +32,20 @@ export class PortPickerModal {
     if (typeof document === 'undefined') return;
     this.modalEl = document.createElement('div');
     this.modalEl.id = 'port-picker-modal';
-    this.modalEl.style.cssText = `
-      position: fixed;
-      inset: 0;
-      background-color: var(--modal-backdrop, rgba(24, 45, 18, 0.72));
-      backdrop-filter: blur(6px);
-      z-index: 1050;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      padding: 16px;
-      font-family: 'Poppins', sans-serif;
-    `;
+    this.modalEl.className = 'ppm-modal-overlay';
+    this.modalEl.style.display = 'none';
 
     this.modalEl.innerHTML = `
-      <div style="background-color: var(--bg-secondary, #fbe6c2); border: 1px solid var(--border-color, #e5cca0); border-radius: 12px; width: 100%; max-width: 720px; max-height: 88vh; display: flex; flex-direction: column; box-shadow: 0 22px 44px rgba(0,0,0,0.32); overflow: hidden;">
+      <div class="ppm-modal-card" data-active-step="src">
         <!-- Header -->
-        <div style="height: 54px; border-bottom: 1px solid var(--border-color, #e5cca0); background: var(--bg-tertiary, #f2dac8); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; flex-shrink: 0;">
-          <div style="display: flex; align-items: center; gap: 10px;">
-            <div style="width: 30px; height: 30px; border-radius: 7px; background: rgba(42, 124, 19, 0.16); display: flex; align-items: center; justify-content: center; color: var(--accent-blue, #2a7c13);">
+        <div class="ppm-header">
+          <div style="display: flex; align-items: center; gap: 10px; min-width: 0;">
+            <div class="ppm-header-icon">
               <i data-lucide="plug-zap" style="width: 17px; height: 17px;"></i>
             </div>
-            <div>
-              <span style="font-size: 14.5px; font-weight: 700; color: var(--text-primary, #18350d); display: block; line-height: 1.2;">Pilih Interface / Port Koneksi (Packet Tracer Mode)</span>
-              <span id="ppm-subtitle" style="font-size: 11px; color: var(--text-muted, #678458);">Hubungkan kabel ke soket port fisik spesifik pada kedua perangkat</span>
+            <div style="min-width: 0;">
+              <span class="ppm-title">Pilih Interface / Port Koneksi</span>
+              <span id="ppm-subtitle" class="ppm-subtitle">Hubungkan kabel ke soket port fisik spesifik pada kedua perangkat</span>
             </div>
           </div>
           <button id="btn-ppm-close" class="btn btn-icon btn-sm" title="Lewati / Tutup">
@@ -61,57 +53,71 @@ export class PortPickerModal {
           </button>
         </div>
 
-        <!-- Body: Two-Column Port Matrix -->
-        <div style="padding: 16px 20px; overflow-y: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+        <!-- Mobile Portrait 2-Step Wizard Tabs (visible <= 680px via CSS) -->
+        <div id="ppm-mobile-steps" class="ppm-mobile-steps" role="tablist">
+          <button type="button" class="ppm-step-tab active" data-ppm-step="src">
+            <span class="ppm-step-num">1</span>
+            <span class="ppm-step-label">Port Sumber</span>
+            <span id="ppm-step-src-badge" class="ppm-step-badge">--</span>
+          </button>
+          <button type="button" class="ppm-step-tab" data-ppm-step="dst">
+            <span class="ppm-step-num">2</span>
+            <span class="ppm-step-label">Port Tujuan</span>
+            <span id="ppm-step-dst-badge" class="ppm-step-badge">--</span>
+          </button>
+        </div>
+
+        <!-- Body: Desktop Two-Column / Mobile Wizard Single-Column -->
+        <div class="ppm-body-grid">
           <!-- Source Column -->
-          <div style="background: var(--bg-primary, #fff8cf); border: 1px solid var(--border-color); border-radius: 9px; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
-            <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 6px;">
-              <div>
-                <span style="font-size: 10px; font-weight: 700; color: var(--accent-sky, #0284c7); text-transform: uppercase;">PERANGKAT SUMBER (SOURCE)</span>
-                <div id="ppm-src-device-name" style="font-size: 13px; font-weight: 700; color: var(--text-primary);">Source Device</div>
+          <div class="ppm-col ppm-col-src">
+            <div class="ppm-col-head">
+              <div style="min-width: 0;">
+                <span class="ppm-col-kicker is-src">PERANGKAT SUMBER (SOURCE)</span>
+                <div id="ppm-src-device-name" class="ppm-col-devname">Source Device</div>
               </div>
               <button type="button" id="btn-ppm-edit-src-ports" class="btn btn-secondary btn-sm" style="font-size: 10px; padding: 3px 8px;" title="Atur / Scan Port 3D .GLB Perangkat Sumber">
                 Atur Port 3D
               </button>
             </div>
-            <div id="ppm-src-port-list" style="display: flex; flex-direction: column; gap: 5px; max-height: 270px; overflow-y: auto; padding-right: 2px;"></div>
-            <div style="display: flex; flex-direction: column; gap: 3px; padding-top: 4px; border-top: 1px dashed var(--border-color);">
-              <label style="font-size: 10px; color: var(--text-muted);">Port Sumber Terpilih / Kustom:</label>
-              <input type="text" id="ppm-src-custom-input" placeholder="Contoh: ether1, Gi0/1, sfp-sfpplus1"
-                     style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px; padding: 5px 8px; font-size: 11.5px; color: var(--text-primary); font-family: var(--font-mono); font-weight: 600;">
+            <div id="ppm-src-port-list" class="ppm-port-list"></div>
+            <div class="ppm-custom-row">
+              <label class="ppm-custom-label">Port Sumber Terpilih / Kustom:</label>
+              <input type="text" id="ppm-src-custom-input" class="ppm-custom-input" placeholder="Contoh: ether1, Gi0/1, sfp-sfpplus1"
+                     autocorrect="off" autocapitalize="off" autocomplete="off">
             </div>
           </div>
 
           <!-- Destination Column -->
-          <div style="background: var(--bg-primary, #fff8cf); border: 1px solid var(--border-color); border-radius: 9px; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
-            <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 6px;">
-              <div>
-                <span style="font-size: 10px; font-weight: 700; color: var(--accent-blue, #2a7c13); text-transform: uppercase;">PERANGKAT TUJUAN (DESTINATION)</span>
-                <div id="ppm-dst-device-name" style="font-size: 13px; font-weight: 700; color: var(--text-primary);">Destination Device</div>
+          <div class="ppm-col ppm-col-dst">
+            <div class="ppm-col-head">
+              <div style="min-width: 0;">
+                <span class="ppm-col-kicker is-dst">PERANGKAT TUJUAN (DESTINATION)</span>
+                <div id="ppm-dst-device-name" class="ppm-col-devname">Destination Device</div>
               </div>
               <button type="button" id="btn-ppm-edit-dst-ports" class="btn btn-secondary btn-sm" style="font-size: 10px; padding: 3px 8px;" title="Atur / Scan Port 3D .GLB Perangkat Tujuan">
                 Atur Port 3D
               </button>
             </div>
-            <div id="ppm-dst-port-list" style="display: flex; flex-direction: column; gap: 5px; max-height: 270px; overflow-y: auto; padding-right: 2px;"></div>
-            <div style="display: flex; flex-direction: column; gap: 3px; padding-top: 4px; border-top: 1px dashed var(--border-color);">
-              <label style="font-size: 10px; color: var(--text-muted);">Port Tujuan Terpilih / Kustom:</label>
-              <input type="text" id="ppm-dst-custom-input" placeholder="Contoh: ether2, Gi0/24, sfp-sfpplus1"
-                     style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 6px; padding: 5px 8px; font-size: 11.5px; color: var(--text-primary); font-family: var(--font-mono); font-weight: 600;">
+            <div id="ppm-dst-port-list" class="ppm-port-list"></div>
+            <div class="ppm-custom-row">
+              <label class="ppm-custom-label">Port Tujuan Terpilih / Kustom:</label>
+              <input type="text" id="ppm-dst-custom-input" class="ppm-custom-input" placeholder="Contoh: ether2, Gi0/24, sfp-sfpplus1"
+                     autocorrect="off" autocapitalize="off" autocomplete="off">
             </div>
           </div>
         </div>
 
         <!-- Footer -->
-        <div style="height: 54px; border-top: 1px solid var(--border-color, #e5cca0); background: var(--bg-tertiary, #f2dac8); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; flex-shrink: 0;">
-          <button type="button" id="btn-ppm-auto" class="btn btn-secondary btn-sm" title="Pilih otomatis port kosong pertama di kedua perangkat">
-            ${uiIcon('zap', 12)} <span>Auto-Pilih Port Kosong</span>
+        <div class="ppm-footer">
+          <button type="button" id="btn-ppm-auto" class="btn btn-secondary btn-sm ppm-touch-btn" title="Pilih otomatis port kosong pertama di kedua perangkat">
+            ${uiIcon('zap', 12)} <span>Auto-Pilih</span>
           </button>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <button type="button" id="btn-ppm-skip" class="btn btn-secondary btn-sm">Simpan Tanpa Ganti</button>
-            <button type="button" id="btn-ppm-apply" class="btn btn-primary btn-sm">
+          <div class="ppm-footer-right">
+            <button type="button" id="btn-ppm-skip" class="btn btn-secondary btn-sm ppm-touch-btn">Lewati</button>
+            <button type="button" id="btn-ppm-apply" class="btn btn-primary btn-sm ppm-touch-btn">
               <i data-lucide="check" style="width: 14px; height: 14px;"></i>
-              <span>Hubungkan ke Port Terpilih</span>
+              <span>Hubungkan Kabel</span>
             </button>
           </div>
         </div>
@@ -127,6 +133,12 @@ export class PortPickerModal {
     this.modalEl.querySelector('#btn-ppm-skip')?.addEventListener('click', () => this.hide());
     this.modalEl.addEventListener('click', (e) => {
       if (e.target === this.modalEl) this.hide();
+    });
+
+    this.modalEl.querySelectorAll('[data-ppm-step]')?.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        this.setActiveMobileStep(tab.getAttribute('data-ppm-step') || 'src');
+      });
     });
 
     this.modalEl.querySelector('#ppm-src-custom-input')?.addEventListener('input', (e) => {
@@ -168,10 +180,27 @@ export class PortPickerModal {
   }
 
   /**
+   * Switch active step in Mobile Portrait 2-Step Wizard ('src' | 'dst').
+   */
+  setActiveMobileStep(step = 'src') {
+    const normalized = step === 'dst' ? 'dst' : 'src';
+    this.activeMobileStep = normalized;
+    const card = this.modalEl?.querySelector('.ppm-modal-card');
+    if (card) card.setAttribute('data-active-step', normalized);
+    this.modalEl?.querySelectorAll('[data-ppm-step]')?.forEach((btn) => {
+      btn.classList.toggle('active', btn.getAttribute('data-ppm-step') === normalized);
+    });
+  }
+
+  _syncStepBadges() {
+    const srcBadge = this.modalEl?.querySelector('#ppm-step-src-badge');
+    const dstBadge = this.modalEl?.querySelector('#ppm-step-dst-badge');
+    if (srcBadge) srcBadge.textContent = this.selectedSrcPort || 'Pilih';
+    if (dstBadge) dstBadge.textContent = this.selectedDstPort || 'Pilih';
+  }
+
+  /**
    * Build map of occupied ports on a given device excluding activeCableId
-   * @param {string} deviceId
-   * @param {string} excludeCableId
-   * @returns {Map<string, {cableName: string, peerName: string}>}
    */
   getOccupiedPortsMap(deviceId, excludeCableId) {
     const map = new Map();
@@ -218,7 +247,6 @@ export class PortPickerModal {
     const srcOccupied = this.getOccupiedPortsMap(srcDev.id, cable.id);
     const dstOccupied = this.getOccupiedPortsMap(dstDev.id, cable.id);
 
-    // Pre-select existing port or first free port
     const firstFreeSrc = srcPorts.find((p) => !srcOccupied.has(p.name))?.name || '';
     const firstFreeDst = dstPorts.find((p) => !dstOccupied.has(p.name))?.name || '';
 
@@ -230,6 +258,7 @@ export class PortPickerModal {
     this.modalEl.querySelector('#ppm-src-custom-input').value = this.selectedSrcPort;
     this.modalEl.querySelector('#ppm-dst-custom-input').value = this.selectedDstPort;
 
+    this.setActiveMobileStep('src');
     this.renderPortColumn('src', srcPorts, srcOccupied);
     this.renderPortColumn('dst', dstPorts, dstOccupied);
 
@@ -258,18 +287,17 @@ export class PortPickerModal {
 
       return `
         <button type="button"
-                class="ppm-port-btn"
+                class="ppm-port-btn ${isOccupied ? 'is-occupied' : ''}"
                 data-side="${side}"
                 data-port-name="${p.name}"
-                ${isOccupied ? 'disabled' : ''}
-                style="display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 7px 10px; border-radius: 7px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); cursor: ${isOccupied ? 'not-allowed' : 'pointer'}; opacity: ${isOccupied ? '0.52' : '1'}; text-align: left; font-family: inherit; transition: all 0.12s ease;">
-          <div style="display: flex; align-items: center; gap: 7px; min-width: 0;">
-            <span style="width: 9px; height: 9px; border-radius: 50%; background: ${isOccupied ? '#ef4444' : '#22c55e'}; flex-shrink: 0;"></span>
-            <span style="font-family: var(--font-mono); font-size: 12px; font-weight: 700;">${p.name}</span>
-            <span style="font-size: 9.5px; font-weight: 700; text-transform: uppercase; padding: 1px 5px; border-radius: 4px; background: ${badgeColor}22; color: ${badgeColor};">${p.type || 'rj45'} • ${p.speed || '1G'}</span>
+                ${isOccupied ? 'disabled' : ''}>
+          <div style="display: flex; align-items: center; gap: 8px; min-width: 0;">
+            <span class="ppm-port-led ${isOccupied ? 'is-busy' : 'is-free'}"></span>
+            <span style="font-family: var(--font-mono); font-size: 12.5px; font-weight: 700;">${p.name}</span>
+            <span style="font-size: 9.5px; font-weight: 700; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; background: ${badgeColor}22; color: ${badgeColor};">${p.type || 'rj45'} • ${p.speed || '1G'}</span>
           </div>
-          <div style="font-size: 10px; color: var(--text-muted); font-family: var(--font-mono); white-space: nowrap; margin-left: 6px;">
-            ${isOccupied ? `Terpakai -> ${occ.peerName}` : coordText}
+          <div style="font-size: 10.5px; color: var(--text-muted); font-family: var(--font-mono); white-space: nowrap; margin-left: 6px;">
+            ${isOccupied ? `Terpakai → ${occ.peerName}` : coordText}
           </div>
         </button>
       `;
@@ -282,6 +310,10 @@ export class PortPickerModal {
         if (side === 'src') {
           this.selectedSrcPort = portName;
           this.modalEl.querySelector('#ppm-src-custom-input').value = portName;
+          // Auto-advance to Step 2 in Mobile Portrait Wizard
+          if (typeof window !== 'undefined' && window.innerWidth <= 680) {
+            this.setActiveMobileStep('dst');
+          }
         } else {
           this.selectedDstPort = portName;
           this.modalEl.querySelector('#ppm-dst-custom-input').value = portName;
@@ -300,10 +332,9 @@ export class PortPickerModal {
       const portName = btn.getAttribute('data-port-name');
       const isSelected = (side === 'src' && portName === this.selectedSrcPort) ||
                          (side === 'dst' && portName === this.selectedDstPort);
-      btn.style.borderColor = isSelected ? 'var(--accent-blue, #2a7c13)' : 'var(--border-color)';
-      btn.style.boxShadow = isSelected ? '0 0 0 2px rgba(42, 124, 19, 0.25)' : 'none';
-      btn.style.background = isSelected ? 'var(--bg-tertiary)' : 'var(--bg-secondary)';
+      btn.classList.toggle('is-selected', isSelected);
     });
+    this._syncStepBadges();
   }
 
   autoSelectFirstAvailablePorts() {
@@ -368,4 +399,3 @@ export class PortPickerModal {
     }
   }
 }
-

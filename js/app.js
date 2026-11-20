@@ -12,6 +12,7 @@ import { StatusBar } from './ui/status-bar.js';
 import { DeviceManager } from './devices/device-manager.js';
 import { DevicePalette } from './ui/device-palette.js';
 import { PropertiesPanel } from './ui/properties-panel.js';
+import { RoomDocumentationPanel } from './ui/room-doc-panel.js';
 import { DeviceLayersPanel } from './ui/device-layers-panel.js';
 import { CableManager } from './connections/cable-manager.js';
 import { CableDrawingTool } from './connections/cable-drawing-tool.js';
@@ -41,6 +42,9 @@ import { DeviceDetailModal } from './ui/device-detail-modal.js';
 import { BuildStudioPalette } from './ui/build-studio-palette.js';
 import { NetworkSimulator } from './simulation/network-simulator.js';
 import { PacketTracerPanel } from './ui/packet-tracer-panel.js';
+import { JobsheetEngine } from './learning/jobsheet-engine.js';
+import { JobsheetPanel } from './ui/jobsheet-panel.js';
+import { OnboardingModal } from './ui/onboarding-modal.js';
 import { WorkspaceController } from './core/workspace-controller.js';
 import { clamp, isMobileTouchDevice } from './utils/helpers.js';
 
@@ -153,6 +157,14 @@ class NetMapApp {
     if (propertiesContainer) {
       this.propertiesPanel = new PropertiesPanel(propertiesContainer, this.deviceManager);
       this.connectionPanel = new ConnectionPanel(propertiesContainer, this.cableManager, this.deviceManager);
+      this.roomDocPanel = new RoomDocumentationPanel({
+        container: propertiesContainer,
+        deviceManager: this.deviceManager,
+        cableManager: this.cableManager,
+        getMap3DEngine: () => this.map3DEngine,
+        getRoom3DModal: () => this.room3DModal,
+        getProjectStorage: () => this.projectStorage
+      });
     }
 
     const layersPanelContainer = document.getElementById('device-layers-panel-container');
@@ -194,7 +206,8 @@ class NetMapApp {
       deviceManager: this.deviceManager,
       cableManager: this.cableManager,
       stage: this.mapEngine.stage,
-      interactionLayer: this.mapEngine.layers.interactionLayer
+      interactionLayer: this.mapEngine.layers.interactionLayer,
+      getMap3DEngine: () => this.map3DEngine
     });
 
     this.projectModal = new ProjectModal({
@@ -317,6 +330,27 @@ class NetMapApp {
     });
     this.workspaceController.init();
 
+    // 14g. Initialize Guided SMK Jobsheet Auto-Grader, Sandbox Dialog & Quick-Start Onboarding (Phase 9)
+    this.jobsheetEngine = new JobsheetEngine({
+      deviceManager: this.deviceManager,
+      cableManager: this.cableManager,
+      projectStorage: this.projectStorage,
+      getMap3DEngine: () => this.map3DEngine
+    });
+    this.jobsheetPanel = new JobsheetPanel({
+      jobsheetEngine: this.jobsheetEngine,
+      projectStorage: this.projectStorage,
+      getMap3DEngine: () => this.map3DEngine,
+      getWorkspaceController: () => this.workspaceController
+    });
+    this.onboardingModal = new OnboardingModal({
+      getJobsheetPanel: () => this.jobsheetPanel,
+      getWorkspaceController: () => this.workspaceController,
+      getAuthModal: () => this.authModal,
+      getMap3DEngine: () => this.map3DEngine
+    });
+    this.setupPhase9Controls();
+
     // Global reference for modal coordination
     window.__netmapApp = this;
 
@@ -369,6 +403,8 @@ class NetMapApp {
 
     // 19. Restore from IndexedDB or seed initial campus data
     await this.loadOrSeedProject();
+    this.projectStorage?.syncSessionModeFromAuth?.();
+    this.workspaceController?.syncSessionGuardBanner?.();
 
     // 20. Final icon rendering, toolbar overflow guard, PWA & Mobile Landscape/Fullscreen UX
     this.renderIcons();
@@ -376,7 +412,67 @@ class NetMapApp {
     this.setupPwaSupport();
     this.setupMobileExperience();
 
-    console.info('[NetMap] Phase 5 Application ready. Complete NetMap MVP operational.');
+    // Show Quick-Start Welcome Launcher once on first visit
+    if (this.onboardingModal?.shouldAutoShowWelcome?.()) {
+      setTimeout(() => {
+        if (!this.authModal?.isOpen?.()) {
+          this.onboardingModal.showWelcome();
+        }
+      }, 260);
+    }
+
+    console.info('[NetMap] Phase 9 Application ready. Complete NetMap MVP operational.');
+  }
+
+  /**
+   * Bind Phase 9 controls: Master/Sandbox Guard Banner, Jobsheet triggers, Quick-Start & Shortcuts.
+   */
+  setupPhase9Controls() {
+    const openJobsheet = () => this.jobsheetPanel?.show('catalog');
+    const openForkDialog = () => this.jobsheetPanel?.openSandboxForkDialog?.();
+
+    document.getElementById('btn-3d-jobsheet')?.addEventListener('click', openJobsheet);
+    document.getElementById('btn-open-jobsheet')?.addEventListener('click', openJobsheet);
+    document.getElementById('btn-banner-open-jobsheet')?.addEventListener('click', openJobsheet);
+    document.getElementById('btn-banner-fork-sandbox')?.addEventListener('click', openForkDialog);
+    document.getElementById('btn-banner-reset-sandbox')?.addEventListener('click', () => {
+      this.projectStorage?.resetPracticeSandbox?.();
+    });
+    document.getElementById('btn-banner-return-master')?.addEventListener('click', () => {
+      this.projectStorage?.returnToMasterProject?.();
+    });
+
+    document.getElementById('btn-open-welcome')?.addEventListener('click', () => {
+      this.onboardingModal?.showWelcome?.();
+    });
+    document.getElementById('btn-open-shortcuts')?.addEventListener('click', () => {
+      this.onboardingModal?.showShortcuts?.();
+    });
+
+    // Quick-toggle triggers inside 'Tampilan 3D' popover
+    document.getElementById('btn-3d-building-labels-quick')?.addEventListener('click', (e) => {
+      if (!this.map3DEngine) return;
+      const next = !Boolean(this.map3DEngine.showBuildingSignboards);
+      this.map3DEngine.setShowBuildingSignboards(next);
+      e.currentTarget?.classList?.toggle('active', next);
+    });
+    document.getElementById('btn-3d-quality-quick')?.addEventListener('click', (e) => {
+      if (!this.map3DEngine) return;
+      const next = this.map3DEngine.getGraphicsQuality?.() === 'lite' ? 'standard' : 'lite';
+      this.map3DEngine.setGraphicsQuality?.(next);
+      const lbl = e.currentTarget?.querySelector?.('span');
+      if (lbl) lbl.textContent = next === 'lite' ? 'Kualitas: Hemat HP' : 'Kualitas: Standar';
+    });
+
+    eventBus.on('ui:open-sandbox-fork', openForkDialog);
+    eventBus.on('auth:changed', () => {
+      this.projectStorage?.syncSessionModeFromAuth?.();
+      this.workspaceController?.syncSessionGuardBanner?.();
+    });
+    eventBus.on('auth:workspace-mode-changed', () => {
+      this.projectStorage?.syncSessionModeFromAuth?.();
+      this.workspaceController?.syncSessionGuardBanner?.();
+    });
   }
 
   setupToolbarResponsiveFit() {
@@ -778,6 +874,12 @@ class NetMapApp {
       });
     }
 
+    // 1-Click Building X-Ray Mode toggle (Shortcut: X)
+    const btnXray = document.getElementById('btn-3d-xray');
+    btnXray?.addEventListener('click', () => {
+      this.map3DEngine?.toggleBuildingXrayMode?.();
+    });
+
     // Mode Teknisi (Roblox-like 3D character walker) & FPP toggles
     const btnAvatar = document.getElementById('btn-3d-avatar');
     const btnFpp = document.getElementById('btn-3d-fpp');
@@ -805,6 +907,31 @@ class NetMapApp {
     });
     document.getElementById('btn-settings-close-doors')?.addEventListener('click', () => {
       this.map3DEngine?.setAllInteractiveDoorsOpen?.(false);
+    });
+
+    // Mode Hemat Grafis HP ('lite' <-> 'standard') in Settings dropdown
+    const btn3dQuality = document.getElementById('btn-settings-3d-quality');
+    const badge3dQuality = document.getElementById('badge-menu-3d-quality');
+    const syncQualityBadge = () => {
+      if (!badge3dQuality || !this.map3DEngine) return;
+      const q = this.map3DEngine.getGraphicsQuality?.() || 'standard';
+      badge3dQuality.textContent = q === 'lite' ? 'Hemat HP' : 'Standar';
+    };
+    syncQualityBadge();
+    btn3dQuality?.addEventListener('click', () => {
+      if (!this.map3DEngine) return;
+      const next = this.map3DEngine.getGraphicsQuality?.() === 'lite' ? 'standard' : 'lite';
+      this.map3DEngine.setGraphicsQuality?.(next);
+      syncQualityBadge();
+    });
+    eventBus.on('map3d:quality-changed', syncQualityBadge);
+
+    // Direct 1-tap open simulator from 3D Port Inspector (#hud-3d-sim-inspector)
+    eventBus.on('modal:open-simulator', ({ deviceId = null, tab = 'winbox' } = {}) => {
+      if (stateManager.getWorkspaceMode?.() !== 'network') {
+        this.workspaceController?.switchWorkspace?.('network', { open3D: false, silent: true });
+      }
+      this.packetTracerPanel?.show?.(tab || 'winbox', deviceId || null);
     });
     const badgeMenu3dNav = document.getElementById('badge-menu-3d-nav');
     const badgeMenu3dHints = document.getElementById('badge-menu-3d-hints');
@@ -887,6 +1014,17 @@ class NetMapApp {
         this.map3DEngine?.focusOnDevice(deviceId);
       }, 60);
     });
+
+    // Focus single building / room in 3D from SearchUI or Building Documentation Card
+    eventBus.on('map3d:focus-room', ({ roomId }) => {
+      if (!roomId) return;
+      if (stateManager.getViewMode() !== '3d') {
+        stateManager.setViewMode('3d');
+      }
+      setTimeout(() => {
+        this.map3DEngine?.focusOnRoom3d?.(roomId);
+      }, 60);
+    });
   }
 
   setupDataCounters() {
@@ -951,6 +1089,13 @@ class NetMapApp {
         return;
       }
 
+      // Global Shortcut Cheat-Sheet Modal (?)
+      if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        this.onboardingModal?.showShortcuts?.();
+        return;
+      }
+
       // Live Z elevation shortcuts in 3D view (PageUp/PageDown in Mode Teknisi or on selected device; ArrowUp/ArrowDown while carrying)
       if (stateManager.getViewMode() === '3d' && !e.ctrlKey && !e.metaKey) {
         const isPgUpDn = (e.key === 'PageUp' || e.key === 'PageDown')
@@ -958,13 +1103,17 @@ class NetMapApp {
         const isCarryingArrowZ =
           this.map3DEngine?.avatarMode &&
           (e.key === 'ArrowUp' || e.key === 'ArrowDown') &&
-          Array.isArray(this.map3DEngine.carriedObjects) &&
-          this.map3DEngine.carriedObjects.length > 0;
+          ((Array.isArray(this.map3DEngine.carriedObjects) && this.map3DEngine.carriedObjects.length > 0) ||
+            Boolean(this.map3DEngine.activeCablePull));
         if (isPgUpDn || isCarryingArrowZ) {
           e.preventDefault();
           const mag = e.shiftKey ? 0.1 : (e.altKey ? 0.5 : 0.25);
           const sign = (e.key === 'PageUp' || e.key === 'ArrowUp') ? 1 : -1;
-          this.map3DEngine.adjustAvatarTargetOrCarriedElevation(sign * mag);
+          if (this.map3DEngine.activeCablePull) {
+            this.map3DEngine.adjustAvatarCablePullElevation(sign * mag);
+          } else {
+            this.map3DEngine.adjustAvatarTargetOrCarriedElevation(sign * mag);
+          }
           return;
         }
       }
@@ -1075,6 +1224,11 @@ class NetMapApp {
           this.map3DEngine?.toggleAvatarMode();
           return;
         }
+        if (lower === 'x' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          e.preventDefault();
+          this.map3DEngine?.toggleBuildingXrayMode?.();
+          return;
+        }
         if (lower === 'v' && !e.ctrlKey && !e.metaKey) {
           e.preventDefault();
           if (this.map3DEngine?.avatarMode) {
@@ -1084,14 +1238,39 @@ class NetMapApp {
           }
           return;
         }
+        if (lower === 'c' && this.map3DEngine?.avatarMode && !e.ctrlKey && !e.metaKey) {
+          e.preventDefault();
+          if (this.map3DEngine.activeCablePull) {
+            this.map3DEngine.placeAvatarCableClip({ shiftKey: Boolean(e.shiftKey) });
+          } else {
+            this.map3DEngine.startAvatarCablePull();
+          }
+          return;
+        }
+        if (e.key === 'Backspace' && this.map3DEngine?.avatarMode && this.map3DEngine?.activeCablePull) {
+          e.preventDefault();
+          this.map3DEngine.undoAvatarCableClip();
+          return;
+        }
         if (lower === 'f' && this.map3DEngine?.avatarMode && !e.ctrlKey && !e.metaKey) {
           e.preventDefault();
-          this.map3DEngine.inspectNearestDeviceFromAvatar();
+          if (this.map3DEngine.activeCablePull) {
+            this.map3DEngine.placeAvatarCableClip({ shiftKey: Boolean(e.shiftKey) });
+          } else {
+            this.map3DEngine.inspectNearestDeviceFromAvatar();
+          }
           return;
         }
         if (lower === 'e' && this.map3DEngine?.avatarMode && !e.ctrlKey && !e.metaKey) {
           e.preventDefault();
-          if (this.map3DEngine.carriedObjects?.length > 0 && !e.shiftKey) {
+          if (this.map3DEngine.activeCablePull) {
+            const aim = this.map3DEngine.computeAvatarCableAimTarget({ shiftKey: Boolean(e.shiftKey) });
+            if (aim?.kind === 'device' && aim.deviceId && aim.deviceId !== this.map3DEngine.activeCablePull.sourceDeviceId) {
+              this.map3DEngine.finishAvatarCablePull(aim.deviceId, aim.portName || '');
+            } else {
+              this.map3DEngine.placeAvatarCableClip({ shiftKey: Boolean(e.shiftKey), aimTarget: aim });
+            }
+          } else if (this.map3DEngine.carriedObjects?.length > 0 && !e.shiftKey) {
             this.map3DEngine.dropCarriedObjectsFromAvatar({ dropAll: false, useAimTarget: true });
           } else if (typeof this.map3DEngine.interactOrPickupFromAvatar === 'function' && !e.shiftKey) {
             this.map3DEngine.interactOrPickupFromAvatar();
@@ -1133,6 +1312,10 @@ class NetMapApp {
           return; // Handled smoothly by Map3DEngine walk loop
         }
         if (e.key === 'Escape') {
+          if (this.map3DEngine?.activeCablePull) {
+            this.map3DEngine.cancelAvatarCablePull();
+            return;
+          }
           if (this.map3DEngine?.roadBuildState) {
             this.map3DEngine.finishActiveRoadBuild();
             return;
@@ -1810,6 +1993,9 @@ class NetMapApp {
           { id: 'mob-act-3d-nav', label: 'Buka Bar Navigasi 3D', fn: () => { if (stateManager.getViewMode() !== '3d') stateManager.setViewMode('3d'); this.setMobileDockMinimized(false); this.set3DControlsMinimized?.(false); } },
           { id: 'mob-act-teknisi', label: 'Mode Teknisi (Roblox Mobile)', fn: () => { if (stateManager.getViewMode() !== '3d') stateManager.setViewMode('3d'); setTimeout(() => this.map3DEngine?.setAvatarMode(true, { perspective: 'tpp' }), 40); } },
           { id: 'mob-act-fpp', label: 'Mode FPP (Kamera Orang Pertama)', fn: () => { if (stateManager.getViewMode() !== '3d') stateManager.setViewMode('3d'); setTimeout(() => this.map3DEngine?.setAvatarMode(true, { perspective: 'fpp' }), 40); } },
+          { id: 'mob-act-xray', label: this.map3DEngine?.buildingXrayMode ? 'Matikan X-Ray Gedung' : 'Aktifkan X-Ray Gedung', fn: () => { if (stateManager.getViewMode() !== '3d') stateManager.setViewMode('3d'); setTimeout(() => this.map3DEngine?.toggleBuildingXrayMode?.(), 40); } },
+          { id: 'mob-act-jobsheet', label: 'Jobsheet Praktikum SMK', fn: () => this.jobsheetPanel?.show?.('catalog') },
+          { id: 'mob-act-shortcuts', label: 'Panduan Kontrol (?)', fn: () => this.onboardingModal?.showShortcuts?.() },
           { id: 'mob-act-lock-rooms', label: this.map3DEngine?.roomsLocked ? 'Buka Kunci Ruangan 3D' : 'Kunci Semua Ruangan 3D', fn: () => this.map3DEngine?.toggleRoomsLocked?.() },
           { id: 'mob-act-rooms3d', label: 'Ruangan & Gedung 3D (.GLB)', fn: () => this.room3DModal?.show() },
           { id: 'mob-act-obj3d', label: 'Studio Objek 3D', fn: () => this.object3DModal?.show() },

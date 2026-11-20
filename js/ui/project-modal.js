@@ -4,6 +4,7 @@
  */
 
 import { stateManager } from '../core/state-manager.js';
+import { eventBus } from '../core/event-bus.js';
 
 export class ProjectModal {
   /**
@@ -65,7 +66,7 @@ export class ProjectModal {
 
               <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11px; color: var(--text-secondary); background: var(--bg-secondary); padding: 8px 10px; border-radius: 4px;">
                 <div>ID: <span id="project-id-display" style="font-family: var(--font-mono); color: var(--accent-sky);">-</span></div>
-                <div>Format: <span style="color: var(--text-primary);">Offline IndexedDB</span></div>
+                <div>Mode Sesi: <span id="project-session-mode-display" style="font-weight: 700; color: var(--accent-green);">-</span></div>
                 <div>Perangkat: <span id="project-dev-count" style="font-weight: 600; color: var(--status-online);">-</span></div>
                 <div>Kabel: <span id="project-cab-count" style="font-weight: 600; color: var(--accent-sky);">-</span></div>
               </div>
@@ -73,6 +74,24 @@ export class ProjectModal {
               <button id="btn-save-project-name" class="btn btn-primary btn-sm" style="width: 100%;">
                 <i data-lucide="check" style="width: 14px; height: 14px;"></i>
                 <span>Perbarui Nama Proyek</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="panel-section">
+            <span class="section-label">Perlindungan Master Sekolah &amp; Sandbox Praktik</span>
+            <div class="info-card" style="display: flex; flex-direction: column; gap: 8px;">
+              <button id="btn-proj-fork-sandbox" class="btn btn-primary btn-sm" style="justify-content: flex-start;">
+                <i data-lucide="flask-conical" style="width: 14px; height: 14px;"></i>
+                <span>Salin ke Sandbox Praktik (Aman — Master Terlindungi)</span>
+              </button>
+              <button id="btn-proj-reset-sandbox" class="btn btn-secondary btn-sm" style="justify-content: flex-start; display: none;">
+                <i data-lucide="rotate-ccw" style="width: 14px; height: 14px;"></i>
+                <span>Reset Sandbox ke Kondisi Awal</span>
+              </button>
+              <button id="btn-proj-return-master" class="btn btn-secondary btn-sm" style="justify-content: flex-start; display: none;">
+                <i data-lucide="building-2" style="width: 14px; height: 14px;"></i>
+                <span>Kembali ke Peta Master SMKN 1 Beringin</span>
               </button>
             </div>
           </div>
@@ -122,6 +141,23 @@ export class ProjectModal {
         alert('Nama proyek berhasil diperbarui!');
         this.hide();
       }
+    });
+
+    // Sandbox Fork / Reset / Return to Master
+    document.getElementById('btn-proj-fork-sandbox')?.addEventListener('click', () => {
+      this.hide();
+      eventBus.emit('ui:open-sandbox-fork');
+    });
+
+    document.getElementById('btn-proj-reset-sandbox')?.addEventListener('click', () => {
+      if (this.projectStorage?.resetPracticeSandbox?.()) {
+        this.hide();
+      }
+    });
+
+    document.getElementById('btn-proj-return-master')?.addEventListener('click', () => {
+      this.projectStorage?.returnToMasterProject?.();
+      this.hide();
     });
 
     // Force Save
@@ -174,6 +210,21 @@ export class ProjectModal {
     if (idDisplay) idDisplay.textContent = state.project.id || 'proj-default';
     if (devCount) devCount.textContent = `${this.deviceManager.getAllDevices().length} unit`;
     if (cabCount) cabCount.textContent = `${this.cableManager.getAllConnections().length} jalur`;
+
+    const modeDisp = document.getElementById('project-session-mode-display');
+    const isSandbox = stateManager.isStudentSandbox?.();
+    const isAdmin = stateManager.getSessionMode?.() === 'master-admin';
+    if (modeDisp) {
+      modeDisp.textContent = isSandbox
+        ? 'Sandbox Praktik (Aman)'
+        : (isAdmin ? 'Master Admin' : 'Master Read-Only');
+    }
+    const btnFork = document.getElementById('btn-proj-fork-sandbox');
+    const btnReset = document.getElementById('btn-proj-reset-sandbox');
+    const btnMaster = document.getElementById('btn-proj-return-master');
+    if (btnFork) btnFork.style.display = isSandbox ? 'none' : 'inline-flex';
+    if (btnReset) btnReset.style.display = isSandbox ? 'inline-flex' : 'none';
+    if (btnMaster) btnMaster.style.display = isSandbox ? 'inline-flex' : 'none';
 
     this.modalEl.style.display = 'flex';
     if (window.lucide) window.lucide.createIcons();

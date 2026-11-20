@@ -7,6 +7,7 @@ import { JsonImporterExporter } from '../storage/json-importer-exporter.js';
 import { CsvExporter } from '../export/csv-exporter.js';
 import { SnapshotExporter } from '../export/snapshot-exporter.js';
 import { PdfReportGenerator } from '../export/pdf-report-generator.js';
+import { stateManager } from '../core/state-manager.js';
 
 export class ExportModal {
   /**
@@ -16,13 +17,15 @@ export class ExportModal {
    * @param {import('../connections/cable-manager.js').CableManager} options.cableManager
    * @param {Konva.Stage} options.stage
    * @param {Konva.Layer} options.interactionLayer
+   * @param {() => import('../map/map-3d-engine.js').Map3DEngine} [options.getMap3DEngine]
    */
-  constructor({ projectStorage, deviceManager, cableManager, stage, interactionLayer }) {
+  constructor({ projectStorage, deviceManager, cableManager, stage, interactionLayer, getMap3DEngine = null }) {
     this.projectStorage = projectStorage;
     this.deviceManager = deviceManager;
     this.cableManager = cableManager;
     this.stage = stage;
     this.interactionLayer = interactionLayer;
+    this.getMap3DEngine = getMap3DEngine;
 
     this.modalEl = null;
     this.createModalDOM();
@@ -89,14 +92,18 @@ export class ExportModal {
               <div style="font-size: 12px; color: var(--text-secondary);">
                 Ekspor data inventaris tabular perangkat dan koneksi kabel yang kompatibel dengan Microsoft Excel atau Google Sheets.
               </div>
-              <div style="display: flex; gap: 10px;">
-                <button id="btn-export-csv-devices" class="btn btn-secondary btn-sm" style="flex: 1;">
+              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <button id="btn-export-csv-devices" class="btn btn-secondary btn-sm" style="flex: 1; min-width: 140px;">
                   <i data-lucide="table" style="width: 14px; height: 14px;"></i>
                   <span>CSV Perangkat</span>
                 </button>
-                <button id="btn-export-csv-cables" class="btn btn-secondary btn-sm" style="flex: 1;">
+                <button id="btn-export-csv-cables" class="btn btn-secondary btn-sm" style="flex: 1; min-width: 140px;">
                   <i data-lucide="table" style="width: 14px; height: 14px;"></i>
                   <span>CSV Jalur Kabel</span>
+                </button>
+                <button id="btn-export-csv-buildings" class="btn btn-secondary btn-sm" style="flex: 1; min-width: 140px;">
+                  <i data-lucide="building-2" style="width: 14px; height: 14px;"></i>
+                  <span>CSV Rekap Gedung</span>
                 </button>
               </div>
             </div>
@@ -130,8 +137,12 @@ export class ExportModal {
             <span class="section-label">4. Dokumen Laporan Resmi (PDF Multi-Halaman)</span>
             <div class="info-card" style="display: flex; flex-direction: column; gap: 10px; background: rgba(59, 130, 246, 0.08); border-color: rgba(59, 130, 246, 0.3);">
               <div style="font-size: 12px; color: var(--text-primary); font-weight: 500;">
-                Dokumen komprehensif A4 Landscape berisi: Ringkasan Eksekutif, Visual Denah Kampus Resolusi Tinggi, Tabel Inventaris Perangkat, dan Tabel Jalur Kabel.
+                Dokumen komprehensif A4 Landscape berisi: Ringkasan Eksekutif, Visual Denah Kampus, Tabel Inventaris Perangkat, Tabel Jalur Kabel, dan Ringkasan Dokumentasi Per-Gedung.
               </div>
+              <label style="display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-primary); cursor: pointer;">
+                <input type="checkbox" id="export-pdf-include-3d-xray" checked style="accent-color: var(--accent-blue);">
+                <span>Sertakan Snapshot 3D Mode X-Ray Kampus (jika viewport 3D aktif)</span>
+              </label>
               <button id="btn-export-pdf" class="btn btn-primary" style="width: 100%;">
                 <i data-lucide="file-text" style="width: 15px; height: 15px;"></i>
                 <span>Hasilkan Dokumen Laporan PDF</span>
@@ -177,16 +188,34 @@ export class ExportModal {
       fileInput.value = '';
     });
 
-    // Export CSV Devices
+    // Export CSV Devices (with auto-detected Building column)
     document.getElementById('btn-export-csv-devices')?.addEventListener('click', async () => {
       const devices = this.deviceManager.getAllDevices();
-      await CsvExporter.exportDevicesCsv(devices);
+      await CsvExporter.exportDevicesCsv(devices, 'devices-inventory.csv', {
+        rooms3d: stateManager.getRooms3d?.() || [],
+        mapWidthMeters: this.cableManager?.mapWidthMeters || 170
+      });
     });
 
-    // Export CSV Cables
+    // Export CSV Cables (with auto-detected Source/Destination Building columns)
     document.getElementById('btn-export-csv-cables')?.addEventListener('click', async () => {
       const cables = this.cableManager.getAllConnections();
-      await CsvExporter.exportCablesCsv(cables, this.deviceManager);
+      await CsvExporter.exportCablesCsv(cables, this.deviceManager, 'cables-inventory.csv', {
+        rooms3d: stateManager.getRooms3d?.() || [],
+        mapWidthMeters: this.cableManager?.mapWidthMeters || 170
+      });
+    });
+
+    // Export CSV Per-Building Documentation Summary
+    document.getElementById('btn-export-csv-buildings')?.addEventListener('click', async () => {
+      await CsvExporter.exportBuildingsCsv(
+        stateManager.getRooms3d?.() || [],
+        this.deviceManager.getAllDevices(),
+        this.cableManager.getAllConnections(),
+        stateManager.getObjects3d?.() || [],
+        'buildings-documentation.csv',
+        { mapWidthMeters: this.cableManager?.mapWidthMeters || 170 }
+      );
     });
 
     // Export PNG
@@ -200,7 +229,7 @@ export class ExportModal {
       });
     });
 
-    // Export PDF Report
+    // Export PDF Report (with Per-Building Summary & optional 3D X-Ray Snapshot)
     document.getElementById('btn-export-pdf')?.addEventListener('click', async () => {
       const btn = document.getElementById('btn-export-pdf');
       const prevHtml = btn.innerHTML;
@@ -209,13 +238,23 @@ export class ExportModal {
 
       try {
         const projectData = this.projectStorage.serializeProject();
+        const include3dXray = Boolean(document.getElementById('export-pdf-include-3d-xray')?.checked);
+        const map3d = this.getMap3DEngine?.() || window.__netmapApp?.map3DEngine || null;
+        const snapshot3dDataUrl = include3dXray && map3d?.isInitialized
+          ? map3d.capture3DSnapshot({ forceXray: true })
+          : null;
+
         await PdfReportGenerator.generateReport({
           project: projectData,
           devices: projectData.devices,
           connections: projectData.connections,
+          rooms3d: projectData.rooms3d || stateManager.getRooms3d?.() || [],
+          objects3d: projectData.objects3d || stateManager.getObjects3d?.() || [],
           deviceManager: this.deviceManager,
           stage: this.stage,
-          interactionLayer: this.interactionLayer
+          interactionLayer: this.interactionLayer,
+          snapshot3dDataUrl,
+          mapWidthMeters: this.cableManager?.mapWidthMeters || 170
         });
       } catch (err) {
         console.error('[ExportModal] PDF generation failed:', err);

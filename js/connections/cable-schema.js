@@ -4,6 +4,7 @@
  */
 
 import { generateId } from '../utils/helpers.js';
+import { CABLE_SURFACE_TYPES, CABLE_CLIP_TYPES, CONDUIT_TYPES } from './cable-routing-engine.js';
 
 export const CableSchema = {
   /**
@@ -37,6 +38,10 @@ export const CableSchema = {
         sideOffset: (typeof params.details?.sideOffset === 'number' && !isNaN(params.details.sideOffset)) ? params.details.sideOffset : 0,
         sagDrop: (typeof params.details?.sagDrop === 'number' && !isNaN(params.details.sagDrop)) ? params.details.sagDrop : null,
         jacketType: params.details?.jacketType || 'indoor-pvc',
+        conduitType: CONDUIT_TYPES.has(params.details?.conduitType) ? params.details.conduitType : 'none',
+        showClips3d: params.details?.showClips3d !== undefined ? Boolean(params.details.showClips3d) : true,
+        bundleLane: typeof params.details?.bundleLane === 'number' && !isNaN(params.details.bundleLane) ? params.details.bundleLane : 0,
+        neatnessReport: params.details?.neatnessReport || null,
 
         // Accurate physical measurement fields (real-world network installation)
         horizontalLength: typeof params.details?.horizontalLength === 'number' ? params.details.horizontalLength : (typeof params.length === 'number' ? params.length : 0),
@@ -106,7 +111,24 @@ export const CableSchema = {
           errors.push(`Waypoint at index ${i} has invalid Z elevation`);
           break;
         }
+        if (pt.surface !== undefined && pt.surface !== null && !CABLE_SURFACE_TYPES.has(pt.surface)) {
+          errors.push(`Waypoint at index ${i} has invalid surface type "${pt.surface}"`);
+          break;
+        }
+        if (pt.clipType !== undefined && pt.clipType !== null && !CABLE_CLIP_TYPES.has(pt.clipType)) {
+          errors.push(`Waypoint at index ${i} has invalid clipType "${pt.clipType}"`);
+          break;
+        }
+        if (pt.normal !== undefined && pt.normal !== null) {
+          if (typeof pt.normal !== 'object' || typeof pt.normal.x !== 'number' || typeof pt.normal.y !== 'number' || typeof pt.normal.z !== 'number') {
+            errors.push(`Waypoint at index ${i} has invalid surface normal vector`);
+            break;
+          }
+        }
       }
+    }
+    if (cable.details?.conduitType !== undefined && cable.details.conduitType !== null && !CONDUIT_TYPES.has(cable.details.conduitType)) {
+      errors.push(`Invalid conduitType "${cable.details.conduitType}"`);
     }
 
     return {

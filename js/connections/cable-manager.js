@@ -7,6 +7,11 @@ import { eventBus } from '../core/event-bus.js';
 import { CableSchema } from './cable-schema.js';
 import { CableRenderer } from './cable-renderer.js';
 import { calculateAccurateCableLength, calculateNetworkPerformanceMetrics } from './cable-library.js';
+import {
+  compute3DCablePathLengthMeters,
+  autoTidyCableRoute,
+  evaluateCableNeatness
+} from './cable-routing-engine.js';
 
 export class CableManager {
   /**
@@ -180,7 +185,10 @@ export class CableManager {
       y: Math.max(0.01, Math.min(0.99, Number(newNormalized.y))),
       ...(typeof newNormalized.z === 'number' && !isNaN(newNormalized.z)
         ? { z: Number(Math.max(0.02, newNormalized.z).toFixed(2)) }
-        : {})
+        : {}),
+      ...(newNormalized.surface ? { surface: newNormalized.surface } : {}),
+      ...(newNormalized.normal ? { normal: { x: Number(newNormalized.normal.x) || 0, y: Number(newNormalized.normal.y) || 0, z: Number(newNormalized.normal.z) || 0 } } : {}),
+      ...(newNormalized.clipType ? { clipType: newNormalized.clipType } : {})
     };
     cable.updatedAt = new Date().toISOString();
 
@@ -216,6 +224,15 @@ export class CableManager {
     if (typeof newNormalized.z === 'number' && !isNaN(newNormalized.z)) {
       pt.z = Number(Math.max(0.02, newNormalized.z).toFixed(2));
     }
+    if (newNormalized.surface) pt.surface = newNormalized.surface;
+    if (newNormalized.normal && typeof newNormalized.normal === 'object') {
+      pt.normal = {
+        x: Number(newNormalized.normal.x) || 0,
+        y: Number(newNormalized.normal.y) || 0,
+        z: Number(newNormalized.normal.z) || 0
+      };
+    }
+    if (newNormalized.clipType) pt.clipType = newNormalized.clipType;
     cable.route.splice(clampedIdx, 0, pt);
     cable.updatedAt = new Date().toISOString();
 
@@ -445,43 +462,64 @@ export class CableManager {
   calculateEstimatedLength(cable, sourceDev, destDev) {
     if (!sourceDev || !destDev) return cable.length || 0;
 
-    const pts = [
-      sourceDev.position,
-      ...(cable.route || []),
-      destDev.position
-    ];
-
-    let totalPixels = 0;
-    const segments = [];
-    for (let i = 0; i < pts.length - 1; i++) {
-      const p1 = pts[i];
-      const p2 = pts[i + 1];
-      const dx = (p2.x - p1.x) * this.naturalWidth;
-      const dy = (p2.y - p1.y) * this.naturalHeight;
-      const segPix = Math.sqrt(dx * dx + dy * dy);
-      totalPixels += segPix;
-      segments.push(Math.round(segPix * this.metersPerPixel * 10) / 10);
-    }
-
-    const horizontalMeters = Math.round(totalPixels * this.metersPerPixel * 10) / 10;
+    const mapH = this.naturalHeight * this.metersPerPixel;
+    const path3d = compute3DCablePathLengthMeters(cable, sourceDev, destDev, this.mapWidthMeters, mapH);
 
     if (!cable.details) cable.details = {};
-    cable.details.segmentLengths = segments;
-    cable.details.horizontalLength = horizontalMeters;
-
-    const vSrc = typeof cable.details.verticalDropSource === 'number' ? cable.details.verticalDropSource : 1.5;
-    const vDest = typeof cable.details.verticalDropDest === 'number' ? cable.details.verticalDropDest : 1.5;
     const sLoop = typeof cable.details.serviceLoopMeters === 'number' ? cable.details.serviceLoopMeters : 2.0;
     const sMargin = typeof cable.details.slackMarginPercent === 'number' ? cable.details.slackMarginPercent : 5;
 
-    const accurate = calculateAccurateCableLength({
-      horizontalMeters,
-      verticalDropSource: vSrc,
-      verticalDropDest: vDest,
-      serviceLoopMeters: sLoop,
-      slackMarginPercent: sMargin
-    });
+    let horizontalMeters = 0;
+    let segments = [];
+    let accurate = null;
 
+    if (path3d.has3dZ) {
+      horizontalMeters = path3d.horizontalMeters;
+      segments = path3d.segmentLengths;
+      const baseWithLoop = path3d.direct3dMeters + sLoop;
+      const slackAmount = Math.round(baseWithLoop * (sMargin / 100) * 10) / 10;
+      const totalPhysical = Math.round((baseWithLoop + slackAmount) * 10) / 10;
+      accurate = {
+        verticalTotal: path3d.verticalTotal,
+        serviceLoopMeters: sLoop,
+        slackAmount,
+        slackMarginPercent: sMargin,
+        totalPhysical
+      };
+    } else {
+      const pts = [
+        sourceDev.position,
+        ...(cable.route || []),
+        destDev.position
+      ];
+
+      let totalPixels = 0;
+      for (let i = 0; i < pts.length - 1; i++) {
+        const p1 = pts[i];
+        const p2 = pts[i + 1];
+        const dx = (p2.x - p1.x) * this.naturalWidth;
+        const dy = (p2.y - p1.y) * this.naturalHeight;
+        const segPix = Math.sqrt(dx * dx + dy * dy);
+        totalPixels += segPix;
+        segments.push(Math.round(segPix * this.metersPerPixel * 10) / 10);
+      }
+
+      horizontalMeters = Math.round(totalPixels * this.metersPerPixel * 10) / 10;
+
+      const vSrc = typeof cable.details.verticalDropSource === 'number' ? cable.details.verticalDropSource : 1.5;
+      const vDest = typeof cable.details.verticalDropDest === 'number' ? cable.details.verticalDropDest : 1.5;
+
+      accurate = calculateAccurateCableLength({
+        horizontalMeters,
+        verticalDropSource: vSrc,
+        verticalDropDest: vDest,
+        serviceLoopMeters: sLoop,
+        slackMarginPercent: sMargin
+      });
+    }
+
+    cable.details.segmentLengths = segments;
+    cable.details.horizontalLength = horizontalMeters;
     cable.details.verticalTotal = accurate.verticalTotal;
     cable.details.serviceLoopMeters = accurate.serviceLoopMeters;
     cable.details.slackAmount = accurate.slackAmount;
@@ -495,7 +533,45 @@ export class CableManager {
       poeSupport: cable.details.poeSupport || 'poe+'
     });
 
+    cable.length = accurate.totalPhysical;
+    cable.details.neatnessReport = evaluateCableNeatness(cable, sourceDev, destDev, {
+      mapWidthMeters: this.mapWidthMeters
+    });
+
     return accurate.totalPhysical;
+  }
+
+  /**
+   * Apply 1-click Auto-Tidy 90° orthogonal wall/ceiling routing + parallel bundling to a cable.
+   * @param {string} cableId
+   * @param {{ preset?: 'ceiling-run'|'skirting-run'|'snap-90-existing', targetElevation?: number, conduitType?: string, wallSnapFn?: Function }} [options]
+   * @returns {Object|null}
+   */
+  applyAutoTidy(cableId, options = {}) {
+    const cable = this.connections.get(cableId);
+    if (!cable) return null;
+    const sourceDev = this.deviceManager.getDeviceById(cable.source);
+    const destDev = this.deviceManager.getDeviceById(cable.destination);
+    if (!sourceDev || !destDev) return null;
+
+    const { route, detailsPatch } = autoTidyCableRoute(cable, sourceDev, destDev, {
+      preset: options.preset || 'ceiling-run',
+      targetElevation: options.targetElevation,
+      allCables: this.getAllConnections(),
+      mapWidthMeters: this.mapWidthMeters,
+      wallSnapFn: options.wallSnapFn || null
+    });
+
+    const nextDetails = {
+      ...(cable.details || {}),
+      ...detailsPatch,
+      ...(options.conduitType ? { conduitType: options.conduitType } : {})
+    };
+
+    return this.updateConnection(cableId, {
+      route,
+      details: nextDetails
+    });
   }
 
   /**

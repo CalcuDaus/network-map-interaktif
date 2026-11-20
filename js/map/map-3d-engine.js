@@ -26,8 +26,25 @@ import {
   createRobloxAvatar3DGroup,
   updateRobloxAvatarLabel,
   animateRobloxAvatarRig,
-  createFppHandsViewmodelGroup
+  createFppHandsViewmodelGroup,
+  createFppCableSpoolViewmodelGroup,
+  createCableClip3DMesh,
+  createConduitSegmentMesh,
+  findCutawayPairPreset,
+  createBuildingSignboard3DGroup
 } from './map-3d-models.js';
+import {
+  buildBuildingDocumentationSummary,
+  isBuildingSignboardEligible,
+  isPointInsideRoomOBB
+} from './room-spatial-index.js';
+import {
+  classifySurfaceFromNormal,
+  getDefaultClipType,
+  getStandardMaxLengthMeters,
+  buildFilletedPolylinePoints,
+  evaluateCableNeatness
+} from '../connections/cable-routing-engine.js';
 import { clamp, generateId, isMobileTouchDevice, uiIcon } from '../utils/helpers.js';
 import { CAMPUS_MAP_DATA_URL } from './campus-map-data.js';
 import {
@@ -115,6 +132,8 @@ export class Map3DEngine {
     this.roadPreviewGroup = new THREE.Group();
     this.roadPreviewGroup.name = 'Road3DPreviewGroup';
     this.roomsGroup = new THREE.Group();
+    this.buildingSignboardsGroup = new THREE.Group();
+    this.buildingSignboardsGroup.name = 'BuildingSignboardsGroup';
     this.objects3dGroup = new THREE.Group();
     this.devicesGroup = new THREE.Group();
     this.cablesGroup = new THREE.Group();
@@ -128,11 +147,19 @@ export class Map3DEngine {
     this.deviceMeshMap = new Map(); // deviceId -> THREE.Group
     this.object3dMeshMap = new Map(); // object3dId -> THREE.Group
     this.room3dMeshMap = new Map(); // roomId -> THREE.Group
+    this.signboardMeshMap = new Map(); // roomId -> { group: THREE.Group, sig: string }
     this.road3dMeshMap = new Map(); // roadId -> THREE.Group
     this.cableMeshMap = new Map();  // cableId -> THREE.Mesh
     this.effectivePosMap = new Map(); // deviceId -> THREE.Vector3
     this.portWorldPosMap = new Map(); // "${deviceId}::${portName}" -> THREE.Vector3
     this.portWorldDirMap = new Map(); // "${deviceId}::${portName}" -> THREE.Vector3 (outward normal)
+
+    // Phase 8 Digital Twin state (X-Ray Gedung & Floating Building Signboards)
+    this.buildingXrayMode = false;
+    this.perRoomXrayIds = new Set();
+    this._xrayMeshMaterialBackup = new WeakMap();
+    this._xrayHighlightBackup = new WeakMap();
+    this.showBuildingSignboards = true;
 
     // User view options
     this.deviceScaleMultiplier = 3.0; // Balanced default visibility on campus/building map
@@ -174,6 +201,10 @@ export class Map3DEngine {
     this.pending3dWaypoints = [];
     this.pen3dPathStyle = 'curve';
     this.pen3dCategory = 'cat6';
+    this.activeCablePull = null;
+    this.cablePullPreviewGroup = new THREE.Group();
+    this.cablePullPreviewGroup.name = 'AvatarCablePullPreview3D';
+    this.fppCableSpoolGroup = null;
     this.dragMoveState = null;
     this.dragRotateState = null;
     this._activeMoveGuideIds = new Set();
@@ -289,6 +320,15 @@ export class Map3DEngine {
     this._avatarTouchPinchDist = 0;
     this._mobileLongPressTimer = null;
     this._mobileLongPressOrigin = null;
+    this.isPausedByModal = false;
+    let savedQuality = null;
+    try {
+      savedQuality = typeof localStorage !== 'undefined' ? localStorage.getItem('netmap_3d_quality_v1') : null;
+    } catch { /* ignore storage restrictions */ }
+    this.graphicsQuality = (savedQuality === 'lite' || savedQuality === 'standard')
+      ? savedQuality
+      : (isMobileTouchDevice() ? 'lite' : 'standard');
+    this.dirLight = null;
 
     this.bindGlobalListeners();
     this.bindRoomLockButton();
@@ -341,16 +381,20 @@ export class Map3DEngine {
     dirLight.castShadow = true;
     dirLight.shadow.mapSize.width = 1024;
     dirLight.shadow.mapSize.height = 1024;
+    this.dirLight = dirLight;
     this.scene.add(dirLight);
+    this.applyGraphicsQuality();
 
     this.scene.add(this.groundGroup);
     this.scene.add(this.roadsGroup);
     this.scene.add(this.roadPreviewGroup);
     this.scene.add(this.roomsGroup);
+    this.scene.add(this.buildingSignboardsGroup);
     this.scene.add(this.objects3dGroup);
     this.scene.add(this.coverageGroup);
     this.scene.add(this.devicesGroup);
     this.scene.add(this.cablesGroup);
+    this.scene.add(this.cablePullPreviewGroup);
     this.scene.add(this.packetFlowGroup);
     this.scene.add(this.remoteAvatarsGroup);
     this.scene.add(this.transformGizmoGroup);
@@ -730,6 +774,10 @@ export class Map3DEngine {
     const animate = (now) => {
       if (!this.isActive) return;
       this.animFrameId = requestAnimationFrame(animate);
+      if (this.isPausedByModal) {
+        this.lastFrameTime = now;
+        return;
+      }
 
       const dt = Math.min(0.05, Math.max(0.001, (now - (this.lastFrameTime || now)) / 1000));
       this.lastFrameTime = now;
@@ -743,7 +791,9 @@ export class Map3DEngine {
       }
       this.updateRemoteAvatars(dt);
       this.updateInteractiveDoors?.(dt);
+      this.updateAvatarCablePullLivePreview?.(dt);
       this.updatePacketFlows3D?.(now);
+      this.updateBuildingSignboardsFrame?.();
       if (this.avatarMode && !this.simulatorFocusedDeviceId) {
         if (this.camera && this.controls) {
           this.camera.lookAt?.(this.controls.target);
@@ -762,6 +812,7 @@ export class Map3DEngine {
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
     this.scene.background = new THREE.Color(isDark ? 0x0b160a : 0xeef5e6);
     this.scene.fog = new THREE.FogExp2(isDark ? 0x0b160a : 0xeef5e6, 0.00035);
+    this.syncBuildingSignboards?.();
   }
 
   getWorldDimensions() {
@@ -930,6 +981,9 @@ export class Map3DEngine {
     roomGroup.userData.roomCollisionProfile = glb.userData?.collisionProfile || null;
     roomGroup.userData.roomCollisionScale = colScale;
     this._registerRoomInteractiveDoors(room, roomGroup, glb);
+    if (this.buildingXrayMode || this.perRoomXrayIds?.has?.(room.id)) {
+      this.applyBuildingXrayMaterials?.();
+    }
   }
 
   _registerRoomInteractiveDoors(room, roomGroup, glb) {
@@ -1068,7 +1122,9 @@ export class Map3DEngine {
     if (!this.activeDoorRigs || this.activeDoorRigs.size === 0) return;
     const step = Math.min(0.25, Math.max(0.004, Number(dt) || 0.016)) * 4.8;
     const isCarryingInAvatar = Boolean(
-      this.avatarMode && !this.simulatorFocusedDeviceId && Array.isArray(this.carriedObjects) && this.carriedObjects.length > 0
+      this.avatarMode
+      && !this.simulatorFocusedDeviceId
+      && ((Array.isArray(this.carriedObjects) && this.carriedObjects.length > 0) || Boolean(this.activeCablePull))
     );
     const avX = Number(this.avatarState?.x) || 0;
     const avY = Number(this.avatarState?.y) || 0;
@@ -1337,6 +1393,8 @@ export class Map3DEngine {
       this.room3dMeshMap.set(room.id, roomGroup);
       this._attachRoomCustomGlb(room, roomGroup);
     });
+    this.applyBuildingXrayMaterials?.();
+    this.syncBuildingSignboards?.();
     this.apply3dViewFilters?.();
   }
 
@@ -1365,6 +1423,8 @@ export class Map3DEngine {
     } else {
       this._attachRoomCustomGlb(room, next);
     }
+    this.applyBuildingXrayMaterials?.();
+    this.syncBuildingSignboards?.();
     this.apply3dViewFilters?.();
     return next;
   }
@@ -2540,11 +2600,17 @@ export class Map3DEngine {
         if (hasCustomSag) wpBowOffset.y -= sagDist * 0.5;
       }
 
+      // Parallel Cable Bundling lateral separation for cables sharing the same corridor
+      const bundleLane = Number(cable.details?.bundleLane) || 0;
+      const bundleOffsetVec = bundleLane !== 0
+        ? sideDir.clone().multiplyScalar(bundleLane * 0.026)
+        : new THREE.Vector3();
+
       if (Array.isArray(cable.route) && cable.route.length > 0) {
         const rawWps = cable.route.map((wp) => {
           const wpWorld = this.normToWorld(wp.x, wp.y);
           const wpY = (typeof wp.z === 'number' && !isNaN(wp.z)) ? Math.max(0.02, wp.z) : trayY;
-          return new THREE.Vector3(wpWorld.x, wpY, wpWorld.z);
+          return new THREE.Vector3(wpWorld.x, wpY, wpWorld.z).add(bundleOffsetVec);
         });
         if (pathStyle === 'orthogonal') {
           waypointMarkers = rawWps;
@@ -2681,7 +2747,13 @@ export class Map3DEngine {
       }
 
       let curve;
-      if (pathStyle === 'straight' || pathStyle === 'orthogonal') {
+      if (pathStyle === 'orthogonal') {
+        const filleted = buildFilletedPolylinePoints(cleanPts, 0.06).map((p) => new THREE.Vector3(p.x, p.y, p.z));
+        curve = new THREE.CurvePath();
+        for (let i = 0; i < filleted.length - 1; i++) {
+          curve.add(new THREE.LineCurve3(filleted[i], filleted[i + 1]));
+        }
+      } else if (pathStyle === 'straight') {
         curve = new THREE.CurvePath();
         for (let i = 0; i < cleanPts.length - 1; i++) {
           curve.add(new THREE.LineCurve3(cleanPts[i], cleanPts[i + 1]));
@@ -2700,7 +2772,10 @@ export class Map3DEngine {
         0.005,
         portMatchedLocalRadius * avgPortScale * this.cableDiameterMultiplier * perCableScale * selectBoost
       );
-      const tubeGeo = new THREE.TubeGeometry(curve, Math.max(40, cleanPts.length * 16), radius, 12, false);
+      const tubularSegs = this.graphicsQuality === 'lite'
+        ? Math.max(24, cleanPts.length * 10)
+        : Math.max(40, cleanPts.length * 16);
+      const tubeGeo = new THREE.TubeGeometry(curve, tubularSegs, radius, this.graphicsQuality === 'lite' ? 8 : 12, false);
       const tubeMat = new THREE.MeshStandardMaterial({
         color: color,
         emissive: color,
@@ -2750,6 +2825,65 @@ export class Map3DEngine {
           dstBoot.quaternion.setFromUnitVectors(upAxis, dstDir.clone().normalize());
           dstBoot.userData.cableId = cable.id;
           this.cablesGroup.add(dstBoot);
+        }
+      }
+
+      // Physical 3D Cable Clips (U-Clip / P-Clamp / Cable Tie) & PVC Duct / Cable Tray
+      if (!isWireless && waypointMarkers.length > 0) {
+        const showClips = cable.details?.showClips3d !== false;
+        const allowClipsNow = showClips && (this.graphicsQuality !== 'lite' || isSelected || waypointMarkers.length <= 8);
+        if (allowClipsNow) {
+          const upAxis = new THREE.Vector3(0, 1, 0);
+          waypointMarkers.forEach((wpVec, idx) => {
+            const rawWp = cable.route?.[idx];
+            const clipType = rawWp?.clipType || getDefaultClipType(cable.cableCategory, rawWp?.surface || 'wall');
+            if (clipType === 'none') return;
+            // Render physical clip when waypoint has surface metadata OR orthogonal/mounted path
+            if (!rawWp?.surface && pathStyle !== 'orthogonal' && !isSelected) return;
+
+            const clipGroup = createCableClip3DMesh({ clipType, radius: Math.max(radius, 0.012), isSelected });
+            clipGroup.position.copy(wpVec);
+            if (rawWp?.normal && typeof rawWp.normal.x === 'number') {
+              const nVec = new THREE.Vector3(rawWp.normal.x, rawWp.normal.y, rawWp.normal.z);
+              if (nVec.lengthSq() > 0.01) {
+                nVec.normalize();
+                if (nVec.y < -0.999) {
+                  clipGroup.quaternion.setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI);
+                } else {
+                  clipGroup.quaternion.setFromUnitVectors(upAxis, nVec);
+                }
+              }
+            }
+            clipGroup.traverse((ch) => {
+              ch.userData.cableId = cable.id;
+              ch.userData.isCableClip3d = true;
+              ch.userData.cableHandleType = 'waypoint';
+              ch.userData.waypointIdx = idx;
+              ch.userData.bowOffset = wpBowOffset.clone();
+            });
+            clipGroup.userData.cableId = cable.id;
+            clipGroup.userData.waypointIdx = idx;
+            this.cablesGroup.add(clipGroup);
+          });
+        }
+
+        const conduitType = cable.details?.conduitType || 'none';
+        if ((conduitType === 'pvc-duct' || conduitType === 'cable-tray') && cleanPts.length >= 2) {
+          // Wrap straight wall/ceiling runs between waypoints in PVC Duct or Steel Cable Tray
+          const conduitPts = pathStyle === 'orthogonal' ? cleanPts.slice(1, -1) : waypointMarkers;
+          for (let i = 0; i < conduitPts.length - 1; i++) {
+            const segMesh = createConduitSegmentMesh({
+              startVec: conduitPts[i],
+              endVec: conduitPts[i + 1],
+              conduitType,
+              radius
+            });
+            if (segMesh) {
+              segMesh.traverse((ch) => { ch.userData.cableId = cable.id; });
+              segMesh.userData.cableId = cable.id;
+              this.cablesGroup.add(segMesh);
+            }
+          }
         }
       }
 
@@ -2858,7 +2992,8 @@ export class Map3DEngine {
 
         this.pending3dWaypoints.forEach((wp) => {
           const wpW = this.normToWorld(wp.x, wp.y);
-          const v = new THREE.Vector3(wpW.x, Math.max(0.15, srcPos.y * 0.4), wpW.z);
+          const wpY = (typeof wp.z === 'number' && !isNaN(wp.z)) ? Math.max(0.02, wp.z) : Math.max(0.15, srcPos.y * 0.4);
+          const v = new THREE.Vector3(wpW.x, wpY, wpW.z);
           previewPts.push(v);
 
           const marker = new THREE.Mesh(dotGeo, dotMat);
@@ -2912,6 +3047,27 @@ export class Map3DEngine {
     }
 
     this.raycaster.setFromCamera(this.pointer, this.camera);
+
+    // Phase 7B: First-Person / Third-Person Cable Spool Pulling priority state
+    // When technician is pulling a live cable, clicking a destination device plugs in; clicking wall/ceiling/floor places a 3D clip!
+    if (
+      this.avatarMode
+      && !this.simulatorFocusedDeviceId
+      && this.activeCablePull
+      && !e.ctrlKey
+      && !e.metaKey
+    ) {
+      const aimTarget = this.computeAvatarCableAimTarget({ shiftKey: Boolean(e.shiftKey) });
+      if (aimTarget?.kind === 'device' && aimTarget.deviceId && aimTarget.deviceId !== this.activeCablePull.sourceDeviceId) {
+        this.finishAvatarCablePull(aimTarget.deviceId, aimTarget.portName || '');
+      } else {
+        this.placeAvatarCableClip({ shiftKey: Boolean(e.shiftKey), aimTarget });
+      }
+      if (e.pointerType !== 'touch') {
+        this.tryLockAvatarPointer?.();
+      }
+      return;
+    }
 
     // House-Flipper 1-click Place: when carrying items in Mode Teknisi, left-clicking places onto the aimed surface/wall
     if (
@@ -3069,13 +3225,26 @@ export class Map3DEngine {
       }
     }
 
-    // 1b. In 3D draw-cable mode with source selected, clicking ground/room floor adds a Pen Tool waypoint
+    // 1b. In 3D draw-cable mode with source selected, clicking wall/ceiling/floor/pole adds a true 3D waypoint clip
     if (stateManager.getMode() === 'draw-cable' && this.pendingCableSourceId) {
-      const envHits = this.raycaster.intersectObjects(
-        [...this.roomsGroup.children, ...this.groundGroup.children],
+      const envHits = this._filterVisibleRayHits(this.raycaster.intersectObjects(
+        [...this.roomsGroup.children, ...this.objects3dGroup.children, ...this.groundGroup.children],
         true
-      );
-      let hitPoint = envHits.length > 0 ? envHits[0].point.clone() : null;
+      ));
+      const firstHit = envHits.length > 0 ? envHits[0] : null;
+      let hitPoint = firstHit ? firstHit.point.clone() : null;
+      let hitNormal = { x: 0, y: 1, z: 0 };
+      if (firstHit?.face?.normal && firstHit.object?.matrixWorld) {
+        const nMat = new THREE.Matrix3().getNormalMatrix(firstHit.object.matrixWorld);
+        const wNorm = firstHit.face.normal.clone().applyMatrix3(nMat).normalize();
+        if (wNorm.dot(this.raycaster.ray.direction) > 0) wNorm.negate();
+        hitNormal = {
+          x: Number(wNorm.x.toFixed(3)),
+          y: Number(wNorm.y.toFixed(3)),
+          z: Number(wNorm.z.toFixed(3))
+        };
+        hitPoint.addScaledVector(wNorm, 0.018);
+      }
       if (!hitPoint) {
         const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
         const intersectPt = new THREE.Vector3();
@@ -3101,9 +3270,18 @@ export class Map3DEngine {
             }
           }
         }
-        this.pending3dWaypoints.push({ x: normX, y: normY });
+        const surface = classifySurfaceFromNormal(hitNormal);
+        const wpZ = Number(Math.max(0.02, hitPoint.y).toFixed(2));
+        this.pending3dWaypoints.push({
+          x: Number(Math.max(0.01, Math.min(0.99, normX)).toFixed(4)),
+          y: Number(Math.max(0.01, Math.min(0.99, normY)).toFixed(4)),
+          z: wpZ,
+          surface,
+          normal: hitNormal,
+          clipType: getDefaultClipType(this.pen3dCategory || 'cat6', surface)
+        });
         this.syncCables();
-        this.showStatusHint(`Titik belok #${this.pending3dWaypoints.length} ditambahkan. Klik lantai lagi atau klik perangkat tujuan.`);
+        this.showStatusHint(`Klem #${this.pending3dWaypoints.length} dipasang (${surface}, Z=${wpZ.toFixed(2)}m). Klik permukaan lagi atau klik perangkat tujuan.`);
         return;
       }
     }
@@ -3154,6 +3332,37 @@ export class Map3DEngine {
       if (doorHit?.doorKey) {
         this.toggleInteractiveDoor(doorHit.doorKey);
         return;
+      }
+    }
+
+    // 1e. Floating Building Signboard 3D click -> Focus building & open Documentation Card
+    if (
+      stateManager.getMode() !== 'draw-cable'
+      && stateManager.getMode() !== 'add-device'
+      && this.navTool !== 'road3d'
+      && !e.ctrlKey
+      && !e.metaKey
+    ) {
+      const signHit = this.findBuildingSignboardHit?.(this.raycaster);
+      if (signHit?.roomId) {
+        const room = stateManager.getRoom3dById?.(signHit.roomId);
+        if (room) {
+          this.deviceManager.deselectDevice();
+          this.cableManager.deselectConnection();
+          stateManager.deselectObject3d?.();
+          stateManager.deselectRoad3d?.();
+          if (this.isRoomLocked(room)) {
+            stateManager.deselectRoom3d?.();
+            stateManager.inspectRoom3d?.(room.id);
+          } else {
+            stateManager.selectRoom3d?.(room.id);
+          }
+          this.focusOnRoom3d(room.id);
+          this.showStatusHint(
+            `Dokumentasi Gedung "${room.name}" — Lihat inventaris perangkat, VLAN/SSID & catatan di panel kanan.`
+          );
+          return;
+        }
       }
     }
 
@@ -3218,6 +3427,7 @@ export class Map3DEngine {
     }
 
     // 3b. Check Ruangan 3D selection (drag/resize/rotate via gizmos or Move/Rotate tools)
+    //     or Read-Only Documentation Inspection when locked (e.g. Simulasi Jaringan mode)
     if (stateManager.getMode() !== 'draw-cable') {
       const roomHit = this.findRoom3dHit?.(this.raycaster);
       if (roomHit?.roomId) {
@@ -3231,6 +3441,23 @@ export class Map3DEngine {
           `Ruangan "${room?.name || 'Ruangan 3D'}" dipilih — Drag handle oranye / Move (M) geser • Rotate (R) / [ ] putar • Kuning / + - ubah skala`
         );
         return;
+      }
+
+      const lockedRoomHit = this.findRoom3dHit?.(this.raycaster, { includeLocked: true });
+      if (lockedRoomHit?.roomId && !this.avatarMode) {
+        const room = stateManager.getRoom3dById?.(lockedRoomHit.roomId);
+        if (room) {
+          this.deviceManager.deselectDevice();
+          this.cableManager.deselectConnection();
+          stateManager.deselectObject3d?.();
+          stateManager.deselectRoad3d?.();
+          stateManager.deselectRoom3d?.();
+          stateManager.inspectRoom3d?.(room.id);
+          this.showStatusHint(
+            `Kartu Dokumentasi Gedung "${room.name}" terbuka (posisi gedung terkunci aman).`
+          );
+          return;
+        }
       }
     }
 
@@ -3250,6 +3477,7 @@ export class Map3DEngine {
       this.cableManager.deselectConnection();
       stateManager.deselectObject3d?.();
       stateManager.deselectRoom3d?.();
+      stateManager.clearInspectedRoom3d?.();
       stateManager.deselectRoad3d?.();
       if (this.simulatorFocusedDeviceId) {
         this.exitSimulatorFocus({ restoreCamera: false });
@@ -4534,7 +4762,39 @@ export class Map3DEngine {
     this.raycaster.setFromCamera(this.pointer, this.camera);
 
     const hitPt = new THREE.Vector3();
-    if (!this.raycaster.ray.intersectPlane(state.dragPlane, hitPt)) return;
+    let snappedSurface = null;
+    let snappedNormal = null;
+
+    if (!e.shiftKey && state.handleType !== 'apex') {
+      const envTargets = [
+        ...(this.roomsGroup?.children || []),
+        ...(this.objects3dGroup?.children || []),
+        ...(this.groundGroup?.children || [])
+      ];
+      const surfHits = envTargets.length > 0
+        ? this._filterVisibleRayHits(this.raycaster.intersectObjects(envTargets, true))
+        : [];
+      if (surfHits.length > 0) {
+        const fh = surfHits[0];
+        hitPt.copy(fh.point);
+        if (fh.face?.normal && fh.object?.matrixWorld) {
+          const nMat = new THREE.Matrix3().getNormalMatrix(fh.object.matrixWorld);
+          const wNorm = fh.face.normal.clone().applyMatrix3(nMat).normalize();
+          if (wNorm.dot(this.raycaster.ray.direction) > 0) wNorm.negate();
+          hitPt.addScaledVector(wNorm, 0.018);
+          snappedNormal = {
+            x: Number(wNorm.x.toFixed(3)),
+            y: Number(wNorm.y.toFixed(3)),
+            z: Number(wNorm.z.toFixed(3))
+          };
+          snappedSurface = classifySurfaceFromNormal(snappedNormal);
+        }
+      } else if (!this.raycaster.ray.intersectPlane(state.dragPlane, hitPt)) {
+        return;
+      }
+    } else if (!this.raycaster.ray.intersectPlane(state.dragPlane, hitPt)) {
+      return;
+    }
 
     state.moved = true;
     if (state.handleType === 'apex') {
@@ -4572,7 +4832,17 @@ export class Map3DEngine {
     const normX = Math.max(0.01, Math.min(0.99, rawNorm.normX));
     const normY = Math.max(0.01, Math.min(0.99, rawNorm.normY));
     const wpZ = Math.max(0.02, Number(rawHit.y.toFixed(2)));
-    const wp = { x: normX, y: normY, z: wpZ };
+    const prevWp = state.handleType === 'waypoint' ? cable.route[state.waypointIdx] : null;
+    const finalSurface = snappedSurface || prevWp?.surface || 'air';
+    const wp = {
+      ...(prevWp || {}),
+      x: normX,
+      y: normY,
+      z: wpZ,
+      ...(snappedSurface ? { surface: snappedSurface } : {}),
+      ...(snappedNormal ? { normal: snappedNormal } : {}),
+      ...(snappedSurface ? { clipType: prevWp?.clipType || getDefaultClipType(cable.cableCategory, finalSurface) } : {})
+    };
 
     if (state.handleType === 'add-waypoint') {
       const insertIdx = state.insertIdx >= 0
@@ -5598,25 +5868,43 @@ export class Map3DEngine {
   syncAvatarMeshVisibilityForPerspective() {
     const isFppFreeRoam = Boolean(this.isActive && this.avatarMode && this.avatarPerspective === 'fpp' && !this.simulatorFocusedDeviceId);
     const isFocusedHide = Boolean(this.simulatorFocusedDeviceId);
+    const isPullingCable = Boolean(this.activeCablePull);
     if (this.avatarGroup) {
       this.avatarGroup.visible = Boolean(this.avatarMode && !isFppFreeRoam && !isFocusedHide);
     }
     if (isFppFreeRoam && !this.fppViewmodelGroup) {
       this.fppViewmodelGroup = createFppHandsViewmodelGroup();
     }
+    if (isFppFreeRoam && isPullingCable && !this.fppCableSpoolGroup) {
+      const catDef = CABLE_CATEGORIES[this.activeCablePull?.cableCategory || 'cat6'] || CABLE_CATEGORIES.cat6;
+      this.fppCableSpoolGroup = createFppCableSpoolViewmodelGroup(catDef.color || '#2563eb');
+    }
     if (this.fppViewmodelGroup) {
-      if (isFppFreeRoam && this.scene && !this.scene.children.includes(this.fppViewmodelGroup)) {
+      if (isFppFreeRoam && !isPullingCable && this.scene && !this.scene.children.includes(this.fppViewmodelGroup)) {
         this.scene.add(this.fppViewmodelGroup);
       }
-      this.fppViewmodelGroup.visible = isFppFreeRoam;
+      this.fppViewmodelGroup.visible = isFppFreeRoam && !isPullingCable;
+    }
+    if (this.fppCableSpoolGroup) {
+      if (isFppFreeRoam && isPullingCable && this.scene && !this.scene.children.includes(this.fppCableSpoolGroup)) {
+        this.scene.add(this.fppCableSpoolGroup);
+      }
+      if (isPullingCable) {
+        const catDef = CABLE_CATEGORIES[this.activeCablePull?.cableCategory || 'cat6'] || CABLE_CATEGORIES.cat6;
+        this.fppCableSpoolGroup.userData?.setCableColor?.(catDef.color || '#2563eb');
+      }
+      this.fppCableSpoolGroup.visible = isFppFreeRoam && isPullingCable;
     }
   }
 
   syncFppViewmodelTransform() {
-    if (!this.fppViewmodelGroup || !this.fppViewmodelGroup.visible || !this.camera) return;
-    this.fppViewmodelGroup.position.copy(this.camera.position);
-    this.fppViewmodelGroup.quaternion.copy(this.camera.quaternion);
-    const swayRoot = this.fppViewmodelGroup.userData?.swayRoot;
+    const activeVm = (this.fppCableSpoolGroup && this.fppCableSpoolGroup.visible)
+      ? this.fppCableSpoolGroup
+      : ((this.fppViewmodelGroup && this.fppViewmodelGroup.visible) ? this.fppViewmodelGroup : null);
+    if (!activeVm || !this.camera) return;
+    activeVm.position.copy(this.camera.position);
+    activeVm.quaternion.copy(this.camera.quaternion);
+    const swayRoot = activeVm.userData?.swayRoot;
     if (swayRoot) {
       const moving = Boolean(this.avatarState.isMoving && this.avatarState.isGrounded);
       const phase = Number(this.avatarState.walkPhase) || 0;
@@ -5624,6 +5912,10 @@ export class Map3DEngine {
       const sx = moving ? Math.cos(phase) * amp : 0;
       const sy = moving ? Math.abs(Math.sin(phase)) * amp : 0;
       swayRoot.position.set(0.32 + sx, -0.27 + sy, -0.52);
+    }
+    const drum = activeVm.userData?.spoolDrum;
+    if (drum && this.activeCablePull) {
+      drum.rotation.x = Number(this.activeCablePull.spoolSpin) || 0;
     }
   }
 
@@ -5642,6 +5934,7 @@ export class Map3DEngine {
     }
     this.configureControlsForAvatarMode(true);
     this.syncAvatarMeshVisibilityForPerspective();
+    this.updateBuildingSignboardsVisibility?.();
     this.syncAvatarControlsUI();
     this.syncAvatarCameraFromAngles();
     this.renderAvatarHudBar();
@@ -6019,6 +6312,7 @@ export class Map3DEngine {
         this.fppViewmodelGroup.visible = false;
       }
       this.updateAvatarDeviceLabelsVisibility?.();
+      this.updateBuildingSignboardsVisibility?.();
       this.syncElevationGuides?.();
       this.syncTransformGizmo?.();
       this.renderRoad3dHudBar?.();
@@ -6127,6 +6421,7 @@ export class Map3DEngine {
     this.syncTransformGizmo?.();
     this.renderRoad3dHudBar?.();
     this.syncAvatarMeshVisibilityForPerspective();
+    this.updateBuildingSignboardsVisibility?.();
     this.syncAvatarControlsUI();
     this.syncAvatarCrosshair();
     this.findNearestDeviceToAvatar();
@@ -7421,6 +7716,13 @@ export class Map3DEngine {
       const perspSpan = perspBtn?.querySelector('span');
       if (perspSpan) perspSpan.textContent = this.avatarPerspective === 'fpp' ? 'FPP' : 'TPP';
       perspBtn?.classList?.toggle('active', this.avatarPerspective === 'fpp');
+
+      const cableCluster = document.getElementById('mob-cable-pull-cluster');
+      if (cableCluster) {
+        const pulling = Boolean(this.activeCablePull);
+        cableCluster.classList.toggle('hidden', !pulling);
+        cableCluster.style.display = pulling ? 'flex' : 'none';
+      }
     }
   }
 
@@ -7520,6 +7822,16 @@ export class Map3DEngine {
     bindTap('btn-mob-drop-all', () => this.dropCarriedObjectsFromAvatar({ dropAll: true, useAimTarget: true }));
     bindTap('btn-mob-rot-left', () => this.rotateSelectedIn3D({ dY: -15 }));
     bindTap('btn-mob-rot-right', () => this.rotateSelectedIn3D({ dY: 15 }));
+    bindTap('btn-mob-cable-clip', () => this.placeAvatarCableClip());
+    bindTap('btn-mob-cable-undo', () => this.undoAvatarCableClip());
+    bindTap('btn-mob-cable-plug', () => {
+      const aim = this.computeAvatarCableAimTarget();
+      if (aim?.kind === 'device' && aim.deviceId && aim.deviceId !== this.activeCablePull?.sourceDeviceId) {
+        this.finishAvatarCablePull(aim.deviceId, aim.portName || '');
+      } else {
+        this.showStatusHint('Arahkan crosshair ke perangkat tujuan terlebih dahulu untuk mencolok kabel.');
+      }
+    });
   }
 
   updateAvatarController(dt = 0.016) {
@@ -10112,6 +10424,32 @@ export class Map3DEngine {
           this.dropCarriedObjectsFromAvatar({ dropAll: Boolean(ev.shiftKey), useAimTarget: true });
         } else if (act === 'pickup') {
           this.pickupNearestObjectFromAvatar();
+        } else if (act === 'start-cable') {
+          const devId = btn.dataset.deviceId;
+          if (devId) this.startAvatarCablePull(devId);
+        } else if (act === 'cable-clip') {
+          this.placeAvatarCableClip({ shiftKey: Boolean(ev.shiftKey) });
+        } else if (act === 'cable-plug') {
+          const targetId = btn.dataset.deviceId;
+          const targetPort = btn.dataset.portName || '';
+          if (targetId) this.finishAvatarCablePull(targetId, targetPort);
+        } else if (act === 'cable-undo') {
+          this.undoAvatarCableClip();
+        } else if (act === 'cable-ortho') {
+          if (this.activeCablePull) {
+            this.activeCablePull.orthoLock = !this.activeCablePull.orthoLock;
+            this.activeCablePull.pathStyle = this.activeCablePull.orthoLock ? 'orthogonal' : 'curve';
+            this._lastHouseFlipperHudKey = '';
+            this.renderHouseFlipperPromptHud();
+          }
+        } else if (act === 'cable-z-up') {
+          this.adjustAvatarCablePullElevation(ev.shiftKey ? 0.1 : 0.25);
+        } else if (act === 'cable-z-down') {
+          this.adjustAvatarCablePullElevation(ev.shiftKey ? -0.1 : -0.25);
+        } else if (act === 'cable-switch-fo') {
+          this.setActiveCablePullCategory('fiber-sm');
+        } else if (act === 'cable-cancel') {
+          this.cancelAvatarCablePull();
         } else if (act === 'toggle-door') {
           const dKey = btn.dataset.doorKey;
           if (dKey) this.toggleInteractiveDoor(dKey);
@@ -10125,6 +10463,44 @@ export class Map3DEngine {
         tipEl.className = 'hud-3d-houseflipper-tip hidden';
         tipEl.style.display = 'none';
         tipEl.innerHTML = '';
+      }
+      return;
+    }
+
+    if (this.avatarMode && this.activeCablePull) {
+      const pull = this.activeCablePull;
+      const aim = this.computeAvatarCableAimTarget();
+      const cat = pull.cableCategory || 'cat6';
+      const maxLen = getStandardMaxLengthMeters(cat);
+      const liveLen = Number(pull.lastLiveLength || 0);
+      const lenStatus = liveLen > maxLen ? 'exceeded' : (liveLen > maxLen * 0.85 ? 'warning' : 'ok');
+      const isAimingDest = Boolean(aim?.kind === 'device' && aim.deviceId && aim.deviceId !== pull.sourceDeviceId);
+      const destDev = isAimingDest ? this.deviceManager?.getDeviceById?.(aim.deviceId) : null;
+      const clipCount = pull.waypoints.length;
+      const zOffStr = Number(pull.elevationOffset || 0).toFixed(2);
+      const key = `cablepull:${cat}:${liveLen.toFixed(1)}:${clipCount}:${pull.orthoLock ? 1 : 0}:${zOffStr}:${isAimingDest ? aim.deviceId : (aim?.surface || 'none')}`;
+
+      if (this._lastHouseFlipperHudKey !== key) {
+        this._lastHouseFlipperHudKey = key;
+        tipEl.className = `hud-3d-houseflipper-tip is-pulling-cable is-len-${lenStatus}`;
+        tipEl.style.display = 'inline-flex';
+        const meterText = `${cat.toUpperCase()} • ${liveLen.toFixed(1)}m / ${maxLen}m • ${clipCount} Klem`;
+        const primaryActionHtml = isAimingDest
+          ? `<button type="button" class="hf-tip-btn is-primary" data-hf-action="cable-plug" data-device-id="${this.escapeHudHtml(aim.deviceId)}" data-port-name="${this.escapeHudHtml(aim.portName || '')}">Colok ${this.escapeHudHtml(destDev?.name || 'Port')} (Klik/E)</button>`
+          : `<button type="button" class="hf-tip-btn is-primary" data-hf-action="cable-clip">Pasang Klem (Klik)</button>`;
+        const foSuggestHtml = (lenStatus === 'exceeded' && !cat.startsWith('fiber'))
+          ? `<button type="button" class="hf-tip-btn is-warn" data-hf-action="cable-switch-fo" title="Panjang melebihi 100m UTP — ganti otomatis ke Fiber Optic">Ganti Fiber</button>`
+          : '';
+        tipEl.innerHTML = `
+          <span class="hf-cable-meter is-${lenStatus}">${this.escapeHudHtml(meterText)}</span>
+          ${foSuggestHtml}
+          <button type="button" class="hf-tip-btn" data-hf-action="cable-z-down" title="Turunkan tinggi klem (-0.25m)">Z-</button>
+          <button type="button" class="hf-tip-btn" data-hf-action="cable-z-up" title="Naikkan tinggi klem (+0.25m)">Z+</button>
+          <button type="button" class="hf-tip-btn ${pull.orthoLock ? 'is-active' : ''}" data-hf-action="cable-ortho" title="Toggle Siku 90° / Bebas">${pull.orthoLock ? '90° Siku' : 'Bebas'}</button>
+          <button type="button" class="hf-tip-btn" data-hf-action="cable-undo" ${clipCount === 0 ? 'disabled' : ''} title="Lepas klem terakhir (Backspace)">Undo</button>
+          ${primaryActionHtml}
+          <button type="button" class="hf-tip-btn is-danger" data-hf-action="cable-cancel" title="Batalkan tarik kabel (Esc)">Batal</button>
+        `;
       }
       return;
     }
@@ -10187,16 +10563,21 @@ export class Map3DEngine {
       );
       if (shouldShowPick) {
         const isMoveTool = this.navTool === 'move';
-        const key = `pick:${nearestPick.id}:${nearestPick.source || 'nearest'}:${isMoveTool ? 1 : 0}`;
+        const isDevicePick = nearestPick.kind === 'device' || Boolean(this.deviceManager?.getDeviceById?.(nearestPick.id));
+        const key = `pick:${nearestPick.id}:${nearestPick.source || 'nearest'}:${isMoveTool ? 1 : 0}:${isDevicePick ? 1 : 0}`;
         if (this._lastHouseFlipperHudKey !== key) {
           this._lastHouseFlipperHudKey = key;
           const escName = this.escapeHudHtml(nearestPick.name || 'Alat');
           const actionLabel = isMoveTool ? 'Angkat (Klik / E)' : 'Angkat (E)';
+          const cableBtnHtml = isDevicePick
+            ? `<button type="button" class="hf-tip-btn is-cable" data-hf-action="start-cable" data-device-id="${this.escapeHudHtml(nearestPick.id)}" title="Ambil gulungan kabel & tarik dari perangkat ini (C)">Tarik Kabel (C)</button>`
+            : '';
           tipEl.className = 'hud-3d-houseflipper-tip';
           tipEl.style.display = 'inline-flex';
           tipEl.innerHTML = `
             <span class="hf-tip-name">${escName}</span>
             <button type="button" class="hf-tip-btn is-primary" data-hf-action="pickup">${actionLabel}</button>
+            ${cableBtnHtml}
           `;
         }
         return;
@@ -10979,6 +11360,10 @@ export class Map3DEngine {
       if (this.isActive) {
         this.syncDevices();
         this.syncCables();
+        this.syncBuildingSignboards?.();
+        if (this.buildingXrayMode || this.perRoomXrayIds?.size > 0) {
+          this.applyBuildingXrayMaterials?.();
+        }
       }
       if (newCab) {
         this.cableManager?.selectConnection?.(newCab.id);
@@ -10996,6 +11381,10 @@ export class Map3DEngine {
       if (this.isActive) {
         this.syncDevices();
         this.syncCables();
+        this.syncBuildingSignboards?.();
+        if (this.buildingXrayMode || this.perRoomXrayIds?.size > 0) {
+          this.applyBuildingXrayMaterials?.();
+        }
       }
       this.renderSimulatorInspectorHud(deviceId);
       return null;
@@ -11094,32 +11483,64 @@ export class Map3DEngine {
       const isConnected = Boolean(link);
       const isCableSel = isConnected && link.cable.id === selectedCableId;
       const isPendingSrc = this.pendingCableSourceId === deviceId && this.pendingCableSourcePort === p.name;
+      const ifaceCfg = dev.network?.interfaces?.[p.name] || null;
+      const isPortAdminDown = ifaceCfg?.status === 'down' || dev.status === 'offline';
+
       let ledClass = '';
       if (isPendingSrc) {
-        ledClass = 'is-warning';
+        ledClass = 'is-pulling';
+      } else if (isPortAdminDown) {
+        ledClass = 'is-offline';
       } else if (isConnected) {
         const st = link.cable.status || 'active';
-        ledClass = (st === 'damaged' || st === 'inactive')
+        ledClass = (st === 'damaged' || st === 'inactive' || st === 'cut')
           ? 'is-offline'
           : (st === 'maintenance' ? 'is-warning' : 'is-online');
       }
+
+      const pType = String(p.type || 'rj45').toLowerCase();
+      const socketIcon = pType.includes('wireless') || pType.includes('wifi')
+        ? 'wifi'
+        : (pType.includes('sfp') || pType.includes('fiber') ? 'cable' : 'ethernet-port');
       const peerLabel = isConnected
         ? `${link.peerName}${link.peerPort ? ` [${link.peerPort}]` : ''}`
         : (isPendingSrc
           ? 'Sumber Kabel Aktif'
-          : (pendingSrcDev && pendingSrcDev.id !== deviceId ? 'Pasang ke Sini' : '+ Kabel'));
+          : (isPortAdminDown
+            ? 'Port DOWN'
+            : (pendingSrcDev && pendingSrcDev.id !== deviceId ? 'Pasang ke Sini' : '+ Kabel')));
 
-      return `<button type="button" class="sim-port-card ${isConnected ? 'is-connected' : ''} ${isCableSel ? 'is-cable-selected' : ''} ${isPendingSrc ? 'is-pending-source' : ''}" data-sim-port="${this.escapeHudHtml(p.name)}" title="${isConnected ? `Pilih kabel ke ${this.escapeHudHtml(peerLabel)}` : (pendingSrcDev && pendingSrcDev.id !== deviceId ? `Sambungkan kabel dari ${this.escapeHudHtml(pendingSrcDev.name)} ke port ${this.escapeHudHtml(p.name)}` : `Tarik kabel dari port ${this.escapeHudHtml(p.name)}`)}">
+      const vlanChip = ifaceCfg?.mode === 'trunk'
+        ? `T:${(ifaceCfg.allowedVlans || [1]).slice(0, 3).join(',')}`
+        : (ifaceCfg?.vlan && ifaceCfg.vlan > 1 ? `V${ifaceCfg.vlan}` : '');
+
+      return `<button type="button" class="sim-port-card ${isConnected ? 'is-connected' : ''} ${isCableSel ? 'is-cable-selected' : ''} ${isPendingSrc ? 'is-pending-source' : ''} ${isPortAdminDown ? 'is-admin-down' : ''}" data-sim-port="${this.escapeHudHtml(p.name)}" title="${isConnected ? `Pilih kabel ke ${this.escapeHudHtml(peerLabel)}` : (pendingSrcDev && pendingSrcDev.id !== deviceId ? `Sambungkan kabel dari ${this.escapeHudHtml(pendingSrcDev.name)} ke port ${this.escapeHudHtml(p.name)}` : `Tarik kabel dari port ${this.escapeHudHtml(p.name)}`)}">
         <div class="sim-port-top-row">
           <span class="sim-port-name-wrap">
             <span class="sim-port-led ${ledClass}"></span>
+            <span class="sim-port-socket-glyph" aria-hidden="true">${uiIcon(socketIcon, 11)}</span>
             <span class="sim-port-name">${this.escapeHudHtml(p.name)}</span>
           </span>
-          <span class="sim-port-speed">${this.escapeHudHtml(p.speed || p.type || '')}</span>
+          <span class="sim-port-speed">${this.escapeHudHtml(vlanChip || p.speed || p.type || '')}</span>
         </div>
         <span class="sim-port-peer">${this.escapeHudHtml(peerLabel)}</span>
       </button>`;
     }).join('');
+
+    const selectedLinkEntry = [...portConnMap.entries()].find(([, l]) => l.cable.id === selectedCableId);
+    const selectedCableBarHtml = selectedLinkEntry
+      ? (() => {
+          const [selPortName, selLink] = selectedLinkEntry;
+          const peerId = selLink.cable.source === deviceId ? selLink.cable.destination : selLink.cable.source;
+          return `<div class="sim-selected-cable-bar">
+            <span>Port <strong>${this.escapeHudHtml(selPortName)}</strong> → <strong>${this.escapeHudHtml(selLink.peerName)}</strong></span>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <button type="button" class="sim-action-btn" data-sim-jump-peer="${this.escapeHudHtml(peerId)}">Lihat Perangkat Tujuan</button>
+              <button type="button" class="sim-action-btn is-exit" data-sim-disconnect-cable="${this.escapeHudHtml(selLink.cable.id)}">Lepas Kabel</button>
+            </div>
+          </div>`;
+        })()
+      : '';
 
     hudEl.innerHTML = `
       <div class="sim-inspector-header">
@@ -11130,6 +11551,8 @@ export class Map3DEngine {
         </div>
         <div class="sim-inspector-controls-group">
           ${angles.map((a) => `<button type="button" class="sim-angle-pill ${this.simulatorViewAngle === a.key ? 'active' : ''}" data-sim-angle="${a.key}">${a.label}</button>`).join('')}
+          <button type="button" class="sim-action-btn is-sim-winbox" data-sim-action="winbox" title="Buka Quick Config (WinBox) & Terminal CLI untuk perangkat ini">${uiIcon('sliders', 12)} WinBox / CLI</button>
+          <button type="button" class="sim-action-btn is-sim-ping" data-sim-action="ping" title="Uji Ping & Animasi Paket 3D dari perangkat ini">${uiIcon('zap', 12)} Ping Dari Sini</button>
           <button type="button" class="sim-action-btn is-primary" data-sim-action="detail" title="Detail Lengkap, Spesifikasi & Anggaran (DAK/BOS)">Detail</button>
           <button type="button" class="sim-action-btn" data-sim-action="config" title="Konfigurasi Detail IP, VLAN & SSID">Konfigurasi</button>
           <button type="button" class="sim-action-btn is-exit" data-sim-action="exit" title="Keluar Mode Fokus Simulator (Esc)">Keluar Fokus</button>
@@ -11137,6 +11560,7 @@ export class Map3DEngine {
       </div>
       ${stackBarHtml}
       ${pendingBannerHtml}
+      ${selectedCableBarHtml}
       <div class="sim-port-grid">${portsHtml}</div>
     `;
 
@@ -11174,14 +11598,43 @@ export class Map3DEngine {
         this.pending3dWaypoints = [];
         this.syncDevices();
         this.syncCables();
+        this.syncBuildingSignboards?.();
+        if (this.buildingXrayMode || this.perRoomXrayIds?.size > 0) {
+          this.applyBuildingXrayMaterials?.();
+        }
         this.renderSimulatorInspectorHud(deviceId);
+        return;
+      }
+
+      const disconnectBtn = evt.target.closest('[data-sim-disconnect-cable]');
+      if (disconnectBtn) {
+        const cabId = disconnectBtn.getAttribute('data-sim-disconnect-cable');
+        if (cabId) {
+          this.cableManager?.deleteConnection?.(cabId);
+          this.syncCables();
+          this.renderSimulatorInspectorHud(deviceId);
+        }
+        return;
+      }
+
+      const jumpPeerBtn = evt.target.closest('[data-sim-jump-peer]');
+      if (jumpPeerBtn) {
+        const peerId = jumpPeerBtn.getAttribute('data-sim-jump-peer');
+        if (peerId) {
+          this.deviceManager?.selectDevice?.(peerId);
+          this.focusOnDevice(peerId, { viewAngle: this.simulatorViewAngle || 'front', saveReturnCamera: false, duration: 360 });
+        }
         return;
       }
 
       const actionBtn = evt.target.closest('[data-sim-action]');
       if (actionBtn) {
         const action = actionBtn.getAttribute('data-sim-action');
-        if (action === 'detail') {
+        if (action === 'winbox') {
+          eventBus.emit('modal:open-simulator', { deviceId, tab: 'winbox' });
+        } else if (action === 'ping') {
+          eventBus.emit('modal:open-simulator', { deviceId, tab: 'sim' });
+        } else if (action === 'detail') {
           eventBus.emit('modal:open-device-detail', { deviceId, tab: 'overview' });
         } else if (action === 'config') {
           eventBus.emit('modal:open-device-detail', { deviceId, tab: 'network' });
@@ -11199,6 +11652,59 @@ export class Map3DEngine {
         }
       }
     };
+  }
+
+  /**
+   * Toggle 3D graphics performance preset ('lite' for mobile battery/FPS vs 'standard' for desktop).
+   * @param {'lite'|'standard'} mode
+   */
+  setGraphicsQuality(mode = 'standard') {
+    const normalized = mode === 'lite' ? 'lite' : 'standard';
+    this.graphicsQuality = normalized;
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('netmap_3d_quality_v1', normalized);
+      }
+    } catch { /* ignore storage restrictions */ }
+    this.applyGraphicsQuality();
+    eventBus.emit('map3d:quality-changed', { quality: normalized });
+    return normalized;
+  }
+
+  getGraphicsQuality() {
+    return this.graphicsQuality || 'standard';
+  }
+
+  applyGraphicsQuality() {
+    const isLite = this.graphicsQuality === 'lite';
+    const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1;
+    const targetRatio = isLite ? Math.min(dpr, 1.15) : Math.min(dpr, 1.5);
+    this.renderer?.setPixelRatio?.(targetRatio);
+    if (this.renderer?.shadowMap) {
+      this.renderer.shadowMap.enabled = !isLite;
+      this.renderer.shadowMap.needsUpdate = true;
+    }
+    if (this.dirLight) {
+      this.dirLight.castShadow = !isLite;
+      if (this.dirLight.shadow?.mapSize) {
+        const sz = isLite ? 512 : 1024;
+        this.dirLight.shadow.mapSize.width = sz;
+        this.dirLight.shadow.mapSize.height = sz;
+      }
+    }
+    return { quality: this.graphicsQuality, pixelRatio: targetRatio, shadows: !isLite };
+  }
+
+  /**
+   * Pause or resume background WebGL rendering when a full-screen simulator modal is open.
+   * @param {boolean} paused
+   */
+  setPausedByModal(paused) {
+    this.isPausedByModal = Boolean(paused);
+    if (!this.isPausedByModal && this.isActive && this.renderer && this.scene && this.camera) {
+      this.renderer.render(this.scene, this.camera);
+    }
+    return this.isPausedByModal;
   }
 
   setDeviceScaleMultiplier(scaleVal) {
@@ -11417,6 +11923,7 @@ export class Map3DEngine {
 
     // 7. Annotations layer (devices, rooms & 3D objects floating sprites)
     this.updateAvatarDeviceLabelsVisibility?.();
+    this.updateBuildingSignboardsVisibility?.();
     [this.roomsGroup, this.objects3dGroup].forEach((grp) => {
       grp?.traverse?.((child) => {
         if (child?.userData?.isLabelSprite || child?.userData?.isDeviceLabel) {
@@ -11468,6 +11975,10 @@ export class Map3DEngine {
         if (!this.isActive || this.dragMoveState || this.dragRotateState || this.transformGizmoDragState) return;
         this.syncDevices();
         this.syncCables();
+        this.syncBuildingSignboards?.();
+        if (this.buildingXrayMode || this.perRoomXrayIds?.size > 0) {
+          this.applyBuildingXrayMaterials?.();
+        }
         if (this.simulatorFocusedDeviceId) {
           if (this.deviceManager?.getDeviceById?.(this.simulatorFocusedDeviceId)) {
             this.renderSimulatorInspectorHud(this.simulatorFocusedDeviceId);
@@ -11522,6 +12033,10 @@ export class Map3DEngine {
     const syncCablesOnly = () => {
       if (!this.isActive) return;
       this.syncCables();
+      this.syncBuildingSignboards?.();
+      if (this.buildingXrayMode || this.perRoomXrayIds?.size > 0) {
+        this.applyBuildingXrayMaterials?.();
+      }
       if (this.simulatorFocusedDeviceId) {
         this.renderSimulatorInspectorHud(this.simulatorFocusedDeviceId);
       }
@@ -11538,9 +12053,17 @@ export class Map3DEngine {
         this.syncRooms();
       }
     };
+    const syncSignboardsOnly = () => {
+      if (this.isActive) {
+        this.syncBuildingSignboards?.();
+      }
+    };
     eventBus.on('room3d:changed', syncRoomsOnly);
     eventBus.on('room3d:selected', syncRoomsOnly);
     eventBus.on('room3d:deselected', syncRoomsOnly);
+    eventBus.on('room3d:doc-updated', syncSignboardsOnly);
+    eventBus.on('room3d:inspect', syncSignboardsOnly);
+    eventBus.on('room3d:inspect-closed', syncSignboardsOnly);
 
     const syncObjects3dOnly = () => {
       if (this.isActive && !this.object3dDragState) {
@@ -11641,6 +12164,10 @@ export class Map3DEngine {
       if (this.isActive) {
         this.syncDevices();
         this.syncCables();
+        this.syncBuildingSignboards?.();
+        if (this.buildingXrayMode || this.perRoomXrayIds?.size > 0) {
+          this.applyBuildingXrayMaterials?.();
+        }
         if (this.simulatorFocusedDeviceId) {
           this.renderSimulatorInspectorHud(this.simulatorFocusedDeviceId);
         }
@@ -11786,58 +12313,4 @@ export class Map3DEngine {
         if (!dev) return null;
         const w = this.normToWorld?.(dev.position?.x ?? 0.5, dev.position?.y ?? 0.5) || { x: 0, z: 0 };
         const elev = Number(dev.spatial3d?.elevationMeters) || 0.4;
-        return new THREE.Vector3(w.x, elev + 0.35, w.z);
-      })
-      .filter(Boolean);
-
-    if (waypoints.length === 0) {
-      return { hopCount: 0, success: Boolean(success) };
-    }
-
-    const color = success ? 0x22c55e : 0xef4444;
-    const sphere = new THREE.Mesh(
-      new THREE.SphereGeometry(0.32, 16, 16),
-      new THREE.MeshBasicMaterial({ color })
-    );
-    sphere.position.copy(waypoints[0]);
-    sphere.userData.isPacketProbe = true;
-    this.packetFlowGroup?.add(sphere);
-
-    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    this.activePacketFlows.push({
-      mesh: sphere,
-      waypoints,
-      startTime: now,
-      duration: Math.max(400, Number(durationMs) || 1500)
-    });
-
-    return { hopCount: waypoints.length, success: Boolean(success) };
-  }
-
-  updatePacketFlows3D(now = typeof performance !== 'undefined' ? performance.now() : Date.now()) {
-    if (!Array.isArray(this.activePacketFlows) || this.activePacketFlows.length === 0) return;
-    const remaining = [];
-    for (const flow of this.activePacketFlows) {
-      const elapsed = now - flow.startTime;
-      const t = Math.min(1, Math.max(0, elapsed / flow.duration));
-      if (t >= 1 || !flow.mesh) {
-        this.packetFlowGroup?.remove(flow.mesh);
-        flow.mesh?.geometry?.dispose?.();
-        flow.mesh?.material?.dispose?.();
-        continue;
-      }
-      const pts = flow.waypoints;
-      if (pts.length === 1) {
-        flow.mesh.position.copy(pts[0]);
-      } else {
-        const segFloat = t * (pts.length - 1);
-        const idx = Math.min(pts.length - 2, Math.floor(segFloat));
-        const alpha = segFloat - idx;
-        flow.mesh.position.lerpVectors(pts[idx], pts[idx + 1], alpha);
-        flow.mesh.position.y += Math.sin(alpha * Math.PI) * 0.45;
-      }
-      remaining.push(flow);
-    }
-    this.activePacketFlows = remaining;
-  }
-}
+... [truncated for diff preview]
