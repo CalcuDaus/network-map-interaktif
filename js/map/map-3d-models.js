@@ -6,11 +6,65 @@
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { BUILTIN_GLB_BASE64 } from './builtin-glb-data.js';
 
 const gltfLoader = new GLTFLoader();
 const glbCache = new Map(); // url -> Promise<THREE.Group>
 const glbCollisionCache = new Map(); // url -> CollisionProfile
+const OFFLINE_GLB_BUNDLE_URL = 'assets/vendor/glb-offline-bundle.js';
+
+const NON_ENTERABLE_GLB_RE = /(?:^|\/)(?:pohon_|wastafel_|tong_sampah|keran_|plank_|banner_|penunjuk_arah|rak_bunga|tempat_duduk|kandang_burung|tandon_air|mikrotik_|ruijie_|tp_link_|dahua_|hpe_)/i;
+
+/**
+ * Determine whether a GLB URL represents a walk-inside building needing door extraction & triangle collision baking.
+ * Decorative props (trees, faucets, benches, trash bins) and small network devices skip heavy door/triangle preprocessing.
+ * @param {string} url
+ * @returns {boolean}
+ */
+export function isEnterableBuildingGlbUrl(url = '') {
+  const clean = String(url || '').trim();
+  if (!clean || clean.startsWith('data:') || clean.startsWith('blob:')) return false;
+  return !NON_ENTERABLE_GLB_RE.test(clean);
+}
+
+/**
+ * Register an embedded GLB base64 lookup map (used by offline/file:// bundle and Node tests).
+ * @param {Record<string, string>} map
+ */
+export function registerEmbeddedGlbMap(map) {
+  if (typeof globalThis !== 'undefined' && map && typeof map === 'object') {
+    globalThis.__NETMAP_BUILTIN_GLB_BASE64__ = map;
+  }
+}
+
+function getEmbeddedGlbMap() {
+  return (typeof globalThis !== 'undefined' && globalThis.__NETMAP_BUILTIN_GLB_BASE64__) || null;
+}
+
+let _offlineGlbScriptPromise = null;
+function ensureOfflineGlbBundleLoaded() {
+  const existing = getEmbeddedGlbMap();
+  if (existing) return Promise.resolve(existing);
+  if (typeof document === 'undefined' || typeof window === 'undefined') return Promise.resolve(null);
+  if (_offlineGlbScriptPromise) return _offlineGlbScriptPromise;
+
+  _offlineGlbScriptPromise = new Promise((resolve) => {
+    try {
+      const script = document.createElement('script');
+      script.src = OFFLINE_GLB_BUNDLE_URL;
+      script.async = true;
+      script.onload = () => resolve(getEmbeddedGlbMap());
+      script.onerror = () => {
+        _offlineGlbScriptPromise = null;
+        resolve(null);
+      };
+      (document.head || document.body || document.documentElement)?.appendChild?.(script);
+    } catch {
+      _offlineGlbScriptPromise = null;
+      resolve(null);
+    }
+  });
+  return _offlineGlbScriptPromise;
+}
 
 const ROOM_ROOF_RE = /atap|plafon|kanopi|lisplang|roof|ceiling/i;
 const ROOM_FLOOR_RE = /lantai|selasar|koridor|beranda|panggung|umpak|floor/i;
@@ -959,17 +1013,94 @@ function normalizeGlbCacheKey(url) {
   return LEGACY_BUILDING_GLB_ALIASES[clean] || clean;
 }
 
+/**
+ * Lightweight O(1) box collision profile for non-enterable GLB props (trees, trash bins, faucets, hardware).
+ */
+export function buildLightweightBoxCollisionProfile(root) {
+  root.updateMatrixWorld(true);
+  const rootBox = new THREE.Box3().setFromObject(root);
+  const rawSizeVec = new THREE.Vector3();
+  rootBox.getSize(rawSizeVec);
+  const rawSize = {
+    x: Math.max(0.01, rawSizeVec.x),
+    y: Math.max(0.01, rawSizeVec.y),
+    z: Math.max(0.01, rawSizeVec.z)
+  };
+  const maxDim = Math.max(rawSize.x, rawSize.y, rawSize.z) || 1;
+  return {
+    rawSize,
+    unitSize: {
+      x: rawSize.x / maxDim,
+      y: rawSize.y / maxDim,
+      z: rawSize.z / maxDim
+    },
+    halfW: rawSize.x * 0.5,
+    halfD: rawSize.z * 0.5,
+    height: rawSize.y,
+    cellSize: 1.25,
+    wallCells: new Map(),
+    floorCells: new Map(),
+    roofCells: new Map(),
+    wallTriCount: 0,
+    floorTriCount: 0,
+    isBoxProxy: true
+  };
+}
+
 function resolveEmbeddedGlbBase64(url) {
+  const map = getEmbeddedGlbMap();
+  if (!map) return '';
   const raw = String(url || '').trim();
   if (!raw) return '';
   const canonical = normalizeGlbCacheKey(raw);
   const clean = raw.replace(/^\/+/, '').replace(/^\.\//, '');
-  return BUILTIN_GLB_BASE64[raw] || BUILTIN_GLB_BASE64[clean] || BUILTIN_GLB_BASE64[canonical] || '';
+  return map[raw] || map[clean] || map[canonical] || '';
+}
+
+function parseGlbArrayBuffer(buffer) {
+  return new Promise((resolve, reject) => {
+    gltfLoader.parse(
+      buffer,
+      '',
+      (gltf) => {
+        const root = gltf.scene || (gltf.scenes && gltf.scenes[0]);
+        if (!root) {
+          reject(new Error('GLB does not contain a scene'));
+          return;
+        }
+        resolve(root);
+      },
+      (err) => reject(err)
+    );
+  });
+}
+
+function extractRawPortsFromGlbRoot(root) {
+  if (!root) return [];
+  root.updateMatrixWorld(true);
+  const ports = [];
+  const seen = new Set();
+  const wp = new THREE.Vector3();
+  root.traverse((obj) => {
+    const parsed = parseGlbPortNodeName(obj.name, obj.userData);
+    if (!parsed || seen.has(parsed.name)) return;
+    seen.add(parsed.name);
+    obj.getWorldPosition(wp);
+    const localPos = root.worldToLocal(wp.clone());
+    ports.push({
+      name: parsed.name,
+      type: parsed.type,
+      speed: parsed.speed,
+      rawPos: { x: localPos.x, y: localPos.y, z: localPos.z }
+    });
+  });
+  return ports;
 }
 
 /**
  * Load and normalize a custom .glb/.gltf model (cached by URL, scaled to targetSize, centered on ground y=0).
- * Supports both data-URI/URL fetch and embedded BUILTIN_GLB_BASE64 fallback/fast-path.
+ * On http(s), streams binary .glb assets on demand for fast mobile startup;
+ * on file:// or offline fallback, lazily loads the base64 GLB bundle once.
  * Automatically evicts failed promises from glbCache so transient network errors can recover on retry.
  * @param {string} url
  * @param {number} [targetSize=1.2]
@@ -980,44 +1111,69 @@ export function loadCustomGlbModel(url, targetSize = 1.2) {
 
   const cacheKey = normalizeGlbCacheKey(url);
   if (!glbCache.has(cacheKey)) {
-    const promise = new Promise((resolve, reject) => {
-      const embeddedB64 = resolveEmbeddedGlbBase64(url);
-      if (embeddedB64) {
-        try {
-          const buffer = base64ToArrayBuffer(embeddedB64);
-          gltfLoader.parse(
-            buffer,
-            '',
+    const isInlineOrBlob = cacheKey.startsWith('data:') || cacheKey.startsWith('blob:');
+    const isFileProtocol = typeof window !== 'undefined' && window.location?.protocol === 'file:';
+
+    const promise = (async () => {
+      // 1. If already inline data/blob URL, parse directly
+      if (isInlineOrBlob) {
+        return new Promise((resolve, reject) => {
+          gltfLoader.load(
+            cacheKey,
             (gltf) => {
               const root = gltf.scene || (gltf.scenes && gltf.scenes[0]);
-              if (!root) {
-                reject(new Error('GLB does not contain a scene'));
-                return;
-              }
-              resolve(root);
+              if (!root) reject(new Error('GLB does not contain a scene'));
+              else resolve(root);
             },
+            undefined,
             (err) => reject(err)
           );
-          return;
+        });
+      }
+
+      // 2. Fast-path if embedded base64 map is already loaded (e.g., Node tests or file:// offline cache)
+      const immediateB64 = resolveEmbeddedGlbBase64(url);
+      if (immediateB64) {
+        try {
+          return await parseGlbArrayBuffer(base64ToArrayBuffer(immediateB64));
         } catch (err) {
           console.warn('[Map3DModels] Embedded GLB parse failed, falling back to fetch:', err);
         }
       }
 
-      gltfLoader.load(
-        url,
-        (gltf) => {
-          const root = gltf.scene || (gltf.scenes && gltf.scenes[0]);
-          if (!root) {
-            reject(new Error('GLB does not contain a scene'));
-            return;
-          }
-          resolve(root);
-        },
-        undefined,
-        (err) => reject(err)
-      );
-    }).catch((err) => {
+      // 3. On file:// protocol, lazily load the offline base64 bundle script once on demand
+      if (isFileProtocol) {
+        await ensureOfflineGlbBundleLoaded();
+        const loadedB64 = resolveEmbeddedGlbBase64(url);
+        if (loadedB64) {
+          return await parseGlbArrayBuffer(base64ToArrayBuffer(loadedB64));
+        }
+      }
+
+      // 4. On http:// / https:// (mobile & desktop browser), stream compact binary .glb directly
+      try {
+        return await new Promise((resolve, reject) => {
+          gltfLoader.load(
+            cacheKey,
+            (gltf) => {
+              const root = gltf.scene || (gltf.scenes && gltf.scenes[0]);
+              if (!root) reject(new Error('GLB does not contain a scene'));
+              else resolve(root);
+            },
+            undefined,
+            (err) => reject(err)
+          );
+        });
+      } catch (networkErr) {
+        // Offline / fallback recovery if binary fetch fails
+        await ensureOfflineGlbBundleLoaded();
+        const fallbackB64 = resolveEmbeddedGlbBase64(url);
+        if (fallbackB64) {
+          return await parseGlbArrayBuffer(base64ToArrayBuffer(fallbackB64));
+        }
+        throw networkErr;
+      }
+    })().catch((err) => {
       glbCache.delete(cacheKey);
       throw err;
     });
@@ -1025,38 +1181,73 @@ export function loadCustomGlbModel(url, targetSize = 1.2) {
   }
 
   return glbCache.get(cacheKey).then((cachedRoot) => {
+    const enterableBuilding = isEnterableBuildingGlbUrl(cacheKey);
     if (!cachedRoot.userData._interactiveDoorsExtracted) {
       cachedRoot.userData._interactiveDoorsExtracted = true;
-      extractInteractiveDoorsFromGlbRoot(cachedRoot);
+      if (enterableBuilding) {
+        extractInteractiveDoorsFromGlbRoot(cachedRoot);
+      }
     }
     if (!glbCollisionCache.has(cacheKey)) {
-      glbCollisionCache.set(cacheKey, buildGlbCollisionProfile(cachedRoot));
+      glbCollisionCache.set(
+        cacheKey,
+        enterableBuilding
+          ? buildGlbCollisionProfile(cachedRoot)
+          : buildLightweightBoxCollisionProfile(cachedRoot)
+      );
     }
     const profile = glbCollisionCache.get(cacheKey);
+
+    if (!cachedRoot.userData._rawBounds) {
+      cachedRoot.updateMatrixWorld(true);
+      const rawBox = new THREE.Box3().setFromObject(cachedRoot);
+      const rawSize = new THREE.Vector3();
+      const rawCenter = new THREE.Vector3();
+      rawBox.getSize(rawSize);
+      rawBox.getCenter(rawCenter);
+      cachedRoot.userData._rawBounds = {
+        rawSize,
+        rawCenter,
+        minY: rawBox.min.y,
+        zeroOrigin: cachedRoot.position.lengthSq() < 1e-10
+      };
+    }
+    if (!cachedRoot.userData._rawPortsScanned) {
+      cachedRoot.userData._rawPortsScanned = true;
+      cachedRoot.userData._rawPorts = extractRawPortsFromGlbRoot(cachedRoot);
+    }
+
     const clone = cachedRoot.clone(true);
     // Tag cloned meshes so scene clear/rebuild helpers never dispose cached shared GPU geometries/textures
     clone.traverse((node) => {
       node.userData.sharedGlbResource = true;
     });
 
-    const box = new THREE.Box3().setFromObject(clone);
-    const size = new THREE.Vector3();
-    const center = new THREE.Vector3();
-    box.getSize(size);
-    box.getCenter(center);
-
+    const rb = cachedRoot.userData._rawBounds;
+    const size = rb.rawSize;
     const maxDim = Math.max(size.x, size.y, size.z) || 1;
     const scale = targetSize / maxDim;
     clone.scale.setScalar(scale);
 
-    // Recompute bounds after scaling so base sits cleanly at y = 0
-    const scaledBox = new THREE.Box3().setFromObject(clone);
-    const scaledCenter = new THREE.Vector3();
-    scaledBox.getCenter(scaledCenter);
-
-    clone.position.x -= scaledCenter.x;
-    clone.position.z -= scaledCenter.z;
-    clone.position.y -= scaledBox.min.y;
+    let offsetX;
+    let offsetY;
+    let offsetZ;
+    if (rb.zeroOrigin) {
+      offsetX = -rb.rawCenter.x * scale;
+      offsetY = -rb.minY * scale;
+      offsetZ = -rb.rawCenter.z * scale;
+      clone.position.set(offsetX, offsetY, offsetZ);
+    } else {
+      const scaledBox = new THREE.Box3().setFromObject(clone);
+      const scaledCenter = new THREE.Vector3();
+      scaledBox.getCenter(scaledCenter);
+      offsetX = -scaledCenter.x;
+      offsetY = -scaledBox.min.y;
+      offsetZ = -scaledCenter.z;
+      clone.position.x += offsetX;
+      clone.position.z += offsetZ;
+      clone.position.y += offsetY;
+    }
 
     const wrapper = new THREE.Group();
     wrapper.userData.sharedGlbResource = true;
@@ -1073,8 +1264,25 @@ export function loadCustomGlbModel(url, targetSize = 1.2) {
     };
     wrapper.userData.collisionProfile = profile;
     wrapper.add(clone);
-    wrapper.updateMatrixWorld(true);
-    wrapper.userData.extractedPorts = extractPortsFromGlbWrapper(wrapper);
+
+    const rawPorts = cachedRoot.userData._rawPorts || [];
+    if (rawPorts.length > 0 && rb.zeroOrigin) {
+      wrapper.userData.extractedPorts = rawPorts.map((rp) => ({
+        name: rp.name,
+        type: rp.type,
+        speed: rp.speed,
+        local3d: {
+          x: Number((rp.rawPos.x * scale + offsetX).toFixed(4)),
+          y: Number((rp.rawPos.y * scale + offsetY).toFixed(4)),
+          z: Number((rp.rawPos.z * scale + offsetZ).toFixed(4))
+        }
+      }));
+    } else if (rawPorts.length > 0) {
+      wrapper.updateMatrixWorld(true);
+      wrapper.userData.extractedPorts = extractPortsFromGlbWrapper(wrapper);
+    } else {
+      wrapper.userData.extractedPorts = [];
+    }
     return wrapper;
   });
 }
@@ -1190,11 +1398,60 @@ export async function extractGlbCustomPorts(url, targetSize = 1.3) {
   return { ports, bounds };
 }
 
+// Shared GPU geometry & material pool for 3D port sockets & status LEDs
+const _portsGeoMatPool = {
+  glbSocketGeo: null,
+  procSocketGeo: null,
+  glbLedGeo: null,
+  procLedGeo: null,
+  glbHitGeo: null,
+  glbHitMat: null,
+  socketMats: new Map(),
+  ledMats: new Map()
+};
+
+function _ensurePortsPool() {
+  if (!_portsGeoMatPool.glbSocketGeo) {
+    _portsGeoMatPool.glbSocketGeo = new THREE.BoxGeometry(0.018, 0.014, 0.020);
+    _portsGeoMatPool.procSocketGeo = new THREE.BoxGeometry(0.052, 0.042, 0.032);
+    _portsGeoMatPool.glbLedGeo = new THREE.SphereGeometry(0.0045, 6, 6);
+    _portsGeoMatPool.procLedGeo = new THREE.SphereGeometry(0.014, 8, 8);
+    _portsGeoMatPool.glbHitGeo = new THREE.BoxGeometry(0.028, 0.026, 0.036);
+    _portsGeoMatPool.glbHitMat = new THREE.MeshBasicMaterial({
+      transparent: true,
+      opacity: 0,
+      depthWrite: false
+    });
+  }
+  return _portsGeoMatPool;
+}
+
+function _getPooledSocketMat(hexColor) {
+  const pool = _ensurePortsPool();
+  if (!pool.socketMats.has(hexColor)) {
+    pool.socketMats.set(hexColor, new THREE.MeshStandardMaterial({
+      color: hexColor,
+      roughness: 0.4,
+      metalness: 0.45
+    }));
+  }
+  return pool.socketMats.get(hexColor);
+}
+
+function _getPooledLedMat(hexColor) {
+  const pool = _ensurePortsPool();
+  if (!pool.ledMats.has(hexColor)) {
+    pool.ledMats.set(hexColor, new THREE.MeshBasicMaterial({ color: hexColor }));
+  }
+  return pool.ledMats.get(hexColor);
+}
+
 /**
  * Create a 3D group of physical port sockets & status LEDs at their local3d coordinates.
  * When `isCustomGlb` is true, the .GLB model already has sculpted 3D port cavities and gold pins,
  * so we do NOT draw bulky procedural socket boxes over unconnected ports; we only render a compact,
  * flush RJ45/SFP connector boot + micro link LED inside connected ports.
+ * Reuses pooled geometries and materials to drastically cut GPU buffer allocations & shader binds on mobile.
  * @param {Array} ports
  * @param {Map<string, {status: string, cableId: string}>} [portStatusMap]
  * @param {boolean} [isCustomGlb=false]
@@ -1205,12 +1462,9 @@ export function create3DPortsSubGroup(ports = [], portStatusMap = new Map(), isC
   group.name = 'DevicePorts3DGroup';
   if (!Array.isArray(ports) || ports.length === 0) return group;
 
-  const socketGeo = isCustomGlb
-    ? new THREE.BoxGeometry(0.018, 0.014, 0.020)
-    : new THREE.BoxGeometry(0.052, 0.042, 0.032);
-  const ledGeo = isCustomGlb
-    ? new THREE.SphereGeometry(0.0045, 8, 8)
-    : new THREE.SphereGeometry(0.014, 8, 8);
+  const pool = _ensurePortsPool();
+  const socketGeo = isCustomGlb ? pool.glbSocketGeo : pool.procSocketGeo;
+  const ledGeo = isCustomGlb ? pool.glbLedGeo : pool.procLedGeo;
 
   ports.forEach((p) => {
     const lx = typeof p.local3d?.x === 'number' ? p.local3d.x : 0;
@@ -1222,16 +1476,12 @@ export function create3DPortsSubGroup(ports = [], portStatusMap = new Map(), isC
     const isConnected = Boolean(linkState);
     if (isCustomGlb && !isConnected) {
       // Keep sculpted .GLB port cavity visually clean while exposing an accurate raycast socket hitbox
-      const hitGeo = new THREE.BoxGeometry(0.028, 0.026, 0.036);
-      const hitMat = new THREE.MeshBasicMaterial({
-        transparent: true,
-        opacity: 0,
-        depthWrite: false
-      });
-      const hitSocket = new THREE.Mesh(hitGeo, hitMat);
+      const hitSocket = new THREE.Mesh(pool.glbHitGeo, pool.glbHitMat);
       hitSocket.position.set(lx, ly, lz + 0.008 * zSign);
       hitSocket.userData.portName = p.name;
       hitSocket.userData.isPortSocket = true;
+      hitSocket.userData.sharedPooledGeo = true;
+      hitSocket.userData.sharedPooledMat = true;
       group.add(hitSocket);
       return;
     }
@@ -1241,15 +1491,13 @@ export function create3DPortsSubGroup(ports = [], portStatusMap = new Map(), isC
     const socketColor = isConnected
       ? (isSfpOrFiber ? 0x0284c7 : 0x1e293b)
       : (isSfpOrFiber ? 0x0f172a : 0x334155);
-    const socketMat = new THREE.MeshStandardMaterial({
-      color: socketColor,
-      roughness: 0.4,
-      metalness: 0.45
-    });
+    const socketMat = _getPooledSocketMat(socketColor);
     const socketMesh = new THREE.Mesh(socketGeo, socketMat);
     socketMesh.position.set(lx, ly, lz);
     socketMesh.userData.portName = p.name;
     socketMesh.userData.isPortSocket = true;
+    socketMesh.userData.sharedPooledGeo = true;
+    socketMesh.userData.sharedPooledMat = true;
     group.add(socketMesh);
 
     let ledColor = 0x475569; // unplugged
@@ -1262,7 +1510,7 @@ export function create3DPortsSubGroup(ports = [], portStatusMap = new Map(), isC
         ledColor = 0x22c55e;
       }
     }
-    const ledMat = new THREE.MeshBasicMaterial({ color: ledColor });
+    const ledMat = _getPooledLedMat(ledColor);
     const ledMesh = new THREE.Mesh(ledGeo, ledMat);
     if (isCustomGlb) {
       ledMesh.position.set(lx, ly + 0.010, lz + zSign * 0.004);
@@ -1271,6 +1519,8 @@ export function create3DPortsSubGroup(ports = [], portStatusMap = new Map(), isC
     }
     ledMesh.userData.portName = p.name;
     ledMesh.userData.isPortSocket = true;
+    ledMesh.userData.sharedPooledGeo = true;
+    ledMesh.userData.sharedPooledMat = true;
     group.add(ledMesh);
   });
 
@@ -2263,6 +2513,188 @@ export const BUILTIN_ROOM_BUILDING_PRESETS = [
     opacity: 0.18,
     isCutaway: false,
     customModelUrl: 'assets/models/pohon_pinus_kecil.glb'
+  },
+  {
+    id: 'gedung-kelas-2-ruangan',
+    name: 'Gedung Kelas 2 Ruangan',
+    subtitle: 'Gedung 2 ruang kelas utuh + atap (22×9.9×5.7m)',
+    widthMeters: 22.0,
+    depthMeters: 9.91,
+    heightMeters: 5.68,
+    wallColor: '#16a34a',
+    floorColor: '#1e293b',
+    opacity: 0.18,
+    isCutaway: false,
+    customModelUrl: 'assets/models/gedung_kelas_2_ruangan.glb'
+  },
+  {
+    id: 'gedung-kelas-2-ruangan-toilet',
+    name: 'Gedung Kelas 2 Ruangan & Toilet',
+    subtitle: 'Gedung 2 kelas dengan unit toilet utuh + atap (22×9.9×5.7m)',
+    widthMeters: 22.0,
+    depthMeters: 9.91,
+    heightMeters: 5.68,
+    wallColor: '#059669',
+    floorColor: '#1e293b',
+    opacity: 0.18,
+    isCutaway: false,
+    customModelUrl: 'assets/models/gedung_kelas_2_ruangan_toilet.glb'
+  },
+  {
+    id: 'gedung-pmr',
+    name: 'Gedung PMR / UKS',
+    subtitle: 'Gedung PMR & UKS sekolah utuh + atap (5.1×6.4×4.4m)',
+    widthMeters: 5.14,
+    depthMeters: 6.37,
+    heightMeters: 4.4,
+    wallColor: '#0284c7',
+    floorColor: '#1e293b',
+    opacity: 0.18,
+    isCutaway: false,
+    customModelUrl: 'assets/models/gedung_pmr.glb'
+  },
+  {
+    id: 'gedung-pmr-cutaway',
+    name: 'Gedung PMR / UKS (Cutaway)',
+    subtitle: 'Gedung PMR terbuka dari atas untuk tata perangkat (5.1×6.4m)',
+    widthMeters: 5.14,
+    depthMeters: 6.37,
+    heightMeters: 4.4,
+    wallColor: '#38bdf8',
+    floorColor: '#1e293b',
+    opacity: 0.18,
+    isCutaway: true,
+    customModelUrl: 'assets/models/gedung_pmr_cutaway.glb'
+  },
+  {
+    id: 'gedung-kelas-belakang-samsung',
+    name: 'Gedung Kelas Belakang Samsung',
+    subtitle: 'Gedung kelas lab Samsung area belakang (18×16.9×5.7m)',
+    widthMeters: 17.96,
+    depthMeters: 16.85,
+    heightMeters: 5.7,
+    wallColor: '#2563eb',
+    floorColor: '#1e293b',
+    opacity: 0.18,
+    isCutaway: false,
+    customModelUrl: 'assets/models/gedung_kelas_belakang_samsung.glb'
+  },
+  {
+    id: 'pendopo-kolam-ikan',
+    name: 'Pendopo Kolam Ikan',
+    subtitle: 'Gazebo pendopo santai di atas kolam ikan (11.7×10.4×6m)',
+    widthMeters: 11.66,
+    depthMeters: 10.44,
+    heightMeters: 6.03,
+    wallColor: '#0284c7',
+    floorColor: '#1e293b',
+    opacity: 0.18,
+    isCutaway: false,
+    customModelUrl: 'assets/models/pendopo_kolam_ikan.glb'
+  },
+  {
+    id: 'halte-tempat-duduk-saung',
+    name: 'Halte Tempat Duduk Saung',
+    subtitle: 'Shelter halte saung Ki Hajar Dewantara (5.2×3.8×3m)',
+    widthMeters: 5.24,
+    depthMeters: 3.82,
+    heightMeters: 2.98,
+    wallColor: '#92400e',
+    floorColor: '#1e293b',
+    opacity: 0.18,
+    isCutaway: false,
+    customModelUrl: 'assets/models/halte_tempat_duduk_saung.glb'
+  },
+  {
+    id: 'tempat-duduk-corak-kayu',
+    name: 'Tempat Duduk Corak Kayu',
+    subtitle: 'Bangku santai corak kayu taman (3.2×2.4×0.8m)',
+    widthMeters: 3.2,
+    depthMeters: 2.4,
+    heightMeters: 0.78,
+    wallColor: '#78350f',
+    floorColor: '#1e293b',
+    opacity: 0.18,
+    isCutaway: false,
+    customModelUrl: 'assets/models/tempat_duduk_corak_kayu.glb'
+  },
+  {
+    id: 'rak-bunga-lapangan',
+    name: 'Rak Bunga Lapangan',
+    subtitle: 'Rak display pot tanaman & baja ringan (2.5×1.2×2.5m)',
+    widthMeters: 2.5,
+    depthMeters: 1.15,
+    heightMeters: 2.45,
+    wallColor: '#475569',
+    floorColor: '#1e293b',
+    opacity: 0.18,
+    isCutaway: false,
+    customModelUrl: 'assets/models/rak_bunga_lapangan.glb'
+  },
+  {
+    id: 'wastafel-batang-kayu',
+    name: 'Wastafel Batang Kayu',
+    subtitle: 'Wastafel cuci tangan batang kayu alami (0.7×0.6×0.9m)',
+    widthMeters: 0.66,
+    depthMeters: 0.6,
+    heightMeters: 0.85,
+    wallColor: '#78350f',
+    floorColor: '#1e293b',
+    opacity: 0.18,
+    isCutaway: false,
+    customModelUrl: 'assets/models/wastafel_batang_kayu.glb'
+  },
+  {
+    id: 'pohon-cemara-pinus-besar',
+    name: 'Pohon Cemara Pinus Besar',
+    subtitle: 'Pohon cemara pinus tinggi peneduh kampus (4.5×4.6×8.7m)',
+    widthMeters: 4.49,
+    depthMeters: 4.55,
+    heightMeters: 8.7,
+    wallColor: '#15803d',
+    floorColor: '#14532d',
+    opacity: 0.18,
+    isCutaway: false,
+    customModelUrl: 'assets/models/pohon_cemara_pinus_besar.glb'
+  },
+  {
+    id: 'pohon-mangga-sedang',
+    name: 'Pohon Mangga Sedang',
+    subtitle: 'Pohon mangga rindang taman sekolah (3.6×3.7×5m)',
+    widthMeters: 3.64,
+    depthMeters: 3.7,
+    heightMeters: 4.98,
+    wallColor: '#16a34a',
+    floorColor: '#14532d',
+    opacity: 0.18,
+    isCutaway: false,
+    customModelUrl: 'assets/models/pohon_mangga_sedang.glb'
+  },
+  {
+    id: 'pohon-palem-hiasan-sedang',
+    name: 'Pohon Palem Hiasan Sedang',
+    subtitle: 'Tanaman palem hiasan taman kampus (3.1×2.6×3.4m)',
+    widthMeters: 3.11,
+    depthMeters: 2.59,
+    heightMeters: 3.43,
+    wallColor: '#65a30d',
+    floorColor: '#14532d',
+    opacity: 0.18,
+    isCutaway: false,
+    customModelUrl: 'assets/models/pohon_palem_hiasan_sedang.glb'
+  },
+  {
+    id: 'pohon-rindang-besar',
+    name: 'Pohon Rindang Besar',
+    subtitle: 'Pohon pelindung rindang besar taman (8.3×7.7×8.9m)',
+    widthMeters: 8.32,
+    depthMeters: 7.7,
+    heightMeters: 8.9,
+    wallColor: '#14532d',
+    floorColor: '#14532d',
+    opacity: 0.18,
+    isCutaway: false,
+    customModelUrl: 'assets/models/pohon_rindang_besar.glb'
   }
 ];
 
@@ -3581,10 +4013,12 @@ const _cableClipCache = {
   uClipMat: null,
   pClampMat: null,
   tieMat: null,
+  selectedMat: null,
   nailMat: null,
   pvcDuctMat: null,
   trayMetalMat: null,
-  trayRailMat: null
+  trayRailMat: null,
+  geoPool: new Map()
 };
 
 function _ensureCableHardwareMats() {
@@ -3592,6 +4026,7 @@ function _ensureCableHardwareMats() {
     _cableClipCache.uClipMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.42, metalness: 0.06 });
     _cableClipCache.pClampMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.36, metalness: 0.65 });
     _cableClipCache.tieMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.5, metalness: 0.1 });
+    _cableClipCache.selectedMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, emissive: 0xeab308, emissiveIntensity: 0.45, roughness: 0.3 });
     _cableClipCache.nailMat = new THREE.MeshStandardMaterial({ color: 0xcbd5e1, roughness: 0.25, metalness: 0.85 });
     _cableClipCache.pvcDuctMat = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.35, metalness: 0.04 });
     _cableClipCache.trayMetalMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.38, metalness: 0.68 });
@@ -3600,8 +4035,38 @@ function _ensureCableHardwareMats() {
   return _cableClipCache;
 }
 
+function _getClipGeometries(clipType, rawRadius) {
+  const r = Number(Math.max(0.012, Math.min(0.08, Number(rawRadius) || 0.014)).toFixed(3));
+  const key = `${clipType}:${r}`;
+  if (_cableClipCache.geoPool.has(key)) return _cableClipCache.geoPool.get(key);
+  let geos;
+  if (clipType === 'cable-tie') {
+    geos = {
+      r,
+      bandGeo: new THREE.TorusGeometry(r * 1.45, r * 0.28, 6, 12),
+      headGeo: new THREE.BoxGeometry(r * 0.9, r * 0.7, r * 0.9)
+    };
+  } else if (clipType === 'p-clamp') {
+    geos = {
+      r,
+      ringGeo: new THREE.TorusGeometry(r * 1.55, r * 0.36, 6, 14),
+      tabGeo: new THREE.BoxGeometry(r * 2.2, r * 0.55, r * 1.4),
+      boltGeo: new THREE.CylinderGeometry(r * 0.36, r * 0.36, r * 0.9, 6)
+    };
+  } else {
+    geos = {
+      r,
+      archGeo: new THREE.TorusGeometry(r * 1.5, r * 0.42, 6, 12, Math.PI * 1.15),
+      plateGeo: new THREE.BoxGeometry(r * 3.8, r * 0.55, r * 1.45),
+      nailGeo: new THREE.CylinderGeometry(r * 0.42, r * 0.32, r * 0.9, 6)
+    };
+  }
+  _cableClipCache.geoPool.set(key, geos);
+  return geos;
+}
+
 /**
- * Create a lightweight physical 3D Cable Clip (U-Clip, P-Clamp, or Cable Tie).
+ * Create a lightweight physical 3D Cable Clip (U-Clip, P-Clamp, or Cable Tie) using pooled geometries & materials.
  * Local +Y points away from the mounting surface (wall/ceiling/floor/pole).
  * @param {{ clipType?: 'u-clip'|'p-clamp'|'cable-tie', radius?: number, isSelected?: boolean }} [options]
  * @returns {THREE.Group}
@@ -3609,46 +4074,141 @@ function _ensureCableHardwareMats() {
 export function createCableClip3DMesh({ clipType = 'u-clip', radius = 0.012, isSelected = false } = {}) {
   const mats = _ensureCableHardwareMats();
   const group = new THREE.Group();
-  const r = Math.max(0.012, Math.min(0.08, Number(radius) || 0.014));
+  const g = _getClipGeometries(clipType, radius);
+  const r = g.r;
   const bodyMat = isSelected
-    ? new THREE.MeshStandardMaterial({ color: 0xfacc15, emissive: 0xeab308, emissiveIntensity: 0.45, roughness: 0.3 })
+    ? mats.selectedMat
     : (clipType === 'p-clamp' ? mats.pClampMat : (clipType === 'cable-tie' ? mats.tieMat : mats.uClipMat));
 
+  const tagPooled = (m) => {
+    m.userData.sharedPooledGeo = true;
+    m.userData.sharedPooledMat = true;
+    return m;
+  };
+
   if (clipType === 'cable-tie') {
-    const bandGeo = new THREE.TorusGeometry(r * 1.45, r * 0.28, 6, 14);
-    const band = new THREE.Mesh(bandGeo, bodyMat);
+    const band = tagPooled(new THREE.Mesh(g.bandGeo, bodyMat));
     group.add(band);
-    const lockHead = new THREE.Mesh(new THREE.BoxGeometry(r * 0.9, r * 0.7, r * 0.9), bodyMat);
+    const lockHead = tagPooled(new THREE.Mesh(g.headGeo, bodyMat));
     lockHead.position.set(0, r * 1.5, 0);
     group.add(lockHead);
   } else if (clipType === 'p-clamp') {
-    const ringGeo = new THREE.TorusGeometry(r * 1.55, r * 0.36, 8, 16);
-    const ring = new THREE.Mesh(ringGeo, bodyMat);
+    const ring = tagPooled(new THREE.Mesh(g.ringGeo, bodyMat));
     group.add(ring);
-    const tab = new THREE.Mesh(new THREE.BoxGeometry(r * 2.2, r * 0.55, r * 1.4), bodyMat);
+    const tab = tagPooled(new THREE.Mesh(g.tabGeo, bodyMat));
     tab.position.set(r * 1.2, -r * 0.85, 0);
     group.add(tab);
-    const bolt = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.36, r * 0.36, r * 0.9, 8), mats.nailMat);
+    const bolt = tagPooled(new THREE.Mesh(g.boltGeo, mats.nailMat));
     bolt.position.set(r * 1.8, -r * 0.85, 0);
     group.add(bolt);
   } else {
     // Classic white plastic U-Clip with side steel nail
-    const archGeo = new THREE.TorusGeometry(r * 1.5, r * 0.42, 8, 14, Math.PI * 1.15);
-    const arch = new THREE.Mesh(archGeo, bodyMat);
+    const arch = tagPooled(new THREE.Mesh(g.archGeo, bodyMat));
     arch.rotation.z = -Math.PI * 0.075;
     group.add(arch);
 
-    const basePlate = new THREE.Mesh(new THREE.BoxGeometry(r * 3.8, r * 0.55, r * 1.45), bodyMat);
+    const basePlate = tagPooled(new THREE.Mesh(g.plateGeo, bodyMat));
     basePlate.position.set(r * 0.35, -r * 1.05, 0);
     group.add(basePlate);
 
-    const nailHead = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.42, r * 0.32, r * 0.9, 8), mats.nailMat);
+    const nailHead = tagPooled(new THREE.Mesh(g.nailGeo, mats.nailMat));
     nailHead.position.set(r * 1.65, -r * 0.7, 0);
     group.add(nailHead);
   }
 
   group.userData.isCableClip3d = true;
   group.userData.clipType = clipType;
+  return group;
+}
+
+/**
+ * Batch multiple physical 3D Cable Clips into GPU InstancedMesh draw calls to minimize mobile WebGL overhead.
+ * @param {Array<{ position: THREE.Vector3, quaternion: THREE.Quaternion, clipType?: string, radius?: number, cableId?: string, waypointIdx?: number }>} clips
+ * @returns {THREE.Group}
+ */
+export function createInstancedCableClips3DGroup(clips = []) {
+  const group = new THREE.Group();
+  group.name = 'InstancedCableClips3DGroup';
+  group.userData.isCableClip3d = true;
+  group.userData.isInstancedClipsGroup = true;
+  if (!Array.isArray(clips) || clips.length === 0 || typeof THREE.InstancedMesh !== 'function') {
+    return group;
+  }
+
+  const mats = _ensureCableHardwareMats();
+  const dummy = new THREE.Object3D();
+  const buckets = new Map();
+
+  clips.forEach((c) => {
+    const clipType = c.clipType || 'u-clip';
+    const r = Number(Math.max(0.012, Math.min(0.08, Number(c.radius) || 0.014)).toFixed(3));
+    const key = `${clipType}:${r}`;
+    if (!buckets.has(key)) buckets.set(key, { clipType, r, items: [] });
+    buckets.get(key).items.push(c);
+  });
+
+  buckets.forEach(({ clipType, r, items }) => {
+    const g = _getClipGeometries(clipType, r);
+    const bodyMat = clipType === 'p-clamp' ? mats.pClampMat : (clipType === 'cable-tie' ? mats.tieMat : mats.uClipMat);
+    const count = items.length;
+    const primaryGeo = clipType === 'cable-tie' ? g.bandGeo : (clipType === 'p-clamp' ? g.ringGeo : g.archGeo);
+    const instPrimary = new THREE.InstancedMesh(primaryGeo, bodyMat, count);
+    instPrimary.name = `InstancedClips_${clipType}`;
+    instPrimary.userData.isCableClip3d = true;
+    instPrimary.userData.isInstancedClips = true;
+    instPrimary.userData.sharedPooledGeo = true;
+    instPrimary.userData.sharedPooledMat = true;
+    instPrimary.userData.instanceMeta = items.map((c) => ({
+      cableId: c.cableId || '',
+      waypointIdx: typeof c.waypointIdx === 'number' ? c.waypointIdx : -1
+    }));
+
+    const nailGeo = clipType === 'p-clamp' ? g.boltGeo : (clipType === 'u-clip' ? g.nailGeo : null);
+    const instNail = nailGeo ? new THREE.InstancedMesh(nailGeo, mats.nailMat, count) : null;
+    if (instNail) {
+      instNail.userData.isCableClip3d = true;
+      instNail.userData.isInstancedClips = true;
+      instNail.userData.sharedPooledGeo = true;
+      instNail.userData.sharedPooledMat = true;
+      instNail.userData.instanceMeta = instPrimary.userData.instanceMeta;
+    }
+
+    const nailLocal = clipType === 'p-clamp'
+      ? new THREE.Vector3(r * 1.8, -r * 0.85, 0)
+      : new THREE.Vector3(r * 1.65, -r * 0.7, 0);
+    const archRot = clipType === 'u-clip' ? new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -Math.PI * 0.075) : null;
+
+    items.forEach((c, idx) => {
+      const q = c.quaternion || new THREE.Quaternion();
+      dummy.position.copy(c.position);
+      dummy.scale.set(1, 1, 1);
+      if (archRot) {
+        dummy.quaternion.copy(q).multiply(archRot);
+      } else {
+        dummy.quaternion.copy(q);
+      }
+      dummy.updateMatrix();
+      instPrimary.setMatrixAt(idx, dummy.matrix);
+
+      if (instNail) {
+        const wOff = nailLocal.clone().applyQuaternion(q);
+        dummy.position.copy(c.position).add(wOff);
+        dummy.quaternion.copy(q);
+        dummy.updateMatrix();
+        instNail.setMatrixAt(idx, dummy.matrix);
+      }
+    });
+
+    instPrimary.instanceMatrix.needsUpdate = true;
+    instPrimary.computeBoundingSphere?.();
+    group.add(instPrimary);
+    if (instNail) {
+      instNail.instanceMatrix.needsUpdate = true;
+      instNail.computeBoundingSphere?.();
+      group.add(instNail);
+    }
+  });
+
   return group;
 }
 
@@ -4152,21 +4712,50 @@ export function create3DRoadGroup(road, normToWorldFn, isSelected = false, { isP
   rightCurb.receiveShadow = true;
   group.add(rightCurb);
 
-  // Curb expansion joints along outer border stones
+  // Curb expansion joints along outer border stones (rendered in 1 draw call via GPU InstancedMesh)
   if (!isPreview && totalLength >= 0.75) {
     const jointMat = makeMat('#6b665e', { roughness: 0.9, metalness: 0 });
     const jointCount = Math.min(220, Math.floor(totalLength / 0.75));
     const jointGeo = new THREE.BoxGeometry(curbW + 0.008, 0.008, 0.016);
-    for (let j = 1; j <= jointCount; j++) {
-      const sample = _interpolateRoadSampleAtDist(samples, j * 0.75);
-      if (!sample) continue;
-      const yaw = Math.atan2(sample.tangent.x, sample.tangent.z);
-      for (const sideSign of [-1, 1]) {
-        const jPos = sample.pos.clone().addScaledVector(sample.right, sideSign * (innerHalfW + curbW * 0.5));
-        const jMesh = new THREE.Mesh(jointGeo, jointMat);
-        jMesh.position.set(jPos.x, elev + curbH + 0.001, jPos.z);
-        jMesh.rotation.y = yaw;
-        group.add(jMesh);
+    if (jointCount > 0 && typeof THREE.InstancedMesh === 'function') {
+      const jointInst = new THREE.InstancedMesh(jointGeo, jointMat, jointCount * 2);
+      jointInst.name = 'RoadCurbJointsInstanced';
+      const dummy = new THREE.Object3D();
+      let instIdx = 0;
+      for (let j = 1; j <= jointCount; j++) {
+        const sample = _interpolateRoadSampleAtDist(samples, j * 0.75);
+        if (!sample) continue;
+        const yaw = Math.atan2(sample.tangent.x, sample.tangent.z);
+        for (const sideSign of [-1, 1]) {
+          const jPos = sample.pos.clone().addScaledVector(sample.right, sideSign * (innerHalfW + curbW * 0.5));
+          dummy.position.set(jPos.x, elev + curbH + 0.001, jPos.z);
+          dummy.rotation.set(0, yaw, 0);
+          dummy.scale.set(1, 1, 1);
+          dummy.updateMatrix();
+          jointInst.setMatrixAt(instIdx++, dummy.matrix);
+        }
+      }
+      if (instIdx > 0) {
+        jointInst.count = instIdx;
+        jointInst.instanceMatrix.needsUpdate = true;
+        jointInst.computeBoundingSphere?.();
+        group.add(jointInst);
+      } else {
+        jointGeo.dispose();
+        jointMat.dispose();
+      }
+    } else {
+      for (let j = 1; j <= jointCount; j++) {
+        const sample = _interpolateRoadSampleAtDist(samples, j * 0.75);
+        if (!sample) continue;
+        const yaw = Math.atan2(sample.tangent.x, sample.tangent.z);
+        for (const sideSign of [-1, 1]) {
+          const jPos = sample.pos.clone().addScaledVector(sample.right, sideSign * (innerHalfW + curbW * 0.5));
+          const jMesh = new THREE.Mesh(jointGeo, jointMat);
+          jMesh.position.set(jPos.x, elev + curbH + 0.001, jPos.z);
+          jMesh.rotation.y = yaw;
+          group.add(jMesh);
+        }
       }
     }
   }
@@ -4275,13 +4864,38 @@ export function create3DRoadGroup(road, normToWorldFn, isSelected = false, { isP
       const stripeGeo = new THREE.BoxGeometry(0.11, 0.012, slabLen);
       const count = Math.min(180, Math.floor(totalLength / (slabLen + slabGap)));
       const deckTopY = elev + Math.max(0.058, curbH - 0.008);
-      for (let sIdx = 0; sIdx < count; sIdx++) {
-        const sample = _interpolateRoadSampleAtDist(samples, slabLen * 0.5 + sIdx * (slabLen + slabGap));
-        if (!sample) continue;
-        const stripe = new THREE.Mesh(stripeGeo, stripeMat);
-        stripe.position.set(sample.pos.x, deckTopY, sample.pos.z);
-        stripe.rotation.y = Math.atan2(sample.tangent.x, sample.tangent.z);
-        group.add(stripe);
+      if (count > 0 && typeof THREE.InstancedMesh === 'function') {
+        const stripeInst = new THREE.InstancedMesh(stripeGeo, stripeMat, count);
+        stripeInst.name = 'RoadAsphaltStripesInstanced';
+        const dummy = new THREE.Object3D();
+        let sWritten = 0;
+        for (let sIdx = 0; sIdx < count; sIdx++) {
+          const sample = _interpolateRoadSampleAtDist(samples, slabLen * 0.5 + sIdx * (slabLen + slabGap));
+          if (!sample) continue;
+          dummy.position.set(sample.pos.x, deckTopY, sample.pos.z);
+          dummy.rotation.set(0, Math.atan2(sample.tangent.x, sample.tangent.z), 0);
+          dummy.scale.set(1, 1, 1);
+          dummy.updateMatrix();
+          stripeInst.setMatrixAt(sWritten++, dummy.matrix);
+        }
+        if (sWritten > 0) {
+          stripeInst.count = sWritten;
+          stripeInst.instanceMatrix.needsUpdate = true;
+          stripeInst.computeBoundingSphere?.();
+          group.add(stripeInst);
+        } else {
+          stripeGeo.dispose();
+          stripeMat.dispose();
+        }
+      } else {
+        for (let sIdx = 0; sIdx < count; sIdx++) {
+          const sample = _interpolateRoadSampleAtDist(samples, slabLen * 0.5 + sIdx * (slabLen + slabGap));
+          if (!sample) continue;
+          const stripe = new THREE.Mesh(stripeGeo, stripeMat);
+          stripe.position.set(sample.pos.x, deckTopY, sample.pos.z);
+          stripe.rotation.y = Math.atan2(sample.tangent.x, sample.tangent.z);
+          group.add(stripe);
+        }
       }
     }
   }

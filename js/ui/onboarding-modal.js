@@ -86,26 +86,22 @@ export class OnboardingModal {
         <div class="onb-welcome-hero">
           <div class="onb-hero-badge">${uiIcon('school', 14)} <span>SMK Negeri 1 Beringin • SmartSchool NetMap</span></div>
           <div class="onb-hero-title">Selamat Datang di Simulator &amp; Digital Twin Jaringan</div>
-          <div class="onb-hero-desc">Pilih mode mulai cepat sesuai kebutuhan Anda hari ini. Dokumentasi asli sekolah selalu aman terlindungi.</div>
+          <div class="onb-hero-desc">Pilih mode mulai cepat di bawah ini. Dokumentasi asli sekolah selalu aman terlindungi.</div>
         </div>
 
-        <div class="onb-role-grid">
+        <div class="onb-role-grid onb-role-grid-2">
           <button type="button" id="btn-onb-role-explore" class="onb-role-card">
             <div class="onb-role-icon is-green">${uiIcon('building', 22)}</div>
-            <div class="onb-role-title">Jelajahi Dokumentasi SMKN 1 Beringin</div>
-            <div class="onb-role-desc">Buka peta 3D kampus dengan Papan Nama Gedung, Kartu Inventaris Ruangan &amp; Mode X-Ray dalam mode baca aman.</div>
+            <div class="onb-role-title">Mode Jelajahi</div>
+            <div class="onb-role-subbadge">Dokumentasi 3D SMKN 1 Beringin</div>
+            <div class="onb-role-desc">Jelajahi peta 3D kampus secara aman: lihat Papan Nama Gedung, Kartu Dokumentasi Ruangan, Mode X-Ray, dan keliling FPP.</div>
           </button>
 
-          <button type="button" id="btn-onb-role-student" class="onb-role-card is-featured">
-            <div class="onb-role-icon is-blue">${uiIcon('graduation-cap', 22)}</div>
-            <div class="onb-role-title">Mulai Praktik Jobsheet Siswa</div>
-            <div class="onb-role-desc">Pilih 1 dari 5 Jobsheet praktikum TKJ/TJKT di Sandbox aman: rakit kabel 3D, WinBox/CLI &amp; dapat skor otomatis!</div>
-          </button>
-
-          <button type="button" id="btn-onb-role-admin" class="onb-role-card">
+          <button type="button" id="btn-onb-role-build" class="onb-role-card is-featured">
             <div class="onb-role-icon is-amber">${uiIcon('wrench', 22)}</div>
-            <div class="onb-role-title">Mode Edit Bangunan &amp; Admin</div>
-            <div class="onb-role-desc">Susun gedung 3D, fasilitas &amp; jalan kampus, atau masuk sebagai Teknisi/Admin untuk memperbarui Master Sekolah.</div>
+            <div class="onb-role-title">Mode Build Sendiri</div>
+            <div class="onb-role-subbadge">Bangunan 3D &amp; Arsitektur Jaringan</div>
+            <div class="onb-role-desc">Susun gedung 3D, fasilitas kampus, sekaligus rancang arsitektur jaringan, tarik kabel fisik 3D, WinBox/CLI &amp; simulasi Ping.</div>
           </button>
         </div>
 
@@ -239,13 +235,7 @@ export class OnboardingModal {
       }, 80);
     });
 
-    this.welcomeEl?.querySelector('#btn-onb-role-student')?.addEventListener('click', () => {
-      persistSkipIfChecked();
-      this.hideWelcome();
-      this.getJobsheetPanel?.()?.show?.('catalog');
-    });
-
-    this.welcomeEl?.querySelector('#btn-onb-role-admin')?.addEventListener('click', () => {
+    this.welcomeEl?.querySelector('#btn-onb-role-build')?.addEventListener('click', () => {
       persistSkipIfChecked();
       this.hideWelcome();
       this.getWorkspaceController?.()?.switchWorkspace?.('build', { open3D: true });

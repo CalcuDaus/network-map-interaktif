@@ -633,7 +633,8 @@ export class CustomDeviceModal {
         const dataUrl = ev.target.result;
         if (cdGlbUrl) cdGlbUrl.value = dataUrl;
         try {
-          const ports = await extractGlbCustomPorts(dataUrl, 1.3);
+          const extracted = await extractGlbCustomPorts(dataUrl, 1.3);
+          const ports = Array.isArray(extracted) ? extracted : extracted?.ports;
           this.extractedGlbPorts = Array.isArray(ports) ? ports : [];
           updatePortBadge(this.extractedGlbPorts);
         } catch {

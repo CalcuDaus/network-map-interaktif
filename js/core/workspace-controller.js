@@ -98,11 +98,9 @@ export class WorkspaceController {
 
     const sessionMode = stateManager.getSessionMode?.() || 'master-readonly';
     const isSandbox = sessionMode === 'student-sandbox';
-    const isAdmin = sessionMode === 'master-admin';
     const activeJsId = stateManager.getActiveJobsheetId?.() || null;
 
-    banner.classList.remove('is-readonly', 'is-sandbox', 'is-admin', 'hidden');
-    banner.style.display = 'flex';
+    banner.classList.remove('is-readonly', 'is-sandbox', 'is-admin');
 
     const titleEl = document.getElementById('session-banner-text');
     const btnFork = document.getElementById('btn-banner-fork-sandbox');
@@ -111,34 +109,22 @@ export class WorkspaceController {
     const btnMaster = document.getElementById('btn-banner-return-master');
 
     if (isSandbox) {
+      banner.classList.remove('hidden');
       banner.classList.add('is-sandbox');
+      banner.style.display = 'flex';
       if (titleEl) {
         titleEl.textContent = activeJsId
-          ? 'Mode Sandbox Praktikum Jobsheet Aktif — Peta Master SMKN 1 Beringin Terlindungi 100%'
-          : 'Mode Sandbox Praktik (Aman — Perubahan Lokal, Master SMKN 1 Beringin Terlindungi)';
+          ? 'Mode Sandbox Praktikum Jobsheet Aktif — Master Sekolah Terlindungi'
+          : 'Mode Sandbox Praktik (Aman — Perubahan Lokal)';
       }
       if (btnFork) btnFork.style.display = 'none';
       if (btnJobsheet) btnJobsheet.style.display = 'inline-flex';
       if (btnReset) btnReset.style.display = 'inline-flex';
       if (btnMaster) btnMaster.style.display = 'inline-flex';
-    } else if (isAdmin) {
-      banner.classList.add('is-admin');
-      if (titleEl) {
-        titleEl.textContent = 'Mode Master Admin SMKN 1 Beringin — Perubahan tersimpan ke dokumentasi resmi sekolah';
-      }
-      if (btnFork) btnFork.style.display = 'inline-flex';
-      if (btnJobsheet) btnJobsheet.style.display = 'inline-flex';
-      if (btnReset) btnReset.style.display = 'none';
-      if (btnMaster) btnMaster.style.display = 'none';
     } else {
-      banner.classList.add('is-readonly');
-      if (titleEl) {
-        titleEl.textContent = 'Peta Master SMKN 1 Beringin (Mode Baca Aman) — Ingin praktik rakit jaringan?';
-      }
-      if (btnFork) btnFork.style.display = 'inline-flex';
-      if (btnJobsheet) btnJobsheet.style.display = 'inline-flex';
-      if (btnReset) btnReset.style.display = 'none';
-      if (btnMaster) btnMaster.style.display = 'none';
+      banner.classList.add('hidden');
+      banner.style.display = 'none';
+      if (titleEl) titleEl.textContent = '';
     }
   }
 

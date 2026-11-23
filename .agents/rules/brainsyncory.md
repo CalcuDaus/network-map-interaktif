@@ -1,7 +1,7 @@
 
 
 # Project Memory — network-map-interaktif
-> 74 notes | Score threshold: >40
+> 79 notes | Score threshold: >40
 
 ## Safety — Never Run Destructive Commands
 
@@ -18,17 +18,9 @@
 
 **Stack:** JavaScript · DB: MySQL
 
-## 📝 NOTE: 1 uncommitted file(s) in working tree.\n\n## Active: `js/map`
+## 📝 NOTE: 1 uncommitted file(s) in working tree.\n\n## Project Standards
 
-- **🟢 Edited js/map/map-3d-engine.js (8 changes, 73min)**
-
-## Project Standards
-
-- Fixed null crash in Quick — prevents XSS injection attacks — confirmed 4x
-- Git Commit: feat: implement interactive 3D map engine, models, and UI co — confirmed 3x
-- 🟢 Edited docker-compose.yml (73 changes, 8min) — confirmed 3x
-- Git Commit: feat: add interactive 3D network map application with core U — confirmed 3x
-- Git Commit: feat: implement interactive 3D map engine and models — confirmed 3x
+- Git Commit: feat: initialize project architecture with modular UI compon — confirmed 3x
 
 ## Learned Patterns
 

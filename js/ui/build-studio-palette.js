@@ -34,7 +34,16 @@ const FACILITY_PRESET_IDS = new Set([
   'plank-motivasi',
   'banner-kejuruan',
   'pohon-mahoni-kecil',
-  'pohon-pinus-kecil'
+  'pohon-pinus-kecil',
+  'pendopo-kolam-ikan',
+  'halte-tempat-duduk-saung',
+  'tempat-duduk-corak-kayu',
+  'rak-bunga-lapangan',
+  'wastafel-batang-kayu',
+  'pohon-cemara-pinus-besar',
+  'pohon-mangga-sedang',
+  'pohon-palem-hiasan-sedang',
+  'pohon-rindang-besar'
 ]);
 
 const OBJECT_ICON_MAP = {

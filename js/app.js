@@ -1238,6 +1238,31 @@ class NetMapApp {
           }
           return;
         }
+        if (/^[1-9]$/.test(e.key) && this.map3DEngine?.avatarMode && this.map3DEngine?.activeCablePull && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          e.preventDefault();
+          const idx = Number(e.key) - 1;
+          const pull = this.map3DEngine.activeCablePull;
+          const aim = this.map3DEngine.computeAvatarCableAimTarget();
+          const destId = (aim?.kind === 'device' && aim.deviceId && aim.deviceId !== pull.sourceDeviceId)
+            ? aim.deviceId
+            : (pull.targetDeviceId && pull.targetDeviceId !== pull.sourceDeviceId ? pull.targetDeviceId : null);
+          if (destId) {
+            const dstPorts = this.map3DEngine.getDevicePortsStatusList(destId);
+            const chosen = dstPorts[idx];
+            if (chosen && !chosen.occupied) {
+              this.map3DEngine.setActiveCablePullTargetPort(destId, chosen.name);
+            } else if (chosen?.occupied) {
+              this.map3DEngine.showStatusHint(`Port tujuan ${chosen.name} sudah terpakai.`);
+            }
+          } else {
+            const srcPorts = this.map3DEngine.getDevicePortsStatusList(pull.sourceDeviceId);
+            const chosen = srcPorts[idx];
+            if (chosen) {
+              this.map3DEngine.setActiveCablePullSourcePort(chosen.name);
+            }
+          }
+          return;
+        }
         if (lower === 'c' && this.map3DEngine?.avatarMode && !e.ctrlKey && !e.metaKey) {
           e.preventDefault();
           if (this.map3DEngine.activeCablePull) {
@@ -1264,12 +1289,21 @@ class NetMapApp {
         if (lower === 'e' && this.map3DEngine?.avatarMode && !e.ctrlKey && !e.metaKey) {
           e.preventDefault();
           if (this.map3DEngine.activeCablePull) {
+            const pull = this.map3DEngine.activeCablePull;
             const aim = this.map3DEngine.computeAvatarCableAimTarget({ shiftKey: Boolean(e.shiftKey) });
-            if (aim?.kind === 'device' && aim.deviceId && aim.deviceId !== this.map3DEngine.activeCablePull.sourceDeviceId) {
-              this.map3DEngine.finishAvatarCablePull(aim.deviceId, aim.portName || '');
+            const destId = (aim?.kind === 'device' && aim.deviceId && aim.deviceId !== pull.sourceDeviceId)
+              ? aim.deviceId
+              : (pull.targetDeviceId && pull.targetDeviceId !== pull.sourceDeviceId ? pull.targetDeviceId : null);
+            const destPort = (aim?.kind === 'device' && aim.deviceId === destId)
+              ? (aim.portName || pull.targetPort || '')
+              : (pull.targetPort || '');
+            if (destId) {
+              this.map3DEngine.finishAvatarCablePull(destId, destPort);
             } else {
               this.map3DEngine.placeAvatarCableClip({ shiftKey: Boolean(e.shiftKey), aimTarget: aim });
             }
+          } else if (stateManager.getMode() === 'draw-cable' || this.map3DEngine.pendingCableSourceId) {
+            this.map3DEngine.showStatusHint?.('Selesaikan atau batalkan penarikan kabel terlebih dahulu sebelum mengangkat perangkat.');
           } else if (this.map3DEngine.carriedObjects?.length > 0 && !e.shiftKey) {
             this.map3DEngine.dropCarriedObjectsFromAvatar({ dropAll: false, useAimTarget: true });
           } else if (typeof this.map3DEngine.interactOrPickupFromAvatar === 'function' && !e.shiftKey) {

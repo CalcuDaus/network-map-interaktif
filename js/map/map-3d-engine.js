@@ -5,6 +5,8 @@
  */
 
 import * as THREE from 'three';
+
+const { Vector3, Matrix3, Color, Raycaster, CurvePath, LineCurve3, TubeGeometry, MeshBasicMaterial, Mesh, RingGeometry, DoubleSide, Group } = THREE;
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { eventBus } from '../core/event-bus.js';
 import { stateManager } from '../core/state-manager.js';
@@ -29,7 +31,7 @@ import {
   createFppHandsViewmodelGroup,
   createFppCableSpoolViewmodelGroup,
   createCableClip3DMesh,
-  createConduitSegmentMesh
+  createInstancedCableClips3DGroup,
   createConduitSegmentMesh,
   findCutawayPairPreset,
   createBuildingSignboard3DGroup
@@ -37,7 +39,9 @@ import {
 import {
   buildBuildingDocumentationSummary,
   isBuildingSignboardEligible,
-  isPointInsideRoomOBB
+  isPointInsideRoomOBB,
+  findBuildingForPoint,
+  isDecorationRoom
 } from './room-spatial-index.js';
 import {
   classifySurfaceFromNormal,
@@ -163,7 +167,7 @@ export class Map3DEngine {
     this.showBuildingSignboards = true;
 
     // User view options
-    this.deviceScaleMultiplier = 3.0; // Balanced default visibility on campus/building map
+    this.deviceScaleMultiplier = 1.0; // Real-world 1:1 device scale matching avatar & buildings
     this.cableDiameterMultiplier = 1.0; // 1.0 = matched to 3D port socket size
     this.explodeStacks = false;
     this.showLabels = stateManager.state?.layers?.annotations !== false;
@@ -331,6 +335,27 @@ export class Map3DEngine {
       : (isMobileTouchDevice() ? 'lite' : 'standard');
     this.dirLight = null;
 
+    // Mobile 3D Rendering Performance State (LOD, Frustum/Indoor Occlusion Culling & Smart Frame Pacing)
+    this._dirtyFramesRemaining = 45;
+    this._lastFrameCamPos = new THREE.Vector3(Infinity, Infinity, Infinity);
+    this._lastFrameCamQuat = new THREE.Quaternion();
+    this._lastLodCamPos = new THREE.Vector3(Infinity, Infinity, Infinity);
+    this._lastLodCamQuat = new THREE.Quaternion();
+    this._lastLodAt = 0;
+    this._lodFrustum = typeof THREE.Frustum === 'function' ? new THREE.Frustum() : null;
+    this._lodProjMatrix = typeof THREE.Matrix4 === 'function' ? new THREE.Matrix4() : null;
+    this._lodSphere = typeof THREE.Sphere === 'function' ? new THREE.Sphere() : null;
+    this._lastOcclusionRoomId = null;
+    this.renderPerfStats = {
+      lodNearCount: 0,
+      lodMidCount: 0,
+      lodFarCount: 0,
+      lodCulledPropsCount: 0,
+      occlusionCulledCount: 0,
+      activeIndoorRoomId: null,
+      idleSkippedFrames: 0
+    };
+
     this.bindGlobalListeners();
     this.bindRoomLockButton();
     this.syncRoomLockUI();
@@ -349,13 +374,16 @@ export class Map3DEngine {
     this.camera.position.set(0, 140, 160);
 
     this.renderer = new THREE.WebGLRenderer({
-      antialias: true,
+      antialias: !isMobileTouchDevice(),
       powerPreference: 'high-performance'
     });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     this.renderer.setSize(width, height);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    // Static shadow caching: update shadows only when geometry/doors change instead of every frame
+    this.renderer.shadowMap.autoUpdate = false;
+    this.renderer.shadowMap.needsUpdate = true;
     this.container.appendChild(this.renderer.domElement);
 
     // SketchUp-inspired OrbitControls configuration
@@ -372,6 +400,7 @@ export class Map3DEngine {
     this.controls.maxDistance = 1200;
     this.controls.target.set(0, 0, 0);
     this.applyNavToolConfig();
+    this.controls.addEventListener?.('change', () => this.markSceneDirty?.(18));
 
     // Lighting
     const hemiLight = new THREE.HemisphereLight(0xfffbeb, 0x334155, 1.15);
@@ -435,6 +464,7 @@ export class Map3DEngine {
 
     dom.addEventListener('pointerdown', (e) => {
       if (!this.isActive) return;
+      this.markSceneDirty?.(24);
       this.cameraAnim = null; // User manual input cancels glide
       this.pointerDownScreen = { x: e.clientX, y: e.clientY };
       this.container.classList.add('is-dragging');
@@ -520,6 +550,9 @@ export class Map3DEngine {
 
     dom.addEventListener('pointermove', (e) => {
       if (!this.isActive) return;
+      if ((e.buttons || 0) !== 0 || this.avatarMode || this.navTool === 'road3d') {
+        this.markSceneDirty?.(12);
+      }
       if (this._mobileLongPressOrigin && e.pointerType === 'touch') {
         if (Math.hypot(e.clientX - this._mobileLongPressOrigin.x, e.clientY - this._mobileLongPressOrigin.y) > 10) {
           cancelLongPress();
@@ -650,6 +683,7 @@ export class Map3DEngine {
     });
 
     dom.addEventListener('wheel', (e) => {
+      this.markSceneDirty?.(18);
       if (!this.isActive || !this.avatarMode || this.simulatorFocusedDeviceId) return;
       e.preventDefault();
       e.stopPropagation();
@@ -690,6 +724,7 @@ export class Map3DEngine {
         this.camera.aspect = w / h;
         this.camera.updateProjectionMatrix();
         this.renderer.setSize(w, h);
+        this.markSceneDirty?.(8);
       }
     });
     this.resizeObserver.observe(this.container);
@@ -772,6 +807,7 @@ export class Map3DEngine {
 
   startLoop() {
     if (this.animFrameId) cancelAnimationFrame(this.animFrameId);
+    this.markSceneDirty?.(30);
     const animate = (now) => {
       if (!this.isActive) return;
       this.animFrameId = requestAnimationFrame(animate);
@@ -783,25 +819,85 @@ export class Map3DEngine {
       const dt = Math.min(0.05, Math.max(0.001, (now - (this.lastFrameTime || now)) / 1000));
       this.lastFrameTime = now;
 
+      const hadCamAnim = Boolean(this.cameraAnim);
       this.updateCameraAnimation(now);
+      let avatarMoved = false;
       if (this.avatarMode) {
         this.updateAvatarController(dt);
+        avatarMoved = Boolean(
+          this.avatarState?.isMoving
+          || !this.avatarState?.isGrounded
+          || this.keysPressed?.size > 0
+          || this.mobileJoystickState?.active
+        );
       } else {
         this.updateWalkMovement(dt);
+        if (this.keysPressed?.size > 0) avatarMoved = true;
         this.publishLocalPresence(false);
       }
-      this.updateRemoteAvatars(dt);
-      this.updateInteractiveDoors?.(dt);
-      this.updateAvatarCablePullLivePreview?.(dt);
-      this.updatePacketFlows3D?.(now);
-      this.updateBuildingSignboardsFrame?.();
+      if (this.remoteAvatarMap.size > 0) {
+        this.updateRemoteAvatars(dt);
+      }
+      const doorMoved = this.updateInteractiveDoors?.(dt);
+      if (this.activeCablePull) {
+        this.updateAvatarCablePullLivePreview?.(dt);
+      }
+      const hasPackets = Array.isArray(this.activePacketFlows) && this.activePacketFlows.length > 0;
+      if (hasPackets) {
+        this.updatePacketFlows3D?.(now);
+      }
+
+      let controlsMoved = false;
       if (this.avatarMode && !this.simulatorFocusedDeviceId) {
         if (this.camera && this.controls) {
           this.camera.lookAt?.(this.controls.target);
         }
-      } else {
-        this.controls?.update();
+      } else if (this.controls) {
+        controlsMoved = Boolean(this.controls.update());
       }
+
+      let cameraMoved = false;
+      if (this.camera?.position && this.camera?.quaternion) {
+        const posDeltaSq = this._lastFrameCamPos.distanceToSquared(this.camera.position);
+        const rotDelta = typeof this._lastFrameCamQuat.angleTo === 'function'
+          ? this._lastFrameCamQuat.angleTo(this.camera.quaternion)
+          : 0;
+        if (posDeltaSq > 1e-6 || rotDelta > 1e-4) {
+          cameraMoved = true;
+          this._lastFrameCamPos.copy(this.camera.position);
+          this._lastFrameCamQuat.copy(this.camera.quaternion);
+        }
+      }
+
+      const hasActivity = Boolean(
+        hadCamAnim
+        || cameraMoved
+        || controlsMoved
+        || avatarMoved
+        || doorMoved
+        || hasPackets
+        || this.activeCablePull
+        || this.remoteAvatarMap.size > 0
+        || (this._dirtyFramesRemaining || 0) > 0
+      );
+
+      if (!hasActivity) {
+        if (this.renderPerfStats) {
+          this.renderPerfStats.idleSkippedFrames = (this.renderPerfStats.idleSkippedFrames || 0) + 1;
+        }
+        return;
+      }
+
+      if (this._dirtyFramesRemaining > 0) {
+        this._dirtyFramesRemaining -= 1;
+      }
+
+      if (cameraMoved || avatarMoved || this._dirtyFramesRemaining > 10) {
+        this.updateBuildingSignboardsFrame?.();
+        this.updateSceneLOD?.(false);
+        this.updateSceneOcclusionCulling?.(false);
+      }
+
       this.syncFppViewmodelTransform();
       this.renderer?.render(this.scene, this.camera);
     };
@@ -814,6 +910,7 @@ export class Map3DEngine {
     this.scene.background = new THREE.Color(isDark ? 0x0b160a : 0xeef5e6);
     this.scene.fog = new THREE.FogExp2(isDark ? 0x0b160a : 0xeef5e6, 0.00035);
     this.syncBuildingSignboards?.();
+    this.markSceneDirty?.(8);
   }
 
   getWorldDimensions() {
@@ -909,6 +1006,8 @@ export class Map3DEngine {
     grid.material.transparent = true;
     this.groundGroup.add(grid);
     this.apply3dViewFilters?.();
+    this.updateSceneLOD?.(true);
+    this.requestShadowUpdate?.();
   }
 
   syncAll() {
@@ -919,6 +1018,9 @@ export class Map3DEngine {
     this.syncDevices();
     this.syncCables();
     this.apply3dViewFilters?.();
+    this.updateSceneLOD?.(true);
+    this.updateSceneOcclusionCulling?.(true);
+    this.requestShadowUpdate?.();
   }
 
   _attachRoomFallbackMesh(room, roomGroup) {
@@ -985,6 +1087,7 @@ export class Map3DEngine {
     if (this.buildingXrayMode || this.perRoomXrayIds?.has?.(room.id)) {
       this.applyBuildingXrayMaterials?.();
     }
+    this.requestShadowUpdate?.();
   }
 
   _registerRoomInteractiveDoors(room, roomGroup, glb) {
@@ -1120,7 +1223,7 @@ export class Map3DEngine {
   }
 
   updateInteractiveDoors(dt = 0.016) {
-    if (!this.activeDoorRigs || this.activeDoorRigs.size === 0) return;
+    if (!this.activeDoorRigs || this.activeDoorRigs.size === 0) return false;
     const step = Math.min(0.25, Math.max(0.004, Number(dt) || 0.016)) * 4.8;
     const isCarryingInAvatar = Boolean(
       this.avatarMode
@@ -1131,6 +1234,7 @@ export class Map3DEngine {
     const avY = Number(this.avatarState?.y) || 0;
     const avZ = Number(this.avatarState?.z) || 0;
     const doorWorldPos = isCarryingInAvatar ? new THREE.Vector3() : null;
+    let doorMoved = false;
 
     for (const rig of this.activeDoorRigs.values()) {
       if (!rig?.pivotGroup) continue;
@@ -1142,6 +1246,7 @@ export class Map3DEngine {
           rig.openProgress += Math.sign(diff) * step;
         }
         this._applyDoorRigPose(rig);
+        doorMoved = true;
       }
 
       // Smart auto-open when carrying network devices up to a closed doorway
@@ -1152,10 +1257,15 @@ export class Map3DEngine {
           const distXZ = Math.hypot(doorWorldPos.x - avX, doorWorldPos.z - avZ);
           if (distXZ <= 2.25) {
             this.toggleInteractiveDoor(rig.key, { forceOpen: true, silent: true });
+            doorMoved = true;
           }
         }
       }
     }
+    if (doorMoved) {
+      this.requestShadowUpdate?.();
+    }
+    return doorMoved;
   }
 
   findInteractiveDoorHit(raycaster = this.raycaster, maxDist = Infinity) {
@@ -1233,6 +1343,14 @@ export class Map3DEngine {
 
   interactOrPickupFromAvatar() {
     if (!this.avatarMode) return false;
+    const isDrawingCable = Boolean(
+      this.activeCablePull
+      || this.pendingCableSourceId
+      || stateManager.getMode?.() === 'draw-cable'
+    );
+    if (isDrawingCable) {
+      return false;
+    }
     const nearestPick = this.findNearestPickableObjectToAvatar?.();
     // Priority 1: Explicitly selected device/object always wins
     if (nearestPick?.source === 'selected') {
@@ -1374,6 +1492,22 @@ export class Map3DEngine {
       : `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg><span>Kunci Ruangan</span>`;
   }
 
+  _annotateRoomLodBounds(roomGroup, room) {
+    if (!roomGroup || !room) return;
+    const w = Math.max(0.5, Number(room.widthMeters) || 14);
+    const d = Math.max(0.5, Number(room.depthMeters) || 12);
+    const h = Math.max(0.5, Number(room.heightMeters) || 3.5);
+    const pos = roomGroup.position || this.normToWorld(room.x ?? 0.5, room.y ?? 0.5);
+    roomGroup.userData.isDecorationProp = isDecorationRoom(room);
+    roomGroup.userData.propMaxHeight = h;
+    roomGroup.userData.lodCenter = {
+      x: Number(pos.x) || 0,
+      y: h * 0.5,
+      z: Number(pos.z) || 0
+    };
+    roomGroup.userData.lodRadius = Math.max(1.5, Math.hypot(w, d, h) * 0.62);
+  }
+
   syncRooms() {
     if (!this.isActive || !this.isInitialized) return;
     this.clearGroup(this.roomsGroup);
@@ -1390,6 +1524,7 @@ export class Map3DEngine {
         isRoomSelected
       );
       roomGroup.userData.roomId = room.id;
+      this._annotateRoomLodBounds(roomGroup, room);
       this.roomsGroup.add(roomGroup);
       this.room3dMeshMap.set(room.id, roomGroup);
       this._attachRoomCustomGlb(room, roomGroup);
@@ -1397,6 +1532,9 @@ export class Map3DEngine {
     this.applyBuildingXrayMaterials?.();
     this.syncBuildingSignboards?.();
     this.apply3dViewFilters?.();
+    this.updateSceneLOD?.(true);
+    this.updateSceneOcclusionCulling?.(true);
+    this.requestShadowUpdate?.();
   }
 
   rebuildSingleRoom3dMesh(room, isSelected = true) {
@@ -1416,6 +1554,7 @@ export class Map3DEngine {
     }
     const next = create3DRoomGroup(room, (nx, ny) => this.normToWorld(nx, ny), isSelected);
     next.userData.roomId = room.id;
+    this._annotateRoomLodBounds(next, room);
     this.roomsGroup.add(next);
     this.room3dMeshMap.set(room.id, next);
 
@@ -1427,6 +1566,7 @@ export class Map3DEngine {
     this.applyBuildingXrayMaterials?.();
     this.syncBuildingSignboards?.();
     this.apply3dViewFilters?.();
+    this.requestShadowUpdate?.();
     return next;
   }
 
@@ -1464,6 +1604,7 @@ export class Map3DEngine {
     this.updateAvatarDeviceLabelsVisibility?.();
     this.syncTransformGizmo?.();
     this.apply3dViewFilters?.();
+    this.requestShadowUpdate?.();
   }
 
   rebuildSingleObject3dMesh(obj, isSelected = true) {
@@ -1477,7 +1618,19 @@ export class Map3DEngine {
     this.objects3dGroup.add(next);
     this.object3dMeshMap.set(obj.id, next);
     this.apply3dViewFilters?.();
+    this.requestShadowUpdate?.();
     return next;
+  }
+
+  _annotateRoadCenter(meshGroup, road) {
+    if (!meshGroup || !Array.isArray(road?.points) || road.points.length === 0) return;
+    const midPt = road.points[Math.floor(road.points.length * 0.5)] || road.points[0];
+    const wPos = this.normToWorld(midPt.x ?? 0.5, midPt.y ?? 0.5);
+    meshGroup.userData.roadCenterWorld = {
+      x: wPos.x,
+      y: Math.max(0, Number(road.elevationMeters) || 0),
+      z: wPos.z
+    };
   }
 
   syncRoads() {
@@ -1494,11 +1647,14 @@ export class Map3DEngine {
         (nx, ny) => this.normToWorld(nx, ny),
         road.id === selectedId
       );
+      this._annotateRoadCenter(meshGroup, road);
       this.roadsGroup.add(meshGroup);
       this.road3dMeshMap.set(road.id, meshGroup);
     });
     this.renderRoad3dHudBar?.();
     this.apply3dViewFilters?.();
+    this.updateSceneLOD?.(true);
+    this.requestShadowUpdate?.();
   }
 
   rebuildSingleRoad3dMesh(road, isSelected = true) {
@@ -1509,9 +1665,11 @@ export class Map3DEngine {
       this._disposeObject3DResources(prev);
     }
     const next = create3DRoadGroup(road, (nx, ny) => this.normToWorld(nx, ny), isSelected);
+    this._annotateRoadCenter(next, road);
     this.roadsGroup.add(next);
     this.road3dMeshMap.set(road.id, next);
     this.apply3dViewFilters?.();
+    this.requestShadowUpdate?.();
     return next;
   }
 
@@ -1985,7 +2143,7 @@ export class Map3DEngine {
   }
 
   getDeviceCollisionFootprint(dev, userModelScale = 1) {
-    const scale = Math.max(0.1, Number(userModelScale) || this.deviceScaleMultiplier || 3.0);
+    const scale = Math.max(0.1, Number(userModelScale) || this.deviceScaleMultiplier || 1.0);
     const type = String(dev?.type || '').toLowerCase();
     const model = String(dev?.model || '').toLowerCase();
     let rawW = 0.72;
@@ -2339,6 +2497,9 @@ export class Map3DEngine {
     this.updateAvatarDeviceLabelsVisibility?.();
     this.syncTransformGizmo?.();
     this.apply3dViewFilters?.();
+    this.updateSceneLOD?.(true);
+    this.updateSceneOcclusionCulling?.(true);
+    this.requestShadowUpdate?.();
   }
 
   isLegacyProceduralPortSet(ports) {
@@ -2499,6 +2660,7 @@ export class Map3DEngine {
     this.cableMeshMap.clear();
 
     const cables = this.cableManager.getAllConnections();
+    const instancedClipsQueue = [];
 
     cables.forEach((cable, cableIdx) => {
       const srcPortKey = this.resolveDevicePortKey(cable.source, cable.details?.portSource, cableIdx);
@@ -2835,6 +2997,7 @@ export class Map3DEngine {
         const allowClipsNow = showClips && (this.graphicsQuality !== 'lite' || isSelected || waypointMarkers.length <= 8);
         if (allowClipsNow) {
           const upAxis = new THREE.Vector3(0, 1, 0);
+          const useInstancedBatch = !isSelected && typeof THREE.InstancedMesh === 'function';
           waypointMarkers.forEach((wpVec, idx) => {
             const rawWp = cable.route?.[idx];
             const clipType = rawWp?.clipType || getDefaultClipType(cable.cableCategory, rawWp?.surface || 'wall');
@@ -2842,19 +3005,34 @@ export class Map3DEngine {
             // Render physical clip when waypoint has surface metadata OR orthogonal/mounted path
             if (!rawWp?.surface && pathStyle !== 'orthogonal' && !isSelected) return;
 
-            const clipGroup = createCableClip3DMesh({ clipType, radius: Math.max(radius, 0.012), isSelected });
-            clipGroup.position.copy(wpVec);
+            const q = new THREE.Quaternion();
             if (rawWp?.normal && typeof rawWp.normal.x === 'number') {
               const nVec = new THREE.Vector3(rawWp.normal.x, rawWp.normal.y, rawWp.normal.z);
               if (nVec.lengthSq() > 0.01) {
                 nVec.normalize();
                 if (nVec.y < -0.999) {
-                  clipGroup.quaternion.setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI);
+                  q.setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI);
                 } else {
-                  clipGroup.quaternion.setFromUnitVectors(upAxis, nVec);
+                  q.setFromUnitVectors(upAxis, nVec);
                 }
               }
             }
+
+            if (useInstancedBatch) {
+              instancedClipsQueue.push({
+                position: wpVec.clone(),
+                quaternion: q,
+                clipType,
+                radius: Math.max(radius, 0.012),
+                cableId: cable.id,
+                waypointIdx: idx
+              });
+              return;
+            }
+
+            const clipGroup = createCableClip3DMesh({ clipType, radius: Math.max(radius, 0.012), isSelected });
+            clipGroup.position.copy(wpVec);
+            clipGroup.quaternion.copy(q);
             clipGroup.traverse((ch) => {
               ch.userData.cableId = cable.id;
               ch.userData.isCableClip3d = true;
@@ -2983,6 +3161,13 @@ export class Map3DEngine {
       }
     });
 
+    if (instancedClipsQueue.length > 0) {
+      const batchGroup = createInstancedCableClips3DGroup(instancedClipsQueue);
+      if (batchGroup?.children?.length > 0) {
+        this.cablesGroup.add(batchGroup);
+      }
+    }
+
     // Render live 3D Pen Tool waypoints & preview tube while drawing a cable in 3D
     if (stateManager.getMode() === 'draw-cable' && this.pendingCableSourceId && this.pending3dWaypoints.length > 0) {
       const srcPos = this.effectivePosMap.get(this.pendingCableSourceId);
@@ -3011,6 +3196,18 @@ export class Map3DEngine {
       }
     }
     this.apply3dViewFilters?.();
+    this.updateSceneLOD?.(true);
+    this.requestShadowUpdate?.();
+  }
+
+  _resolveCableIdFromHit(hit) {
+    if (!hit?.object) return null;
+    const ud = hit.object.userData;
+    if (ud?.cableId) return ud.cableId;
+    if (ud?.isInstancedClips && Number.isInteger(hit.instanceId) && Array.isArray(ud.instanceMeta)) {
+      return ud.instanceMeta[hit.instanceId]?.cableId || null;
+    }
+    return null;
   }
 
   tagDescendantDeviceId(obj, deviceId) {
@@ -3050,7 +3247,8 @@ export class Map3DEngine {
     this.raycaster.setFromCamera(this.pointer, this.camera);
 
     // Phase 7B: First-Person / Third-Person Cable Spool Pulling priority state
-    // When technician is pulling a live cable, clicking a destination device plugs in; clicking wall/ceiling/floor places a 3D clip!
+    // Clicking a destination device selects/opens its port picker (or plugs straight into aimed 3D port);
+    // clicking floor/wall/ceiling places a 3D cable clip! Never picks up devices while pulling cables.
     if (
       this.avatarMode
       && !this.simulatorFocusedDeviceId
@@ -3058,9 +3256,70 @@ export class Map3DEngine {
       && !e.ctrlKey
       && !e.metaKey
     ) {
+      const pull = this.activeCablePull;
+      const directDevHits = !this.workspaceGhostDevices && this.devicesGroup?.visible
+        ? this._filterVisibleRayHits(this.raycaster.intersectObjects(this.devicesGroup.children, true))
+        : [];
+      const firstDirect = directDevHits.length > 0 && directDevHits[0].distance <= 14.0 ? directDevHits[0] : null;
+      const directDevId = firstDirect ? this.findDeviceIdFromObject(firstDirect.object) : null;
+      const directPortName = firstDirect ? this.findPortNameFromObject(firstDirect.object) : '';
+
+      if (directDevId && directDevId === pull.sourceDeviceId) {
+        if (directPortName) {
+          this.setActiveCablePullSourcePort(directPortName);
+        } else {
+          this.showStatusHint('Pilih port asal di panel bawah, lalu klik perangkat tujuan atau klik dinding untuk Klem 3D.');
+        }
+        return;
+      }
+
+      if (directDevId && directDevId !== pull.sourceDeviceId) {
+        const dstPorts = this.getDevicePortsStatusList(directDevId);
+        const freePorts = dstPorts.filter((p) => !p.occupied);
+        if (directPortName) {
+          this.finishAvatarCablePull(directDevId, directPortName);
+          if (e.pointerType !== 'touch') {
+            this.tryLockAvatarPointer?.();
+          }
+          return;
+        }
+        if (freePorts.length <= 1) {
+          this.finishAvatarCablePull(directDevId, freePorts[0]?.name || '');
+          if (e.pointerType !== 'touch') {
+            this.tryLockAvatarPointer?.();
+          }
+          return;
+        }
+        pull.targetDeviceId = directDevId;
+        pull.targetPort = freePorts[0]?.name || '';
+        this._lastHouseFlipperHudKey = '';
+        this.releaseAvatarPointerLock?.();
+        this.renderHouseFlipperPromptHud?.();
+        const dstDev = this.deviceManager?.getDeviceById?.(directDevId);
+        this.showStatusHint(
+          `Tujuan "${dstDev?.name || directDevId}" dipilih — Klik port tujuan di panel bawah (atau tekan E untuk colok ke [${pull.targetPort}]).`
+        );
+        return;
+      }
+
       const aimTarget = this.computeAvatarCableAimTarget({ shiftKey: Boolean(e.shiftKey) });
-      if (aimTarget?.kind === 'device' && aimTarget.deviceId && aimTarget.deviceId !== this.activeCablePull.sourceDeviceId) {
-        this.finishAvatarCablePull(aimTarget.deviceId, aimTarget.portName || '');
+      if (aimTarget?.kind === 'device' && aimTarget.deviceId && aimTarget.deviceId !== pull.sourceDeviceId) {
+        const dstPorts = this.getDevicePortsStatusList(aimTarget.deviceId);
+        const freePorts = dstPorts.filter((p) => !p.occupied);
+        if (aimTarget.hitPortDirectly || freePorts.length <= 1 || pull.targetDeviceId === aimTarget.deviceId) {
+          this.finishAvatarCablePull(aimTarget.deviceId, aimTarget.portName || freePorts[0]?.name || '');
+        } else {
+          pull.targetDeviceId = aimTarget.deviceId;
+          pull.targetPort = aimTarget.portName || freePorts[0]?.name || '';
+          this._lastHouseFlipperHudKey = '';
+          this.releaseAvatarPointerLock?.();
+          this.renderHouseFlipperPromptHud?.();
+          const dstDev = this.deviceManager?.getDeviceById?.(aimTarget.deviceId);
+          this.showStatusHint(
+            `Tujuan "${dstDev?.name || aimTarget.deviceId}" dipilih — Klik port tujuan di panel bawah (atau tekan E untuk colok ke [${pull.targetPort}]).`
+          );
+          return;
+        }
       } else {
         this.placeAvatarCableClip({ shiftKey: Boolean(e.shiftKey), aimTarget });
       }
@@ -3102,7 +3361,7 @@ export class Map3DEngine {
       cableHitsPre[0].distance <= devHits[0].distance + cableDistBias ||
       Boolean(cableHitsPre[0].object?.userData?.cableHandleType)
     )) {
-      const cabId = cableHitsPre[0].object.userData?.cableId;
+      const cabId = this._resolveCableIdFromHit(cableHitsPre[0]);
       if (cabId) {
         stateManager.deselectObject3d?.();
         stateManager.deselectRoom3d?.();
@@ -3167,9 +3426,14 @@ export class Map3DEngine {
         }
 
         // Simulator Port Patching outside draw-cable mode:
-        // Direct click on a destination 3D port cavity completes the pending patch cord immediately
-        if (this.pendingCableSourceId && this.pendingCableSourcePort && hitPortName && this.pendingCableSourceId !== devId) {
-          this.handleSimulatorPortClick(devId, hitPortName);
+        // Clicking any destination 3D port or device completes the pending patch cord cleanly (never triggers pickup)
+        if (this.pendingCableSourceId && this.pendingCableSourceId !== devId) {
+          const targetPort = hitPortName || this._findFirstFreePortName(devId);
+          if (targetPort) {
+            this.handleSimulatorPortClick(devId, targetPort);
+          } else {
+            this.showStatusHint(`Semua port pada "${this.deviceManager?.getDeviceById?.(devId)?.name || devId}" sudah terpakai.`);
+          }
           return;
         }
 
@@ -3179,23 +3443,6 @@ export class Map3DEngine {
           return;
         }
 
-        // House-Flipper 1-click Pickup when clicking a device in Mode Teknisi + Move tool
-        if (
-          this.avatarMode
-          && !this.simulatorFocusedDeviceId
-          && this.navTool === 'move'
-          && !e.ctrlKey
-          && !e.metaKey
-          && !e.shiftKey
-        ) {
-          if (this.pickupDeviceFromAvatar(devId)) {
-            if (e.pointerType !== 'touch') {
-              this.tryLockAvatarPointer?.();
-            }
-            return;
-          }
-        }
-
         stateManager.deselectObject3d?.();
         stateManager.deselectRoom3d?.();
         this.deviceManager.selectDevice(devId, {
@@ -3203,7 +3450,12 @@ export class Map3DEngine {
           additive: Boolean(e.shiftKey)
         });
         if (!e.ctrlKey && !e.metaKey && !e.shiftKey) {
-          if (this.navTool === 'move') {
+          if (this.avatarMode) {
+            const devObj = this.deviceManager.getDeviceById?.(devId);
+            this.showStatusHint(
+              `"${devObj?.name || devId}" dipilih — Tekan E untuk mengangkat • Tekan C untuk tarik kabel.`
+            );
+          } else if (this.navTool === 'move') {
             const devObj = this.deviceManager.getDeviceById?.(devId);
             this.showStatusHint(
               `"${devObj?.name || devId}" dipilih — Seret langsung di lantai/meja untuk pindah • Panah : Geser • R : Putar 45°`
@@ -3371,21 +3623,6 @@ export class Map3DEngine {
     if (stateManager.getMode() !== 'draw-cable') {
       const objHit = this.findObject3dHit(this.raycaster);
       if (objHit?.object3dId) {
-        if (
-          this.avatarMode
-          && !this.simulatorFocusedDeviceId
-          && this.navTool === 'move'
-          && !e.ctrlKey
-          && !e.metaKey
-          && !e.shiftKey
-        ) {
-          if (this.pickupObjectFromAvatar(objHit.object3dId)) {
-            if (e.pointerType !== 'touch') {
-              this.tryLockAvatarPointer?.();
-            }
-            return;
-          }
-        }
         this.deviceManager.deselectDevice();
         this.cableManager.deselectConnection();
         stateManager.deselectRoom3d?.();
@@ -3400,7 +3637,7 @@ export class Map3DEngine {
       ? this._filterVisibleRayHits(this.raycaster.intersectObjects(this.cablesGroup.children, true))
       : [];
     if (cableHits.length > 0) {
-      const cabId = cableHits[0].object.userData?.cableId;
+      const cabId = this._resolveCableIdFromHit(cableHits[0]);
       if (cabId) {
         stateManager.deselectObject3d?.();
         stateManager.deselectRoom3d?.();
@@ -3518,7 +3755,7 @@ export class Map3DEngine {
       cableHits[0].distance <= devHits[0].distance + 0.25 ||
       Boolean(cableHits[0].object?.userData?.cableHandleType)
     )) {
-      const cabId = cableHits[0].object.userData?.cableId;
+      const cabId = this._resolveCableIdFromHit(cableHits[0]);
       const cable = cabId ? this.cableManager.getConnectionById(cabId) : null;
       if (cable) {
         const hitPt = cableHits[0].point.clone();
@@ -3602,7 +3839,7 @@ export class Map3DEngine {
       cableHits[0].distance <= devHits[0].distance + 0.25 ||
       Boolean(cableHits[0].object?.userData?.cableHandleType)
     )) {
-      const cabId = cableHits[0].object?.userData?.cableId;
+      const cabId = this._resolveCableIdFromHit(cableHits[0]);
       if (cabId) {
         if (cableHits[0].object?.userData?.cableHandleType === 'waypoint') {
           this.cableManager.deleteWaypoint(cabId, cableHits[0].object.userData.waypointIdx);
@@ -5084,7 +5321,7 @@ export class Map3DEngine {
       if (Math.abs(worldNormal.y) >= 0.52) continue;
       if (hit.point.y < minHitY || hit.point.y > maxHitY) continue;
 
-      const devScale = ((device?.spatial3d?.modelScale || 1) * (this.deviceScaleMultiplier || 3.0));
+      const devScale = ((device?.spatial3d?.modelScale || 1) * (this.deviceScaleMultiplier || 1.0));
       const existingCol = device?.id ? this.deviceColliders?.find((c) => c.id === device.id) : null;
       const fp = this.getDeviceCollisionFootprint
         ? this.getDeviceCollisionFootprint(device, devScale)
@@ -5179,7 +5416,7 @@ export class Map3DEngine {
             modelContainer.rotation.y = (wallHit.rotationY * Math.PI) / 180;
           }
           const holderPorts = meshGroup.userData?.devPorts || [];
-          const userScale = meshGroup.userData?.userModelScale || ((state.device?.spatial3d?.modelScale || 1) * (this.deviceScaleMultiplier || 3.0));
+          const userScale = meshGroup.userData?.userModelScale || ((state.device?.spatial3d?.modelScale || 1) * (this.deviceScaleMultiplier || 1.0));
           this.registerDevicePortTransforms(
             state.device,
             holderPorts,
@@ -5191,7 +5428,7 @@ export class Map3DEngine {
           );
           this.effectivePosMap.set(
             state.deviceId,
-            new THREE.Vector3(clampedWorld.x, mountY + 0.35 * (this.deviceScaleMultiplier || 3.0), clampedWorld.z)
+            new THREE.Vector3(clampedWorld.x, mountY + 0.35 * (this.deviceScaleMultiplier || 1.0), clampedWorld.z)
           );
         }
         state.latestNorm = { x: normX, y: normY };
@@ -5247,7 +5484,7 @@ export class Map3DEngine {
       }
       if (!this.buildPlacementConfig?.allowClipping && this.resolveBuildPlacementCollision) {
         const sp = { ...getDefaultSpatial3d(state.device?.type), ...(state.device?.spatial3d || {}) };
-        const scale = (sp.modelScale || 1) * (this.deviceScaleMultiplier || 3.0);
+        const scale = (sp.modelScale || 1) * (this.deviceScaleMultiplier || 1.0);
         const fp = this.getDeviceCollisionFootprint
           ? this.getDeviceCollisionFootprint(state.device, scale)
           : { halfW: 0.45, halfD: 0.38, height: 0.35 };
@@ -6710,7 +6947,7 @@ export class Map3DEngine {
       const pos = effPos || (this.normToWorld && dev.position ? this.normToWorld(dev.position.x, dev.position.y) : null);
       if (!pos) continue;
       const sp = dev.spatial3d || getDefaultSpatial3d(dev.type);
-      const userModelScale = (sp.modelScale || 1) * (this.deviceScaleMultiplier || 3.0);
+      const userModelScale = (sp.modelScale || 1) * (this.deviceScaleMultiplier || 1.0);
       const fp = this.getDeviceCollisionFootprint
         ? this.getDeviceCollisionFootprint(dev, userModelScale)
         : { halfW: 0.9, halfD: 0.7, height: 0.8 };
@@ -6774,6 +7011,9 @@ export class Map3DEngine {
 
   pickupNearestObjectFromAvatar() {
     if (!this.avatarMode) return false;
+    if (this.activeCablePull || this.pendingCableSourceId || stateManager.getMode?.() === 'draw-cable') {
+      return false;
+    }
     const nearest = this.findNearestPickableObjectToAvatar();
     if (!nearest?.id) {
       this.showStatusHint(`Tidak ada objek/perangkat dalam jangkauan (<= ${(this.objectCarryReachMeters || 6.5).toFixed(1)}m) untuk diangkat.`);
@@ -6805,6 +7045,9 @@ export class Map3DEngine {
 
   pickupObjectFromAvatar(objId) {
     if (!this.avatarMode || !objId) return false;
+    if (this.activeCablePull || this.pendingCableSourceId || stateManager.getMode?.() === 'draw-cable') {
+      return false;
+    }
     if (!this._canAvatarCarryMoreAndWrite()) return false;
 
     const obj = stateManager.getObject3dById?.(objId);
@@ -6858,6 +7101,9 @@ export class Map3DEngine {
 
   pickupDeviceFromAvatar(devId) {
     if (!this.avatarMode || !devId) return false;
+    if (this.activeCablePull || this.pendingCableSourceId || stateManager.getMode?.() === 'draw-cable') {
+      return false;
+    }
     if (!this._canAvatarCarryMoreAndWrite()) return false;
 
     const dev = this.deviceManager?.getDeviceById?.(devId);
@@ -6865,7 +7111,7 @@ export class Map3DEngine {
     if (this.carriedObjects.some((c) => c.devId === dev.id || c.objId === dev.id || c.mountedPeers?.some((p) => p?.id === dev.id))) return false;
 
     const sp = { ...getDefaultSpatial3d(dev.type), ...(dev.spatial3d || {}) };
-    const userModelScale = (sp.modelScale || 1) * (this.deviceScaleMultiplier || 3.0);
+    const userModelScale = (sp.modelScale || 1) * (this.deviceScaleMultiplier || 1.0);
     const fp = this.getDeviceCollisionFootprint
       ? this.getDeviceCollisionFootprint(dev, userModelScale)
       : { halfW: 0.9, halfD: 0.7, height: 0.8 };
@@ -7826,11 +8072,18 @@ export class Map3DEngine {
     bindTap('btn-mob-cable-clip', () => this.placeAvatarCableClip());
     bindTap('btn-mob-cable-undo', () => this.undoAvatarCableClip());
     bindTap('btn-mob-cable-plug', () => {
+      const pull = this.activeCablePull;
       const aim = this.computeAvatarCableAimTarget();
-      if (aim?.kind === 'device' && aim.deviceId && aim.deviceId !== this.activeCablePull?.sourceDeviceId) {
-        this.finishAvatarCablePull(aim.deviceId, aim.portName || '');
+      const destId = (aim?.kind === 'device' && aim.deviceId && aim.deviceId !== pull?.sourceDeviceId)
+        ? aim.deviceId
+        : (pull?.targetDeviceId && pull.targetDeviceId !== pull?.sourceDeviceId ? pull.targetDeviceId : null);
+      const destPort = (aim?.kind === 'device' && aim.deviceId === destId)
+        ? (aim.portName || pull?.targetPort || '')
+        : (pull?.targetPort || '');
+      if (destId) {
+        this.finishAvatarCablePull(destId, destPort);
       } else {
-        this.showStatusHint('Arahkan crosshair ke perangkat tujuan terlebih dahulu untuk mencolok kabel.');
+        this.showStatusHint('Arahkan crosshair atau klik perangkat tujuan terlebih dahulu untuk mencolok kabel.');
       }
     });
   }
@@ -8153,7 +8406,7 @@ export class Map3DEngine {
         const p = this.effectivePosMap?.get(dev.id)
           || (this.normToWorld && dev.position ? this.normToWorld(dev.position.x, dev.position.y) : null);
         if (!p) continue;
-        const userModelScale = (dev.spatial3d?.modelScale || 1) * (this.deviceScaleMultiplier || 3.0);
+        const userModelScale = (dev.spatial3d?.modelScale || 1) * (this.deviceScaleMultiplier || 1.0);
         const fp = this.getDeviceCollisionFootprint
           ? this.getDeviceCollisionFootprint(dev, userModelScale)
           : { halfW: 0.9, halfD: 0.7, height: 0.8 };
@@ -8659,10 +8912,13 @@ export class Map3DEngine {
   }
 
   publishLocalPresence(force = false) {
-    if (!authManager?.isAuthenticated?.()) return;
+    if (!authManager?.isAuthenticated?.() || stateManager?.isStudentSandbox?.()) return;
     const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
     const isActivelyMoving = this.avatarMode && Boolean(this.avatarState.isMoving);
-    const minIntervalMs = this.avatarMode ? (isActivelyMoving ? 28 : 90) : 220;
+    const hasRemotePeers = this.remoteAvatarMap && this.remoteAvatarMap.size > 0;
+    const minIntervalMs = this.avatarMode
+      ? (isActivelyMoving ? 32 : 120)
+      : (hasRemotePeers ? 350 : 2500);
     if (!force && (now - this._lastPresenceEmitAt < minIntervalMs)) return;
 
     let wx = 0;
@@ -9930,7 +10186,7 @@ export class Map3DEngine {
       for (const other of devices) {
         const sp = { ...getDefaultSpatial3d(other.type), ...(other.spatial3d || {}) };
         const otherElev = (Number(sp.elevationMeters) || 0) + (Number(sp.offsetY) || 0);
-        const otherScale = (sp.modelScale || 1) * (this.deviceScaleMultiplier || 3.0);
+        const otherScale = (sp.modelScale || 1) * (this.deviceScaleMultiplier || 1.0);
         const fp = this.getDeviceCollisionFootprint
           ? this.getDeviceCollisionFootprint(other, otherScale)
           : { halfW: 0.45, halfD: 0.38, height: 0.35 };
@@ -10361,7 +10617,7 @@ export class Map3DEngine {
           py = holder ? holder.position.y : Math.max(0, Number(nearestPick.obj.spatial3d?.elevationMeters) || 0);
           pz = w?.z ?? 0;
           rotY = Number(nearestPick.obj.spatial3d?.rotationY) || 0;
-          radius = clamp(0.45 * (this.deviceScaleMultiplier || 3.0), 0.7, 2.2);
+          radius = clamp(0.45 * (this.deviceScaleMultiplier || 1.0), 0.7, 2.2);
         } else {
           const w = this.normToWorld?.(nearestPick.obj.x ?? 0.5, nearestPick.obj.y ?? 0.5);
           px = w?.x ?? 0;
@@ -10387,7 +10643,7 @@ export class Map3DEngine {
         const w = holder ? holder.position : this.normToWorld?.(dev.position?.x ?? 0.5, dev.position?.y ?? 0.5);
         const py = holder ? holder.position.y : Math.max(0, Number(dev.spatial3d?.elevationMeters) || 0);
         const rotY = Number(dev.spatial3d?.rotationY) || 0;
-        const radius = clamp(0.45 * (this.deviceScaleMultiplier || 3.0), 0.7, 2.2);
+        const radius = clamp(0.45 * (this.deviceScaleMultiplier || 1.0), 0.7, 2.2);
         group.position.set(w?.x ?? 0, py + 0.025, w?.z ?? 0);
         group.rotation.set(0, (rotY * Math.PI) / 180, 0, 'YXZ');
         group.scale.setScalar(radius);
@@ -10428,12 +10684,25 @@ export class Map3DEngine {
         } else if (act === 'start-cable') {
           const devId = btn.dataset.deviceId;
           if (devId) this.startAvatarCablePull(devId);
+        } else if (act === 'cable-src-port') {
+          const portName = btn.dataset.portName || '';
+          if (portName) this.setActiveCablePullSourcePort(portName);
+        } else if (act === 'cable-dst-clear') {
+          if (this.activeCablePull) {
+            this.activeCablePull.targetDeviceId = null;
+            this.activeCablePull.targetPort = '';
+            this._lastHouseFlipperHudKey = '';
+            this.renderHouseFlipperPromptHud();
+          }
         } else if (act === 'cable-clip') {
           this.placeAvatarCableClip({ shiftKey: Boolean(ev.shiftKey) });
         } else if (act === 'cable-plug') {
           const targetId = btn.dataset.deviceId;
           const targetPort = btn.dataset.portName || '';
-          if (targetId) this.finishAvatarCablePull(targetId, targetPort);
+          if (targetId) {
+            if (targetPort) this.setActiveCablePullTargetPort(targetId, targetPort);
+            else this.finishAvatarCablePull(targetId, '');
+          }
         } else if (act === 'cable-undo') {
           this.undoAvatarCableClip();
         } else if (act === 'cable-ortho') {
@@ -10475,11 +10744,24 @@ export class Map3DEngine {
       const maxLen = getStandardMaxLengthMeters(cat);
       const liveLen = Number(pull.lastLiveLength || 0);
       const lenStatus = liveLen > maxLen ? 'exceeded' : (liveLen > maxLen * 0.85 ? 'warning' : 'ok');
-      const isAimingDest = Boolean(aim?.kind === 'device' && aim.deviceId && aim.deviceId !== pull.sourceDeviceId);
-      const destDev = isAimingDest ? this.deviceManager?.getDeviceById?.(aim.deviceId) : null;
+      const srcDev = this.deviceManager?.getDeviceById?.(pull.sourceDeviceId);
+      const destDeviceId = (aim?.kind === 'device' && aim.deviceId && aim.deviceId !== pull.sourceDeviceId)
+        ? aim.deviceId
+        : (pull.targetDeviceId && pull.targetDeviceId !== pull.sourceDeviceId ? pull.targetDeviceId : null);
+      const isAimingDest = Boolean(destDeviceId);
+      const destDev = isAimingDest ? this.deviceManager?.getDeviceById?.(destDeviceId) : null;
+      const srcPorts = this.getDevicePortsStatusList(pull.sourceDeviceId);
+      const dstPorts = isAimingDest ? this.getDevicePortsStatusList(destDeviceId) : [];
+      const activeDstPort = isAimingDest
+        ? ((aim?.kind === 'device' && aim.deviceId === destDeviceId && aim.portName)
+          ? aim.portName
+          : (pull.targetDeviceId === destDeviceId && pull.targetPort ? pull.targetPort : this._findFirstFreePortName(destDeviceId)))
+        : '';
       const clipCount = pull.waypoints.length;
       const zOffStr = Number(pull.elevationOffset || 0).toFixed(2);
-      const key = `cablepull:${cat}:${liveLen.toFixed(1)}:${clipCount}:${pull.orthoLock ? 1 : 0}:${zOffStr}:${isAimingDest ? aim.deviceId : (aim?.surface || 'none')}`;
+      const srcUsedKey = srcPorts.map((p) => (p.occupied ? '1' : '0')).join('');
+      const dstUsedKey = dstPorts.map((p) => (p.occupied ? '1' : '0')).join('');
+      const key = `cablepull:${cat}:${liveLen.toFixed(1)}:${clipCount}:${pull.orthoLock ? 1 : 0}:${zOffStr}:${pull.sourcePort || ''}:${srcUsedKey}:${destDeviceId || (aim?.surface || 'none')}:${activeDstPort || ''}:${dstUsedKey}`;
 
       if (this._lastHouseFlipperHudKey !== key) {
         this._lastHouseFlipperHudKey = key;
@@ -10487,20 +10769,49 @@ export class Map3DEngine {
         tipEl.style.display = 'inline-flex';
         const meterText = `${cat.toUpperCase()} • ${liveLen.toFixed(1)}m / ${maxLen}m • ${clipCount} Klem`;
         const primaryActionHtml = isAimingDest
-          ? `<button type="button" class="hf-tip-btn is-primary" data-hf-action="cable-plug" data-device-id="${this.escapeHudHtml(aim.deviceId)}" data-port-name="${this.escapeHudHtml(aim.portName || '')}">Colok ${this.escapeHudHtml(destDev?.name || 'Port')} (Klik/E)</button>`
+          ? `<button type="button" class="hf-tip-btn is-primary" data-hf-action="cable-plug" data-device-id="${this.escapeHudHtml(destDeviceId)}" data-port-name="${this.escapeHudHtml(activeDstPort || '')}">Colok ${this.escapeHudHtml(destDev?.name || 'Port')}${activeDstPort ? ` [${this.escapeHudHtml(activeDstPort)}]` : ''} (E)</button>`
           : `<button type="button" class="hf-tip-btn is-primary" data-hf-action="cable-clip">Pasang Klem (Klik)</button>`;
         const foSuggestHtml = (lenStatus === 'exceeded' && !cat.startsWith('fiber'))
           ? `<button type="button" class="hf-tip-btn is-warn" data-hf-action="cable-switch-fo" title="Panjang melebihi 100m UTP — ganti otomatis ke Fiber Optic">Ganti Fiber</button>`
           : '';
+        const clearDestBtnHtml = pull.targetDeviceId
+          ? `<button type="button" class="hf-tip-btn" data-hf-action="cable-dst-clear" title="Batal kunci perangkat tujuan">Ganti Tujuan</button>`
+          : '';
+
+        const srcChipsHtml = srcPorts.length > 0
+          ? srcPorts.map((p, idx) => {
+            const isSel = p.name === pull.sourcePort;
+            const numHint = idx < 9 && !isAimingDest ? `${idx + 1}.` : '';
+            return `<button type="button" class="hf-port-chip ${isSel ? 'is-active' : ''} ${p.occupied ? 'is-occupied' : ''}" data-hf-action="cable-src-port" data-port-name="${this.escapeHudHtml(p.name)}" ${p.occupied && !isSel ? 'disabled' : ''} title="${p.occupied ? `Port ${this.escapeHudHtml(p.name)} sudah terpakai` : `Tarik kabel dari port ${this.escapeHudHtml(p.name)}`}">${numHint}${this.escapeHudHtml(p.name)}</button>`;
+          }).join('')
+          : '';
+
+        const dstChipsHtml = isAimingDest && dstPorts.length > 0
+          ? dstPorts.map((p, idx) => {
+            const isSel = p.name === activeDstPort;
+            const numHint = idx < 9 ? `${idx + 1}.` : '';
+            return `<button type="button" class="hf-port-chip is-dest ${isSel ? 'is-active' : ''} ${p.occupied ? 'is-occupied' : ''}" data-hf-action="cable-plug" data-device-id="${this.escapeHudHtml(destDeviceId)}" data-port-name="${this.escapeHudHtml(p.name)}" ${p.occupied ? 'disabled' : ''} title="${p.occupied ? `Port ${this.escapeHudHtml(p.name)} sudah terpakai` : `Pasang kabel ke port ${this.escapeHudHtml(p.name)}`}">${numHint}${this.escapeHudHtml(p.name)}</button>`;
+          }).join('')
+          : '';
+
+        const portBarsHtml = `
+          ${srcChipsHtml ? `<div class="hf-cable-port-bar"><div class="hf-cable-port-group"><span class="hf-cable-port-label">Port Asal (${this.escapeHudHtml(srcDev?.name || 'Sumber')}):</span><div class="hf-cable-port-list">${srcChipsHtml}</div></div></div>` : ''}
+          ${dstChipsHtml ? `<div class="hf-cable-port-bar is-dest-bar"><div class="hf-cable-port-group"><span class="hf-cable-port-label">Pilih Port Tujuan (${this.escapeHudHtml(destDev?.name || 'Tujuan')}):</span><div class="hf-cable-port-list">${dstChipsHtml}</div></div></div>` : ''}
+        `;
+
         tipEl.innerHTML = `
-          <span class="hf-cable-meter is-${lenStatus}">${this.escapeHudHtml(meterText)}</span>
-          ${foSuggestHtml}
-          <button type="button" class="hf-tip-btn" data-hf-action="cable-z-down" title="Turunkan tinggi klem (-0.25m)">Z-</button>
-          <button type="button" class="hf-tip-btn" data-hf-action="cable-z-up" title="Naikkan tinggi klem (+0.25m)">Z+</button>
-          <button type="button" class="hf-tip-btn ${pull.orthoLock ? 'is-active' : ''}" data-hf-action="cable-ortho" title="Toggle Siku 90° / Bebas">${pull.orthoLock ? '90° Siku' : 'Bebas'}</button>
-          <button type="button" class="hf-tip-btn" data-hf-action="cable-undo" ${clipCount === 0 ? 'disabled' : ''} title="Lepas klem terakhir (Backspace)">Undo</button>
-          ${primaryActionHtml}
-          <button type="button" class="hf-tip-btn is-danger" data-hf-action="cable-cancel" title="Batalkan tarik kabel (Esc)">Batal</button>
+          <div class="hf-cable-top-row">
+            <span class="hf-cable-meter is-${lenStatus}">${this.escapeHudHtml(meterText)}</span>
+            ${foSuggestHtml}
+            <button type="button" class="hf-tip-btn" data-hf-action="cable-z-down" title="Turunkan tinggi klem (-0.25m)">Z-</button>
+            <button type="button" class="hf-tip-btn" data-hf-action="cable-z-up" title="Naikkan tinggi klem (+0.25m)">Z+</button>
+            <button type="button" class="hf-tip-btn ${pull.orthoLock ? 'is-active' : ''}" data-hf-action="cable-ortho" title="Toggle Siku 90° / Bebas">${pull.orthoLock ? '90° Siku' : 'Bebas'}</button>
+            <button type="button" class="hf-tip-btn" data-hf-action="cable-undo" ${clipCount === 0 ? 'disabled' : ''} title="Lepas klem terakhir (Backspace)">Undo</button>
+            ${primaryActionHtml}
+            ${clearDestBtnHtml}
+            <button type="button" class="hf-tip-btn is-danger" data-hf-action="cable-cancel" title="Batalkan tarik kabel (Esc)">Batal</button>
+          </div>
+          ${portBarsHtml}
         `;
       }
       return;
@@ -10563,13 +10874,12 @@ export class Map3DEngine {
         )
       );
       if (shouldShowPick) {
-        const isMoveTool = this.navTool === 'move';
         const isDevicePick = nearestPick.kind === 'device' || Boolean(this.deviceManager?.getDeviceById?.(nearestPick.id));
-        const key = `pick:${nearestPick.id}:${nearestPick.source || 'nearest'}:${isMoveTool ? 1 : 0}:${isDevicePick ? 1 : 0}`;
+        const key = `pick:${nearestPick.id}:${nearestPick.source || 'nearest'}:${isDevicePick ? 1 : 0}`;
         if (this._lastHouseFlipperHudKey !== key) {
           this._lastHouseFlipperHudKey = key;
           const escName = this.escapeHudHtml(nearestPick.name || 'Alat');
-          const actionLabel = isMoveTool ? 'Angkat (Klik / E)' : 'Angkat (E)';
+          const actionLabel = 'Angkat (E)';
           const cableBtnHtml = isDevicePick
             ? `<button type="button" class="hf-tip-btn is-cable" data-hf-action="start-cable" data-device-id="${this.escapeHudHtml(nearestPick.id)}" title="Ambil gulungan kabel & tarik dari perangkat ini (C)">Tarik Kabel (C)</button>`
             : '';
@@ -10632,7 +10942,7 @@ export class Map3DEngine {
 
     const holder = this.deviceMeshMap?.get(targetDev.id);
     const sp = { ...getDefaultSpatial3d(targetDev.type), ...(targetDev.spatial3d || {}) };
-    const userScale = (sp.modelScale || 1) * (this.deviceScaleMultiplier || 3.0);
+    const userScale = (sp.modelScale || 1) * (this.deviceScaleMultiplier || 1.0);
     const scaleBase = Number(clamp(userScale * 0.52, 0.9, 3.2).toFixed(2));
     const gizmoMode = this.buildPlacementConfig?.gizmoMode || 'both';
 
@@ -10776,7 +11086,7 @@ export class Map3DEngine {
     const meshGroup = this.deviceMeshMap?.get(state.deviceId);
     const modelContainer = meshGroup?.getObjectByName?.('DeviceModelContainer');
     const holderPorts = meshGroup?.userData?.devPorts || [];
-    const userScale = meshGroup?.userData?.userModelScale || ((state.dev?.spatial3d?.modelScale || 1) * (this.deviceScaleMultiplier || 3.0));
+    const userScale = meshGroup?.userData?.userModelScale || ((state.dev?.spatial3d?.modelScale || 1) * (this.deviceScaleMultiplier || 1.0));
 
     if (state.gizmoKind === 'rotate') {
       const deltaDeg = (e.clientX - state.startClientX) * 0.75 + (state.startClientY - e.clientY) * 0.35;
@@ -10982,7 +11292,7 @@ export class Map3DEngine {
     }
 
     if (!this.buildPlacementConfig?.allowClipping) {
-      const scale = (sp.modelScale || 1) * (this.deviceScaleMultiplier || 3.0);
+      const scale = (sp.modelScale || 1) * (this.deviceScaleMultiplier || 1.0);
       const fp = this.getDeviceCollisionFootprint
         ? this.getDeviceCollisionFootprint(targetDev, scale)
         : { halfW: 0.45, halfD: 0.38, height: 0.35 };
@@ -11655,778 +11965,239 @@ export class Map3DEngine {
     };
   }
 
-  /**
-   * Toggle 3D graphics performance preset ('lite' for mobile battery/FPS vs 'standard' for desktop).
-   * @param {'lite'|'standard'} mode
-   */
-  setGraphicsQuality(mode = 'standard') {
-    const normalized = mode === 'lite' ? 'lite' : 'standard';
-    this.graphicsQuality = normalized;
-    try {
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem('netmap_3d_quality_v1', normalized);
-      }
-    } catch { /* ignore storage restrictions */ }
-    this.applyGraphicsQuality();
-    eventBus.emit('map3d:quality-changed', { quality: normalized });
-    return normalized;
+  markSceneDirty(frames = 20) {
+    const n = Math.max(1, Number(frames) || 12);
+    this._dirtyFramesRemaining = Math.max(this._dirtyFramesRemaining || 0, n);
   }
 
-  getGraphicsQuality() {
-    return this.graphicsQuality || 'standard';
-  }
-
-  applyGraphicsQuality() {
-    const isLite = this.graphicsQuality === 'lite';
-    const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1;
-    const targetRatio = isLite ? Math.min(dpr, 1.15) : Math.min(dpr, 1.5);
-    this.renderer?.setPixelRatio?.(targetRatio);
-    if (this.renderer?.shadowMap) {
-      this.renderer.shadowMap.enabled = !isLite;
+  requestShadowUpdate() {
+    if (this.renderer?.shadowMap?.enabled) {
       this.renderer.shadowMap.needsUpdate = true;
     }
-    if (this.dirLight) {
-      this.dirLight.castShadow = !isLite;
-      if (this.dirLight.shadow?.mapSize) {
-        const sz = isLite ? 512 : 1024;
-        this.dirLight.shadow.mapSize.width = sz;
-        this.dirLight.shadow.mapSize.height = sz;
-      }
-    }
-    return { quality: this.graphicsQuality, pixelRatio: targetRatio, shadows: !isLite };
+    this.markSceneDirty?.(4);
+  }
+
+  getLodThresholds() {
+    const isLite = this.graphicsQuality === 'lite' || isMobileTouchDevice();
+    return isLite
+      ? { nearMax: 24, midMax: 55, farPropCull: 48, labelCull: 42 }
+      : { nearMax: 38, midMax: 88, farPropCull: 76, labelCull: 72 };
   }
 
   /**
-   * Pause or resume background WebGL rendering when a full-screen simulator modal is open.
-   * @param {boolean} paused
+   * Multi-Tier 3D Level of Detail (LOD):
+   * - Near: Full device body + 3D ports sub-group + labels + road pebbles + clips.
+   * - Mid: Hides tiny 2cm 3D port sockets, distant cable clips & high-density road pebbles.
+   * - Far: Hides distant device floating sprites & street-level decorative props (trees/faucets/bins).
+   * @param {boolean} [force=false]
    */
-  setPausedByModal(paused) {
-    this.isPausedByModal = Boolean(paused);
-    if (!this.isPausedByModal && this.isActive && this.renderer && this.scene && this.camera) {
-      this.renderer.render(this.scene, this.camera);
-    }
-    return this.isPausedByModal;
-  }
-
-  setDeviceScaleMultiplier(scaleVal) {
-    this.deviceScaleMultiplier = Number(scaleVal) || 3.0;
-    if (this.isActive) {
-      this.syncDevices();
-      this.syncCables();
-    }
-  }
-
-  setCableDiameterMultiplier(scaleVal) {
-    this.cableDiameterMultiplier = Math.max(0.1, Number(scaleVal) || 1.0);
-    if (this.isActive) {
-      this.syncCables();
-    }
-  }
-
-  setExplodeStacks(enabled) {
-    this.explodeStacks = Boolean(enabled);
-    if (this.isActive) {
-      this.syncDevices();
-      this.syncCables();
-    }
-  }
-
-  setShowLabels(enabled) {
-    const val = Boolean(enabled);
-    this.showLabels = val;
-    if (stateManager.state?.layers && stateManager.state.layers.annotations !== val) {
-      stateManager.toggleLayer('annotations', val);
-    }
-    if (typeof document !== 'undefined') {
-      const cb = document.getElementById('layer-toggle-annotations');
-      if (cb && cb.checked !== val) cb.checked = val;
-      document.getElementById('btn-3d-labels')?.classList.toggle('active', val);
-    }
-    this.apply3dViewFilters();
-  }
-
-  setShowCoverage(enabled) {
-    const val = Boolean(enabled);
-    this.showCoverage = val;
-    this.viewFilters.showCoverage = val;
-    this.apply3dViewFilters();
-  }
-
-  /** Update 3D scene quick filters (CCTV, Fiber, Wireless, Coverage, Selection Dimming) and apply immediately. */
-  setViewFilters(partialFilters = {}) {
-    this.viewFilters = {
-      ...this.viewFilters,
-      ...(partialFilters || {})
-    };
-    if (Object.prototype.hasOwnProperty.call(this.viewFilters, 'showCoverage')) {
-      this.showCoverage = Boolean(this.viewFilters.showCoverage);
-    }
-    this.apply3dViewFilters();
-    return { ...this.viewFilters };
-  }
-
-  _isBuildingStructureObject3d(obj) {
-    if (!obj) return false;
-    const shape = String(obj.shape || obj.preset || '').toLowerCase();
-    return shape === 'wall' || String(obj.category || '').toLowerCase() === 'building';
-  }
-
-  isDeviceVisibleIn3d(dev) {
-    if (!dev) return false;
-    const layers = stateManager.state?.layers || {};
-    if (layers.devices === false) return false;
-    if (dev.layerVisible === false) return false;
-    if (dev.type === 'cctv' && this.viewFilters?.showCctv === false) return false;
-    return true;
-  }
-
-  isCableVisibleIn3d(cable) {
-    if (!cable) return false;
-    if (this.workspaceGhostDevices) return false;
-    const layers = stateManager.state?.layers || {};
-    if (layers.connections === false) return false;
-    const srcDev = this.deviceManager?.getDeviceById?.(cable.source);
-    const dstDev = this.deviceManager?.getDeviceById?.(cable.destination);
-    if (srcDev && !this.isDeviceVisibleIn3d(srcDev) && layers.devices !== false) return false;
-    if (dstDev && !this.isDeviceVisibleIn3d(dstDev) && layers.devices !== false) return false;
-    const isWireless = cable.type === 'wireless' || cable.cableCategory === 'wireless-ptp';
-    const isFiber = cable.type === 'fiber' || String(cable.cableCategory || '').toLowerCase().startsWith('fiber');
-    if (isFiber && this.viewFilters?.showFiber === false) return false;
-    if (isWireless && this.viewFilters?.showWireless === false) return false;
-    return true;
-  }
-
-  _setMaterialDimState(material, shouldDim, { opacity = 0.42, tintHex = null } = {}) {
-    if (!material) return;
-    const mats = Array.isArray(material) ? material : [material];
-    mats.forEach((m) => {
-      if (!m) return;
-      if (!m.userData) m.userData = {};
-      if (!m.userData._origFilterState) {
-        m.userData._origFilterState = {
-          opacity: m.opacity ?? 1,
-          transparent: Boolean(m.transparent),
-          colorHex: typeof m.color?.getHex === 'function' ? m.color.getHex() : null
-        };
-      }
-      const orig = m.userData._origFilterState;
-      if (shouldDim) {
-        m.transparent = true;
-        m.opacity = Math.min(opacity, orig.opacity);
-        if (tintHex !== null && typeof m.color?.setHex === 'function') {
-          m.color.setHex(tintHex);
-        }
-      } else {
-        m.opacity = orig.opacity;
-        m.transparent = orig.transparent;
-        if (orig.colorHex !== null && typeof m.color?.setHex === 'function') {
-          m.color.setHex(orig.colorHex);
-        }
-      }
-    });
-  }
-
-  /** Apply all 6 layer toggles and 5 component/focus filters to the 3D scene graph non-destructively. */
-  apply3dViewFilters() {
-    if (!this.isInitialized) return;
-    const layers = stateManager.state?.layers || {};
-    const showBg = layers.background !== false;
-    const showDevices = layers.devices !== false;
-    const showConnections = layers.connections !== false;
-    const showInfra = layers.infrastructure !== false;
-    const showBuildings = layers.buildings !== false;
-    const showAnnotations = layers.annotations !== false;
-
-    this.showLabels = showAnnotations;
-    if (typeof document !== 'undefined') {
-      document.getElementById('btn-3d-labels')?.classList.toggle('active', showAnnotations);
-    }
-
-    const selDevId = !this.workspaceGhostDevices ? (this.deviceManager?.selectedDeviceId || null) : null;
-    const selCabId = !this.workspaceGhostDevices ? (this.cableManager?.selectedCableId || null) : null;
-    const shouldDimBg = Boolean((selDevId || selCabId) && this.viewFilters?.dimOnSelection !== false);
-
-    // 1. Background ground image plane (keep GridHelper visible for 3D orientation) + selection dim
-    if (this.groundGroup) {
-      this.groundGroup.visible = true;
-      this.groundGroup.children.forEach((child) => {
-        if (child.type === 'GridHelper') {
-          child.visible = true;
-          if (child.material) {
-            if (!child.material.userData) child.material.userData = {};
-            if (child.material.userData._origGridOpacity === undefined) {
-              child.material.userData._origGridOpacity = child.material.opacity ?? 0.18;
-            }
-            child.material.opacity = shouldDimBg
-              ? 0.07
-              : (showBg ? child.material.userData._origGridOpacity : 0.22);
-          }
-        } else if (child.isMesh) {
-          child.visible = showBg;
-          this._setMaterialDimState(child.material, shouldDimBg, { opacity: 0.42, tintHex: 0x94a3b8 });
-        }
-      });
-    }
-
-    // 2. Buildings layer (Rooms, Roads & Wall 3D objects)
-    if (this.roomsGroup) this.roomsGroup.visible = showBuildings;
-    if (this.roadsGroup) this.roadsGroup.visible = showBuildings;
-
-    // 3. Infrastructure & Building objects inside objects3dGroup
-    if (this.objects3dGroup) {
-      this.objects3dGroup.visible = showInfra || showBuildings;
-      this.object3dMeshMap.forEach((meshGroup, objId) => {
-        const obj = stateManager.getObject3dById?.(objId);
-        const isBldg = this._isBuildingStructureObject3d(obj);
-        meshGroup.visible = isBldg ? showBuildings : showInfra;
-      });
-    }
-
-    // 4. Devices layer + CCTV quick filter
-    if (this.devicesGroup) {
-      this.devicesGroup.visible = showDevices;
-      this.deviceMeshMap.forEach((holder, devId) => {
-        const dev = this.deviceManager?.getDeviceById?.(devId);
-        holder.visible = dev ? this.isDeviceVisibleIn3d(dev) : showDevices;
-      });
-    }
-
-    // 5. Connections layer + Fiber / Wireless filters + non-selected cable focus dimming
-    const cablesActive = !this.workspaceGhostDevices && showConnections;
-    if (this.cablesGroup) {
-      this.cablesGroup.visible = cablesActive;
-      this.cablesGroup.children.forEach((child) => {
-        const cabId = child.userData?.cableId;
-        if (!cabId) return;
-        const cable = this.cableManager?.getConnectionById?.(cabId);
-        const isVis = cable ? this.isCableVisibleIn3d(cable) : cablesActive;
-        child.visible = isVis;
-        if (isVis && child.isMesh && child.material) {
-          const isHighlighted = !shouldDimBg ||
-            cabId === selCabId ||
-            cable?.source === selDevId ||
-            cable?.destination === selDevId;
-          this._setMaterialDimState(child.material, !isHighlighted, { opacity: 0.26 });
-        }
-      });
-    }
-
-    // 6. WiFi Coverage overlay filter
-    const showCov = !this.workspaceGhostDevices && showDevices && (this.viewFilters?.showCoverage !== false);
-    if (this.coverageGroup) {
-      this.coverageGroup.visible = showCov;
-      this.coverageGroup.children.forEach((child) => {
-        const devId = child.userData?.deviceId;
-        const dev = devId ? this.deviceManager?.getDeviceById?.(devId) : null;
-        child.visible = showCov && (!dev || this.isDeviceVisibleIn3d(dev));
-      });
-    }
-
-    // 7. Annotations layer (devices, rooms & 3D objects floating sprites)
-    this.updateAvatarDeviceLabelsVisibility?.();
-    this.updateBuildingSignboardsVisibility?.();
-    [this.roomsGroup, this.objects3dGroup].forEach((grp) => {
-      grp?.traverse?.((child) => {
-        if (child?.userData?.isLabelSprite || child?.userData?.isDeviceLabel) {
-          child.visible = showAnnotations;
-        }
-      });
-    });
-  }
-
-  _disposeObject3DResources(root) {
-    if (!root) return;
-    root.traverse((obj) => {
-      // Never dispose shared geometries/materials/textures originating from glbCache clones
-      if (obj.userData?.sharedGlbResource) return;
-      if (obj.geometry) obj.geometry.dispose();
-      if (obj.material) {
-        const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
-        mats.forEach((m) => {
-          if (!m) return;
-          if (m.map && m.map !== this.groundTexture) m.map.dispose();
-          m.dispose();
-        });
-      }
-    });
-  }
-
-  clearGroup(group) {
-    if (!group) return;
-    while (group.children.length > 0) {
-      const child = group.children[0];
-      group.remove(child);
-      this._disposeObject3DResources(child);
-    }
-  }
-
-  showStatusHint(message) {
-    const statusHint = document.querySelector('#app-status-bar .status-item:last-child');
-    if (statusHint) {
-      statusHint.innerHTML = `<span style="color: var(--accent-blue); font-weight: 600;">${message}</span>`;
-    }
-  }
-
-  bindGlobalListeners() {
-    const scheduleSyncDevAndCables = () => {
-      if (!this.isActive || this.dragMoveState || this.dragRotateState || this.transformGizmoDragState) return;
-      if (this._pendingSyncRaf) return;
-      this._pendingSyncRaf = requestAnimationFrame(() => {
-        this._pendingSyncRaf = null;
-        if (!this.isActive || this.dragMoveState || this.dragRotateState || this.transformGizmoDragState) return;
-        this.syncDevices();
-        this.syncCables();
-        this.syncBuildingSignboards?.();
-        if (this.buildingXrayMode || this.perRoomXrayIds?.size > 0) {
-          this.applyBuildingXrayMaterials?.();
-        }
-        if (this.simulatorFocusedDeviceId) {
-          if (this.deviceManager?.getDeviceById?.(this.simulatorFocusedDeviceId)) {
-            this.renderSimulatorInspectorHud(this.simulatorFocusedDeviceId);
-          } else {
-            this.exitSimulatorFocus({ restoreCamera: false });
-          }
-        } else if (this.avatarMode) {
-          this.findNearestDeviceToAvatar();
-          this.renderAvatarHudBar();
-        }
-      });
-    };
-
-    const handleSelectionVisuals = () => {
-      if (!this.isActive) return;
-      this.syncSelectionRings();
-      this.apply3dViewFilters();
-      if (this.avatarMode) {
-        this.syncBuildPlacementHudUI?.();
-        this.renderHouseFlipperPromptHud?.();
-        this.updateAvatarProximityHud?.();
-      }
-      if (this.simulatorFocusedDeviceId) {
-        if (this.deviceManager?.getDeviceById?.(this.simulatorFocusedDeviceId)) {
-          this.renderSimulatorInspectorHud(this.simulatorFocusedDeviceId);
-        } else {
-          this.exitSimulatorFocus({ restoreCamera: false });
-        }
-      }
-    };
-
-    eventBus.on('layer:visibility-changed', ({ layer, visible } = {}) => {
-      if (layer === 'annotations') {
-        this.showLabels = Boolean(visible);
-        if (typeof document !== 'undefined') {
-          document.getElementById('btn-3d-labels')?.classList.toggle('active', Boolean(visible));
-        }
-      }
-      if (this.isInitialized) {
-        this.apply3dViewFilters();
-      }
-    });
-
-    eventBus.on('device:added', scheduleSyncDevAndCables);
-    eventBus.on('device:updated', scheduleSyncDevAndCables);
-    eventBus.on('device:deleted', scheduleSyncDevAndCables);
-    eventBus.on('device:moved', scheduleSyncDevAndCables);
-    eventBus.on('device:selected', handleSelectionVisuals);
-    eventBus.on('device:deselected', handleSelectionVisuals);
-    eventBus.on('device:selection-changed', handleSelectionVisuals);
-
-    const syncCablesOnly = () => {
-      if (!this.isActive) return;
-      this.syncCables();
-      this.syncBuildingSignboards?.();
-      if (this.buildingXrayMode || this.perRoomXrayIds?.size > 0) {
-        this.applyBuildingXrayMaterials?.();
-      }
-      if (this.simulatorFocusedDeviceId) {
-        this.renderSimulatorInspectorHud(this.simulatorFocusedDeviceId);
-      }
-    };
-
-    eventBus.on('connection:added', syncCablesOnly);
-    eventBus.on('connection:updated', syncCablesOnly);
-    eventBus.on('connection:deleted', syncCablesOnly);
-    eventBus.on('connection:selected', syncCablesOnly);
-    eventBus.on('connection:deselected', syncCablesOnly);
-
-    const syncRoomsOnly = () => {
-      if (this.isActive && !this.object3dDragState) {
-        this.syncRooms();
-      }
-    };
-    const syncSignboardsOnly = () => {
-      if (this.isActive) {
-        this.syncBuildingSignboards?.();
-      }
-    };
-    eventBus.on('room3d:changed', syncRoomsOnly);
-    eventBus.on('room3d:selected', syncRoomsOnly);
-    eventBus.on('room3d:deselected', syncRoomsOnly);
-    eventBus.on('room3d:doc-updated', syncSignboardsOnly);
-    eventBus.on('room3d:inspect', syncSignboardsOnly);
-    eventBus.on('room3d:inspect-closed', syncSignboardsOnly);
-
-    const syncObjects3dOnly = () => {
-      if (this.isActive && !this.object3dDragState) {
-        this.syncObjects3d();
-        if (this.avatarMode) {
-          this.renderHouseFlipperPromptHud?.();
-          this.updateAvatarProximityHud?.();
-        }
-      }
-    };
-    eventBus.on('object3d:changed', syncObjects3dOnly);
-    eventBus.on('object3d:selected', syncObjects3dOnly);
-    eventBus.on('object3d:deselected', syncObjects3dOnly);
-
-    const syncRoadsOnly = () => {
-      if (this.isActive && !this.object3dDragState) {
-        this.syncRoads();
-      }
-    };
-    eventBus.on('road3d:changed', syncRoadsOnly);
-    eventBus.on('road3d:selected', syncRoadsOnly);
-    eventBus.on('road3d:deselected', syncRoadsOnly);
-
-    eventBus.on('map:scale-changed', () => {
-      if (this.isInitialized) {
-        this.rebuildGround();
-        if (this.isActive) this.syncAll();
-      }
-    });
-
-    eventBus.on('map:image-changed', ({ src, image }) => {
-      if (src) {
-        this.activeMapUrl = src;
-        this.activeMapImage = image || null;
-        if (this.isInitialized) this.rebuildGround();
-      }
-    });
-
-    eventBus.on('theme:changed', () => {
-      this.applyThemeColors();
-    });
-
-    eventBus.on('presence:updated', ({ peers, deltaPeer, deltaType, deltaClientId } = {}) => {
-      if (deltaType === 'update' && deltaPeer) {
-        this.syncSingleRemoteAvatar(deltaPeer);
-        return;
-      }
-      if (deltaType === 'remove' && deltaClientId) {
-        this.removeSingleRemoteAvatar(deltaClientId);
-        return;
-      }
-      this.syncRemoteAvatars(peers || authManager.getRemotePeers());
-    });
-
-    eventBus.on('auth:changed', () => {
-      const u = authManager.getCurrentUser?.();
-      if (this.avatarGroup) {
-        updateRobloxAvatarLabel(this.avatarGroup, u ? `@${u.username}` : 'Teknisi Jaringan', '#76c457');
-      }
-      this.syncRemoteAvatars(authManager.getRemotePeers());
-    });
-
-    eventBus.on('mode:changed', ({ mode }) => {
-      if (this.container) {
-        this.container.classList.toggle('mode-draw-cable', mode === 'draw-cable');
-      }
-      if (mode !== 'draw-cable') {
-        this.pendingCableSourceId = null;
-        this.pendingCableSourcePort = '';
-        this.pending3dWaypoints = [];
-        if (this.isActive) {
-          this.syncDevices();
-          this.syncCables();
-          if (this.simulatorFocusedDeviceId) {
-            this.renderSimulatorInspectorHud(this.simulatorFocusedDeviceId);
-          }
-        }
-      }
-    });
-
-    eventBus.on('pen-tool:options-changed', ({ pathStyle, category }) => {
-      if (pathStyle) this.pen3dPathStyle = pathStyle;
-      if (category) this.pen3dCategory = category;
-      if (this.isActive) this.syncCables();
-    });
-
-    eventBus.on('pen-tool:undo-3d-point', () => {
-      if (this.pending3dWaypoints.length > 0) {
-        this.pending3dWaypoints.pop();
-        if (this.isActive) this.syncCables();
-      }
-    });
-
-    eventBus.on('map3d:start-cable', ({ deviceId, portName = '' }) => {
-      this.pendingCableSourceId = deviceId || null;
-      this.pendingCableSourcePort = portName || '';
-      this.pending3dWaypoints = [];
-      if (this.isActive) {
-        this.syncDevices();
-        this.syncCables();
-        this.syncBuildingSignboards?.();
-        if (this.buildingXrayMode || this.perRoomXrayIds?.size > 0) {
-          this.applyBuildingXrayMaterials?.();
-        }
-        if (this.simulatorFocusedDeviceId) {
-          this.renderSimulatorInspectorHud(this.simulatorFocusedDeviceId);
-        }
-      }
-    });
-
-    eventBus.on('map3d:zoom-extents', () => {
-      if (this.isActive) this.zoomExtents();
-    });
-
-    eventBus.on('map3d:set-navtool', ({ tool }) => {
-      if (tool) this.setNavTool(tool);
-    });
-
-    eventBus.on('map3d:bake-cable-pen-points', ({ cableId, count = 3 }) => {
-      const cable = this.cableManager?.getConnectionById(cableId);
-      if (!cable) return;
-      const numPts = Math.max(1, Math.min(8, Number(count) || 3));
-      const mesh = this.cableMeshMap.get(cableId);
-      const curve = mesh?.userData?.curve || null;
-      const srcDev = this.deviceManager?.getDeviceById(cable.source);
-      const dstDev = this.deviceManager?.getDeviceById(cable.destination);
-
-      const sampledRoute = [];
-      if (curve && typeof curve.getPoint === 'function') {
-        for (let i = 1; i <= numPts; i++) {
-          const t = i / (numPts + 1);
-          const pt = curve.getPoint(t);
-          const { normX, normY } = this.worldToNorm(pt.x, pt.z);
-          sampledRoute.push({
-            x: Number(Math.max(0.01, Math.min(0.99, normX)).toFixed(4)),
-            y: Number(Math.max(0.01, Math.min(0.99, normY)).toFixed(4)),
-            z: Number(Math.max(0.02, pt.y).toFixed(2))
-          });
-        }
-      } else if (srcDev && dstDev) {
-        const srcElev = srcDev.spatial3d?.elevationMeters ?? 1.2;
-        const dstElev = dstDev.spatial3d?.elevationMeters ?? 1.2;
-        for (let i = 1; i <= numPts; i++) {
-          const t = i / (numPts + 1);
-          sampledRoute.push({
-            x: Number(Math.max(0.01, Math.min(0.99, srcDev.position.x + (dstDev.position.x - srcDev.position.x) * t)).toFixed(4)),
-            y: Number(Math.max(0.01, Math.min(0.99, srcDev.position.y + (dstDev.position.y - srcDev.position.y) * t)).toFixed(4)),
-            z: Number(Math.max(0.02, srcElev + (dstElev - srcElev) * t).toFixed(2))
-          });
-        }
-      }
-
-      if (sampledRoute.length > 0) {
-        this.cableManager.updateConnection(cableId, {
-          route: sampledRoute,
-          details: {
-            ...(cable.details || {}),
-            pathStyle: 'curve',
-            bowOut: 0,
-            sideOffset: 0,
-            sagDrop: 0
-          }
-        });
-      }
-    });
-
-    // Keyboard state tracking for smooth WASD/QE walk/fly and Roblox Mode Teknisi jump/sprint in 3D mode
-    window.addEventListener('keydown', (e) => {
-      if (!this.isActive) return;
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) return;
-      if (e.key === 'Alt' && this.avatarMode) {
-        this.releaseAvatarPointerLock();
-      }
-      if (e.code === 'Space' || e.key === ' ') {
-        if (this.avatarMode) {
-          e.preventDefault();
-          this.keysPressed.add('space');
-        }
-        return;
-      }
-      const lowerKey = e.key.toLowerCase();
-      if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(lowerKey)) {
-        return; // Reserved for device X/Y nudging, never camera/avatar WASD walk
-      }
-      this.keysPressed.add(lowerKey);
-      if (e.shiftKey) this.keysPressed.add('shift');
-    });
-
-    window.addEventListener('keyup', (e) => {
-      if (e.code === 'Space' || e.key === ' ') {
-        this.keysPressed.delete('space');
-      }
-      this.keysPressed.delete(e.key.toLowerCase());
-      if (!e.shiftKey) this.keysPressed.delete('shift');
-    });
-
-    window.addEventListener('blur', () => {
-      this.keysPressed.clear();
-    });
-  }
-
-  /**
-   * Toggle ghost/non-interactive rendering of network devices & cables while in Studio Bangunan 3D.
-   * @param {boolean} enabled
-   */
-  setWorkspaceGhostDevices(enabled) {
-    this.workspaceGhostDevices = Boolean(enabled);
-    if (this.devicesGroup) {
-      this.devicesGroup.traverse((obj) => {
-        if (!obj.isMesh || !obj.material) return;
-        const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
-        mats.forEach((m) => {
-          if (!m) return;
-          if (m.userData?._origOpacity === undefined) {
-            m.userData = { ...(m.userData || {}), _origOpacity: m.opacity ?? 1, _origTransparent: Boolean(m.transparent) };
-          }
-          if (this.workspaceGhostDevices) {
-            m.transparent = true;
-            m.opacity = Math.min(0.28, m.userData._origOpacity);
-          } else {
-            m.opacity = m.userData._origOpacity;
-            m.transparent = m.userData._origTransparent;
-          }
-        });
-      });
-    }
-    this.apply3dViewFilters?.();
-    return this.workspaceGhostDevices;
-  }
-
-  /**
-   * Spawn glowing 3D packet sphere(s) along the world coordinates of a simulated network path.
-   * @param {string[]} deviceIds
-   * @param {{ success?: boolean, durationMs?: number }} [options]
-   * @returns {{ hopCount: number, success: boolean }}
-   */
-  animatePacketPath3D(deviceIds = [], { success = true, durationMs = 1500 } = {}) {
-    if (!Array.isArray(deviceIds) || deviceIds.length === 0) {
-      return { hopCount: 0, success: Boolean(success) };
-    }
-
-    const waypoints = deviceIds
-      .map((id) => {
-        const eff = this.effectivePosMap?.get?.(id);
-        if (eff) return eff.clone().add(new THREE.Vector3(0, 0.35, 0));
-        const dev = this.deviceManager?.getDeviceById?.(id);
-        if (!dev) return null;
-        const w = this.normToWorld?.(dev.position?.x ?? 0.5, dev.position?.y ?? 0.5) || { x: 0, z: 0 };
-        const elev = Number(dev.spatial3d?.elevationMeters) || 0.4;
-        return new THREE.Vector3(w.x, elev + 0.35, w.z);
-      })
-      .filter(Boolean);
-
-    if (waypoints.length === 0) {
-      return { hopCount: 0, success: Boolean(success) };
-    }
-
-    const color = success ? 0x22c55e : 0xef4444;
-    const sphere = new THREE.Mesh(
-      new THREE.SphereGeometry(0.32, 16, 16),
-      new THREE.MeshBasicMaterial({ color })
-    );
-    sphere.position.copy(waypoints[0]);
-    sphere.userData.isPacketProbe = true;
-    this.packetFlowGroup?.add(sphere);
-
+  updateSceneLOD(force = false) {
+    if (!this.isInitialized || !this.camera?.position) return null;
     const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    this.activePacketFlows.push({
-      mesh: sphere,
-      waypoints,
-      startTime: now,
-      duration: Math.max(400, Number(durationMs) || 1500)
+    const camPos = this.camera.position;
+    if (!force) {
+      if (now - (this._lastLodAt || 0) < 75) return this.renderPerfStats;
+      const moveSq = this._lastLodCamPos?.distanceToSquared?.(camPos) ?? Infinity;
+      const rotDelta = (this._lastLodCamQuat && typeof this._lastLodCamQuat.angleTo === 'function' && this.camera.quaternion)
+        ? this._lastLodCamQuat.angleTo(this.camera.quaternion)
+        : 1;
+      if (moveSq < 0.3 && rotDelta < 0.03) return this.renderPerfStats;
+    }
+
+    this._lastLodAt = now;
+    this._lastLodCamPos?.copy?.(camPos);
+    if (this.camera.quaternion) this._lastLodCamQuat?.copy?.(this.camera.quaternion);
+
+    const th = this.getLodThresholds();
+    const nearSq = th.nearMax * th.nearMax;
+    const midSq = th.midMax * th.midMax;
+    const labelSq = th.labelCull * th.labelCull;
+    const propCullSq = th.farPropCull * th.farPropCull;
+    const roadDetailSq = (th.nearMax * 1.35) * (th.nearMax * 1.35);
+    const isBirdsEyeOverview = camPos.y >= 32;
+
+    const selDevId = this.deviceManager?.selectedDeviceId || null;
+    const selCabId = this.cableManager?.selectedCableId || null;
+    const selRoomId = stateManager.getSelectedRoom3dId?.() || null;
+
+    let lodNearCount = 0;
+    let lodMidCount = 0;
+    let lodFarCount = 0;
+    let lodCulledPropsCount = 0;
+
+    // 1. Device LOD (hide tiny RJ45 port sockets & labels beyond near/mid thresholds)
+    this.deviceMeshMap?.forEach((holder, devId) => {
+      if (!holder) return;
+      const hp = holder.position;
+      const dx = camPos.x - (hp?.x || 0);
+      const dy = camPos.y - (hp?.y || 0);
+      const dz = camPos.z - (hp?.z || 0);
+      const distSq = dx * dx + dy * dy + dz * dz;
+      const tier = distSq <= nearSq ? 'near' : (distSq <= midSq ? 'mid' : 'far');
+      holder.userData.lodTier = tier;
+      if (tier === 'near') lodNearCount += 1;
+      else if (tier === 'mid') lodMidCount += 1;
+      else lodFarCount += 1;
+
+      const keepDetailed = (devId === selDevId || devId === this.simulatorFocusedDeviceId || devId === this.pendingCableSourceId);
+      const children = holder.children || [];
+      for (let i = 0; i < children.length; i++) {
+        const ch = children[i];
+        if (!ch) continue;
+        if (ch.name === 'DeviceModelContainer' && ch.children) {
+          for (let j = 0; j < ch.children.length; j++) {
+            const sub = ch.children[j];
+            if (sub?.name === 'DevicePorts3DGroup') {
+              sub.visible = keepDetailed || tier === 'near';
+            }
+          }
+        } else if (ch.userData?.isDeviceLabel && !this.avatarMode) {
+          const allowLabel = Boolean(this.showLabels);
+          ch.visible = allowLabel && (keepDetailed || isBirdsEyeOverview || distSq <= labelSq);
+        }
+      }
     });
 
-    return { hopCount: waypoints.length, success: Boolean(success) };
-  }
-
-  updatePacketFlows3D(now = typeof performance !== 'undefined' ? performance.now() : Date.now()) {
-    if (!Array.isArray(this.activePacketFlows) || this.activePacketFlows.length === 0) return;
-    const remaining = [];
-    for (const flow of this.activePacketFlows) {
-      const elapsed = now - flow.startTime;
-      const t = Math.min(1, Math.max(0, elapsed / flow.duration));
-      if (t >= 1 || !flow.mesh) {
-        this.packetFlowGroup?.remove(flow.mesh);
-        flow.mesh?.geometry?.dispose?.();
-        flow.mesh?.material?.dispose?.();
-        continue;
-      }
-      const pts = flow.waypoints;
-      if (pts.length === 1) {
-        flow.mesh.position.copy(pts[0]);
-      } else {
-        const segFloat = t * (pts.length - 1);
-        const idx = Math.min(pts.length - 2, Math.floor(segFloat));
-        const alpha = segFloat - idx;
-        flow.mesh.position.lerpVectors(pts[idx], pts[idx + 1], alpha);
-        flow.mesh.position.y += Math.sin(alpha * Math.PI) * 0.45;
-      }
-      remaining.push(flow);
-    }
-    this.activePacketFlows = remaining;
-  }
-
-  // ===========================================================================
-  // Phase 7B–7E: First-Person / Third-Person Physical Cable Spool Pulling
-  // ===========================================================================
-
-  /**
-   * Pick the first unoccupied port name on a device (for effortless 1-tap cable start/finish).
-   */
-  _findFirstFreePortName(deviceId) {
-    const dev = this.deviceManager?.getDeviceById?.(deviceId);
-    if (!dev) return '';
-    const ports = (Array.isArray(dev.ports) && dev.ports.length > 0)
-      ? dev.ports
-      : getDefaultDevicePorts(dev.type, dev.model, dev.spatial3d?.customModelUrl);
-    const used = new Set();
-    (this.cableManager?.getAllConnections?.() || []).forEach((cab) => {
-      if (cab.source === deviceId && cab.details?.portSource) used.add(cab.details.portSource);
-      if (cab.destination === deviceId && cab.details?.portDestination) used.add(cab.details.portDestination);
+    // 2. Cable LOD (hide distant non-selected cable clips/handles)
+    this.cableMeshMap?.forEach((mesh, cabId) => {
+      if (!mesh) return;
+      const mid = mesh.userData?.linearMid || mesh.position;
+      const dx = camPos.x - (mid?.x || 0);
+      const dy = camPos.y - (mid?.y || 0);
+      const dz = camPos.z - (mid?.z || 0);
+      const distSq = dx * dx + dy * dy + dz * dz;
+      mesh.userData.lodTier = distSq <= nearSq ? 'near' : (distSq <= midSq ? 'mid' : 'far');
     });
-    const free = ports.find((p) => !used.has(p.name));
-    return free?.name || ports[0]?.name || '';
+    if (this.cablesGroup?.children) {
+      for (let i = 0; i < this.cablesGroup.children.length; i++) {
+        const ch = this.cablesGroup.children[i];
+        if (!ch?.userData?.isCableClip3d) continue;
+        const cabId = ch.userData.cableId;
+        if (cabId && cabId === selCabId) {
+          ch.visible = true;
+        } else if (ch.userData.isInstancedClipsGroup) {
+          ch.visible = camPos.y < (th.midMax * 1.45);
+        } else if (cabId) {
+          const cabMesh = this.cableMeshMap.get(cabId);
+          ch.visible = !cabMesh || cabMesh.userData.lodTier === 'near';
+        }
+      }
+    }
+
+    // 3. Road LOD (hide dense 3D river pebbles & curb joints when zoomed far away)
+    this.road3dMeshMap?.forEach((roadGroup) => {
+      if (!roadGroup) return;
+      const rc = roadGroup.userData?.roadCenterWorld || roadGroup.position || { x: 0, y: 0, z: 0 };
+      const dx = camPos.x - (rc.x || 0);
+      const dy = camPos.y - (rc.y || 0);
+      const dz = camPos.z - (rc.z || 0);
+      const distSq = dx * dx + dy * dy + dz * dz;
+      const showDetail = distSq <= roadDetailSq;
+      roadGroup.userData.lodTier = showDetail ? 'near' : 'mid';
+      const children = roadGroup.children || [];
+      for (let i = 0; i < children.length; i++) {
+        const ch = children[i];
+        if (ch?.name === 'RoadRiverPebbles' || ch?.name === 'RoadCurbJointsInstanced') {
+          ch.visible = showDetail;
+        }
+      }
+    });
+
+    // 4. Room & Decorative Prop LOD (cull tiny/far outdoor trees & props when street-level)
+    const layers = stateManager.state?.layers || {};
+    const allowBuildings = layers.buildings !== false;
+    this.room3dMeshMap?.forEach((roomGroup, roomId) => {
+      if (!roomGroup) return;
+      const c = roomGroup.userData?.lodCenter || roomGroup.position || { x: 0, y: 0, z: 0 };
+      const dx = camPos.x - (c.x || 0);
+      const dy = camPos.y - (c.y || 0);
+      const dz = camPos.z - (c.z || 0);
+      const distSq = dx * dx + dy * dy + dz * dz;
+      const tier = distSq <= nearSq ? 'near' : (distSq <= midSq ? 'mid' : 'far');
+      roomGroup.userData.lodTier = tier;
+
+      const isDecor = Boolean(roomGroup.userData?.isDecorationProp);
+      const propH = Number(roomGroup.userData?.propMaxHeight) || 3;
+      const cullProp = isDecor && roomId !== selRoomId && (
+        (!isBirdsEyeOverview && distSq > propCullSq) ||
+        (isBirdsEyeOverview && propH <= 2.6 && distSq > propCullSq * 5)
+      );
+      roomGroup.userData.lodCulled = Boolean(cullProp);
+      if (cullProp) lodCulledPropsCount += 1;
+      roomGroup.visible = allowBuildings && !roomGroup.userData.lodCulled && !roomGroup.userData.occlusionCulled;
+    });
+
+    this.renderPerfStats = {
+      ...(this.renderPerfStats || {}),
+      lodNearCount,
+      lodMidCount,
+      lodFarCount,
+      lodCulledPropsCount
+    };
+    return this.renderPerfStats;
   }
 
   /**
-   * Start physical 3D cable pulling from a source device/port in Mode Teknisi (FPP/TPP).
-   * @param {string} [deviceId]
-   * @param {string} [portName]
-   * @param {{ cableCategory?: string, conduitType?: string, orthoLock?: boolean }} [options]
+   * Resolve the building object the technician avatar is currently standing inside (null if outdoors).
+   * @returns {Object|null}
    */
-  startAvatarCablePull(deviceId = null, portName = '', options = {}) {
-    let targetId = deviceId;
-    if (!targetId) {
-      const pick = this.findNearestPickableObjectToAvatar?.();
-      if (pick?.id && this.deviceManager?.getDeviceById?.(pick.id)) {
-        targetId = pick.id;
-      } else {
-        targetId = this.deviceManager?.selectedDeviceId || null;
+  _getAvatarCurrentBuilding() {
+    if (!this.avatarMode || !this.avatarState) return null;
+    const rooms = stateManager.getRooms3d?.() || [];
+    if (rooms.length === 0) return null;
+    const { normX, normY } = this.worldToNorm(
+      Number(this.avatarState.x) || 0,
+      Number(this.avatarState.z) || 0
+    );
+    const projectMap = stateManager.getState()?.project?.map || {};
+    return findBuildingForPoint(normX, normY, rooms, {
+      mapWidthMeters: this.cableManager?.mapWidthMeters || 170,
+      naturalWidth: projectMap.naturalWidth || 1024,
+      naturalHeight: projectMap.naturalHeight || 1024,
+      marginMeters: 0.15,
+      includeDecorations: false
+    });
+  }
+
+  /**
+   * Frustum & Indoor FPP Room Occlusion Culling:
+   * When the technician walks inside a building in FPP mode, culls outdoor decorative props,
+   * unrelated far buildings outside frustum/room shell, and devices far outside the active room.
+   * Also performs group-level bounding-sphere frustum culling when camera matrices are ready.
+   * @param {boolean} [force=false]
+   */
+  updateSceneOcclusionCulling(force = false) {
+    if (!this.isInitialized || !this.camera) return null;
+    const indoorRoom = (this.avatarMode && this.avatarPerspective === 'fpp')
+      ? this._getAvatarCurrentBuilding()
+      : null;
+    const indoorId = indoorRoom?.id || null;
+    if (!force && indoorId === null && this._lastOcclusionRoomId === null && !this.camera.projectionMatrix) {
+      return this.renderPerfStats;
+    }
+    this._lastOcclusionRoomId = indoorId;
+
+    // Prepare frustum if camera has valid projection matrices
+    let hasValidFrustum = false;
+    if (this._lodFrustum && this._lodProjMatrix && this._lodSphere && this.camera.projectionMatrix && this.camera.matrixWorldInverse) {
+      try {
+        this.camera.updateMatrixWorld?.();
+        if (typeof this.camera.matrixWorldInverse.copy === 'function') {
+          this.camera.matrixWorldInverse.copy(this.camera.matrixWorld).invert();
+        }
+        this._lodProjMatrix.multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse);
+        const pe = this._lodProjMatrix.elements;
+        if (Number.isFinite(pe?.[0]) && Math.abs(pe[0]) > 1e-6) {
+          this._lodFrustum.setFromProjectionMatrix(this._lodProjMatrix);
+          hasValidFrustum = true;
+        }
+      } catch {
+        hasValidFrustum = false;
       }
     }
-    const srcDev = targetId ? this.deviceManager?.getDeviceById?.(targetId) : null;
-    if (!srcDev) {
-      this.showStatusHint('Arahkan crosshair ke perangkat jaringan terlebih dahulu lalu tekan C untuk menarik kabel.');
-      return null;
-    }
 
-    // Drop any carried items first so technician holds only the cable spool
-    if (Array.isArray(this.carriedObjects) && this.carriedObjects.length > 0) {
-      this.dropCarriedObjectsFromAvatar?.({ dropAll: true, silent: true });
-    }
-
-    const chosenPort = portName || this._findFirstFreePortName(srcDev.id);
-    const cableCategory = options.cableCategory || this.pen3dCategory || 'cat6';
-    const orthoLock = options.orthoLock !== undefined ? Boolean(options.orthoLock) : true;
-
-    this.activeCablePull = {
-      sourceDeviceId: srcDev.id,
-      sourcePort: chosenPort,
-      cableCategory,
-      pathStyle: orthoLock ? 'orthogonal' : 'curve',
-      conduitType: options.conduitType || 'none',
-      waypoints: [],
-      ...[truncated for diff preview]
+    const layers = stateManager.state?.layers || {};
+    const allowBuildings = layers.buildings !== false;
+    const selRoomId = stateManager.getSelectedRoom3dId?.() || null;
+    const selDevId = this.deviceManager?.selectedDeviceId || null;
+... [truncated for diff preview]

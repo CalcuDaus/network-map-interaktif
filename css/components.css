@@ -5645,3 +5645,27 @@ textarea:focus {
   white-space: nowrap;
   flex-shrink: 0;
 }
+
+
+.onb-role-grid-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.onb-role-subbadge {
+  display: inline-block;
+  align-self: flex-start;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--accent-green);
+  background: rgba(42, 124, 19, 0.12);
+  border: 1px solid rgba(42, 124, 19, 0.25);
+  border-radius: 6px;
+  padding: 2px 7px;
+  margin-top: -3px;
+}
+
+@media (max-width: 600px) {
+  .onb-role-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}

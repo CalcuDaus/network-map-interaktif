@@ -4,7 +4,7 @@
  * VLAN/Subnet/SSID extraction, and 1-click device location synchronization.
  */
 
-const DECORATION_ROOM_RE = /pohon|tong_sampah|keran_air|wastafel|plank_motivasi|banner_kejuruan|halte|tiang_|bendera|taman_|pot_|lampu_taman|dekorasi|decoration/i;
+const DECORATION_ROOM_RE = /pohon|tong_sampah|keran_air|wastafel|plank_motivasi|banner_kejuruan|halte|rak_bunga|tempat_duduk|tiang_|bendera|taman_|pot_|lampu_taman|dekorasi|decoration/i;
 
 const DEVICE_TYPE_SORT_ORDER = {
   'main-router': 1,
