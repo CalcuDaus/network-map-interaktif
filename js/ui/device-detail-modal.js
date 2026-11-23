@@ -204,6 +204,10 @@ export class DeviceDetailModal {
    * @param {'overview'|'inventory'|'network'|'ports'} [tab='overview']
    */
   show(deviceId, tab = 'overview') {
+    if (stateManager.getWorkspaceMode?.() === 'build') {
+      this.hide();
+      return;
+    }
     const dev = this.deviceManager?.getDeviceById(deviceId);
     if (!dev) return;
 

@@ -2499,6 +2499,7 @@ export const BUILTIN_ROOM_BUILDING_PRESETS = [
     floorColor: '#14532d',
     opacity: 0.18,
     isCutaway: false,
+    passThrough: true,
     customModelUrl: 'assets/models/pohon_mahoni_kecil.glb'
   },
   {
@@ -2512,6 +2513,7 @@ export const BUILTIN_ROOM_BUILDING_PRESETS = [
     floorColor: '#14532d',
     opacity: 0.18,
     isCutaway: false,
+    passThrough: true,
     customModelUrl: 'assets/models/pohon_pinus_kecil.glb'
   },
   {
@@ -2681,6 +2683,7 @@ export const BUILTIN_ROOM_BUILDING_PRESETS = [
     floorColor: '#14532d',
     opacity: 0.18,
     isCutaway: false,
+    passThrough: true,
     customModelUrl: 'assets/models/pohon_palem_hiasan_sedang.glb'
   },
   {
@@ -2697,6 +2700,24 @@ export const BUILTIN_ROOM_BUILDING_PRESETS = [
     customModelUrl: 'assets/models/pohon_rindang_besar.glb'
   }
 ];
+
+export function getDefaultRoomPassThrough(room) {
+  if (!room || typeof room !== 'object') return false;
+  if (typeof room.passThrough === 'boolean') return room.passThrough;
+  const ident = `${room.presetId || ''} ${room.customModelUrl || ''} ${room.name || ''}`;
+  if (/wastafel|keran/i.test(ident)) return false;
+  if (/pohon.*(kecil|palem)|semak|rumput|bush|shrub/i.test(ident)) return true;
+  return false;
+}
+
+export function getDefaultObject3dPassThrough(obj) {
+  if (!obj || typeof obj !== 'object') return false;
+  if (typeof obj.passThrough === 'boolean') return obj.passThrough;
+  const ident = `${obj.preset || ''} ${obj.name || ''} ${obj.label || ''}`;
+  if (/wastafel|keran/i.test(ident)) return false;
+  if (/pohon.*(kecil|palem)|semak|rumput|bush|shrub/i.test(ident)) return true;
+  return false;
+}
 
 export function createBuildingRoomPresetData(presetOrId, { x = 0.5, y = 0.5, existingRooms = [], id = '' } = {}) {
   const preset = typeof presetOrId === 'string'
@@ -2723,6 +2744,9 @@ export function createBuildingRoomPresetData(presetOrId, { x = 0.5, y = 0.5, exi
     wallColor: preset.wallColor || '#2a7c13',
     floorColor: preset.floorColor || '#1e293b',
     opacity: preset.opacity ?? 0.18,
+    passThrough: typeof preset.passThrough === 'boolean'
+      ? preset.passThrough
+      : getDefaultRoomPassThrough(preset),
     customModelUrl: preset.customModelUrl
   };
 }

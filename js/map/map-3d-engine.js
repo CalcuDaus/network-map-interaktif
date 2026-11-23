@@ -12200,4 +12200,4 @@ export class Map3DEngine {
     const allowBuildings = layers.buildings !== false;
     const selRoomId = stateManager.getSelectedRoom3dId?.() || null;
     const selDevId = this.deviceManager?.selectedDeviceId || null;
-... [truncated for diff preview]
+...[truncated for diff preview]

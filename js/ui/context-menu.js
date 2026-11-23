@@ -133,6 +133,10 @@ export class ContextMenu {
    * @param {number} screenY 
    */
   showDeviceMenu(device, screenX, screenY) {
+    if (stateManager.getWorkspaceMode?.() === 'build') {
+      this.hide();
+      return;
+    }
     if (!device) return;
     this.activeTarget = { type: 'device', data: device };
 
@@ -281,6 +285,10 @@ export class ContextMenu {
    * @param {{hitCoord?: {x: number, y: number, z?: number}|null, waypointIdx?: number|null}} [extra]
    */
   showCableMenu(cable, screenX, screenY, extra = {}) {
+    if (stateManager.getWorkspaceMode?.() === 'build') {
+      this.hide();
+      return;
+    }
     if (!cable) return;
     const { hitCoord = null, waypointIdx = null } = extra || {};
     this.activeTarget = { type: 'cable', data: cable };
@@ -444,10 +452,11 @@ export class ContextMenu {
 
     const posXStr = (normX * 100).toFixed(1);
     const posYStr = (normY * 100).toFixed(1);
+    const isBuildWs = stateManager.getWorkspaceMode?.() === 'build';
 
-    const hasSelection = Boolean(this.deviceManager?.selectedDeviceId || this.cableManager?.selectedCableId);
+    const hasSelection = !isBuildWs && Boolean(this.deviceManager?.selectedDeviceId || this.cableManager?.selectedCableId);
 
-    const items = [
+    const networkItems = isBuildWs ? [] : [
       {
         id: 'add-custom-device-here',
         icon: 'sparkles',
@@ -480,7 +489,11 @@ export class ContextMenu {
           stateManager.setMode('draw-cable');
         }
       },
-      { isDivider: true },
+      { isDivider: true }
+    ];
+
+    const items = [
+      ...networkItems,
       {
         id: 'fit-screen',
         icon: 'maximize-2',

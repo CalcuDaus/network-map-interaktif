@@ -24,10 +24,10 @@
     rel="stylesheet">
 
   <!-- Core Stylesheets -->
-  <link rel="stylesheet" href="css/main.css?v=20261123-portpick-v35">
-  <link rel="stylesheet" href="css/layout.css?v=20261123-portpick-v35">
-  <link rel="stylesheet" href="css/components.css?v=20261123-portpick-v35">
-  <link rel="stylesheet" href="css/map.css?v=20261123-portpick-v35">
+  <link rel="stylesheet" href="css/main.css?v=20261123-buildiso-v36">
+  <link rel="stylesheet" href="css/layout.css?v=20261123-buildiso-v36">
+  <link rel="stylesheet" href="css/components.css?v=20261123-buildiso-v36">
+  <link rel="stylesheet" href="css/map.css?v=20261123-buildiso-v36">
 
   <!-- Vendor Libraries (Offline-First with CDN fallback) -->
   <script src="assets/vendor/konva.min.js"></script>
@@ -179,12 +179,12 @@
             <i data-lucide="chevron-down" style="width: 13px; height: 13px; opacity: 0.7;"></i>
           </button>
           <div id="navbar-menu-dropdown" class="navbar-dropdown-panel" role="menu">
-            <button id="btn-open-topology" class="navbar-dropdown-item" role="menuitem"
+            <button id="btn-open-topology" class="navbar-dropdown-item ws-network-only" role="menuitem"
               title="Buka Diagram Topologi Jaringan (Fisik & Logis)">
               <i data-lucide="git-fork" style="width: 14px; height: 14px; color: var(--accent-blue);"></i>
               <span>Topologi</span>
             </button>
-            <button id="btn-open-ip-vlan" class="navbar-dropdown-item" role="menuitem"
+            <button id="btn-open-ip-vlan" class="navbar-dropdown-item ws-network-only" role="menuitem"
               title="Tabel Dokumentasi IP Address & VLAN">
               <i data-lucide="file-spreadsheet" style="width: 14px; height: 14px; color: var(--accent-blue);"></i>
               <span>IP & VLAN</span>
@@ -199,7 +199,7 @@
               <i data-lucide="folder" style="width: 14px; height: 14px; color: var(--status-warning);"></i>
               <span>Proyek</span>
             </button>
-            <button id="btn-open-jobsheet" class="navbar-dropdown-item" role="menuitem"
+            <button id="btn-open-jobsheet" class="navbar-dropdown-item ws-network-only" role="menuitem"
               title="Buka Katalog Jobsheet Praktikum SMK &amp; Tugas Guru">
               <i data-lucide="clipboard-list" style="width: 14px; height: 14px; color: var(--accent-green);"></i>
               <span>Jobsheet Praktikum</span>
@@ -280,15 +280,15 @@
 
               <div class="vf-col">
                 <div class="vf-col-title">Filter Cepat Komponen</div>
-                <label class="vf-check-row">
+                <label class="vf-check-row ws-network-only">
                   <input type="checkbox" id="filter-toggle-cctv" checked style="accent-color: var(--status-online);">
                   <span>Tampilkan Kamera CCTV</span>
                 </label>
-                <label class="vf-check-row">
+                <label class="vf-check-row ws-network-only">
                   <input type="checkbox" id="filter-toggle-fiber" checked style="accent-color: #eab308;">
                   <span>Tampilkan Kabel Fiber Optik</span>
                 </label>
-                <label class="vf-check-row">
+                <label class="vf-check-row ws-network-only">
                   <input type="checkbox" id="filter-toggle-wireless" checked style="accent-color: #06b6d4;">
                   <span>Tampilkan Link Nirkabel</span>
                 </label>
@@ -559,10 +559,10 @@
             <button type="button" class="mob-dock-seg-btn" data-mob-mode="select" title="Pilih / Box">
               <i data-lucide="mouse-pointer" style="width: 13px; height: 13px;"></i>
             </button>
-            <button type="button" class="mob-dock-seg-btn" data-mob-mode="add-device" title="Tambah Perangkat">
+            <button type="button" class="mob-dock-seg-btn ws-network-only" data-mob-mode="add-device" title="Tambah Perangkat">
               <i data-lucide="plus-circle" style="width: 13px; height: 13px;"></i>
             </button>
-            <button type="button" class="mob-dock-seg-btn" data-mob-mode="draw-cable" title="Tarik Kabel">
+            <button type="button" class="mob-dock-seg-btn ws-network-only" data-mob-mode="draw-cable" title="Tarik Kabel">
               <i data-lucide="git-commit" style="width: 13px; height: 13px;"></i>
             </button>
           </div>
@@ -993,7 +993,7 @@
                 <span>Semua</span>
               </button>
             </div>
-            <div id="mob-cable-pull-cluster" class="mob-cable-pull-cluster hidden" style="display: none;">
+            <div id="mob-cable-pull-cluster" class="mob-cable-pull-cluster ws-network-only hidden" style="display: none;">
               <button type="button" id="btn-mob-cable-clip" class="mob-action-btn is-cable-clip"
                 title="Pasang Klem Kabel 3D di titik bidik">
                 <i data-lucide="pin" style="width: 16px; height: 16px;"></i>
@@ -1015,7 +1015,7 @@
                 <i data-lucide="eye" style="width: 16px; height: 16px;"></i>
                 <span>TPP</span>
               </button>
-              <button type="button" id="btn-mob-inspect" class="mob-action-btn is-inspect"
+              <button type="button" id="btn-mob-inspect" class="mob-action-btn is-inspect ws-network-only"
                 title="Inspeksi Port Terdekat">
                 <i data-lucide="scan-search" style="width: 16px; height: 16px;"></i>
                 <span>Port</span>
@@ -1130,7 +1130,7 @@
               <i data-lucide="sliders" style="width: 14px; height: 14px;"></i>
               <span>Properti</span>
             </button>
-            <button id="tab-btn-layers" class="sidebar-tab-btn" data-right-tab="layers" role="tab" aria-selected="false"
+            <button id="tab-btn-layers" class="sidebar-tab-btn ws-network-only" data-right-tab="layers" role="tab" aria-selected="false"
               title="Window Layer Perangkat (Grup Library ala Adobe Photoshop)">
               <i data-lucide="layers" style="width: 14px; height: 14px;"></i>
               <span>Layers</span>
@@ -1204,7 +1204,7 @@
   </div>
 
   <!-- Application Bootstrap (Bundled for file:// and http:// compatibility) -->
-  <script src="js/bundle.js?v=20261123-portpick-v35"></script>
+  <script src="js/bundle.js?v=20261123-buildiso-v36"></script>
 </body>
 
 </html>

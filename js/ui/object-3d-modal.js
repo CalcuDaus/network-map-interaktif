@@ -6,7 +6,7 @@
 
 import { eventBus } from '../core/event-bus.js';
 import { stateManager } from '../core/state-manager.js';
-import { OBJECT3D_PRESETS, BUILTIN_ROOM_BUILDING_PRESETS, createBuildingRoomPresetData } from '../map/map-3d-models.js';
+import { OBJECT3D_PRESETS, BUILTIN_ROOM_BUILDING_PRESETS, createBuildingRoomPresetData, getDefaultObject3dPassThrough } from '../map/map-3d-models.js';
 import { clamp, generateId, uiIcon } from '../utils/helpers.js';
 
 const PRESET_LIST = [
@@ -205,7 +205,7 @@ export class Object3DModal {
             </div>
           </div>
 
-          <button type="button" id="btn-o3d-pick-device-pos" class="btn btn-secondary btn-sm" style="font-size: 10.5px;">
+          <button type="button" id="btn-o3d-pick-device-pos" class="btn btn-secondary btn-sm ws-network-only" style="font-size: 10.5px;">
             ${uiIcon('map-pin', 12)} Ambil Posisi Perangkat Terpilih
           </button>
 
@@ -263,11 +263,19 @@ export class Object3DModal {
               <input type="checkbox" id="o3d-show-label" checked style="accent-color: var(--accent-blue);">
               <span>Label 3D</span>
             </label>
+            <label style="display: inline-flex; align-items: center; gap: 4px; cursor: pointer;" title="Aktifkan agar avatar teknisi bisa melewati objek (misal pohon kecil / semak); matikan untuk objek padat seperti wastafel / dinding.">
+              <input type="checkbox" id="o3d-pass-through" style="accent-color: var(--accent-blue);">
+              <span>Bisa Ditembus</span>
+            </label>
+            <label style="display: inline-flex; align-items: center; gap: 4px; cursor: pointer;" title="Kunci posisi objek agar tidak tergeser.">
+              <input type="checkbox" id="o3d-locked" style="accent-color: var(--accent-blue);">
+              <span>Kunci Posisi</span>
+            </label>
           </div>
         </div>
 
         <!-- Section 3: Smart Mount Devices -->
-        <div style="background: rgba(42, 124, 19, 0.1); border: 1px solid rgba(42, 124, 19, 0.3); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px;">
+        <div class="ws-network-only" style="background: rgba(42, 124, 19, 0.1); border: 1px solid rgba(42, 124, 19, 0.3); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px;">
           <div style="font-size: 10.5px; font-weight: 700; color: var(--accent-blue, #2a7c13);">
             Smart Mount Perangkat ke Objek 3D
           </div>
@@ -425,7 +433,9 @@ export class Object3DModal {
       ['#o3d-opacity', 'input', (el) => ({ opacity: clamp((parseFloat(el.value) || 100) / 100, 0.05, 1) })],
       ['#o3d-show-edges', 'change', (el) => ({ showEdges: Boolean(el.checked) })],
       ['#o3d-has-arm', 'change', (el) => ({ hasArm: Boolean(el.checked) })],
-      ['#o3d-show-label', 'change', (el) => ({ showLabel: Boolean(el.checked) })]
+      ['#o3d-show-label', 'change', (el) => ({ showLabel: Boolean(el.checked) })],
+      ['#o3d-pass-through', 'change', (el) => ({ passThrough: Boolean(el.checked) })],
+      ['#o3d-locked', 'change', (el) => ({ locked: Boolean(el.checked) })]
     ];
 
     textAndNumBindings.forEach(([sel, evtName, extract]) => {
@@ -550,6 +560,8 @@ export class Object3DModal {
     const presetDefaults = OBJECT3D_PRESETS[shape] || OBJECT3D_PRESETS.box;
     const rawName = (this.panelEl.querySelector('#o3d-name')?.value || '').trim();
 
+    const passCb = this.panelEl.querySelector('#o3d-pass-through');
+    const lockCb = this.panelEl.querySelector('#o3d-locked');
     const newObj = {
       ...presetDefaults,
       ...this.draft,
@@ -557,7 +569,9 @@ export class Object3DModal {
       name: rawName || `${presetDefaults.name} #${count}`,
       shape,
       x,
-      y
+      y,
+      passThrough: passCb ? Boolean(passCb.checked) : getDefaultObject3dPassThrough({ ...presetDefaults, ...this.draft, shape, name: rawName }),
+      locked: Boolean(lockCb?.checked)
     };
 
     stateManager.addObject3d(newObj);
@@ -654,6 +668,10 @@ export class Object3DModal {
     if (armCb) armCb.checked = src.hasArm !== false;
     const labelCb = this.panelEl.querySelector('#o3d-show-label');
     if (labelCb) labelCb.checked = Boolean(src.showLabel);
+    const passCb = this.panelEl.querySelector('#o3d-pass-through');
+    if (passCb) passCb.checked = getDefaultObject3dPassThrough(src);
+    const lockedCb = this.panelEl.querySelector('#o3d-locked');
+    if (lockedCb) lockedCb.checked = Boolean(src.locked);
 
     this.toggleArmCheckboxVisibility(src.shape || 'box');
     this.highlightActivePresetButton();
@@ -737,7 +755,7 @@ export class Object3DModal {
               ${this.escapeHtml(o.name || 'Objek 3D')}
             </div>
             <div style="font-size: 9.5px; color: var(--text-muted); font-family: var(--font-mono);">
-              ${this.escapeHtml(o.shape || 'box')} • ${dim} • Z:${Number(o.elevationMeters || 0).toFixed(1)}m
+              ${this.escapeHtml(o.shape || 'box')} • ${dim} • Z:${Number(o.elevationMeters || 0).toFixed(1)}m${getDefaultObject3dPassThrough(o) ? ' • Tembus' : ''}${o.locked ? ' • Terkunci' : ''}
             </div>
           </div>
           <div style="display: flex; gap: 3px; flex-shrink: 0;">

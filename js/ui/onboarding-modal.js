@@ -261,8 +261,13 @@ export class OnboardingModal {
       this.hideFppCoachmark();
     });
 
+    eventBus.on('workspace:changed', () => {
+      this._syncFppCoachmarkCopy();
+    });
+
     // Show FPP Micro-Coachmark once on first avatar mode entry
     eventBus.on('map3d:avatar-toggled', ({ active } = {}) => {
+      this._syncFppCoachmarkCopy();
       if (active && !this._hasSeenFppCoachmark()) {
         this.showFppCoachmark();
       } else if (!active) {
@@ -276,6 +281,31 @@ export class OnboardingModal {
         if (this.shortcutsEl?.style?.display === 'flex') this.hideShortcuts();
       }
     });
+  }
+
+  _syncFppCoachmarkCopy() {
+    if (!this.coachmarkEl) return;
+    const isBuildWs = stateManager.getWorkspaceMode?.() === 'build';
+    const titleEl = this.coachmarkEl.querySelector('.onb-coach-head > :first-child');
+    const stepsEl = this.coachmarkEl.querySelector('.onb-coach-steps');
+    if (titleEl) {
+      titleEl.innerHTML = isBuildWs
+        ? `${uiIcon('lightbulb', 13)} Tips Cepat Mode Teknisi Bangunan (3 Langkah)`
+        : `${uiIcon('lightbulb', 13)} Tips Cepat Mode Teknisi (3 Langkah)`;
+    }
+    if (stepsEl) {
+      stepsEl.innerHTML = isBuildWs
+        ? `
+          <li><strong>Jalan &amp; Buka Pintu:</strong> Gunakan <code>WASD</code> (atau Joystick kiri di HP), tekan <code>E</code> di depan pintu ruangan.</li>
+          <li><strong>Susun Bangunan &amp; Objek 3D:</strong> Pilih gedung/fasilitas/objek 3D dari <strong>Katalog Bangunan</strong> atau klik langsung di kanvas 3D untuk geser &amp; putar.</li>
+          <li><strong>Atur Tembus / Padat (3D):</strong> Buka kartu properti di kanan untuk mengatur opsi <strong>Bisa Ditembus</strong> pada pohon/semak atau kunci objek padat.</li>
+        `
+        : `
+          <li><strong>Jalan &amp; Buka Pintu:</strong> Gunakan <code>WASD</code> (atau Joystick kiri di HP), tekan <code>E</code> di depan pintu ruangan.</li>
+          <li><strong>Angkat Alat &amp; Tarik Kabel 3D:</strong> Bidik alat lalu tekan <code>E</code> untuk angkat, atau <code>C</code> untuk menarik gulungan kabel + pasang klem di dinding!</li>
+          <li><strong>Konfigurasi WinBox / CLI:</strong> Dekati perangkat lalu tekan <code>F</code> (atau tombol <strong>Port</strong>) untuk membuka Quick Config &amp; Ping 3D.</li>
+        `;
+    }
   }
 
   showWelcome() {
@@ -302,6 +332,7 @@ export class OnboardingModal {
 
   showFppCoachmark() {
     if (!this.coachmarkEl) return;
+    this._syncFppCoachmarkCopy();
     this.coachmarkEl.classList.remove('hidden');
     this.coachmarkEl.style.display = 'flex';
   }

@@ -3300,3 +3300,84 @@ body.is-mobile-touch .hud-3d-sim-inspector .sim-action-btn {
   color: var(--text-primary);
   line-height: 1.35;
 }
+
+body[data-workspace="build"] #tab-btn-layers,
+body[data-workspace="build"] #device-layers-panel-container,
+body[data-workspace="build"] #btn-avatar-sim-devices,
+body[data-workspace="build"] #avatar-sim-device-deck {
+  display: none !important;
+}
+
+.roomdoc-pass-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  background: rgba(22, 163, 74, 0.14);
+  color: #15803d;
+  border: 1px solid rgba(22, 163, 74, 0.35);
+}
+
+.roomdoc-pass-badge.is-solid {
+  background: rgba(180, 83, 9, 0.12);
+  color: #b45309;
+  border-color: rgba(180, 83, 9, 0.3);
+}
+
+.roomdoc-collision-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 11px;
+  border-radius: 8px;
+  background: var(--bg-secondary, #f7eed6);
+  border: 1px solid var(--border-color);
+}
+
+.roomdoc-collision-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 11.5px;
+  color: var(--text-primary);
+}
+
+.roomdoc-collision-toggle input[type="checkbox"] {
+  margin-top: 2px;
+  accent-color: var(--accent-green, #2a7c13);
+}
+
+.roomdoc-collision-hint {
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
+.prop-o3d-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.prop-o3d-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.prop-o3d-field input,
+.prop-o3d-field select {
+  background: var(--bg-elevated, #ffffff);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 11.5px;
+  color: var(--text-primary);
+}

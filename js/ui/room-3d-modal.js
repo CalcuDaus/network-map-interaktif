@@ -9,7 +9,8 @@ import { stateManager } from '../core/state-manager.js';
 import {
   BUILTIN_ROOM_BUILDING_PRESETS,
   createBuildingRoomPresetData,
-  getRoomMinDimensions
+  getRoomMinDimensions,
+  getDefaultRoomPassThrough
 } from '../map/map-3d-models.js';
 import { clamp, generateId, uiIcon } from '../utils/helpers.js';
 
@@ -98,7 +99,7 @@ export class Room3DModal {
               </div>
             </div>
 
-            <button type="button" id="btn-room3d-use-selected" class="btn btn-secondary btn-sm" style="font-size: 11px;">
+            <button type="button" id="btn-room3d-use-selected" class="btn btn-secondary btn-sm ws-network-only" style="font-size: 11px;">
               Ambil Koordinat dari Perangkat Terpilih
             </button>
 
@@ -164,7 +165,11 @@ export class Room3DModal {
 
             <label style="display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; color: var(--text-primary); cursor: pointer;">
               <input type="checkbox" id="r3d-locked">
-              <span>Kunci posisi ruangan ini (tidak ikut tergeser saat klik perangkat)</span>
+              <span>Kunci posisi ruangan ini (tidak ikut tergeser saat klik objek lain)</span>
+            </label>
+            <label style="display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; color: var(--text-primary); cursor: pointer; margin-top: 6px;">
+              <input type="checkbox" id="r3d-pass-through">
+              <span>Bisa Ditembus Avatar (Pass-Through — cocok untuk pohon kecil / semak; matikan untuk dinding, wastafel, &amp; keran)</span>
             </label>
 
             <!-- Documentation Metadata (Phase 8: School Digital Twin) -->
@@ -248,7 +253,7 @@ export class Room3DModal {
               <div id="r3d-list-container" style="display: flex; flex-direction: column; gap: 6px; max-height: 190px; overflow-y: auto;"></div>
             </div>
 
-            <div style="background: rgba(42, 124, 19, 0.08); border: 1px solid rgba(42, 124, 19, 0.25); border-radius: 8px; padding: 10px; font-size: 11px; color: var(--text-secondary); line-height: 1.45;">
+            <div class="ws-network-only" style="background: rgba(42, 124, 19, 0.08); border: 1px solid rgba(42, 124, 19, 0.25); border-radius: 8px; padding: 10px; font-size: 11px; color: var(--text-secondary); line-height: 1.45;">
               <strong style="color: var(--accent-blue); display: block; margin-bottom: 4px;">Tips Penumpukan Perangkat di Dalam Gedung:</strong>
               Pilih model <strong>Cutaway</strong> bila ingin atap terbuka sehingga switch/router/kabel di dalam ruangan tetap mudah diklik. Atur <strong>Ketinggian Z (Meter)</strong> di Panel Properti kanan.
             </div>
@@ -448,6 +453,8 @@ export class Room3DModal {
       this.modalEl.querySelector('#r3d-opacity').value = Math.round((preset.opacity ?? 0.18) * 100);
       this.modalEl.querySelector('#r3d-glb-url').value = preset.customModelUrl;
       this.modalEl.querySelector('#btn-r3d-clear-glb').style.display = 'inline-flex';
+      const passCb = this.modalEl.querySelector('#r3d-pass-through');
+      if (passCb) passCb.checked = getDefaultRoomPassThrough(preset);
       return null;
     }
 
@@ -549,6 +556,8 @@ export class Room3DModal {
     if (rotInput) rotInput.value = '0';
     const lockedCb = this.modalEl.querySelector('#r3d-locked');
     if (lockedCb) lockedCb.checked = false;
+    const passCb = this.modalEl.querySelector('#r3d-pass-through');
+    if (passCb) passCb.checked = false;
     const codeInp = this.modalEl.querySelector('#r3d-doc-code');
     if (codeInp) codeInp.value = '';
     const zoneInp = this.modalEl.querySelector('#r3d-doc-zone');
@@ -604,6 +613,7 @@ export class Room3DModal {
       floorColor: this.modalEl.querySelector('#r3d-floor-color')?.value || '#1e293b',
       opacity: clamp((parseFloat(this.modalEl.querySelector('#r3d-opacity')?.value) || 20) / 100, 0.05, 0.85),
       locked: Boolean(this.modalEl.querySelector('#r3d-locked')?.checked),
+      passThrough: Boolean(this.modalEl.querySelector('#r3d-pass-through')?.checked),
       customModelUrl,
       doc: {
         ...prevDoc,
@@ -661,7 +671,7 @@ export class Room3DModal {
             ${isLocked ? uiIcon('lock', 11) : ''}${r.name}
           </div>
           <div style="font-size: 10px; color: var(--text-muted); font-family: var(--font-mono);">
-            ${r.widthMeters}x${r.depthMeters}x${r.heightMeters}m • ${scalePct}% • ${rotDeg}°${r.customModelUrl ? ' • GLB' : ''}${isLocked ? ' • Terkunci' : ''}
+            ${r.widthMeters}x${r.depthMeters}x${r.heightMeters}m • ${scalePct}% • ${rotDeg}°${r.customModelUrl ? ' • GLB' : ''}${getDefaultRoomPassThrough(r) ? ' • Bisa Ditembus' : ''}${isLocked ? ' • Terkunci' : ''}
           </div>
         </div>
         <div style="display: flex; gap: 4px; flex-shrink: 0; flex-wrap: wrap;">
@@ -763,6 +773,8 @@ export class Room3DModal {
     this.modalEl.querySelector('#r3d-opacity').value = Math.round((room.opacity ?? 0.2) * 100);
     const lockedCb = this.modalEl.querySelector('#r3d-locked');
     if (lockedCb) lockedCb.checked = Boolean(room.locked);
+    const passCb = this.modalEl.querySelector('#r3d-pass-through');
+    if (passCb) passCb.checked = getDefaultRoomPassThrough(room);
     const codeInp = this.modalEl.querySelector('#r3d-doc-code');
     if (codeInp) codeInp.value = room.doc?.roomCode || '';
     const zoneInp = this.modalEl.querySelector('#r3d-doc-zone');

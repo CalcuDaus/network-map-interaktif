@@ -6,6 +6,7 @@
  */
 
 import { eventBus } from '../core/event-bus.js';
+import { stateManager } from '../core/state-manager.js';
 import { getDefaultDevicePorts } from '../devices/device-schema.js';
 import { uiIcon } from '../utils/helpers.js';
 
@@ -233,6 +234,10 @@ export class PortPickerModal {
   }
 
   show(cableId) {
+    if (stateManager.getWorkspaceMode?.() === 'build') {
+      this.hide?.();
+      return;
+    }
     if (!this.modalEl) return;
     const cable = this.cableManager.getConnectionById(cableId);
     if (!cable) return;

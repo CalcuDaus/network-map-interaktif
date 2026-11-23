@@ -326,7 +326,8 @@ class NetMapApp {
       map3DEngine: this.map3DEngine,
       buildStudioPalette: this.buildStudioPalette,
       packetTracerPanel: this.packetTracerPanel,
-      deviceManager: this.deviceManager
+      deviceManager: this.deviceManager,
+      cableManager: this.cableManager
     });
     this.workspaceController.init();
 
@@ -369,10 +370,12 @@ class NetMapApp {
       }
     });
     document.getElementById('btn-open-topology')?.addEventListener('click', () => {
+      if (stateManager.getWorkspaceMode?.() === 'build') return;
       this.topologyModal.show();
     });
 
     document.getElementById('btn-open-ip-vlan')?.addEventListener('click', () => {
+      if (stateManager.getWorkspaceMode?.() === 'build') return;
       this.ipVlanModal.show();
     });
 
@@ -428,8 +431,14 @@ class NetMapApp {
    * Bind Phase 9 controls: Master/Sandbox Guard Banner, Jobsheet triggers, Quick-Start & Shortcuts.
    */
   setupPhase9Controls() {
-    const openJobsheet = () => this.jobsheetPanel?.show('catalog');
-    const openForkDialog = () => this.jobsheetPanel?.openSandboxForkDialog?.();
+    const openJobsheet = () => {
+      if (stateManager.getWorkspaceMode?.() === 'build') return;
+      this.jobsheetPanel?.show('catalog');
+    };
+    const openForkDialog = () => {
+      if (stateManager.getWorkspaceMode?.() === 'build') return;
+      this.jobsheetPanel?.openSandboxForkDialog?.();
+    };
 
     document.getElementById('btn-3d-jobsheet')?.addEventListener('click', openJobsheet);
     document.getElementById('btn-open-jobsheet')?.addEventListener('click', openJobsheet);
@@ -928,8 +937,9 @@ class NetMapApp {
 
     // Direct 1-tap open simulator from 3D Port Inspector (#hud-3d-sim-inspector)
     eventBus.on('modal:open-simulator', ({ deviceId = null, tab = 'winbox' } = {}) => {
-      if (stateManager.getWorkspaceMode?.() !== 'network') {
-        this.workspaceController?.switchWorkspace?.('network', { open3D: false, silent: true });
+      if (stateManager.getWorkspaceMode?.() === 'build') {
+        this.map3DEngine?.showStatusHint?.('Simulasi & CLI dinonaktifkan saat Mode Edit Bangunan. Pindah ke Simulasi Jaringan untuk mengaksesnya.');
+        return;
       }
       this.packetTracerPanel?.show?.(tab || 'winbox', deviceId || null);
     });
@@ -1264,6 +1274,7 @@ class NetMapApp {
           return;
         }
         if (lower === 'c' && this.map3DEngine?.avatarMode && !e.ctrlKey && !e.metaKey) {
+          if (stateManager.getWorkspaceMode?.() === 'build') return;
           e.preventDefault();
           if (this.map3DEngine.activeCablePull) {
             this.map3DEngine.placeAvatarCableClip({ shiftKey: Boolean(e.shiftKey) });
@@ -1273,11 +1284,13 @@ class NetMapApp {
           return;
         }
         if (e.key === 'Backspace' && this.map3DEngine?.avatarMode && this.map3DEngine?.activeCablePull) {
+          if (stateManager.getWorkspaceMode?.() === 'build') return;
           e.preventDefault();
           this.map3DEngine.undoAvatarCableClip();
           return;
         }
         if (lower === 'f' && this.map3DEngine?.avatarMode && !e.ctrlKey && !e.metaKey) {
+          if (stateManager.getWorkspaceMode?.() === 'build') return;
           e.preventDefault();
           if (this.map3DEngine.activeCablePull) {
             this.map3DEngine.placeAvatarCableClip({ shiftKey: Boolean(e.shiftKey) });
@@ -1338,6 +1351,7 @@ class NetMapApp {
           return;
         }
         if (lower === 'd' && e.shiftKey && this.deviceManager?.selectedDeviceId) {
+          if (stateManager.getWorkspaceMode?.() === 'build') return;
           e.preventDefault();
           this.deviceDetailModal?.show(this.deviceManager.selectedDeviceId, 'overview');
           return;
@@ -1441,6 +1455,7 @@ class NetMapApp {
           break;
         case 'd':
         case 'D':
+          if (stateManager.getWorkspaceMode?.() === 'build') break;
           if (!e.ctrlKey && !e.metaKey && this.deviceManager?.selectedDeviceId) {
             e.preventDefault();
             this.deviceDetailModal?.show(this.deviceManager.selectedDeviceId, 'overview');

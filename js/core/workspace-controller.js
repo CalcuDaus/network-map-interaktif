@@ -20,12 +20,14 @@ export class WorkspaceController {
     map3DEngine = null,
     buildStudioPalette = null,
     packetTracerPanel = null,
-    deviceManager = null
+    deviceManager = null,
+    cableManager = null
   } = {}) {
     this.map3DEngine = map3DEngine;
     this.buildStudioPalette = buildStudioPalette;
     this.packetTracerPanel = packetTracerPanel;
     this.deviceManager = deviceManager;
+    this.cableManager = cableManager;
     this._applying = false;
   }
 
@@ -165,12 +167,21 @@ export class WorkspaceController {
       if (curMode === 'add-device' || curMode === 'draw-cable') {
         stateManager.setMode('select');
       }
+      this.packetTracerPanel?.hide?.();
+      this.map3DEngine?.exitSimulatorFocus?.({ restoreCamera: false });
+      this.map3DEngine?.cancelAvatarCablePull?.({ silent: true });
+      this.map3DEngine?.dropCarriedDevicesOnly?.();
+      this.deviceManager?.deselectDevice?.();
+      this.cableManager?.deselectConnection?.();
+      if (typeof document !== 'undefined') {
+        document.getElementById('tab-btn-properties')?.click?.();
+      }
       this.map3DEngine?.setRoomsLocked?.(false, { silent: true });
       this.map3DEngine?.setBuildPlacementConfig?.({ buildModeEnabled: true }, { silent: true });
       this.map3DEngine?.setWorkspaceGhostDevices?.(true);
       if (!silent) {
         this.map3DEngine?.showStatusHint?.(
-          'Edit Bangunan aktif — Tambah/geser/putar gedung, fasilitas & jalan sekolah. Perangkat jaringan digelapkan.'
+          'Edit Bangunan aktif — Fokus susun gedung, fasilitas, objek 3D & jalan. Kontrol perangkat & jaringan dikunci.'
         );
       }
     } else {

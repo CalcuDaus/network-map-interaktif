@@ -13,7 +13,7 @@ import {
   isBuildingSignboardEligible,
   syncDeviceLocationsFromBuilding
 } from '../map/room-spatial-index.js';
-import { findCutawayPairPreset } from '../map/map-3d-models.js';
+import { findCutawayPairPreset, getDefaultRoomPassThrough } from '../map/map-3d-models.js';
 import { PdfReportGenerator } from '../export/pdf-report-generator.js';
 
 const LOG_CATEGORY_LABELS = {
@@ -84,6 +84,11 @@ export class RoomDocumentationPanel {
   }
 
   bindEvents() {
+    eventBus.on('workspace:changed', () => {
+      if (!this.currentRoomId) return;
+      const room = stateManager.getRoom3dById?.(this.currentRoomId);
+      if (room) this.renderRoomCard(room, { skipSidebarOpen: true });
+    });
     eventBus.on('room3d:inspect', (room) => {
       if (!room?.id) return;
       this.currentRoomId = room.id;
@@ -99,17 +104,24 @@ export class RoomDocumentationPanel {
       const hadRoom = Boolean(this.currentRoomId);
       this.currentRoomId = null;
       this._logFormOpen = false;
-      if (hadRoom && !this.deviceManager?.selectedDeviceId && !this.cableManager?.selectedCableId) {
+      if (hadRoom && !this.deviceManager?.selectedDeviceId && !this.cableManager?.selectedCableId && !stateManager.getSelectedObject3dId?.()) {
         this.renderEmpty();
       }
     });
 
+    eventBus.on('object3d:selected', () => {
+      this.currentRoomId = null;
+      this._logFormOpen = false;
+    });
+
     eventBus.on('device:selected', () => {
+      if (stateManager.getWorkspaceMode?.() === 'build') return;
       this.currentRoomId = null;
       this._logFormOpen = false;
     });
 
     eventBus.on('connection:selected', () => {
+      if (stateManager.getWorkspaceMode?.() === 'build') return;
       this.currentRoomId = null;
       this._logFormOpen = false;
     });
@@ -122,6 +134,7 @@ export class RoomDocumentationPanel {
       'connection:added',
       'connection:updated',
       'connection:deleted',
+      'room3d:changed',
       'object3d:changed',
       'map3d:xray-changed',
       'rooms3d:lock-changed'
@@ -137,17 +150,30 @@ export class RoomDocumentationPanel {
 
   renderEmpty() {
     if (!this.container) return;
-    this.container.innerHTML = `
-      <div class="empty-state">
-        <div class="empty-state-icon">
-          ${uiIcon('building', 22)}
+    const isBuildWs = stateManager.getWorkspaceMode?.() === 'build';
+    this.container.innerHTML = isBuildWs
+      ? `
+        <div class="empty-state">
+          <div class="empty-state-icon">
+            ${uiIcon('building', 22)}
+          </div>
+          <div class="empty-state-text">Mode Edit Bangunan &amp; Objek 3D</div>
+          <div class="empty-state-hint">
+            Klik bangunan, fasilitas, jalan, atau objek 3D pada kanvas untuk mengatur posisi, rotasi, dan opsi bisa ditembus (pass-through).
+          </div>
         </div>
-        <div class="empty-state-text">Belum ada perangkat atau gedung terpilih</div>
-        <div class="empty-state-hint">
-          Klik marker perangkat, jalur kabel, atau gedung 3D untuk membuka properti &amp; kartu dokumentasi infrastruktur.
+      `
+      : `
+        <div class="empty-state">
+          <div class="empty-state-icon">
+            ${uiIcon('building', 22)}
+          </div>
+          <div class="empty-state-text">Belum ada perangkat atau gedung terpilih</div>
+          <div class="empty-state-hint">
+            Klik marker perangkat, jalur kabel, atau gedung 3D untuk membuka properti &amp; kartu dokumentasi infrastruktur.
+          </div>
         </div>
-      </div>
-    `;
+      `;
   }
 
   renderRoomCard(room, { skipSidebarOpen = false } = {}) {
@@ -180,6 +206,10 @@ export class RoomDocumentationPanel {
     const isLocked = Boolean(map3d?.isRoomLocked?.(room));
     const isRoomXray = Boolean(map3d?.buildingXrayMode || map3d?.perRoomXrayIds?.has?.(room.id));
     const cutawayInfo = findCutawayPairPreset(room);
+    if (stateManager.getWorkspaceMode?.() === 'build') {
+      this._renderBuildRoomCard(room, { cutawayInfo });
+      return;
+    }
     const signboardOn = isBuildingSignboardEligible(room);
     const st = summary.statusCounts;
     const net = summary.networkSummary;
@@ -479,6 +509,183 @@ export class RoomDocumentationPanel {
     `;
 
     this._bindCardDOMEvents(room, summary);
+  }
+
+  _renderBuildRoomCard(room, { cutawayInfo = null } = {}) {
+    if (!this.container || !room) return;
+    const map3d = this.getMap3DEngine?.() || null;
+    const isLocked = Boolean(map3d?.isRoomLocked?.(room));
+    const selfLocked = Boolean(room.locked);
+    const isPassThrough = getDefaultRoomPassThrough(room);
+    const isRoomXray = Boolean(map3d?.buildingXrayMode || map3d?.perRoomXrayIds?.has?.(room.id));
+    const dimsText = `${Number(room.widthMeters || 0).toFixed(1)} × ${Number(room.depthMeters || 0).toFixed(1)} × ${Number(room.heightMeters || 0).toFixed(1)} m`;
+    const scalePct = Math.round((Number(room.modelScale) || 1) * 100);
+    const rotDeg = Math.round(Number(room.rotationY) || 0);
+    const subtitleParts = [
+      dimsText,
+      `Skala ${scalePct}%`,
+      `Rotasi ${rotDeg}°`
+    ];
+
+    this.container.innerHTML = `
+      <div class="roomdoc-panel" id="roomdoc-panel-root" data-room-id="${escapeHtml(room.id)}" data-workspace="build">
+        <div class="roomdoc-header">
+          <div class="roomdoc-title-wrap">
+            <div class="roomdoc-eyebrow">Properti Bangunan / Fasilitas 3D</div>
+            <h3 class="roomdoc-title">
+              ${escapeHtml(room.name || 'Bangunan 3D')}
+              ${isLocked ? `<span class="roomdoc-lock-badge" title="Posisi bangunan dikunci">${uiIcon('lock', 10)} Terkunci</span>` : ''}
+              <span id="roomdoc-pass-status-badge" class="roomdoc-pass-badge ${isPassThrough ? '' : 'is-solid'}">
+                ${uiIcon(isPassThrough ? 'wind' : 'shield', 10)} ${isPassThrough ? 'Bisa Ditembus' : 'Padat (Solid)'}
+              </span>
+            </h3>
+            <div class="roomdoc-dims">${escapeHtml(subtitleParts.join(' • '))}</div>
+          </div>
+          <button type="button" id="btn-roomdoc-close" class="btn btn-icon btn-sm" title="Tutup Properti Bangunan">
+            ${uiIcon('x', 14)}
+          </button>
+        </div>
+
+        <div class="roomdoc-actions">
+          <button type="button" id="btn-roomdoc-fpp" class="btn btn-primary btn-sm roomdoc-act-btn" title="Masuk Mode Teknisi (FPP) tepat di bangunan/objek ini">
+            ${uiIcon('footprints', 13)} <span>Masuk FPP</span>
+          </button>
+          <button type="button" id="btn-roomdoc-focus" class="btn btn-secondary btn-sm roomdoc-act-btn" title="Arahkan kamera 3D ke bangunan/fasilitas ini">
+            ${uiIcon('crosshair', 13)} <span>Fokus</span>
+          </button>
+          <button type="button" id="btn-roomdoc-xray" class="btn ${isRoomXray ? 'btn-primary' : 'btn-secondary'} btn-sm roomdoc-act-btn" title="Toggle dinding transparan (X-Ray) bangunan ini">
+            ${uiIcon('scan', 13)} <span>X-Ray</span>
+          </button>
+          ${cutawayInfo?.pairPreset ? `
+            <button type="button" id="btn-roomdoc-cutaway" class="btn ${cutawayInfo.isCurrentlyCutaway ? 'btn-primary' : 'btn-secondary'} btn-sm roomdoc-act-btn" title="Tukar model antara Atap Penuh dan Cutaway">
+              ${uiIcon('layers', 13)} <span>${cutawayInfo.isCurrentlyCutaway ? 'Atap Penuh' : 'Cutaway'}</span>
+            </button>
+          ` : ''}
+          <button type="button" id="btn-roomdoc-edit-geo" class="btn btn-secondary btn-sm roomdoc-act-btn" title="Edit nama, ukuran, skala, rotasi &amp; model GLB">
+            ${uiIcon('pencil', 13)} <span>Edit 3D</span>
+          </button>
+          <button type="button" id="btn-roomdoc-delete" class="btn btn-secondary btn-sm roomdoc-act-btn" style="color: #dc2626;" title="Hapus bangunan / fasilitas ini dari peta">
+            ${uiIcon('trash-2', 13)} <span>Hapus</span>
+          </button>
+        </div>
+
+        <div class="roomdoc-section">
+          <div class="roomdoc-section-title">
+            ${uiIcon('shield', 12)} <span>Pengaturan Fisik &amp; Tabrakan (3D)</span>
+          </div>
+          <div class="roomdoc-collision-card">
+            <label class="roomdoc-collision-toggle">
+              <input type="checkbox" id="roomdoc-pass-through" ${isPassThrough ? 'checked' : ''}>
+              <div>
+                <strong>Bisa Ditembus (Pass-Through)</strong>
+                <div class="roomdoc-collision-hint">
+                  Aktifkan agar avatar dapat berjalan melewati objek kecil seperti pohon hias / semak. Matikan agar solid (tidak tembus) untuk bangunan, wastafel, atau keran.
+                </div>
+              </div>
+            </label>
+            <label class="roomdoc-collision-toggle">
+              <input type="checkbox" id="roomdoc-locked" ${selfLocked ? 'checked' : ''}>
+              <div>
+                <strong>Kunci Posisi Objek Ini</strong>
+                <div class="roomdoc-collision-hint">
+                  Mencegah bangunan/fasilitas tergeser tanpa sengaja saat menyusun elemen lain.
+                </div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div class="roomdoc-section">
+          <div class="roomdoc-section-title">
+            ${uiIcon('rotate-cw', 12)} <span>Putar Cepat 3D</span>
+          </div>
+          <div style="display: flex; gap: 6px;">
+            <button type="button" id="btn-roomdoc-rot-left" class="btn btn-secondary btn-sm" style="flex: 1;">-15°</button>
+            <button type="button" id="btn-roomdoc-rot-90" class="btn btn-secondary btn-sm" style="flex: 1;">+90°</button>
+            <button type="button" id="btn-roomdoc-rot-right" class="btn btn-secondary btn-sm" style="flex: 1;">+15°</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    this._bindBuildCardDOMEvents(room);
+  }
+
+  _bindBuildCardDOMEvents(room) {
+    const root = this.container?.querySelector('#roomdoc-panel-root');
+    if (!root || !room) return;
+    const map3d = this.getMap3DEngine?.() || null;
+
+    root.querySelector('#btn-roomdoc-close')?.addEventListener('click', () => {
+      stateManager.clearInspectedRoom3d?.();
+    });
+
+    root.querySelector('#btn-roomdoc-fpp')?.addEventListener('click', () => {
+      this.getMap3DEngine?.()?.teleportAvatarToRoom?.(room.id);
+    });
+
+    root.querySelector('#btn-roomdoc-focus')?.addEventListener('click', () => {
+      this.getMap3DEngine?.()?.focusOnRoom3d?.(room.id);
+    });
+
+    root.querySelector('#btn-roomdoc-xray')?.addEventListener('click', () => {
+      const engine = this.getMap3DEngine?.();
+      if (engine?.toggleRoomXray) {
+        engine.toggleRoomXray(room.id);
+        const latest = stateManager.getRoom3dById?.(room.id);
+        if (latest) this.renderRoomCard(latest, { skipSidebarOpen: true });
+      }
+    });
+
+    root.querySelector('#btn-roomdoc-cutaway')?.addEventListener('click', () => {
+      const engine = this.getMap3DEngine?.();
+      engine?.toggleRoomCutawayVariant?.(room.id);
+      const latest = stateManager.getRoom3dById?.(room.id);
+      if (latest) this.renderRoomCard(latest, { skipSidebarOpen: true });
+    });
+
+    root.querySelector('#btn-roomdoc-edit-geo')?.addEventListener('click', () => {
+      const modal = this.getRoom3DModal?.();
+      if (modal?.openForRoom) {
+        modal.openForRoom(room.id);
+      } else if (modal?.show) {
+        modal.show(room.id);
+      } else {
+        eventBus.emit('modal:open-room3d', { roomId: room.id });
+      }
+    });
+
+    root.querySelector('#btn-roomdoc-delete')?.addEventListener('click', () => {
+      stateManager.deleteRoom3d?.(room.id);
+      stateManager.clearInspectedRoom3d?.();
+    });
+
+    root.querySelector('#roomdoc-pass-through')?.addEventListener('change', (e) => {
+      const passThrough = Boolean(e.target.checked);
+      stateManager.updateRoom3d?.(room.id, { passThrough });
+      map3d?.showStatusHint?.(
+        passThrough
+          ? `"${room.name}" diatur Bisa Ditembus (Pass-Through).`
+          : `"${room.name}" diatur Padat (Solid — tidak bisa ditembus).`
+      );
+      const latest = stateManager.getRoom3dById?.(room.id);
+      if (latest) this.renderRoomCard(latest, { skipSidebarOpen: true });
+    });
+
+    root.querySelector('#roomdoc-locked')?.addEventListener('change', (e) => {
+      stateManager.updateRoom3d?.(room.id, { locked: Boolean(e.target.checked) });
+      const latest = stateManager.getRoom3dById?.(room.id);
+      if (latest) this.renderRoomCard(latest, { skipSidebarOpen: true });
+    });
+
+    const applyRotDelta = (delta) => {
+      const latest = stateManager.getRoom3dById?.(room.id) || room;
+      const nextRot = (((Number(latest.rotationY) || 0) + delta) % 360 + 360) % 360;
+      stateManager.updateRoom3d?.(room.id, { rotationY: nextRot });
+    };
+    root.querySelector('#btn-roomdoc-rot-left')?.addEventListener('click', () => applyRotDelta(-15));
+    root.querySelector('#btn-roomdoc-rot-90')?.addEventListener('click', () => applyRotDelta(90));
+    root.querySelector('#btn-roomdoc-rot-right')?.addEventListener('click', () => applyRotDelta(15));
   }
 
   _bindCardDOMEvents(room, summary) {

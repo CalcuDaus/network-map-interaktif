@@ -7,7 +7,8 @@ import { eventBus } from '../core/event-bus.js';
 import { stateManager } from '../core/state-manager.js';
 import { DEVICE_CATEGORIES, DEVICE_STATUSES, DEVICE_CATALOG } from '../devices/device-library.js';
 import { validateIp, validateMac, validateVlan, getDefaultSpatial3d, FUNDING_SOURCE_PRESETS } from '../devices/device-schema.js';
-import { clamp, formatDecimals } from '../utils/helpers.js';
+import { clamp, formatDecimals, uiIcon, escapeHtml } from '../utils/helpers.js';
+import { getDefaultObject3dPassThrough } from '../map/map-3d-models.js';
 import { NETWORK_ICON_DEFS, getDeviceIconSvg, getDefaultIconForType } from '../devices/device-icon-factory.js';
 import { metersToPixels, calculateCoverageArea, formatCoverageArea } from '../devices/wireless-coverage.js';
 
@@ -26,17 +27,30 @@ export class PropertiesPanel {
   }
 
   renderEmpty() {
-    this.container.innerHTML = `
-      <div class="empty-state">
-        <div class="empty-state-icon">
-          <i data-lucide="mouse-pointer-click" style="width: 22px; height: 22px;"></i>
+    const isBuildWs = stateManager.getWorkspaceMode?.() === 'build';
+    this.container.innerHTML = isBuildWs
+      ? `
+        <div class="empty-state">
+          <div class="empty-state-icon">
+            <i data-lucide="building-2" style="width: 22px; height: 22px;"></i>
+          </div>
+          <div class="empty-state-text">Mode Edit Bangunan &amp; Objek 3D</div>
+          <div class="empty-state-hint">
+            Klik bangunan, fasilitas, jalan, atau objek 3D pada peta untuk mengatur posisi, skala, rotasi, dan opsi tembus (pass-through).
+          </div>
         </div>
-        <div class="empty-state-text">Belum ada perangkat terpilih</div>
-        <div class="empty-state-hint">
-          Klik salah satu marker perangkat pada denah atau drag perangkat dari panel kiri untuk membuka konfigurasi teknis.
+      `
+      : `
+        <div class="empty-state">
+          <div class="empty-state-icon">
+            <i data-lucide="mouse-pointer-click" style="width: 22px; height: 22px;"></i>
+          </div>
+          <div class="empty-state-text">Belum ada perangkat terpilih</div>
+          <div class="empty-state-hint">
+            Klik salah satu marker perangkat pada denah atau drag perangkat dari panel kiri untuk membuka konfigurasi teknis.
+          </div>
         </div>
-      </div>
-    `;
+      `;
     if (window.lucide) window.lucide.createIcons();
   }
 
@@ -44,7 +58,160 @@ export class PropertiesPanel {
    * Render the form for the selected device
    * @param {Object} device 
    */
+  renderObject3dForm(obj) {
+    if (!obj || !this.container) return;
+    if (stateManager.getWorkspaceMode?.() !== 'build') {
+      this.renderEmpty();
+      return;
+    }
+    this.currentDevice = null;
+    this._lastRenderedSig = null;
+
+    const isPassThrough = getDefaultObject3dPassThrough(obj);
+    const isLocked = Boolean(obj.locked);
+    const elev = Number(obj.elevationMeters ?? 0).toFixed(2);
+    const rotY = Math.round(Number(obj.rotationY ?? obj.rotationDeg ?? 0));
+    const dimsText = `${Number(obj.widthMeters || 1).toFixed(1)} × ${Number(obj.depthMeters || 1).toFixed(1)} × ${Number(obj.heightMeters || 1).toFixed(1)} m`;
+
+    this.container.innerHTML = `
+      <div class="prop-o3d-card" id="prop-o3d-panel" data-object3d-id="${escapeHtml(obj.id)}">
+        <div class="roomdoc-header" style="margin-bottom: 2px;">
+          <div class="roomdoc-title-wrap">
+            <div class="roomdoc-eyebrow">Properti Objek 3D</div>
+            <h3 class="roomdoc-title">
+              ${escapeHtml(obj.name || obj.label || 'Objek 3D')}
+              ${isLocked ? `<span class="roomdoc-lock-badge">${uiIcon('lock', 10)} Terkunci</span>` : ''}
+              <span id="prop-o3d-pass-badge" class="roomdoc-pass-badge ${isPassThrough ? '' : 'is-solid'}">
+                ${uiIcon(isPassThrough ? 'wind' : 'shield', 10)} ${isPassThrough ? 'Bisa Ditembus' : 'Padat (Solid)'}
+              </span>
+            </h3>
+            <div class="roomdoc-dims">${escapeHtml(obj.shape || obj.preset || 'box')} • ${dimsText} • Z ${elev}m</div>
+          </div>
+          <button type="button" id="btn-prop-o3d-close" class="btn btn-icon btn-sm" title="Batalkan Pilihan">
+            ${uiIcon('x', 14)}
+          </button>
+        </div>
+
+        <label class="prop-o3d-field">
+          <span>Nama Objek 3D</span>
+          <input type="text" id="prop-o3d-name" value="${escapeHtml(obj.name || obj.label || '')}">
+        </label>
+
+        <div class="roomdoc-collision-card">
+          <div class="roomdoc-section-title" style="margin: 0;">
+            ${uiIcon('shield', 12)} <span>Pengaturan Fisik &amp; Tabrakan (3D)</span>
+          </div>
+          <label class="roomdoc-collision-toggle">
+            <input type="checkbox" id="prop-o3d-pass-through" ${isPassThrough ? 'checked' : ''}>
+            <div>
+              <strong>Bisa Ditembus Avatar (Pass-Through)</strong>
+              <div class="roomdoc-collision-hint">
+                Aktifkan untuk pohon kecil / semak agar avatar bisa melewati objek; matikan agar padat untuk wastafel, keran, dinding, atau meja.
+              </div>
+            </div>
+          </label>
+          <label class="roomdoc-collision-toggle">
+            <input type="checkbox" id="prop-o3d-locked" ${isLocked ? 'checked' : ''}>
+            <div>
+              <strong>Kunci Posisi Objek</strong>
+              <div class="roomdoc-collision-hint">Mencegah objek tergeser saat menyusun bangunan lain.</div>
+            </div>
+          </label>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+          <label class="prop-o3d-field">
+            <span>Elevasi Z (m)</span>
+            <input type="number" id="prop-o3d-elev" step="0.1" min="0" max="40" value="${Number(obj.elevationMeters ?? 0)}">
+          </label>
+          <label class="prop-o3d-field">
+            <span>Rotasi Y (deg)</span>
+            <input type="number" id="prop-o3d-rot" step="15" min="-360" max="360" value="${rotY}">
+          </label>
+        </div>
+
+        <div style="display: flex; gap: 6px;">
+          <button type="button" id="btn-prop-o3d-rot-left" class="btn btn-secondary btn-sm" style="flex: 1;">-15°</button>
+          <button type="button" id="btn-prop-o3d-rot-90" class="btn btn-secondary btn-sm" style="flex: 1;">+90°</button>
+          <button type="button" id="btn-prop-o3d-rot-right" class="btn btn-secondary btn-sm" style="flex: 1;">+15°</button>
+        </div>
+
+        <div style="display: flex; gap: 6px; margin-top: 2px;">
+          <button type="button" id="btn-prop-o3d-open-editor" class="btn btn-secondary btn-sm" style="flex: 1;">
+            ${uiIcon('sliders', 13)} <span>Editor Lengkap</span>
+          </button>
+          <button type="button" id="btn-prop-o3d-delete" class="btn btn-secondary btn-sm" style="color: #dc2626;">
+            ${uiIcon('trash-2', 13)} <span>Hapus</span>
+          </button>
+        </div>
+      </div>
+    `;
+
+    const panel = this.container.querySelector('#prop-o3d-panel');
+    if (!panel) return;
+
+    panel.querySelector('#btn-prop-o3d-close')?.addEventListener('click', () => {
+      stateManager.deselectObject3d?.();
+    });
+
+    panel.querySelector('#prop-o3d-name')?.addEventListener('change', (e) => {
+      const val = String(e.target.value || '').trim();
+      if (val) stateManager.updateObject3d?.(obj.id, { name: val });
+    });
+
+    panel.querySelector('#prop-o3d-pass-through')?.addEventListener('change', (e) => {
+      const passThrough = Boolean(e.target.checked);
+      stateManager.updateObject3d?.(obj.id, { passThrough });
+      const latest = stateManager.getObject3dById?.(obj.id);
+      if (latest) this.renderObject3dForm(latest);
+    });
+
+    panel.querySelector('#prop-o3d-locked')?.addEventListener('change', (e) => {
+      stateManager.updateObject3d?.(obj.id, { locked: Boolean(e.target.checked) });
+      const latest = stateManager.getObject3dById?.(obj.id);
+      if (latest) this.renderObject3dForm(latest);
+    });
+
+    panel.querySelector('#prop-o3d-elev')?.addEventListener('change', (e) => {
+      const val = Math.max(0, parseFloat(e.target.value) || 0);
+      stateManager.updateObject3d?.(obj.id, { elevationMeters: val });
+    });
+
+    panel.querySelector('#prop-o3d-rot')?.addEventListener('change', (e) => {
+      const val = (((parseFloat(e.target.value) || 0) % 360) + 360) % 360;
+      stateManager.updateObject3d?.(obj.id, { rotationY: val });
+    });
+
+    const rotDelta = (delta) => {
+      const latest = stateManager.getObject3dById?.(obj.id) || obj;
+      const next = (((Number(latest.rotationY ?? latest.rotationDeg ?? 0) + delta) % 360) + 360) % 360;
+      stateManager.updateObject3d?.(obj.id, { rotationY: next });
+    };
+    panel.querySelector('#btn-prop-o3d-rot-left')?.addEventListener('click', () => rotDelta(-15));
+    panel.querySelector('#btn-prop-o3d-rot-90')?.addEventListener('click', () => rotDelta(90));
+    panel.querySelector('#btn-prop-o3d-rot-right')?.addEventListener('click', () => rotDelta(15));
+
+    panel.querySelector('#btn-prop-o3d-open-editor')?.addEventListener('click', () => {
+      document.getElementById('btn-3d-objects')?.click?.();
+    });
+
+    panel.querySelector('#btn-prop-o3d-delete')?.addEventListener('click', () => {
+      stateManager.deleteObject3d?.(obj.id);
+      this.renderEmpty();
+    });
+
+    if (window.lucide) window.lucide.createIcons();
+  }
+
   renderDeviceForm(device) {
+    if (stateManager.getWorkspaceMode?.() === 'build') {
+      this.currentDevice = null;
+      this._lastRenderedSig = null;
+      if (!stateManager.getInspectedRoom3dId?.() && !stateManager.getSelectedObject3dId?.()) {
+        this.renderEmpty();
+      }
+      return;
+    }
     this.currentDevice = device;
     const cat = DEVICE_CATEGORIES[device.category] || DEVICE_CATEGORIES.core;
     const statusDef = DEVICE_STATUSES[device.status] || DEVICE_STATUSES.unknown;
@@ -1143,6 +1310,11 @@ export class PropertiesPanel {
   bindEvents() {
     eventBus.on('device:selected', (device) => {
       if (!device) return;
+      if (stateManager.getWorkspaceMode?.() === 'build') {
+        this.currentDevice = null;
+        this._lastRenderedSig = null;
+        return;
+      }
       stateManager.clearInspectedRoom3d?.({ silent: true });
       const selectedDevices = this.deviceManager.getSelectedDevices?.() || [device];
       const unlockedCount = selectedDevices.filter((d) => !d.layerLocked).length;
@@ -1151,6 +1323,46 @@ export class PropertiesPanel {
         return;
       }
       this.renderDeviceForm(device);
+    });
+
+    eventBus.on('object3d:selected', (obj) => {
+      if (!obj || stateManager.getWorkspaceMode?.() !== 'build') return;
+      stateManager.clearInspectedRoom3d?.({ silent: true });
+      this.currentDevice = null;
+      this._lastRenderedSig = null;
+      this.renderObject3dForm?.(obj);
+    });
+
+    eventBus.on('object3d:changed', () => {
+      if (stateManager.getWorkspaceMode?.() !== 'build') return;
+      const selObjId = stateManager.getSelectedObject3dId?.();
+      const obj = selObjId ? stateManager.getObject3dById?.(selObjId) : null;
+      if (obj && this.container?.querySelector?.('#prop-o3d-panel')) {
+        this.renderObject3dForm?.(obj);
+      }
+    });
+
+    eventBus.on('object3d:deselected', () => {
+      if (stateManager.getWorkspaceMode?.() !== 'build') return;
+      if (!stateManager.getInspectedRoom3dId?.() && !stateManager.getSelectedObject3dId?.()) {
+        this.renderEmpty();
+      }
+    });
+
+    eventBus.on('workspace:changed', ({ workspaceMode } = {}) => {
+      this.currentDevice = null;
+      this._lastRenderedSig = null;
+      if (workspaceMode === 'build') {
+        const selObjId = stateManager.getSelectedObject3dId?.();
+        const obj = selObjId ? stateManager.getObject3dById?.(selObjId) : null;
+        if (obj) {
+          this.renderObject3dForm?.(obj);
+        } else if (!stateManager.getInspectedRoom3dId?.()) {
+          this.renderEmpty();
+        }
+      } else if (!stateManager.getInspectedRoom3dId?.() && !this.deviceManager?.selectedDeviceId && !this.cableManager?.selectedCableId) {
+        this.renderEmpty();
+      }
     });
 
     eventBus.on('device:selection-changed', ({ primaryId, devices }) => {

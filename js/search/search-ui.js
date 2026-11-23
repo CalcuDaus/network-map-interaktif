@@ -165,9 +165,11 @@ export class SearchUI {
       this.clearBtn.classList.toggle('visible', trimmed.length > 0);
     }
 
-    if (this.filterMode === 'building') {
+    const isBuildWs = stateManager.getWorkspaceMode?.() === 'build';
+    if (isBuildWs || this.filterMode === 'building') {
       const rooms = this.searchEngine.searchRooms?.(query, {
         browseWhenEmpty: true,
+        includeDecorations: isBuildWs,
         limit: 15
       }) || [];
       this.results = rooms.map((entry) => ({ kind: 'room', ...entry }));
@@ -202,16 +204,19 @@ export class SearchUI {
   }
 
   renderDropdown(results, query = '') {
-    const filterPillsHtml = FILTER_OPTIONS.map((opt) => `
+    const isBuildWs = stateManager.getWorkspaceMode?.() === 'build';
+    const filterOptions = isBuildWs ? FILTER_OPTIONS.filter((opt) => opt.id === 'building') : FILTER_OPTIONS;
+    const activeFilterMode = isBuildWs ? 'building' : this.filterMode;
+    const filterPillsHtml = filterOptions.map((opt) => `
       <button type="button"
-        class="search-filter-pill ${this.filterMode === opt.id ? 'active' : ''}"
+        class="search-filter-pill ${activeFilterMode === opt.id ? 'active' : ''}"
         data-filter-mode="${opt.id}">
         ${opt.label}
       </button>
     `).join('');
 
     const trimmed = String(query || '').trim();
-    const emptyUnitLabel = this.filterMode === 'building' ? 'gedung' : 'perangkat';
+    const emptyUnitLabel = activeFilterMode === 'building' ? 'gedung' : 'perangkat';
     const countText = trimmed
       ? `${results.length} cocok`
       : `${results.length} ${emptyUnitLabel}${results.length > 15 ? ' (tampil 15 teratas)' : ''}`;
@@ -311,7 +316,7 @@ export class SearchUI {
         <div class="search-filter-pills">${filterPillsHtml}</div>
         <div class="search-meta-hint">
           <span>${countText}</span>
-          <span>Cari Gedung / Catatan ODP / IP / VLAN</span>
+          <span>${isBuildWs ? 'Cari Gedung &amp; Fasilitas 3D' : 'Cari Gedung / Catatan ODP / IP / VLAN'}</span>
         </div>
       </div>
       <div class="search-results-list">
@@ -357,6 +362,9 @@ export class SearchUI {
 
   activateResultItem(item, options = {}) {
     if (!item) return;
+    if (stateManager.getWorkspaceMode?.() === 'build' && item.kind !== 'room') {
+      return;
+    }
     if (item.kind === 'room' && item.room) {
       this.selectRoom(item.room);
       return;

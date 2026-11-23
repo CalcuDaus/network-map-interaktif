@@ -77,6 +77,9 @@ export class DeviceLayersPanel {
    * @param {'properties'|'layers'} tabName
    */
   switchTab(tabName) {
+    if (tabName === 'layers' && stateManager.getWorkspaceMode?.() === 'build') {
+      tabName = 'properties';
+    }
     this.activeTab = tabName;
 
     // Ensure right sidebar is open

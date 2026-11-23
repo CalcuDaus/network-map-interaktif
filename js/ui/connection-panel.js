@@ -37,6 +37,10 @@ export class ConnectionPanel {
    * @param {Object} cable 
    */
   renderCableForm(cable) {
+    if (stateManager.getWorkspaceMode?.() === 'build') {
+      this.currentCable = null;
+      return;
+    }
     this.currentCable = cable;
     const catDef = CABLE_CATEGORIES[cable.cableCategory] || CABLE_CATEGORIES['cat6'];
     const statusDef = CABLE_STATUSES[cable.status] || CABLE_STATUSES.active;
@@ -1179,6 +1183,10 @@ export class ConnectionPanel {
 
   bindEvents() {
     eventBus.on('connection:selected', (cable) => {
+      if (stateManager.getWorkspaceMode?.() === 'build') {
+        this.currentCable = null;
+        return;
+      }
       stateManager.clearInspectedRoom3d?.({ silent: true });
       this.renderCableForm(cable);
     });
