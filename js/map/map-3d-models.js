@@ -1097,10 +1097,124 @@ function extractRawPortsFromGlbRoot(root) {
   return ports;
 }
 
+const GLB_IDB_NAME = 'SmartSchoolNetMapGlbCacheV1';
+const GLB_IDB_STORE = 'glb_binaries';
+const glbIdbMemoryCache = new Map();
+const glbIdbStats = {
+  hits: 0,
+  misses: 0,
+  writes: 0
+};
+let _glbIdbOpenPromise = null;
+
+function openGlbIndexedDb() {
+  if (typeof indexedDB === 'undefined' || !indexedDB) return Promise.resolve(null);
+  if (_glbIdbOpenPromise) return _glbIdbOpenPromise;
+  _glbIdbOpenPromise = new Promise((resolve) => {
+    try {
+      const req = indexedDB.open(GLB_IDB_NAME, 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(GLB_IDB_STORE)) {
+          db.createObjectStore(GLB_IDB_STORE);
+        }
+      };
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
+  });
+  return _glbIdbOpenPromise;
+}
+
 /**
- * Load and normalize a custom .glb/.gltf model (cached by URL, scaled to targetSize, centered on ground y=0).
- * On http(s), streams binary .glb assets on demand for fast mobile startup;
- * on file:// or offline fallback, lazily loads the base64 GLB bundle once.
+ * Load a cached binary .GLB ArrayBuffer from persistent IndexedDB (or in-memory mirror).
+ * @param {string} cacheKey
+ * @returns {Promise<ArrayBuffer|null>}
+ */
+export async function loadGlbArrayBufferFromIdb(cacheKey) {
+  const key = normalizeGlbCacheKey(cacheKey);
+  if (!key) return null;
+  if (glbIdbMemoryCache.has(key)) {
+    glbIdbStats.hits += 1;
+    return glbIdbMemoryCache.get(key);
+  }
+  const db = await openGlbIndexedDb();
+  if (!db) {
+    glbIdbStats.misses += 1;
+    return null;
+  }
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(GLB_IDB_STORE, 'readonly');
+      const store = tx.objectStore(GLB_IDB_STORE);
+      const req = store.get(key);
+      req.onsuccess = () => {
+        const buf = req.result;
+        if (buf instanceof ArrayBuffer && buf.byteLength > 0) {
+          glbIdbMemoryCache.set(key, buf);
+          glbIdbStats.hits += 1;
+          resolve(buf);
+        } else {
+          glbIdbStats.misses += 1;
+          resolve(null);
+        }
+      };
+      req.onerror = () => {
+        glbIdbStats.misses += 1;
+        resolve(null);
+      };
+    } catch {
+      glbIdbStats.misses += 1;
+      resolve(null);
+    }
+  });
+}
+
+/**
+ * Persist a binary .GLB ArrayBuffer into IndexedDB and in-memory mirror for instant subsequent loads.
+ * @param {string} cacheKey
+ * @param {ArrayBuffer} arrayBuffer
+ * @returns {Promise<boolean>}
+ */
+export async function cacheGlbArrayBufferInIdb(cacheKey, arrayBuffer) {
+  const key = normalizeGlbCacheKey(cacheKey);
+  if (!key || !(arrayBuffer instanceof ArrayBuffer) || arrayBuffer.byteLength === 0) return false;
+  glbIdbMemoryCache.set(key, arrayBuffer);
+  glbIdbStats.writes += 1;
+  const db = await openGlbIndexedDb();
+  if (!db) return true;
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(GLB_IDB_STORE, 'readwrite');
+      const store = tx.objectStore(GLB_IDB_STORE);
+      const req = store.put(arrayBuffer, key);
+      req.onsuccess = () => resolve(true);
+      req.onerror = () => resolve(false);
+    } catch {
+      resolve(false);
+    }
+  });
+}
+
+/**
+ * Inspect IndexedDB binary GLB cache hit/miss/write telemetry.
+ */
+export function getGlbIndexedDbCacheStats() {
+  return {
+    hits: glbIdbStats.hits,
+    misses: glbIdbStats.misses,
+    writes: glbIdbStats.writes,
+    memoryEntries: glbIdbMemoryCache.size
+  };
+}
+
+/**
+ * Load and normalize a custom .glb/.gltf model (cached by URL + persistent IndexedDB binary cache,
+ * scaled to targetSize, centered on ground y=0).
+ * On http(s), checks IndexedDB binary cache first, then streams binary .glb assets on demand;
+ * on file:// or offline fallback, lazily loads the base64 GLB bundle once and caches its binary buffer.
  * Automatically evicts failed promises from glbCache so transient network errors can recover on retry.
  * @param {string} url
  * @param {number} [targetSize=1.2]
@@ -1131,11 +1245,23 @@ export function loadCustomGlbModel(url, targetSize = 1.2) {
         });
       }
 
+      // 1b. Persistent IndexedDB / Memory Binary ArrayBuffer Cache fast-path (Fase 3)
+      const cachedIdbBuffer = await loadGlbArrayBufferFromIdb(cacheKey);
+      if (cachedIdbBuffer) {
+        try {
+          return await parseGlbArrayBuffer(cachedIdbBuffer);
+        } catch {
+          glbIdbMemoryCache.delete(cacheKey);
+        }
+      }
+
       // 2. Fast-path if embedded base64 map is already loaded (e.g., Node tests or file:// offline cache)
       const immediateB64 = resolveEmbeddedGlbBase64(url);
       if (immediateB64) {
         try {
-          return await parseGlbArrayBuffer(base64ToArrayBuffer(immediateB64));
+          const buf = base64ToArrayBuffer(immediateB64);
+          await cacheGlbArrayBufferInIdb(cacheKey, buf);
+          return await parseGlbArrayBuffer(buf);
         } catch (err) {
           console.warn('[Map3DModels] Embedded GLB parse failed, falling back to fetch:', err);
         }
@@ -1146,7 +1272,9 @@ export function loadCustomGlbModel(url, targetSize = 1.2) {
         await ensureOfflineGlbBundleLoaded();
         const loadedB64 = resolveEmbeddedGlbBase64(url);
         if (loadedB64) {
-          return await parseGlbArrayBuffer(base64ToArrayBuffer(loadedB64));
+          const buf = base64ToArrayBuffer(loadedB64);
+          await cacheGlbArrayBufferInIdb(cacheKey, buf);
+          return await parseGlbArrayBuffer(buf);
         }
       }
 
@@ -1169,7 +1297,9 @@ export function loadCustomGlbModel(url, targetSize = 1.2) {
         await ensureOfflineGlbBundleLoaded();
         const fallbackB64 = resolveEmbeddedGlbBase64(url);
         if (fallbackB64) {
-          return await parseGlbArrayBuffer(base64ToArrayBuffer(fallbackB64));
+          const buf = base64ToArrayBuffer(fallbackB64);
+          await cacheGlbArrayBufferInIdb(cacheKey, buf);
+          return await parseGlbArrayBuffer(buf);
         }
         throw networkErr;
       }
