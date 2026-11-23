@@ -12168,36 +12168,15 @@ export class Map3DEngine {
    */
   updateSceneOcclusionCulling(force = false) {
     if (!this.isInitialized || !this.camera) return null;
-    const indoorRoom = (this.avatarMode && this.avatarPerspective === 'fpp')
-      ? this._getAvatarCurrentBuilding()
-      : null;
-    const indoorId = indoorRoom?.id || null;
-    if (!force && indoorId === null && this._lastOcclusionRoomId === null && !this.camera.projectionMatrix) {
-      return this.renderPerfStats;
-    }
+    let indoorRoom = this.avatarMode && this.avatarPerspective === "fpp" ? this._getAvatarCurrentBuilding() : null, indoorId = indoorRoom?.id || null;
+    if (!force && indoorId === null && this._lastOcclusionRoomId === null && !this.camera.projectionMatrix) return this.renderPerfStats;
     this._lastOcclusionRoomId = indoorId;
-
-    // Prepare frustum if camera has valid projection matrices
     let hasValidFrustum = false;
-    if (this._lodFrustum && this._lodProjMatrix && this._lodSphere && this.camera.projectionMatrix && this.camera.matrixWorldInverse) {
-      try {
-        this.camera.updateMatrixWorld?.();
-        if (typeof this.camera.matrixWorldInverse.copy === 'function') {
-          this.camera.matrixWorldInverse.copy(this.camera.matrixWorld).invert();
-        }
-        this._lodProjMatrix.multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse);
-        const pe = this._lodProjMatrix.elements;
-        if (Number.isFinite(pe?.[0]) && Math.abs(pe[0]) > 1e-6) {
-          this._lodFrustum.setFromProjectionMatrix(this._lodProjMatrix);
-          hasValidFrustum = true;
-        }
-      } catch {
-        hasValidFrustum = false;
-      }
+    if (this._lodFrustum && this._lodProjMatrix && this._lodSphere && this.camera.projectionMatrix && this.camera.matrixWorldInverse) try {
+      this.camera.updateMatrixWorld?.(), typeof this.camera.matrixWorldInverse.copy == "function" && this.camera.matrixWorldInverse.copy(this.camera.matrixWorld).invert(), this._lodProjMatrix.multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse);
+      let pe = this._lodProjMatrix.elements;
+      Number.isFinite(pe?.[0]) && Math.abs(pe[0]) > 1e-6 && (this._lodFrustum.setFromProjectionMatrix(this._lodProjMatrix), hasValidFrustum = true);
+    } catch {
+      hasValidFrustum = false;
     }
-
-    const layers = stateManager.state?.layers || {};
-    const allowBuildings = layers.buildings !== false;
-    const selRoomId = stateManager.getSelectedRoom3dId?.() || null;
-    const selDevId = this.deviceManager?.selectedDeviceId || null;
-...[truncated for diff preview]
+... [truncated for diff preview]

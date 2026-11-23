@@ -43,7 +43,27 @@ const FACILITY_PRESET_IDS = new Set([
   'pohon-cemara-pinus-besar',
   'pohon-mangga-sedang',
   'pohon-palem-hiasan-sedang',
-  'pohon-rindang-besar'
+  'pohon-rindang-besar',
+  'pohon-kaktus',
+  'bunga-keladi',
+  'bunga-pucuk-merah',
+  'bunga-taman-merah',
+  'bunga-bonsai-taman',
+  'kaktus-karang-taman',
+  'kandang-burung-samping-futsal',
+  'lapangan-futsal',
+  'gawang-lapangan-futsal',
+  'lorong-bunga-anggrek',
+  'tong-sampah-krisbow-hijau',
+  'tiang-pull-up-bar',
+  'lampu-taman',
+  'plank-dasa-pesona',
+  'plank-nilai-karakter',
+  'plank-tjkt',
+  'pohon-pinang',
+  'pohon-mahoni-super-besar',
+  'pohon-rindang-super-besar',
+  'pohon-pinus-ekstra-besar'
 ]);
 
 const OBJECT_ICON_MAP = {
