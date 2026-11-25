@@ -185,6 +185,20 @@
 
         <div class="divider-vertical"></div>
 
+        <!-- Quick Save (.JSON) & New Blank Canvas right at top bar -->
+        <button type="button" id="btn-navbar-save-json" class="btn btn-primary btn-sm navbar-save-json-btn"
+          title="Simpan Proyek &amp; Export Otomatis File .JSON (Ctrl+S)">
+          <i data-lucide="save" style="width: 13px; height: 13px;"></i>
+          <span id="label-navbar-save-json">Simpan (.JSON)</span>
+        </button>
+        <button type="button" id="btn-navbar-new-canvas" class="btn btn-secondary btn-sm navbar-new-canvas-btn"
+          title="Buat Kanvas Baru Kosong (Reset simpanan lokal Mode Tamu)">
+          <i data-lucide="file-plus" style="width: 13px; height: 13px;"></i>
+          <span>Kanvas Baru</span>
+        </button>
+
+        <div class="divider-vertical"></div>
+
         <!-- Feature Modals Dropdown Menu -->
         <div id="navbar-menu-wrapper" class="navbar-dropdown">
           <button id="btn-navbar-menu" class="btn btn-secondary btn-sm navbar-dropdown-trigger"
@@ -371,6 +385,28 @@
                   <i data-lucide="moon" id="theme-toggle-icon" style="width: 13px; height: 13px;"></i>
                   <span>Mode Gelap</span>
                 </button>
+              </div>
+            </div>
+
+            <!-- Save (.JSON) & New Blank Canvas Actions (Top of Settings Panel) -->
+            <div id="gs-project-actions" class="gs-project-actions">
+              <button type="button" id="btn-settings-save-json" class="btn btn-primary btn-sm gs-save-json-btn"
+                title="Simpan Proyek &amp; Unduh Otomatis File .JSON (Ctrl+S)">
+                <i data-lucide="save" style="width: 13px; height: 13px;"></i>
+                <span id="label-settings-save-json">Simpan Proyek (.JSON)</span>
+              </button>
+              <div class="gs-project-subactions">
+                <button type="button" id="btn-settings-new-canvas" class="btn btn-secondary btn-sm"
+                  title="Mulai Kanvas Baru Kosong (Data lokal Mode Tamu akan direset)">
+                  <i data-lucide="file-plus" style="width: 12px; height: 12px;"></i>
+                  <span>Kanvas Baru Kosong</span>
+                </button>
+                <button type="button" id="btn-settings-import-json" class="btn btn-secondary btn-sm"
+                  title="Buka &amp; Muat Proyek dari File .JSON">
+                  <i data-lucide="upload" style="width: 12px; height: 12px;"></i>
+                  <span>Buka .JSON</span>
+                </button>
+                <input type="file" id="input-settings-import-json" accept=".json,application/json" style="display: none;">
               </div>
             </div>
 

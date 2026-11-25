@@ -620,7 +620,10 @@ export class AuthModal {
 
     this.modalEl.querySelector('#auth-btn-exit-public-preview')?.addEventListener('click', () => {
       this.authManager.setPublicPreviewMode(false);
-      this.projectStorage.clearCanvasToEmpty('SmartSchool NetMap');
+      const guestRes = this.projectStorage.loadGuestCanvasFromLocal?.();
+      if (!guestRes?.loaded) {
+        this.projectStorage.clearCanvasToEmpty('SmartSchool NetMap');
+      }
       this.historyManager?.initBaseline?.();
       this.statusMessage = '';
       this.render();
@@ -711,9 +714,14 @@ export class AuthModal {
 
     this.modalEl.querySelector('#auth-btn-logout')?.addEventListener('click', async () => {
       await this.authManager.logout();
-      this.projectStorage.clearCanvasToEmpty('SmartSchool NetMap');
+      const guestRes = this.projectStorage.loadGuestCanvasFromLocal?.();
+      if (!guestRes?.loaded) {
+        this.projectStorage.clearCanvasToEmpty('SmartSchool NetMap');
+      }
       this.historyManager?.initBaseline?.();
-      this.statusMessage = 'Anda telah keluar. Kanvas kembali ke Mode Tamu (kosong).';
+      this.statusMessage = guestRes?.loaded
+        ? 'Anda telah keluar. Kanvas Mode Tamu dari browser lokal dipulihkan.'
+        : 'Anda telah keluar. Kanvas kembali ke Mode Tamu (kosong).';
       this.statusTone = 'info';
       this.render();
     });

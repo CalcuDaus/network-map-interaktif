@@ -121,6 +121,9 @@ export class PtDeviceWindow {
   }
 
   hide() {
+    if (this.activeDeviceId && this.terminalEngine?.isStreaming?.(this.activeDeviceId)) {
+      this.terminalEngine.interrupt(this.activeDeviceId);
+    }
     this.isOpen = false;
     if (this.backdropEl) {
       this.backdropEl.classList.add('hidden');
@@ -352,8 +355,8 @@ export class PtDeviceWindow {
 
   /**
    * PLUGGABLE TERMINAL UI MOUNT POINT
-   * Seluruh logika eksekusi CLI ada di `this.terminalEngine` (`TerminalSessionEngine`).
-   * Nanti saat Anda membuat desain Terminal UI baru, cukup ganti implementasi metode ini.
+   * Antarmuka konsol terminal asli (inline prompt + kursor blok berkedip + streaming I/O).
+   * Seluruh logika eksekusi CLI berada di `this.terminalEngine` (`TerminalSessionEngine`).
    */
   renderTerminalMount(hostEl, dev, { forceFlavor = null } = {}) {
     if (!hostEl || !dev || !this.terminalEngine) return;
@@ -362,101 +365,308 @@ export class PtDeviceWindow {
     }
     const session = this.terminalEngine.getSession(dev.id);
     const activeFlavor = session.flavorOverride || 'auto';
-    const promptStr = this.terminalEngine.getPrompt(dev.id);
+    const resolvedOs = activeFlavor === 'auto' ? session.osType : activeFlavor;
+    const devLabel = dev.network?.hostname || dev.name || 'Device';
+    const windowTitle = resolvedOs === 'host-cmd'
+      ? `Command Prompt -- ${devLabel}`
+      : resolvedOs === 'mikrotik'
+        ? `admin@${devLabel} -- MikroTik RouterOS`
+        : `Console tty0 -- ${devLabel} -- Cisco IOS`;
 
     hostEl.innerHTML = `
-      <div class="pt-terminal-shell" data-terminal-device="${escapeHtml(dev.id)}">
-        <div class="pt-terminal-toolbar">
-          <div style="display:flex;align-items:center;gap:6px;">
-            <span style="font-weight:700;">Terminal: ${escapeHtml(dev.name)}</span>
-            <select id="pt-term-flavor-select" class="pt-topo-select" style="height:22px;font-size:10.5px;">
+      <div class="pt-terminal-shell" data-terminal-device="${escapeHtml(dev.id)}" data-terminal-os="${escapeHtml(resolvedOs)}">
+        <div class="pt-terminal-titlebar">
+          <div class="pt-term-title-left">
+            <div class="pt-term-window-dots" aria-hidden="true">
+              <span class="pt-term-dot is-red"></span>
+              <span class="pt-term-dot is-amber"></span>
+              <span class="pt-term-dot is-green"></span>
+            </div>
+            <span id="pt-term-window-title" class="pt-term-window-title">${escapeHtml(windowTitle)}</span>
+          </div>
+          <div class="pt-term-title-actions">
+            <select id="pt-term-flavor-select" class="pt-term-os-select" title="Mode Sintaks Terminal">
               <option value="auto" ${activeFlavor === 'auto' ? 'selected' : ''}>Auto OS</option>
               <option value="mikrotik" ${activeFlavor === 'mikrotik' ? 'selected' : ''}>MikroTik ROS</option>
               <option value="cisco" ${activeFlavor === 'cisco' ? 'selected' : ''}>Cisco IOS</option>
               <option value="host-cmd" ${activeFlavor === 'host-cmd' ? 'selected' : ''}>Host CMD</option>
             </select>
-          </div>
-          <div style="display:flex;align-items:center;gap:4px;">
-            <button type="button" id="pt-term-help-btn" class="btn btn-secondary btn-sm" style="padding:2px 7px;font-size:10.5px;">?</button>
-            <button type="button" id="pt-term-clear-btn" class="btn btn-secondary btn-sm" style="padding:2px 7px;font-size:10.5px;">Clear</button>
+            <button type="button" id="pt-term-copy-btn" class="pt-term-chrome-btn" title="Salin seluruh output terminal">${uiIcon('copy', 11)}<span>Copy</span></button>
+            <button type="button" id="pt-term-help-btn" class="pt-term-chrome-btn" title="Tampilkan Daftar Perintah (?)">?</button>
+            <button type="button" id="pt-term-clear-btn" class="pt-term-chrome-btn" title="Bersihkan Layar (Ctrl+L)">Clear</button>
           </div>
         </div>
-        <div id="pt-term-screen" class="pt-terminal-screen"></div>
-        <form id="pt-term-form" class="pt-terminal-input-row">
-          <span id="pt-term-prompt" class="pt-terminal-prompt-prefix">${escapeHtml(promptStr)}</span>
-          <input id="pt-term-input" type="text" class="pt-terminal-input" placeholder="Ketik perintah (Tab=Autocomplete, Up/Down=History, ?=Bantuan)" autocorrect="off" autocapitalize="off" autocomplete="off" spellcheck="false">
-          <button type="submit" class="btn btn-primary btn-sm" style="padding:3px 9px;font-size:11px;">Run</button>
-        </form>
+
+        <div id="pt-term-screen" class="pt-terminal-screen" tabindex="-1">
+          <div id="pt-term-history" class="pt-terminal-history"></div>
+          <div id="pt-term-live-line" class="pt-terminal-live-line">
+            <span id="pt-term-prompt" class="pt-terminal-prompt-prefix"></span><span class="pt-terminal-editor-wrap"><span id="pt-term-mirror-before" class="pt-terminal-mirror"></span><span id="pt-term-cursor" class="pt-terminal-cursor">&nbsp;</span><span id="pt-term-mirror-after" class="pt-terminal-mirror"></span><span id="pt-term-ghost" class="pt-terminal-ghost"></span><input id="pt-term-input" type="text" class="pt-terminal-hidden-input" autocorrect="off" autocapitalize="off" autocomplete="off" spellcheck="false" enterkeyhint="send" aria-label="Terminal command input"></span>
+          </div>
+        </div>
+
+        <div class="pt-terminal-statusbar">
+          <span id="pt-term-status-left" class="pt-term-status-left">READY</span>
+          <span class="pt-term-status-shortcuts">Tab: Complete | Up/Down: History | Ctrl+C: Stop | Ctrl+L: Clear</span>
+        </div>
       </div>
     `;
 
     this._syncTerminalScreen();
 
+    const shellEl = hostEl.querySelector('.pt-terminal-shell');
+    const screenEl = hostEl.querySelector('#pt-term-screen');
     const inputEl = hostEl.querySelector('#pt-term-input');
     const flavorSel = hostEl.querySelector('#pt-term-flavor-select');
+    const copyBtn = hostEl.querySelector('#pt-term-copy-btn');
+
+    const focusInput = () => {
+      inputEl?.focus?.();
+      this._syncTerminalCursorMirror();
+    };
+
+    // Click anywhere inside console viewport to focus inline cursor (unless user highlighted text to copy)
+    screenEl?.addEventListener('click', () => {
+      const sel = typeof window !== 'undefined' ? window.getSelection?.()?.toString?.() : '';
+      if (!sel) focusInput();
+    });
 
     flavorSel?.addEventListener('change', (ev) => {
       this.terminalEngine.setFlavor(dev.id, ev.target.value || 'auto');
-      this._syncTerminalScreen();
+      this.render();
+    });
+
+    copyBtn?.addEventListener('click', () => {
+      const lines = (this.terminalEngine.getSession(dev.id)?.bufferLines || []).map((l) =>
+        l.type === 'input' ? `${l.prompt || ''}${l.text}` : l.text
+      ).join('\n');
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(lines).catch(() => {});
+      }
+      const lbl = copyBtn.querySelector('span');
+      if (lbl) {
+        lbl.textContent = 'Copied';
+        setTimeout(() => { lbl.textContent = 'Copy'; }, 1200);
+      }
+      focusInput();
     });
 
     hostEl.querySelector('#pt-term-clear-btn')?.addEventListener('click', () => {
       this.terminalEngine.clear(dev.id);
-      inputEl?.focus?.();
+      this._syncTerminalCursorMirror();
+      focusInput();
     });
 
     hostEl.querySelector('#pt-term-help-btn')?.addEventListener('click', () => {
-      this.terminalEngine.execute(dev.id, 'help');
-      inputEl?.focus?.();
+      this.terminalEngine.showInlineHelp(dev.id, inputEl?.value || '');
+      focusInput();
+    });
+
+    inputEl?.addEventListener('focus', () => {
+      shellEl?.classList?.add('is-focused');
+      this._syncTerminalCursorMirror();
+    });
+    inputEl?.addEventListener('blur', () => {
+      shellEl?.classList?.remove('is-focused');
+    });
+
+    ['input', 'keyup', 'click', 'select'].forEach((evtName) => {
+      inputEl?.addEventListener(evtName, () => this._syncTerminalCursorMirror());
     });
 
     inputEl?.addEventListener('keydown', (ev) => {
-      if (ev.key === 'Tab') {
-        ev.preventDefault();
-        const res = this.terminalEngine.complete(dev.id, inputEl.value || '');
-        if (res?.completed) inputEl.value = res.completed;
-      } else if (ev.key === 'ArrowUp') {
-        ev.preventDefault();
-        inputEl.value = this.terminalEngine.navigateHistory(dev.id, -1);
-      } else if (ev.key === 'ArrowDown') {
-        ev.preventDefault();
-        inputEl.value = this.terminalEngine.navigateHistory(dev.id, 1);
+      const key = String(ev.key || '');
+      if ((ev.ctrlKey || ev.metaKey) && key.toLowerCase() === 'c') {
+        const sel = typeof window !== 'undefined' ? window.getSelection?.()?.toString?.() : '';
+        if (!sel) {
+          ev.preventDefault();
+          const draft = inputEl.value || '';
+          inputEl.value = '';
+          this.terminalEngine.interrupt(dev.id, draft);
+          this._syncTerminalCursorMirror();
+        }
+        return;
       }
-    });
-
-    hostEl.querySelector('#pt-term-form')?.addEventListener('submit', (ev) => {
-      ev.preventDefault();
-      const cmd = inputEl?.value || '';
-      this.terminalEngine.execute(dev.id, cmd);
-      if (inputEl) {
+      if ((ev.ctrlKey || ev.metaKey) && key.toLowerCase() === 'l') {
+        ev.preventDefault();
+        this.terminalEngine.clear(dev.id);
+        this._syncTerminalCursorMirror();
+        return;
+      }
+      if (key === 'Enter') {
+        ev.preventDefault();
+        const cmd = inputEl.value || '';
         inputEl.value = '';
-        inputEl.focus?.();
+        this._syncTerminalCursorMirror();
+        this.terminalEngine.executeInteractive(dev.id, cmd);
+        focusInput();
+        return;
+      }
+      if (key === 'Tab') {
+        ev.preventDefault();
+        const cur = inputEl.value || '';
+        const res = this.terminalEngine.complete(dev.id, cur);
+        if (res?.completed && res.completed !== cur) {
+          inputEl.value = res.completed;
+          const endPos = res.completed.length;
+          inputEl.setSelectionRange?.(endPos, endPos);
+        } else if (res?.suggestions?.length > 1) {
+          this.terminalEngine.showTabCandidates(dev.id, cur, res.suggestions);
+        }
+        this._syncTerminalCursorMirror();
+        return;
+      }
+      if (key === 'ArrowRight') {
+        const cur = inputEl.value || '';
+        const caret = typeof inputEl.selectionStart === 'number' ? inputEl.selectionStart : cur.length;
+        if (cur.length > 0 && caret === cur.length) {
+          const ghostEl = this.backdropEl?.querySelector('#pt-term-ghost');
+          const ghostText = ghostEl?.textContent || '';
+          if (ghostText) {
+            ev.preventDefault();
+            inputEl.value = `${cur}${ghostText}`;
+            const endPos = inputEl.value.length;
+            inputEl.setSelectionRange?.(endPos, endPos);
+            this._syncTerminalCursorMirror();
+            return;
+          }
+        }
+      }
+      if (key === 'ArrowUp' || key === 'ArrowDown') {
+        ev.preventDefault();
+        const recalled = this.terminalEngine.navigateHistory(dev.id, key === 'ArrowUp' ? -1 : 1);
+        inputEl.value = recalled;
+        const endPos = recalled.length;
+        inputEl.setSelectionRange?.(endPos, endPos);
+        this._syncTerminalCursorMirror();
+        return;
+      }
+      if (key === '?' && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+        const cur = inputEl.value || '';
+        const ses = this.terminalEngine.getSession(dev.id);
+        const curOs = ses.flavorOverride === 'auto' ? ses.osType : ses.flavorOverride;
+        if ((curOs === 'cisco' || curOs === 'mikrotik') && !cur.includes('"')) {
+          ev.preventDefault();
+          this.terminalEngine.showInlineHelp(dev.id, cur);
+        }
       }
     });
 
-    inputEl?.focus?.();
+    shellEl?.classList?.add('is-focused');
+    focusInput();
+  }
+
+  _formatTerminalLineHtml(line, osType = 'cisco') {
+    if (!line) return '';
+    if (line.type === 'banner') {
+      return `<div class="pt-term-line pt-term-banner">${escapeHtml(line.text || '')}</div>`;
+    }
+    if (line.type === 'input') {
+      const promptCls = osType === 'mikrotik'
+        ? 'pt-term-prompt-mt'
+        : (osType === 'host-cmd' ? 'pt-term-prompt-cmd' : 'pt-term-prompt-cs');
+      return `<div class="pt-term-line"><span class="pt-terminal-line-prompt ${promptCls}">${escapeHtml(line.prompt || '')}</span><span class="pt-term-entered-cmd">${escapeHtml(line.text || '')}</span></div>`;
+    }
+    if (line.type === 'error') {
+      return `<div class="pt-term-line pt-terminal-line-error">${escapeHtml(line.text || '')}</div>`;
+    }
+
+    let safe = escapeHtml(line.text || '');
+    safe = safe.replace(
+      /\b(\d{1,3}(?:\.\d{1,3}){3}(?:\/\d{1,2})?)\b/g,
+      '<span class="pt-term-kw-ip">$1</span>'
+    );
+    safe = safe.replace(
+      /\b(Reply from|REACHABLE|Media Connected|0% loss|Success rate is 100|UP)\b/g,
+      '<span class="pt-term-kw-ok">$1</span>'
+    );
+    safe = safe.replace(
+      /\b(Request timed out|unreachable|100% loss|Disabled|DOWN|administratively down|FAILED)\b/gi,
+      '<span class="pt-term-kw-err">$1</span>'
+    );
+    return `<div class="pt-term-line pt-term-output">${safe}</div>`;
+  }
+
+  _syncTerminalCursorMirror() {
+    if (!this.backdropEl || !this.activeDeviceId || !this.terminalEngine) return;
+    const inputEl = this.backdropEl.querySelector('#pt-term-input');
+    const beforeEl = this.backdropEl.querySelector('#pt-term-mirror-before');
+    const cursorEl = this.backdropEl.querySelector('#pt-term-cursor');
+    const afterEl = this.backdropEl.querySelector('#pt-term-mirror-after');
+    const ghostEl = this.backdropEl.querySelector('#pt-term-ghost');
+    if (!inputEl || !beforeEl || !cursorEl || !afterEl) return;
+
+    const val = String(inputEl.value || '');
+    const caret = typeof inputEl.selectionStart === 'number'
+      ? Math.max(0, Math.min(val.length, inputEl.selectionStart))
+      : val.length;
+
+    beforeEl.textContent = val.slice(0, caret);
+    cursorEl.textContent = caret < val.length ? val[caret] : '\u00a0';
+    cursorEl.classList?.toggle('is-char', caret < val.length);
+    afterEl.textContent = caret < val.length ? val.slice(caret + 1) : '';
+
+    if (ghostEl) {
+      if (val.trim().length > 0 && caret === val.length) {
+        const comp = this.terminalEngine.complete(this.activeDeviceId, val);
+        const completed = String(comp?.completed || '');
+        if (completed.toLowerCase().startsWith(val.toLowerCase()) && completed.length > val.length) {
+          ghostEl.textContent = completed.slice(val.length);
+        } else {
+          ghostEl.textContent = '';
+        }
+      } else {
+        ghostEl.textContent = '';
+      }
+    }
   }
 
   _syncTerminalScreen() {
     if (!this.backdropEl || !this.activeDeviceId || !this.terminalEngine) return;
     const screen = this.backdropEl.querySelector('#pt-term-screen');
+    const historyEl = this.backdropEl.querySelector('#pt-term-history');
+    const liveLineEl = this.backdropEl.querySelector('#pt-term-live-line');
     const promptEl = this.backdropEl.querySelector('#pt-term-prompt');
-    if (promptEl) {
-      promptEl.textContent = this.terminalEngine.getPrompt(this.activeDeviceId);
-    }
-    if (!screen) return;
+    const statusLeftEl = this.backdropEl.querySelector('#pt-term-status-left');
 
     const session = this.terminalEngine.getSession(this.activeDeviceId);
-    screen.innerHTML = session.bufferLines.map((line) => {
-      if (line.type === 'input') {
-        return `<div><span class="pt-terminal-line-prompt">${escapeHtml(line.prompt || '')}</span>${escapeHtml(line.text)}</div>`;
+    const resolvedOs = session.flavorOverride === 'auto' ? session.osType : session.flavorOverride;
+    const streaming = this.terminalEngine.isStreaming(this.activeDeviceId);
+    const dev = this.deviceManager?.getDeviceById?.(this.activeDeviceId);
+    const isOffline = dev?.status === 'offline';
+
+    if (promptEl) {
+      promptEl.textContent = this.terminalEngine.getPrompt(this.activeDeviceId);
+      promptEl.className = `pt-terminal-prompt-prefix ${
+        resolvedOs === 'mikrotik'
+          ? 'pt-term-prompt-mt'
+          : (resolvedOs === 'host-cmd' ? 'pt-term-prompt-cmd' : 'pt-term-prompt-cs')
+      }`;
+    }
+
+    if (liveLineEl?.style) {
+      liveLineEl.style.display = streaming ? 'none' : 'flex';
+    }
+
+    if (statusLeftEl) {
+      const ipInfo = dev?.network?.ip || 'No IP';
+      if (isOffline) {
+        statusLeftEl.innerHTML = `<span class="pt-term-status-dot is-off"></span><span>POWER OFF -- Nyalakan perangkat di tab Physical</span>`;
+      } else if (streaming) {
+        statusLeftEl.innerHTML = `<span class="pt-term-status-dot is-run"></span><span>RUNNING: ${escapeHtml(session.activeStream?.cmd || 'command')} (Tekan Ctrl+C untuk berhenti)</span>`;
+      } else {
+        statusLeftEl.innerHTML = `<span class="pt-term-status-dot is-ready"></span><span>CONNECTED &bull; ${escapeHtml(resolvedOs.toUpperCase())} &bull; ${escapeHtml(ipInfo)}</span>`;
       }
-      if (line.type === 'error') {
-        return `<div class="pt-terminal-line-error">${escapeHtml(line.text)}</div>`;
-      }
-      return `<div>${escapeHtml(line.text)}</div>`;
-    }).join('');
-    screen.scrollTop = screen.scrollHeight;
+    }
+
+    if (historyEl) {
+      historyEl.innerHTML = (session.bufferLines || [])
+        .map((line) => this._formatTerminalLineHtml(line, resolvedOs))
+        .join('');
+    }
+    if (screen) {
+      screen.scrollTop = screen.scrollHeight;
+    }
+    this._syncTerminalCursorMirror();
   }
 
   _renderDesktopTab(hostEl, dev) {

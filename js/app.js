@@ -24,6 +24,7 @@ import { TopologyModal } from './topology/topology-modal.js';
 import { IpVlanModal } from './ui/ip-vlan-modal.js';
 import { LayerControls } from './ui/layer-controls.js';
 import { ProjectStorage } from './storage/project-storage.js';
+import { JsonImporterExporter } from './storage/json-importer-exporter.js';
 import { authManager } from './storage/auth-manager.js';
 import { ExportModal } from './ui/export-modal.js';
 import { ProjectModal } from './ui/project-modal.js';
@@ -427,6 +428,8 @@ class NetMapApp {
       this.historyManager.redo();
     });
 
+    this.setupQuickSaveAndNewCanvasControls();
+
     // 16. Setup Canvas Drag & Drop and Placement Handlers
     this.setupCanvasPlacementHandlers();
 
@@ -447,8 +450,8 @@ class NetMapApp {
     this.setupPwaSupport();
     this.setupMobileExperience();
 
-    // Show Quick-Start Welcome Launcher once on first visit
-    if (this.onboardingModal?.shouldAutoShowWelcome?.()) {
+    // Show Quick-Start Welcome Launcher once on first visit (skip if Guest restored existing work)
+    if (!this._restoredGuestCanvas && this.onboardingModal?.shouldAutoShowWelcome?.()) {
       setTimeout(() => {
         if (!this.authModal?.isOpen?.()) {
           this.onboardingModal.showWelcome();
@@ -610,8 +613,12 @@ class NetMapApp {
           : (this.authManager.isMainWorkspaceUnlocked?.() ? 'Server Utama' : 'Terkunci'))
         : (isPublic ? 'Read-Only' : 'Masuk');
     }
+    const newCanvasNavBtn = document.getElementById('btn-navbar-new-canvas');
+    if (newCanvasNavBtn) {
+      newCanvasNavBtn.style.display = (!isAuth || stateManager.isStudentSandbox?.()) ? 'inline-flex' : 'none';
+    }
     const status = !isAuth
-      ? (isPublic ? 'public-readonly' : 'guest')
+      ? (isPublic ? 'public-readonly' : (this.projectStorage?.hasSavedGuestCanvas?.() ? 'guest-saved' : 'guest'))
       : (!this.authManager.canWriteActiveWorkspace?.()
         ? 'readonly-main'
         : (this.projectStorage.hasPendingSave ? 'saving' : 'saved'));
@@ -620,18 +627,121 @@ class NetMapApp {
   }
 
   /**
+   * Bind Quick Save (auto export .JSON) & New Blank Canvas actions in top bar & Pengaturan.
+   */
+  setupQuickSaveAndNewCanvasControls() {
+    document.getElementById('btn-navbar-save-json')?.addEventListener('click', () => {
+      this.handleQuickSaveAndExportJson();
+    });
+    document.getElementById('btn-settings-save-json')?.addEventListener('click', () => {
+      this.handleQuickSaveAndExportJson();
+    });
+    document.getElementById('btn-navbar-new-canvas')?.addEventListener('click', () => {
+      this.handleCreateNewBlankCanvas();
+    });
+    document.getElementById('btn-settings-new-canvas')?.addEventListener('click', () => {
+      this.toolbar?.closeNavbarDropdowns?.();
+      this.handleCreateNewBlankCanvas();
+    });
+
+    const importBtn = document.getElementById('btn-settings-import-json');
+    const importInput = document.getElementById('input-settings-import-json');
+    importBtn?.addEventListener('click', () => importInput?.click());
+    importInput?.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const res = await JsonImporterExporter.importJson(file);
+      importInput.value = '';
+      if (!res.isValid || !res.project) {
+        alert('File JSON tidak valid:\n' + (res.errors || []).join('\n'));
+        return;
+      }
+      this.projectStorage.deserializeProject(res.project);
+      if (!this.authManager.isAuthenticated() && !this.authManager.isPublicPreviewActive?.()) {
+        this.projectStorage.saveGuestCanvasToLocal();
+      } else if (this.authManager.canWriteActiveWorkspace?.() || stateManager.isStudentSandbox?.()) {
+        await this.projectStorage.saveCurrentProject();
+      }
+      this.historyManager?.initBaseline?.();
+      this.toolbar?.closeNavbarDropdowns?.();
+    });
+  }
+
+  async handleQuickSaveAndExportJson() {
+    await this.projectStorage.saveAndExportJson();
+    const labelIds = [
+      ['label-navbar-save-json', 'Simpan (.JSON)', 'Tersimpan (.JSON)!'],
+      ['label-settings-save-json', 'Simpan Proyek (.JSON)', 'Tersimpan & Diunduh!']
+    ];
+    labelIds.forEach(([id, defaultText, okText]) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.textContent = okText;
+      clearTimeout(el._saveFlashTimer);
+      el._saveFlashTimer = setTimeout(() => {
+        el.textContent = defaultText;
+      }, 1600);
+    });
+  }
+
+  async handleCreateNewBlankCanvas() {
+    const isAuth = this.authManager.isAuthenticated();
+    const isSandbox = Boolean(stateManager.isStudentSandbox?.());
+    if (isAuth && !isSandbox && !this.authManager.canWriteActiveWorkspace?.()) {
+      alert('Server Utama sedang terkunci (Read-Only). Gunakan Sandbox Praktik atau buka kunci password server.');
+      return;
+    }
+
+    const hasContent =
+      (this.deviceManager?.getAllDevices?.()?.length || 0) > 0 ||
+      (this.cableManager?.getAllConnections?.()?.length || 0) > 0 ||
+      (stateManager.getRooms3d?.()?.length || 0) > 0 ||
+      (stateManager.getObjects3d?.()?.length || 0) > 0 ||
+      (stateManager.getRoads3d?.()?.length || 0) > 0;
+
+    if (hasContent && typeof confirm === 'function') {
+      const ok = confirm('Buat kanvas baru kosong? Seluruh objek di kanvas saat ini akan dihapus (klik Simpan (.JSON) terlebih dahulu bila ingin menyimpan cadangan file).');
+      if (!ok) return;
+    }
+
+    if (!isAuth) {
+      if (this.authManager.isPublicPreviewActive?.()) {
+        this.authManager.setPublicPreviewMode(false);
+      }
+      this.projectStorage.createNewGuestBlankCanvas('SmartSchool NetMap');
+    } else {
+      this.projectStorage.clearCanvasToEmpty('SmartSchool NetMap');
+      await this.projectStorage.saveCurrentProject();
+    }
+    this.historyManager?.initBaseline?.();
+    this.updateAuthNavbarUI();
+  }
+
+  /**
    * Check active session:
-   * - Guest (not logged in): bebas memakai app tanpa data tersimpan (kanvas kosong)
+   * - Guest (not logged in): muat rancangan terakhir dari localStorage browser (sampai user klik Kanvas Baru)
    * - Logged in: muat workspace aktif (Server Utama atau Akun Pribadi)
    */
   async loadOrSeedProject() {
+    this._restoredGuestCanvas = false;
     try {
       await this.authManager.initSession();
       this.updateAuthNavbarUI();
 
       if (!this.authManager.isAuthenticated()) {
-        console.info('[NetMap] Mode Tamu aktif: kanvas dimulai kosong tanpa data tersimpan.');
-        this.projectStorage.clearCanvasToEmpty('SmartSchool NetMap');
+        const guestRes = this.projectStorage.loadGuestCanvasFromLocal();
+        if (guestRes.loaded) {
+          const p = guestRes.projectData || {};
+          this._restoredGuestCanvas =
+            (p.devices?.length || 0) > 0 ||
+            (p.rooms3d?.length || 0) > 0 ||
+            (p.objects3d?.length || 0) > 0 ||
+            (p.roads3d?.length || 0) > 0;
+          console.info('[NetMap] Mode Tamu: data kanvas dipulihkan dari localStorage browser.');
+        } else {
+          console.info('[NetMap] Mode Tamu aktif: kanvas dimulai kosong.');
+          this.projectStorage.clearCanvasToEmpty('SmartSchool NetMap');
+        }
       } else {
         const res = await this.projectStorage.loadActiveWorkspaceProject();
         if (res.loaded) {
@@ -1141,6 +1251,11 @@ class NetMapApp {
         if (e.key === 'y' || e.key === 'Y') {
           e.preventDefault();
           this.historyManager?.redo();
+          return;
+        }
+        if (e.key === 's' || e.key === 'S') {
+          e.preventDefault();
+          this.handleQuickSaveAndExportJson();
           return;
         }
       }

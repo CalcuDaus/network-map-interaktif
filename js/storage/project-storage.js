@@ -7,6 +7,9 @@ import { database } from './database.js';
 import { eventBus } from '../core/event-bus.js';
 import { stateManager } from '../core/state-manager.js';
 import { debounce } from '../utils/helpers.js';
+import { JsonImporterExporter } from './json-importer-exporter.js';
+
+export const GUEST_CANVAS_STORAGE_KEY = 'netmap_guest_canvas_v1';
 
 export class ProjectStorage {
   /**
@@ -21,6 +24,7 @@ export class ProjectStorage {
     this.authManager = authManager;
     this.isAutoSaveEnabled = true;
     this.hasPendingSave = false;
+    this.hasPendingGuestSave = false;
 
     // Phase 9B: Master Read-Only Protection vs Isolated Practice Sandbox
     this._masterSnapshot = null;
@@ -33,6 +37,11 @@ export class ProjectStorage {
       this.saveCurrentProject();
     }, 300);
 
+    // Debounced Guest localStorage persistence (survives page refresh until New Blank Canvas)
+    this.debouncedGuestSave = debounce(() => {
+      this.saveGuestCanvasToLocal();
+    }, 220);
+
     this.initMutationListeners();
     this.initUnloadFlush();
   }
@@ -40,7 +49,12 @@ export class ProjectStorage {
   initUnloadFlush() {
     if (typeof window === 'undefined') return;
     const flushNow = () => {
-      if (!this.isAutoSaveEnabled || !this.hasPendingSave) return;
+      if (!this.isAutoSaveEnabled) return;
+      if (this.hasPendingGuestSave && this.authManager && !this.authManager.isAuthenticated() && !this.authManager.isPublicPreviewActive?.()) {
+        this.saveGuestCanvasToLocal();
+        return;
+      }
+      if (!this.hasPendingSave) return;
       if (this.authManager && !this.authManager.canWriteActiveWorkspace()) return;
       const projectData = this.serializeProject();
       this.saveLocalBackup(projectData);
@@ -92,8 +106,14 @@ export class ProjectStorage {
         return;
       }
       if (this.authManager && !this.authManager.isAuthenticated()) {
-        this.hasPendingSave = false;
-        this.updateStatusIndicator(this.authManager.isPublicPreviewActive?.() ? 'public-readonly' : 'guest');
+        if (this.authManager.isPublicPreviewActive?.()) {
+          this.hasPendingSave = false;
+          this.updateStatusIndicator('public-readonly');
+          return;
+        }
+        this.hasPendingGuestSave = true;
+        this.updateStatusIndicator('guest-saving');
+        this.debouncedGuestSave();
         return;
       }
       if (this.authManager && !this.authManager.canWriteActiveWorkspace()) {
@@ -251,6 +271,96 @@ export class ProjectStorage {
       this.updateStatusIndicator('error');
       return { loaded: false, workspaceKey: activeKey };
     }
+  }
+
+  /**
+   * Persist current Guest Mode canvas into localStorage so refreshes preserve the user's work
+   * until they explicitly trigger "Kanvas Baru Kosong".
+   * @returns {boolean}
+   */
+  saveGuestCanvasToLocal() {
+    if (this.authManager?.isAuthenticated?.() || this.authManager?.isPublicPreviewActive?.()) {
+      return false;
+    }
+    try {
+      if (typeof localStorage === 'undefined') return false;
+      const projectData = this.serializeProject();
+      localStorage.setItem(GUEST_CANVAS_STORAGE_KEY, JSON.stringify(projectData));
+      this.hasPendingGuestSave = false;
+      this.updateStatusIndicator('guest-saved');
+      eventBus.emit('guest:saved', projectData);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  hasSavedGuestCanvas() {
+    try {
+      if (typeof localStorage === 'undefined') return false;
+      return Boolean(localStorage.getItem(GUEST_CANVAS_STORAGE_KEY));
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Restore previously auto-saved Guest Mode canvas from localStorage on page reload.
+   * @returns {{ loaded: boolean, projectData?: Object }}
+   */
+  loadGuestCanvasFromLocal() {
+    try {
+      if (typeof localStorage === 'undefined') return { loaded: false };
+      const raw = localStorage.getItem(GUEST_CANVAS_STORAGE_KEY);
+      if (!raw) return { loaded: false };
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.devices)) {
+        return { loaded: false };
+      }
+      this.deserializeProject(parsed);
+      this.hasPendingGuestSave = false;
+      this.updateStatusIndicator('guest-saved');
+      return { loaded: true, projectData: parsed };
+    } catch (e) {
+      return { loaded: false };
+    }
+  }
+
+  /**
+   * Wipe Guest Mode localStorage snapshot and reset active canvas to a clean empty workspace.
+   * @param {string} [projectName='SmartSchool NetMap']
+   * @returns {boolean}
+   */
+  createNewGuestBlankCanvas(projectName = 'SmartSchool NetMap') {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem(GUEST_CANVAS_STORAGE_KEY);
+      }
+    } catch { /* ignore */ }
+    this.hasPendingGuestSave = false;
+    this.clearCanvasToEmpty(projectName);
+    this.updateStatusIndicator('guest');
+    eventBus.emit('guest:canvas-reset', { projectName });
+    return true;
+  }
+
+  /**
+   * Persist active workspace/guest state and auto-download a .JSON project file.
+   * @param {{ filename?: string }} [options]
+   * @returns {Promise<Object>}
+   */
+  async saveAndExportJson({ filename } = {}) {
+    if (!this.authManager?.isAuthenticated?.() && !this.authManager?.isPublicPreviewActive?.()) {
+      this.saveGuestCanvasToLocal();
+    } else if (stateManager.isStudentSandbox?.() || this.authManager?.canWriteActiveWorkspace?.()) {
+      await this.saveCurrentProject();
+    }
+    const projectData = this.serializeProject();
+    if (typeof document !== 'undefined' && typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+      JsonImporterExporter.exportJson(projectData, filename);
+    }
+    eventBus.emit('project:exported-json', { projectData });
+    return projectData;
   }
 
   /**
@@ -584,8 +694,22 @@ export class ProjectStorage {
       return;
     }
 
+    if (status === 'guest-saving') {
+      statusPill.textContent = '● MODE TAMU (MENYIMPAN DI BROWSER...)';
+      statusPill.style.color = 'var(--accent-sky)';
+      statusPill.style.background = 'rgba(56, 189, 248, 0.14)';
+      return;
+    }
+
+    if (status === 'guest-saved') {
+      statusPill.textContent = '● MODE TAMU (TERSIMPAN DI BROWSER LOKAL)';
+      statusPill.style.color = 'var(--status-online)';
+      statusPill.style.background = 'rgba(34, 197, 94, 0.14)';
+      return;
+    }
+
     if (status === 'guest' || (this.authManager && !isAuthed)) {
-      statusPill.textContent = '● MODE TAMU (TIDAK TERSIMPAN — LOGIN)';
+      statusPill.textContent = '● MODE TAMU (KANVAS LOKAL BROWSER)';
       statusPill.style.color = 'var(--status-warning)';
       statusPill.style.background = 'rgba(217, 119, 6, 0.14)';
       return;

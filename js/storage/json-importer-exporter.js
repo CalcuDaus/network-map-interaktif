@@ -19,10 +19,10 @@ export class JsonImporterExporter {
     const a = document.createElement('a');
     a.href = url;
     a.download = filename || defaultName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    document.body.appendChild?.(a);
+    a.click?.();
+    document.body.removeChild?.(a);
+    URL.revokeObjectURL?.(url);
   }
 
   /**

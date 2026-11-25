@@ -3421,6 +3421,24 @@ textarea:focus {
   display: none;
 }
 
+.packet-tracer-modal .pt-cli-output {
+  background: #0c0c0c;
+  color: #e6edf3;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-family: 'Cascadia Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.48;
+}
+
+.packet-tracer-modal input.pt-cli-input {
+  background: #161b22;
+  color: #e6edf3;
+  border: 1px solid #30363d;
+  font-family: 'Cascadia Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
 .packet-tracer-modal.is-keyboard-open .pt-cli-output {
   height: 115px;
 }

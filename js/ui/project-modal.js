@@ -183,9 +183,12 @@ export class ProjectModal {
     // Clear All
     document.getElementById('btn-clear-all')?.addEventListener('click', async () => {
       if (confirm('PERINGATAN: Yakin ingin menghapus SELURUH perangkat dan kabel untuk membuat proyek kosong baru?')) {
-        const devs = this.deviceManager.getAllDevices();
-        devs.forEach((d) => this.deviceManager.deleteDevice(d.id));
-        await this.projectStorage.saveCurrentProject();
+        if (this.projectStorage?.authManager && !this.projectStorage.authManager.isAuthenticated()) {
+          this.projectStorage.createNewGuestBlankCanvas('SmartSchool NetMap');
+        } else {
+          this.projectStorage.clearCanvasToEmpty('SmartSchool NetMap');
+          await this.projectStorage.saveCurrentProject();
+        }
         alert('Semua perangkat dan kabel telah dikosongkan.');
         this.hide();
       }
