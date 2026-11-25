@@ -58,7 +58,10 @@ const SWITCH_TYPES = new Set([
   'tplink-sg2428p',
   'tplink-sg3428x',
   'tplink-sx3016f',
-  'tplink-sg108'
+  'tplink-sg108',
+  'hub',
+  'ont',
+  'onu'
 ]);
 
 /**

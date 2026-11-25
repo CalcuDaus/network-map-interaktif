@@ -153,7 +153,7 @@ export class CableRenderer {
         lineCap: 'round',
         lineJoin: 'round',
         hitStrokeWidth: 16, // Generous hit area for clicking
-        shadowColor: isSelected ? '#76c457' : null,
+        shadowColor: isSelected ? '#537b8e' : null,
         shadowBlur: isSelected ? 6 : 0,
         perfectDrawEnabled: false,
         opacity: cable.status === 'inactive' ? 0.45 : 1.0
@@ -224,7 +224,7 @@ export class CableRenderer {
       line.strokeWidth(strokeWidth);
       line.setAttr('baseStrokeWidth', strokeWidth);
       line.dash(dashPattern);
-      line.shadowColor(isSelected ? '#76c457' : null);
+      line.shadowColor(isSelected ? '#537b8e' : null);
       line.shadowBlur(isSelected ? 6 : 0);
       line.opacity(cable.status === 'inactive' ? 0.45 : 1.0);
     }
@@ -281,7 +281,7 @@ export class CableRenderer {
         fontSize: 10,
         fontFamily: "'Poppins', -apple-system, BlinkMacSystemFont, sans-serif",
         fontStyle: '600',
-        fill: isOverLimit ? '#fca5a5' : '#fff8cf',
+        fill: isOverLimit ? '#fca5a5' : '#e3edf0',
         padding: 3,
         align: 'center',
         perfectDrawEnabled: false
@@ -296,7 +296,7 @@ export class CableRenderer {
       const text = badge.findOne('.cable-distance-text');
       if (text) {
         text.text(labelText);
-        text.fill(isOverLimit ? '#fca5a5' : '#fff8cf');
+        text.fill(isOverLimit ? '#fca5a5' : '#e3edf0');
       }
       if (tag) {
         tag.fill(isOverLimit ? 'rgba(80, 10, 10, 0.92)' : 'rgba(20, 36, 14, 0.92)');
@@ -467,8 +467,8 @@ export class CableRenderer {
         x: px,
         y: py,
         radius: 6,
-        fill: '#76c457',
-        stroke: '#18350d',
+        fill: '#537b8e',
+        stroke: '#0b1620',
         strokeWidth: 2,
         draggable: true,
         perfectDrawEnabled: false,

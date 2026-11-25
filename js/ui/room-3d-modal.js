@@ -49,16 +49,16 @@ export class Room3DModal {
     `;
 
     this.modalEl.innerHTML = `
-      <div style="background-color: var(--bg-secondary, #fbe6c2); border: 1px solid var(--border-color, #e5cca0); border-radius: 12px; width: 100%; max-width: 780px; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 20px 40px rgba(0,0,0,0.3); overflow: hidden;">
+      <div style="background-color: var(--bg-secondary, #d4e3e8); border: 1px solid var(--border-color, #9ab7c1); border-radius: 12px; width: 100%; max-width: 780px; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 20px 40px rgba(0,0,0,0.3); overflow: hidden;">
         <!-- Header -->
-        <div style="height: 54px; border-bottom: 1px solid var(--border-color, #e5cca0); background: var(--bg-tertiary, #f2dac8); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; flex-shrink: 0;">
+        <div style="height: 54px; border-bottom: 1px solid var(--border-color, #9ab7c1); background: var(--bg-tertiary, #c4d7df); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; flex-shrink: 0;">
           <div style="display: flex; align-items: center; gap: 10px;">
-            <div style="width: 30px; height: 30px; border-radius: 7px; background: rgba(42, 124, 19, 0.16); display: flex; align-items: center; justify-content: center; color: var(--accent-blue, #2a7c13);">
+            <div style="width: 30px; height: 30px; border-radius: 7px; background: rgba(42, 83, 103, 0.16); display: flex; align-items: center; justify-content: center; color: var(--accent-blue, #2a5367);">
               <i data-lucide="box" style="width: 17px; height: 17px;"></i>
             </div>
             <div>
-              <span style="font-size: 15px; font-weight: 700; color: var(--text-primary, #18350d); display: block; line-height: 1.2;">Kelola Ruangan 3D & Model Kustom (.GLB)</span>
-              <span style="font-size: 11px; color: var(--text-muted, #678458);">Buat dinding ruangan 3D transparan atau unggah model 3D ruangan Anda sendiri</span>
+              <span style="font-size: 15px; font-weight: 700; color: var(--text-primary, #0b1620); display: block; line-height: 1.2;">Kelola Ruangan 3D & Model Kustom (.GLB)</span>
+              <span style="font-size: 11px; color: var(--text-muted, #537b8e);">Buat dinding ruangan 3D transparan atau unggah model 3D ruangan Anda sendiri</span>
             </div>
           </div>
           <button id="btn-room3d-close" class="btn btn-icon btn-sm" title="Tutup">
@@ -69,9 +69,9 @@ export class Room3DModal {
         <!-- Body -->
         <div style="padding: 16px 20px; overflow-y: auto; display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 16px; flex: 1;">
           <!-- Left: Room Form -->
-          <div style="display: flex; flex-direction: column; gap: 10px; background: var(--bg-primary, #fff8cf); border: 1px solid var(--border-color, #e5cca0); border-radius: 8px; padding: 12px;">
+          <div style="display: flex; flex-direction: column; gap: 10px; background: var(--bg-primary, #e3edf0); border: 1px solid var(--border-color, #9ab7c1); border-radius: 8px; padding: 12px;">
             <div style="display: flex; align-items: center; justify-content: space-between;">
-              <span id="room3d-form-title" style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--accent-blue, #2a7c13);">Tambah Ruangan 3D Baru</span>
+              <span id="room3d-form-title" style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--accent-blue, #2a5367);">Tambah Ruangan 3D Baru</span>
               <button type="button" id="btn-room3d-preset-noc" class="btn btn-secondary btn-sm" style="font-size: 10px; padding: 2px 8px;">
                 + Isi Preset Ruang Control
               </button>
@@ -83,19 +83,19 @@ export class Room3DModal {
             <div style="display: flex; flex-direction: column; gap: 3px;">
               <label style="font-size: 11px; font-weight: 600; color: var(--text-primary);">Nama Ruangan *</label>
               <input type="text" id="r3d-name" placeholder="contoh: Ruang Control Utama"
-                     style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 6px 8px; font-size: 12px; color: var(--text-primary);">
+                     style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #9ab7c1); border-radius: 6px; padding: 6px 8px; font-size: 12px; color: var(--text-primary);">
             </div>
 
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
               <div style="display: flex; flex-direction: column; gap: 3px;">
                 <label style="font-size: 11px; font-weight: 600; color: var(--text-primary);">Koordinat X (0 - 1)</label>
                 <input type="number" id="r3d-x" step="0.005" min="0" max="1" value="0.635"
-                       style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 5px 8px; font-size: 12px; font-family: var(--font-mono);">
+                       style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #9ab7c1); border-radius: 6px; padding: 5px 8px; font-size: 12px; font-family: var(--font-mono);">
               </div>
               <div style="display: flex; flex-direction: column; gap: 3px;">
                 <label style="font-size: 11px; font-weight: 600; color: var(--text-primary);">Koordinat Y (0 - 1)</label>
                 <input type="number" id="r3d-y" step="0.005" min="0" max="1" value="0.195"
-                       style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 5px 8px; font-size: 12px; font-family: var(--font-mono);">
+                       style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #9ab7c1); border-radius: 6px; padding: 5px 8px; font-size: 12px; font-family: var(--font-mono);">
               </div>
             </div>
 
@@ -107,38 +107,38 @@ export class Room3DModal {
               <div style="display: flex; flex-direction: column; gap: 3px;">
                 <label style="font-size: 10.5px; font-weight: 600; color: var(--text-primary);">Lebar (m)</label>
                 <input type="number" id="r3d-width" min="0.35" max="200" step="0.1" value="28"
-                       style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 5px 6px; font-size: 12px; font-family: var(--font-mono);">
+                       style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #9ab7c1); border-radius: 6px; padding: 5px 6px; font-size: 12px; font-family: var(--font-mono);">
               </div>
               <div style="display: flex; flex-direction: column; gap: 3px;">
                 <label style="font-size: 10.5px; font-weight: 600; color: var(--text-primary);">Panjang (m)</label>
                 <input type="number" id="r3d-depth" min="0.35" max="200" step="0.1" value="22"
-                       style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 5px 6px; font-size: 12px; font-family: var(--font-mono);">
+                       style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #9ab7c1); border-radius: 6px; padding: 5px 6px; font-size: 12px; font-family: var(--font-mono);">
               </div>
               <div style="display: flex; flex-direction: column; gap: 3px;">
                 <label style="font-size: 10.5px; font-weight: 600; color: var(--text-primary);">Tinggi (m)</label>
                 <input type="number" id="r3d-height" min="0.35" max="40" step="0.1" value="5"
-                       style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 5px 6px; font-size: 12px; font-family: var(--font-mono);">
+                       style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #9ab7c1); border-radius: 6px; padding: 5px 6px; font-size: 12px; font-family: var(--font-mono);">
               </div>
               <div style="display: flex; flex-direction: column; gap: 3px;">
                 <label style="font-size: 10.5px; font-weight: 600; color: var(--text-primary);">Rotasi (°)</label>
                 <input type="number" id="r3d-rot-y" min="-360" max="360" step="5" value="0"
-                       style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 5px 6px; font-size: 12px; font-family: var(--font-mono);">
+                       style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #9ab7c1); border-radius: 6px; padding: 5px 6px; font-size: 12px; font-family: var(--font-mono);">
               </div>
             </div>
 
             <!-- Proportional Scale Slider + Lock Aspect Ratio -->
-            <div style="background: rgba(42,124,19,0.06); border: 1px solid var(--border-color, #e5cca0); border-radius: 7px; padding: 8px; display: flex; flex-direction: column; gap: 6px;">
+            <div style="background: rgba(42, 83, 103,0.06); border: 1px solid var(--border-color, #9ab7c1); border-radius: 7px; padding: 8px; display: flex; flex-direction: column; gap: 6px;">
               <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
-                <span style="font-size: 10.5px; font-weight: 700; color: var(--text-primary);">Skala Gedung / Ruangan: <strong id="r3d-scale-pct" style="color: var(--accent-blue, #2a7c13);">100%</strong></span>
+                <span style="font-size: 10.5px; font-weight: 700; color: var(--text-primary);">Skala Gedung / Ruangan: <strong id="r3d-scale-pct" style="color: var(--accent-blue, #2a5367);">100%</strong></span>
                 <label style="display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 600; color: var(--text-primary); cursor: pointer;">
                   <input type="checkbox" id="r3d-lock-aspect" checked>
                   <span>Kunci Rasio Proporsional</span>
                 </label>
               </div>
               <div style="display: flex; align-items: center; gap: 8px;">
-                <input type="range" id="r3d-scale-slider" min="0.25" max="4" step="0.05" value="1" style="flex: 1; accent-color: var(--accent-blue, #2a7c13);">
+                <input type="range" id="r3d-scale-slider" min="0.25" max="4" step="0.05" value="1" style="flex: 1; accent-color: var(--accent-blue, #2a5367);">
                 <input type="number" id="r3d-scale-input" min="0.2" max="5" step="0.05" value="1"
-                       style="width: 64px; background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 3px 6px; font-size: 11.5px; font-family: var(--font-mono);">
+                       style="width: 64px; background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #9ab7c1); border-radius: 6px; padding: 3px 6px; font-size: 11.5px; font-family: var(--font-mono);">
               </div>
               <div style="display: flex; flex-wrap: wrap; gap: 4px;">
                 ${[0.5, 0.75, 1, 1.25, 1.5, 2].map((s) => `
@@ -150,7 +150,7 @@ export class Room3DModal {
             <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
               <div style="display: flex; flex-direction: column; gap: 3px;">
                 <label style="font-size: 10.5px; font-weight: 600; color: var(--text-primary);">Dinding</label>
-                <input type="color" id="r3d-wall-color" value="#2a7c13" style="width: 100%; height: 30px; border-radius: 4px; border: 1px solid var(--border-color);">
+                <input type="color" id="r3d-wall-color" value="#2a5367" style="width: 100%; height: 30px; border-radius: 4px; border: 1px solid var(--border-color);">
               </div>
               <div style="display: flex; flex-direction: column; gap: 3px;">
                 <label style="font-size: 10.5px; font-weight: 600; color: var(--text-primary);">Lantai</label>
@@ -159,7 +159,7 @@ export class Room3DModal {
               <div style="display: flex; flex-direction: column; gap: 3px;">
                 <label style="font-size: 10.5px; font-weight: 600; color: var(--text-primary);">Opasitas (%)</label>
                 <input type="number" id="r3d-opacity" min="5" max="80" value="20"
-                       style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 5px 6px; font-size: 12px; font-family: var(--font-mono);">
+                       style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #9ab7c1); border-radius: 6px; padding: 5px 6px; font-size: 12px; font-family: var(--font-mono);">
               </div>
             </div>
 
@@ -174,15 +174,15 @@ export class Room3DModal {
 
             <!-- Documentation Metadata (Phase 8: School Digital Twin) -->
             <div style="display: flex; flex-direction: column; gap: 6px; border-top: 1px dashed var(--border-color); padding-top: 8px;">
-              <span style="font-size: 10.5px; font-weight: 700; text-transform: uppercase; color: var(--accent-blue, #2a7c13);">Dokumentasi Gedung (Opsional)</span>
+              <span style="font-size: 10.5px; font-weight: 700; text-transform: uppercase; color: var(--accent-blue, #2a5367);">Dokumentasi Gedung (Opsional)</span>
               <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
                 <input type="text" id="r3d-doc-code" placeholder="Kode Ruang (mis. GDG-PPLG-01)"
-                       style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 5px 8px; font-size: 11px; color: var(--text-primary);">
+                       style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #9ab7c1); border-radius: 6px; padding: 5px 8px; font-size: 11px; color: var(--text-primary);">
                 <input type="text" id="r3d-doc-zone" placeholder="Zona / Jurusan (mis. TJKT / PPLG)"
-                       style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 5px 8px; font-size: 11px; color: var(--text-primary);">
+                       style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #9ab7c1); border-radius: 6px; padding: 5px 8px; font-size: 11px; color: var(--text-primary);">
               </div>
               <input type="text" id="r3d-doc-pic" placeholder="Penanggung Jawab / PIC (mis. Tim Teknisi TKJ)"
-                     style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 5px 8px; font-size: 11px; color: var(--text-primary);">
+                     style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #9ab7c1); border-radius: 6px; padding: 5px 8px; font-size: 11px; color: var(--text-primary);">
               <label style="display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; color: var(--text-primary); cursor: pointer;">
                 <input type="checkbox" id="r3d-doc-signboard" checked>
                 <span>Tampilkan Papan Nama Gedung 3D di atas atap</span>
@@ -202,7 +202,7 @@ export class Room3DModal {
                 </button>
               </div>
               <input type="text" id="r3d-glb-url" placeholder="Atau URL model .glb (https://...)"
-                     style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 5px 8px; font-size: 11px; color: var(--text-primary);">
+                     style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #9ab7c1); border-radius: 6px; padding: 5px 8px; font-size: 11px; color: var(--text-primary);">
             </div>
 
             <div style="display: flex; gap: 8px; margin-top: 4px;">
@@ -217,21 +217,21 @@ export class Room3DModal {
 
           <!-- Right: Built-in 3D Building Presets & Existing Rooms List -->
           <div style="display: flex; flex-direction: column; gap: 10px;">
-            <div style="background: var(--bg-primary, #fff8cf); border: 1px solid var(--border-color, #e5cca0); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px;">
+            <div style="background: var(--bg-primary, #e3edf0); border: 1px solid var(--border-color, #9ab7c1); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px;">
               <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
-                <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--accent-blue, #2a7c13);">Gedung &amp; Ruangan 3D (.GLB)</span>
+                <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--accent-blue, #2a5367);">Gedung &amp; Ruangan 3D (.GLB)</span>
                 <span style="font-size: 10px; font-weight: 600; color: var(--text-muted);">${BUILTIN_ROOM_BUILDING_PRESETS.length} Model</span>
               </div>
               <div style="display: flex; gap: 4px; align-items: center;">
                 <input type="text" id="r3d-preset-search" placeholder="Cari gedung / ruangan..."
-                       style="flex: 1; background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 5px; padding: 4px 7px; font-size: 11px; color: var(--text-primary);">
+                       style="flex: 1; background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #9ab7c1); border-radius: 5px; padding: 4px 7px; font-size: 11px; color: var(--text-primary);">
                 <button type="button" class="btn btn-primary btn-sm r3d-bldg-filter" data-filter="all" style="font-size: 10px; padding: 3px 6px;">Semua</button>
                 <button type="button" class="btn btn-secondary btn-sm r3d-bldg-filter" data-filter="cutaway" style="font-size: 10px; padding: 3px 6px;">Cutaway</button>
                 <button type="button" class="btn btn-secondary btn-sm r3d-bldg-filter" data-filter="full" style="font-size: 10px; padding: 3px 6px;">Atap Utuh</button>
               </div>
               <div id="r3d-building-presets" style="display: grid; grid-template-columns: 1fr; gap: 5px; max-height: 230px; overflow-y: auto; padding-right: 2px;">
                 ${BUILTIN_ROOM_BUILDING_PRESETS.map((b) => `
-                  <div class="r3d-bldg-card" data-bldg-name="${b.name.toLowerCase()}" data-bldg-type="${b.isCutaway ? 'cutaway' : 'full'}" style="background: var(--bg-secondary, #fbe6c2); border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 8px; display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+                  <div class="r3d-bldg-card" data-bldg-name="${b.name.toLowerCase()}" data-bldg-type="${b.isCutaway ? 'cutaway' : 'full'}" style="background: var(--bg-secondary, #d4e3e8); border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 8px; display: flex; align-items: center; justify-content: space-between; gap: 6px;">
                     <div style="min-width: 0;">
                       <div style="font-size: 11.5px; font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${b.name}</div>
                       <div style="font-size: 10px; color: var(--text-muted);">${b.subtitle}</div>
@@ -245,15 +245,15 @@ export class Room3DModal {
               </div>
             </div>
 
-            <div style="background: var(--bg-primary, #fff8cf); border: 1px solid var(--border-color, #e5cca0); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px; flex: 1;">
+            <div style="background: var(--bg-primary, #e3edf0); border: 1px solid var(--border-color, #9ab7c1); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px; flex: 1;">
               <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap;">
-                <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--accent-blue, #2a7c13);">Daftar Ruangan 3D Tersimpan</span>
+                <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--accent-blue, #2a5367);">Daftar Ruangan 3D Tersimpan</span>
                 <button type="button" id="btn-r3d-lock-all" class="btn btn-secondary btn-sm" style="font-size: 10.5px; padding: 3px 8px;" title="Kunci atau buka kunci posisi semua ruangan 3D">${uiIcon('unlock', 12)} Kunci Semua</button>
               </div>
               <div id="r3d-list-container" style="display: flex; flex-direction: column; gap: 6px; max-height: 190px; overflow-y: auto;"></div>
             </div>
 
-            <div class="ws-network-only" style="background: rgba(42, 124, 19, 0.08); border: 1px solid rgba(42, 124, 19, 0.25); border-radius: 8px; padding: 10px; font-size: 11px; color: var(--text-secondary); line-height: 1.45;">
+            <div class="ws-network-only" style="background: rgba(42, 83, 103, 0.08); border: 1px solid rgba(42, 83, 103, 0.25); border-radius: 8px; padding: 10px; font-size: 11px; color: var(--text-secondary); line-height: 1.45;">
               <strong style="color: var(--accent-blue); display: block; margin-bottom: 4px;">Tips Penumpukan Perangkat di Dalam Gedung:</strong>
               Pilih model <strong>Cutaway</strong> bila ingin atap terbuka sehingga switch/router/kabel di dalam ruangan tetap mudah diklik. Atur <strong>Ketinggian Z (Meter)</strong> di Panel Properti kanan.
             </div>
@@ -279,7 +279,7 @@ export class Room3DModal {
       this.modalEl.querySelector('#r3d-width').value = '48';
       this.modalEl.querySelector('#r3d-depth').value = '34';
       this.modalEl.querySelector('#r3d-height').value = '6';
-      this.modalEl.querySelector('#r3d-wall-color').value = '#2a7c13';
+      this.modalEl.querySelector('#r3d-wall-color').value = '#2a5367';
       this.modalEl.querySelector('#r3d-floor-color').value = '#1e293b';
       this.modalEl.querySelector('#r3d-opacity').value = '18';
       this.setFormBaseAndScale({ widthMeters: 48, depthMeters: 34, heightMeters: 6 }, 1);
@@ -448,7 +448,7 @@ export class Room3DModal {
       this.setFormBaseAndScale({ widthMeters: preset.widthMeters, depthMeters: preset.depthMeters, heightMeters: preset.heightMeters }, 1, true);
       const rotInput = this.modalEl.querySelector('#r3d-rot-y');
       if (rotInput) rotInput.value = '0';
-      this.modalEl.querySelector('#r3d-wall-color').value = preset.wallColor || '#2a7c13';
+      this.modalEl.querySelector('#r3d-wall-color').value = preset.wallColor || '#2a5367';
       this.modalEl.querySelector('#r3d-floor-color').value = preset.floorColor || '#1e293b';
       this.modalEl.querySelector('#r3d-opacity').value = Math.round((preset.opacity ?? 0.18) * 100);
       this.modalEl.querySelector('#r3d-glb-url').value = preset.customModelUrl;
@@ -609,7 +609,7 @@ export class Room3DModal {
       modelScale: Number(scaleVal.toFixed(3)),
       lockAspectRatio,
       rotationY: clamp(parseFloat(this.modalEl.querySelector('#r3d-rot-y')?.value) || 0, -360, 360),
-      wallColor: this.modalEl.querySelector('#r3d-wall-color')?.value || '#2a7c13',
+      wallColor: this.modalEl.querySelector('#r3d-wall-color')?.value || '#2a5367',
       floorColor: this.modalEl.querySelector('#r3d-floor-color')?.value || '#1e293b',
       opacity: clamp((parseFloat(this.modalEl.querySelector('#r3d-opacity')?.value) || 20) / 100, 0.05, 0.85),
       locked: Boolean(this.modalEl.querySelector('#r3d-locked')?.checked),
@@ -665,7 +665,7 @@ export class Room3DModal {
       const disabledAttr = isLocked ? 'disabled style="font-size: 10px; padding: 2px 6px; opacity: 0.45; cursor: not-allowed;"' : 'style="font-size: 10px; padding: 2px 6px;"';
       const moveDisabledAttr = isLocked ? 'disabled style="font-size: 10px; padding: 2px 7px; opacity: 0.45; cursor: not-allowed;"' : 'style="font-size: 10px; padding: 2px 7px;"';
       return `
-      <div style="background: var(--bg-secondary, #fbe6c2); border: 1px solid ${isLocked ? '#d97706' : 'var(--border-color)'}; border-radius: 6px; padding: 8px 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+      <div style="background: var(--bg-secondary, #d4e3e8); border: 1px solid ${isLocked ? '#d97706' : 'var(--border-color)'}; border-radius: 6px; padding: 8px 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
         <div style="min-width: 0;">
           <div style="font-size: 12px; font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 4px;">
             ${isLocked ? uiIcon('lock', 11) : ''}${r.name}
@@ -768,7 +768,7 @@ export class Room3DModal {
     );
     const rotInput = this.modalEl.querySelector('#r3d-rot-y');
     if (rotInput) rotInput.value = Number(room.rotationY ?? room.rotationDeg) || 0;
-    this.modalEl.querySelector('#r3d-wall-color').value = room.wallColor || '#2a7c13';
+    this.modalEl.querySelector('#r3d-wall-color').value = room.wallColor || '#2a5367';
     this.modalEl.querySelector('#r3d-floor-color').value = room.floorColor || '#1e293b';
     this.modalEl.querySelector('#r3d-opacity').value = Math.round((room.opacity ?? 0.2) * 100);
     const lockedCb = this.modalEl.querySelector('#r3d-locked');

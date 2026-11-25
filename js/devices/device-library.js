@@ -7,21 +7,21 @@ export const DEVICE_CATEGORIES = {
   core: {
     id: 'core',
     name: 'Core Network',
-    color: '#2a7c13', // Deep Forest Green (Palette #2a7c13)
-    badgeBg: 'rgba(42, 124, 19, 0.15)',
+    color: '#2a5367', // Deep Forest Green (Palette #2a5367)
+    badgeBg: 'rgba(42, 83, 103, 0.15)',
     icon: 'cpu'
   },
   distribution: {
     id: 'distribution',
     name: 'Network Distribution',
-    color: '#76c457', // Leaf Meadow Green (Palette #76c457)
-    badgeBg: 'rgba(118, 196, 87, 0.18)',
+    color: '#537b8e', // Leaf Meadow Green (Palette #537b8e)
+    badgeBg: 'rgba(83, 123, 142, 0.18)',
     icon: 'network'
   },
   infrastructure: {
     id: 'infrastructure',
     name: 'Infrastructure & Cabling',
-    color: '#d97706', // Warm Amber (Complements Sand #fbe6c2)
+    color: '#d97706', // Warm Amber (Complements Sand #d4e3e8)
     badgeBg: 'rgba(217, 119, 6, 0.15)',
     icon: 'box'
   },
@@ -396,7 +396,7 @@ export const MIKROTIK_CATALOG = [
     defaultWirelessCoverage: {
       enabled: true,
       radiusMeters: 30,
-      color: '#76c457',
+      color: '#537b8e',
       opacity: 0.18,
       hatch: true,
       band: 'dual-band',
@@ -416,7 +416,7 @@ export const MIKROTIK_CATALOG = [
     defaultWirelessCoverage: {
       enabled: true,
       radiusMeters: 25,
-      color: '#76c457',
+      color: '#537b8e',
       opacity: 0.18,
       hatch: true,
       band: 'dual-band',
@@ -601,7 +601,7 @@ export const RUIJIE_CATALOG = [
     defaultWirelessCoverage: {
       enabled: true,
       radiusMeters: 30,
-      color: '#76c457',
+      color: '#537b8e',
       opacity: 0.18,
       hatch: true,
       band: 'dual-band',
@@ -621,7 +621,7 @@ export const RUIJIE_CATALOG = [
     defaultWirelessCoverage: {
       enabled: true,
       radiusMeters: 25,
-      color: '#76c457',
+      color: '#537b8e',
       opacity: 0.18,
       hatch: true,
       band: 'dual-band',
@@ -641,7 +641,7 @@ export const RUIJIE_CATALOG = [
     defaultWirelessCoverage: {
       enabled: true,
       radiusMeters: 15,
-      color: '#76c457',
+      color: '#537b8e',
       opacity: 0.18,
       hatch: true,
       band: 'dual-band',
@@ -661,7 +661,7 @@ export const RUIJIE_CATALOG = [
     defaultWirelessCoverage: {
       enabled: true,
       radiusMeters: 60,
-      color: '#76c457',
+      color: '#537b8e',
       opacity: 0.16,
       hatch: true,
       band: 'outdoor',

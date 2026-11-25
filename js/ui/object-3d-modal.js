@@ -99,8 +99,8 @@ export class Object3DModal {
       z-index: 950;
       display: none;
       flex-direction: column;
-      background-color: var(--bg-secondary, #fbe6c2);
-      border: 1px solid var(--border-color, #e5cca0);
+      background-color: var(--bg-secondary, #d4e3e8);
+      border: 1px solid var(--border-color, #9ab7c1);
       border-radius: 12px;
       box-shadow: 0 18px 36px rgba(0, 0, 0, 0.28);
       overflow: hidden;
@@ -109,9 +109,9 @@ export class Object3DModal {
 
     this.panelEl.innerHTML = `
       <!-- Header -->
-      <div style="height: 46px; border-bottom: 1px solid var(--border-color, #e5cca0); background: var(--bg-tertiary, #f2dac8); display: flex; align-items: center; justify-content: space-between; padding: 0 14px; flex-shrink: 0;">
+      <div style="height: 46px; border-bottom: 1px solid var(--border-color, #9ab7c1); background: var(--bg-tertiary, #c4d7df); display: flex; align-items: center; justify-content: space-between; padding: 0 14px; flex-shrink: 0;">
         <div style="display: flex; align-items: center; gap: 8px;">
-          <div style="width: 26px; height: 26px; border-radius: 6px; background: rgba(42, 124, 19, 0.18); display: flex; align-items: center; justify-content: center; color: var(--accent-blue, #2a7c13);">
+          <div style="width: 26px; height: 26px; border-radius: 6px; background: rgba(42, 83, 103, 0.18); display: flex; align-items: center; justify-content: center; color: var(--accent-blue, #2a5367);">
             <i data-lucide="boxes" style="width: 15px; height: 15px;"></i>
           </div>
           <div>
@@ -128,7 +128,7 @@ export class Object3DModal {
       <div style="padding: 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; flex: 1;">
 
         <!-- Section 1: Draw Mode & 8 Preset Library -->
-        <div style="background: var(--bg-primary, #fff8cf); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 8px;">
+        <div style="background: var(--bg-primary, #e3edf0); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 8px;">
           <button type="button" id="btn-o3d-toggle-draw" class="btn btn-secondary btn-sm" style="width: 100%; justify-content: center; font-weight: 700; font-size: 11.5px;">
             ${uiIcon('pencil', 12)} Mode Tarik / Taruh di Lantai 3D (Nonaktif)
           </button>
@@ -152,7 +152,7 @@ export class Object3DModal {
 
           <div style="border-top: 1px dashed var(--border-color); padding-top: 7px; margin-top: 2px; display: flex; flex-direction: column; gap: 5px;">
             <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
-              <div style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--accent-blue, #2a7c13);">
+              <div style="font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--accent-blue, #2a5367);">
                 Pasang Gedung Sekolah 3D (${BUILTIN_ROOM_BUILDING_PRESETS.length} Model .GLB)
               </div>
             </div>
@@ -171,9 +171,9 @@ export class Object3DModal {
         </div>
 
         <!-- Section 2: Live Parametric Editor & Push/Pull Controls -->
-        <div style="background: var(--bg-primary, #fff8cf); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 8px;">
+        <div style="background: var(--bg-primary, #e3edf0); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 8px;">
           <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
-            <span id="o3d-editor-title" style="font-size: 10.5px; font-weight: 700; text-transform: uppercase; color: var(--accent-blue, #2a7c13);">
+            <span id="o3d-editor-title" style="font-size: 10.5px; font-weight: 700; text-transform: uppercase; color: var(--accent-blue, #2a5367);">
               Parameter Draft Objek Baru
             </span>
             <button type="button" id="btn-o3d-deselect" class="btn btn-secondary btn-sm" style="display: none; font-size: 10px; padding: 2px 6px;">
@@ -225,7 +225,7 @@ export class Object3DModal {
                 <input type="number" id="o3d-rot-num" min="0" max="360" step="5" style="width: 52px; background: var(--bg-elevated, #fff); border: 1px solid var(--border-color); border-radius: 4px; padding: 2px 4px; font-size: 10.5px; font-family: var(--font-mono);">
               </div>
             </div>
-            <input type="range" id="o3d-rot-range" min="0" max="360" step="5" style="accent-color: var(--accent-blue, #2a7c13); width: 100%;">
+            <input type="range" id="o3d-rot-range" min="0" max="360" step="5" style="accent-color: var(--accent-blue, #2a5367); width: 100%;">
             <div style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap;">
               <button type="button" id="btn-o3d-wall-90" class="btn btn-secondary btn-sm" style="font-size: 9.5px; padding: 2px 6px;">Dinding X:90°</button>
               <button type="button" id="btn-o3d-rot-reset" class="btn btn-secondary btn-sm" style="font-size: 9.5px; padding: 2px 6px;">Reset 0°</button>
@@ -275,8 +275,8 @@ export class Object3DModal {
         </div>
 
         <!-- Section 3: Smart Mount Devices -->
-        <div class="ws-network-only" style="background: rgba(42, 124, 19, 0.1); border: 1px solid rgba(42, 124, 19, 0.3); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px;">
-          <div style="font-size: 10.5px; font-weight: 700; color: var(--accent-blue, #2a7c13);">
+        <div class="ws-network-only" style="background: rgba(42, 83, 103, 0.1); border: 1px solid rgba(42, 83, 103, 0.3); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px;">
+          <div style="font-size: 10.5px; font-weight: 700; color: var(--accent-blue, #2a5367);">
             Smart Mount Perangkat ke Objek 3D
           </div>
           <div style="font-size: 10.5px; color: var(--text-secondary); line-height: 1.35;">
@@ -288,7 +288,7 @@ export class Object3DModal {
         </div>
 
         <!-- Section 4: Created Objects List -->
-        <div style="background: var(--bg-primary, #fff8cf); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px;">
+        <div style="background: var(--bg-primary, #e3edf0); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px;">
           <div style="display: flex; align-items: center; justify-content: space-between;">
             <span style="font-size: 10.5px; font-weight: 700; text-transform: uppercase; color: var(--text-muted);">Daftar Objek 3D di Peta</span>
             <span id="o3d-list-count" style="font-size: 10px; font-family: var(--font-mono); color: var(--accent-blue);">0 objek</span>
@@ -310,7 +310,7 @@ export class Object3DModal {
           <input type="number" id="${baseId}-num" min="${min}" max="${max}" step="${step}"
                  style="width: 58px; background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color); border-radius: 4px; padding: 2px 5px; font-size: 10.5px; font-family: var(--font-mono);">
         </div>
-        <input type="range" id="${baseId}-range" min="${min}" max="${max}" step="${step}" style="accent-color: var(--accent-blue, #2a7c13); width: 100%;">
+        <input type="range" id="${baseId}-range" min="${min}" max="${max}" step="${step}" style="accent-color: var(--accent-blue, #2a5367); width: 100%;">
       </div>
     `;
   }
@@ -659,7 +659,7 @@ export class Object3DModal {
     setVal('#o3d-rotz-num', src.rotationZ ?? 0);
     setVal('#o3d-rotz-range', src.rotationZ ?? 0);
     setVal('#o3d-color', src.color || '#64748b');
-    setVal('#o3d-accent', src.accentColor || '#2a7c13');
+    setVal('#o3d-accent', src.accentColor || '#2a5367');
     setVal('#o3d-opacity', Math.round((src.opacity ?? 1) * 100));
 
     const edgesCb = this.panelEl.querySelector('#o3d-show-edges');
@@ -690,8 +690,8 @@ export class Object3DModal {
     this.panelEl?.querySelectorAll('.o3d-preset-btn').forEach((btn) => {
       const pId = btn.getAttribute('data-preset');
       const active = !selId && pId === this.activePresetId;
-      btn.style.borderColor = active ? 'var(--accent-blue, #2a7c13)' : 'var(--border-color)';
-      btn.style.backgroundColor = active ? 'rgba(42, 124, 19, 0.14)' : '';
+      btn.style.borderColor = active ? 'var(--accent-blue, #2a5367)' : 'var(--border-color)';
+      btn.style.backgroundColor = active ? 'rgba(42, 83, 103, 0.14)' : '';
     });
   }
 
@@ -749,7 +749,7 @@ export class Object3DModal {
       const dim = `${Number(o.widthMeters || 1).toFixed(1)}×${Number(o.depthMeters || 1).toFixed(1)}×${Number(o.heightMeters || 2).toFixed(1)}m`;
       return `
         <div class="o3d-list-item" data-id="${o.id}"
-             style="background: ${isSel ? 'rgba(42, 124, 19, 0.14)' : 'var(--bg-secondary, #fbe6c2)'}; border: 1px solid ${isSel ? 'var(--accent-blue, #2a7c13)' : 'var(--border-color)'}; border-radius: 6px; padding: 6px 8px; display: flex; align-items: center; justify-content: space-between; gap: 6px; cursor: pointer;">
+             style="background: ${isSel ? 'rgba(42, 83, 103, 0.14)' : 'var(--bg-secondary, #d4e3e8)'}; border: 1px solid ${isSel ? 'var(--accent-blue, #2a5367)' : 'var(--border-color)'}; border-radius: 6px; padding: 6px 8px; display: flex; align-items: center; justify-content: space-between; gap: 6px; cursor: pointer;">
           <div style="min-width: 0;">
             <div style="font-size: 11px; font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
               ${this.escapeHtml(o.name || 'Objek 3D')}

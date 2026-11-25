@@ -5,6 +5,7 @@
 
 import { DEVICE_CATEGORIES, DEVICE_STATUSES } from '../devices/device-library.js';
 import { getCableDefByCategory } from '../connections/cable-library.js';
+import { getDeviceIsoIconDataUrl, getDefaultIconForType } from '../devices/device-icon-factory.js';
 
 export class TopologyGenerator {
   /**
@@ -30,6 +31,7 @@ export class TopologyGenerator {
     devices.forEach((dev) => {
       const cat = DEVICE_CATEGORIES[dev.category] || DEVICE_CATEGORIES.core;
       const statusDef = DEVICE_STATUSES[dev.status] || DEVICE_STATUSES.unknown;
+      const iconUrl = getDeviceIsoIconDataUrl(dev.customIcon || getDefaultIconForType(dev.type)) || '';
 
       elements.push({
         group: 'nodes',
@@ -43,7 +45,8 @@ export class TopologyGenerator {
           statusColor: statusDef.color,
           catColor: cat.color,
           location: dev.location,
-          ip: dev.network?.ip || ''
+          ip: dev.network?.ip || '',
+          iconUrl
         }
       });
     });
@@ -109,6 +112,7 @@ export class TopologyGenerator {
       devs.forEach((dev) => {
         const cat = DEVICE_CATEGORIES[dev.category] || DEVICE_CATEGORIES.core;
         const statusDef = DEVICE_STATUSES[dev.status] || DEVICE_STATUSES.unknown;
+        const iconUrl = getDeviceIsoIconDataUrl(dev.customIcon || getDefaultIconForType(dev.type)) || '';
 
         elements.push({
           group: 'nodes',
@@ -123,7 +127,8 @@ export class TopologyGenerator {
             statusColor: statusDef.color,
             catColor: cat.color,
             location: dev.location,
-            ip: dev.network?.ip || ''
+            ip: dev.network?.ip || '',
+            iconUrl
           }
         });
       });

@@ -3,6 +3,7 @@
  * Fullscreen visualizer for Physical (Dagre) and Logical (VLAN) topology
  */
 
+import { eventBus } from '../core/event-bus.js';
 import { TopologyGenerator } from './topology-generator.js';
 import { TOPOLOGY_STYLESHEET, getDagreLayoutOptions } from './topology-layout.js';
 
@@ -154,6 +155,15 @@ export class TopologyModal {
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && this.modalEl.style.display === 'flex') {
         this.hide();
+      }
+    });
+
+    // Live sync device name & IP labels when edited in PropertiesPanel
+    eventBus.on('device:updated', (dev) => {
+      if (!dev || !this.cy || this.modalEl?.style.display !== 'flex') return;
+      const node = this.cy.$id(dev.id);
+      if (node?.length) {
+        node.data('label', dev.network?.ip ? `${dev.name}\n${dev.network.ip}` : dev.name);
       }
     });
   }

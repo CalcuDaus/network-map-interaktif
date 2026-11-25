@@ -41,7 +41,10 @@ import { PortPickerModal } from './ui/port-picker-modal.js';
 import { DeviceDetailModal } from './ui/device-detail-modal.js';
 import { BuildStudioPalette } from './ui/build-studio-palette.js';
 import { NetworkSimulator } from './simulation/network-simulator.js';
+import { TerminalSessionEngine } from './simulation/terminal-session-engine.js';
 import { PacketTracerPanel } from './ui/packet-tracer-panel.js';
+import { PtDeviceWindow } from './ui/pt-device-window.js';
+import { PacketTracerTopologyEngine } from './topology/packet-tracer-canvas.js';
 import { JobsheetEngine } from './learning/jobsheet-engine.js';
 import { JobsheetPanel } from './ui/jobsheet-panel.js';
 import { OnboardingModal } from './ui/onboarding-modal.js';
@@ -317,6 +320,29 @@ class NetMapApp {
       cableManager: this.cableManager,
       map3DEngine: this.map3DEngine
     });
+    this.terminalEngine = new TerminalSessionEngine({
+      simulator: this.networkSimulator,
+      deviceManager: this.deviceManager,
+      getJobsheetEngine: () => this.jobsheetEngine
+    });
+    this.ptDeviceWindow = new PtDeviceWindow({
+      deviceManager: this.deviceManager,
+      cableManager: this.cableManager,
+      simulator: this.networkSimulator,
+      terminalEngine: this.terminalEngine,
+      getDevice3DModelModal: () => this.device3DModelModal,
+      getJobsheetEngine: () => this.jobsheetEngine
+    });
+    const topoContainer = document.getElementById('topology-workspace-container');
+    this.packetTracerCanvas = new PacketTracerTopologyEngine({
+      container: topoContainer,
+      deviceManager: this.deviceManager,
+      cableManager: this.cableManager,
+      simulator: this.networkSimulator,
+      ptDeviceWindow: this.ptDeviceWindow,
+      devicePalette: this.devicePalette,
+      getJobsheetEngine: () => this.jobsheetEngine
+    });
     this.packetTracerPanel = new PacketTracerPanel({
       simulator: this.networkSimulator,
       deviceManager: this.deviceManager,
@@ -326,10 +352,16 @@ class NetMapApp {
       map3DEngine: this.map3DEngine,
       buildStudioPalette: this.buildStudioPalette,
       packetTracerPanel: this.packetTracerPanel,
+      ptDeviceWindow: this.ptDeviceWindow,
+      packetTracerCanvas: this.packetTracerCanvas,
       deviceManager: this.deviceManager,
       cableManager: this.cableManager
     });
     this.workspaceController.init();
+
+    eventBus.on('modal:open-device-3d-model', ({ deviceId } = {}) => {
+      if (deviceId) this.device3DModelModal?.show?.(deviceId);
+    });
 
     // 14g. Initialize Guided SMK Jobsheet Auto-Grader, Sandbox Dialog & Quick-Start Onboarding (Phase 9)
     this.jobsheetEngine = new JobsheetEngine({
@@ -727,8 +759,10 @@ class NetMapApp {
   }
 
   setup3DControls() {
+    const btnTopology = document.getElementById('btn-view-topology');
     const btn2d = document.getElementById('btn-view-2d');
     const btn3d = document.getElementById('btn-view-3d');
+    const topoContainer = document.getElementById('topology-workspace-container');
     const konvaContainer = document.getElementById('konva-stage-container');
     const map3dContainer = document.getElementById('map-3d-container');
     const hud3d = document.getElementById('hud-3d-controls');
@@ -737,15 +771,23 @@ class NetMapApp {
     const hudCompass = document.getElementById('hud-compass');
 
     const applyViewMode = (mode) => {
+      const isTopology = mode === 'topology';
       const is3d = mode === '3d';
-      btn2d?.classList.toggle('active', !is3d);
+      const is2d = !is3d && !isTopology;
+
+      btnTopology?.classList.toggle('active', isTopology);
+      btn2d?.classList.toggle('active', is2d);
       btn3d?.classList.toggle('active', is3d);
-      konvaContainer?.classList.toggle('hidden', is3d);
-      if (konvaContainer) konvaContainer.style.display = is3d ? 'none' : '';
-      hud2dZoom?.classList.toggle('hidden', is3d);
-      if (hud2dZoom) hud2dZoom.style.display = is3d ? 'none' : '';
-      hudCompass?.classList.toggle('hidden', is3d);
-      if (hudCompass) hudCompass.style.display = is3d ? 'none' : '';
+
+      topoContainer?.classList.toggle('hidden', !isTopology);
+      if (topoContainer) topoContainer.style.display = isTopology ? 'block' : 'none';
+
+      konvaContainer?.classList.toggle('hidden', !is2d);
+      if (konvaContainer) konvaContainer.style.display = is2d ? '' : 'none';
+      hud2dZoom?.classList.toggle('hidden', !is2d);
+      if (hud2dZoom) hud2dZoom.style.display = is2d ? '' : 'none';
+      hudCompass?.classList.toggle('hidden', !is2d);
+      if (hudCompass) hudCompass.style.display = is2d ? '' : 'none';
 
       map3dContainer?.classList.toggle('hidden', !is3d);
       if (map3dContainer) map3dContainer.style.display = is3d ? 'block' : 'none';
@@ -767,13 +809,18 @@ class NetMapApp {
         hud3dAvatarBar.style.display = 'none';
       }
 
-      if (is3d) {
+      if (isTopology) {
+        this.map3DEngine?.deactivate();
+        this.packetTracerCanvas?.activate?.();
+      } else if (is3d) {
+        this.packetTracerCanvas?.deactivate?.();
         this.map3DEngine?.activate();
         const coverageToggle = document.getElementById('filter-toggle-coverage');
         if (coverageToggle) {
           this.map3DEngine?.setShowCoverage(Boolean(coverageToggle.checked));
         }
       } else {
+        this.packetTracerCanvas?.deactivate?.();
         this.map3DEngine?.deactivate();
       }
     };
@@ -781,6 +828,10 @@ class NetMapApp {
     // Enforce initial view state immediately on boot
     applyViewMode(stateManager.getViewMode());
 
+    btnTopology?.addEventListener('click', () => {
+      if (stateManager.getWorkspaceMode?.() === 'build') return;
+      stateManager.setViewMode('topology');
+    });
     btn2d?.addEventListener('click', () => stateManager.setViewMode('2d'));
     btn3d?.addEventListener('click', () => stateManager.setViewMode('3d'));
 
@@ -2196,7 +2247,7 @@ class NetMapApp {
         wirelessCoverage: {
           enabled: true,
           radiusMeters: 28,
-          color: '#76c457',
+          color: '#537b8e',
           opacity: 0.18,
           hatch: true,
           band: 'dual-band',

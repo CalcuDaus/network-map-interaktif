@@ -119,7 +119,7 @@ export class BuildStudioPalette {
         category,
         badge,
         icon: uiIcon(isFacility ? 'trees' : 'building', 15),
-        color: preset.wallColor || '#2a7c13',
+        color: preset.wallColor || '#2a5367',
         name: preset.name,
         subtitle: preset.subtitle || `${preset.widthMeters}×${preset.depthMeters}×${preset.heightMeters}m`,
         dimsText: `${Number(preset.widthMeters).toFixed(1)}×${Number(preset.depthMeters).toFixed(1)}×${Number(preset.heightMeters).toFixed(1)}m`,

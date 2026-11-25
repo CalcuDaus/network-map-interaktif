@@ -465,7 +465,51 @@ export function getDefaultDevicePorts(type = 'router', preset = '', customModelU
     ], 0.12, 0.34, 0.76);
   }
 
-  // Default 2-port endpoint (PC, Laptop, Printer, CCTV, IP Phone, ONT)
+  if (['pc', 'computer', 'workstation'].includes(type)) {
+    return makeRow([
+      { name: 'eth0', type: 'rj45', speed: '1G' }
+    ], 0.14, -0.25, 0.24);
+  }
+
+  if (type === 'laptop') {
+    return makeRow([
+      { name: 'eth0', type: 'rj45', speed: '1G' },
+      { name: 'wlan0', type: 'wireless', speed: '867M' }
+    ], 0.1, -0.18, 0.3);
+  }
+
+  if (type === 'smartphone') {
+    return makeRow([
+      { name: 'wlan0', type: 'wireless', speed: '867M' }
+    ], 0.12, 0, 0.18);
+  }
+
+  if (['isp', 'cloud', 'internet'].includes(type)) {
+    return makeRow([
+      { name: 'wan0', type: 'rj45', speed: '1G' },
+      { name: 'sfp-wan1', type: 'sfp', speed: '10G' }
+    ], 0.18, 0.2, 0.34);
+  }
+
+  if (type === 'hub') {
+    return makeRow([
+      { name: 'port1', type: 'rj45', speed: '100M' },
+      { name: 'port2', type: 'rj45', speed: '100M' },
+      { name: 'port3', type: 'rj45', speed: '100M' },
+      { name: 'port4', type: 'rj45', speed: '100M' }
+    ], 0.09, 0.26, 0.48);
+  }
+
+  if (type === 'ont' || type === 'onu') {
+    return makeRow([
+      { name: 'PON', type: 'fiber', speed: '2.5G' },
+      { name: 'LAN1', type: 'rj45', speed: '1G' },
+      { name: 'LAN2', type: 'rj45', speed: '1G' },
+      { name: 'wlan0', type: 'wireless', speed: '867M' }
+    ], 0.1, -0.2, 0.42);
+  }
+
+  // Default 2-port endpoint (Printer, CCTV, IP Phone, ONT)
   return makeRow([
     { name: 'eth0', type: 'rj45', speed: '1G' },
     { name: 'port1', type: 'rj45', speed: '1G' }
@@ -824,18 +868,30 @@ export const DeviceSchema = {
       wirelessCoverage: params.wirelessCoverage ? {
         enabled: Boolean(params.wirelessCoverage.enabled),
         radiusMeters: typeof params.wirelessCoverage.radiusMeters === 'number' ? params.wirelessCoverage.radiusMeters : 25,
-        color: params.wirelessCoverage.color || '#76c457',
+        color: params.wirelessCoverage.color || '#537b8e',
         opacity: typeof params.wirelessCoverage.opacity === 'number' ? params.wirelessCoverage.opacity : 0.18,
         hatch: params.wirelessCoverage.hatch !== undefined ? Boolean(params.wirelessCoverage.hatch) : true,
+        hatchStyle: ['diagonal', 'reverse', 'cross'].includes(params.wirelessCoverage.hatchStyle) ? params.wirelessCoverage.hatchStyle : 'diagonal',
+        hatchSpacing: typeof params.wirelessCoverage.hatchSpacing === 'number' ? params.wirelessCoverage.hatchSpacing : 14,
+        hatchThickness: typeof params.wirelessCoverage.hatchThickness === 'number' ? params.wirelessCoverage.hatchThickness : 1.2,
+        hatchOpacity: typeof params.wirelessCoverage.hatchOpacity === 'number' ? params.wirelessCoverage.hatchOpacity : 0.35,
+        hatchAngle: typeof params.wirelessCoverage.hatchAngle === 'number' ? params.wirelessCoverage.hatchAngle : 45,
+        hatchAreaPercent: typeof params.wirelessCoverage.hatchAreaPercent === 'number' ? params.wirelessCoverage.hatchAreaPercent : 100,
         band: params.wirelessCoverage.band || 'dual-band',
         showLabel: params.wirelessCoverage.showLabel !== undefined ? Boolean(params.wirelessCoverage.showLabel) : true
       } : (
         (params.type === 'access-point' || params.type === 'wireless-bridge' || params.type === 'network-pole') ? {
           enabled: true,
           radiusMeters: params.type === 'wireless-bridge' ? 80 : (params.type === 'access-point' ? 25 : 30),
-          color: params.type === 'wireless-bridge' ? '#06b6d4' : '#76c457',
+          color: params.type === 'wireless-bridge' ? '#06b6d4' : '#537b8e',
           opacity: 0.18,
           hatch: true,
+          hatchStyle: 'diagonal',
+          hatchSpacing: 14,
+          hatchThickness: 1.2,
+          hatchOpacity: 0.35,
+          hatchAngle: 45,
+          hatchAreaPercent: 100,
           band: params.type === 'wireless-bridge' ? 'ptp' : 'dual-band',
           showLabel: true
         } : null
@@ -844,6 +900,15 @@ export const DeviceSchema = {
         x: typeof params.position?.x === 'number' ? params.position.x : 0.5,
         y: typeof params.position?.y === 'number' ? params.position.y : 0.5
       },
+      logicalPosition: (
+        params.logicalPosition &&
+        typeof params.logicalPosition.x === 'number' &&
+        typeof params.logicalPosition.y === 'number' &&
+        Number.isFinite(params.logicalPosition.x) &&
+        Number.isFinite(params.logicalPosition.y)
+      )
+        ? { x: Math.round(params.logicalPosition.x), y: Math.round(params.logicalPosition.y) }
+        : null,
       inventory: {
         purchaseYear: String(params.inventory?.purchaseYear ?? params.purchaseYear ?? ''),
         fundingSource: String(params.inventory?.fundingSource ?? params.fundingSource ?? ''),

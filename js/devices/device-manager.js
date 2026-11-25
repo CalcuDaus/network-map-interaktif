@@ -159,6 +159,58 @@ export class DeviceManager {
   }
 
   /**
+   * Update independent diagram coordinates for Packet Tracer Logical Topology mode
+   * without mutating physical 2D/3D campus map positions (`device.position` / `spatial3d`).
+   * @param {string} id
+   * @param {{x: number, y: number}} logicalPos
+   * @returns {Object|null}
+   */
+  updateDeviceLogicalPosition(id, logicalPos) {
+    const device = this.devices.get(id);
+    if (!device || !logicalPos) return null;
+    const x = Number(logicalPos.x);
+    const y = Number(logicalPos.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+
+    device.logicalPosition = { x: Math.round(x), y: Math.round(y) };
+    device.updatedAt = new Date().toISOString();
+    this.lastInteractedDeviceId = id;
+
+    eventBus.emit('device:logical-moved', { deviceId: id, logicalPosition: { ...device.logicalPosition } });
+    return device;
+  }
+
+  /**
+   * Batch update logical topology coordinates for multi-device drags or auto-layout.
+   * @param {Array<{id: string, logicalPosition: {x: number, y: number}}>} moves
+   * @returns {Object[]}
+   */
+  moveDeviceLogicalGroup(moves) {
+    if (!Array.isArray(moves) || moves.length === 0) return [];
+    const now = new Date().toISOString();
+    const updated = [];
+
+    moves.forEach(({ id, logicalPosition }) => {
+      const device = this.devices.get(id);
+      if (!device || !logicalPosition) return;
+      const x = Number(logicalPosition.x);
+      const y = Number(logicalPosition.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+
+      device.logicalPosition = { x: Math.round(x), y: Math.round(y) };
+      device.updatedAt = now;
+      this.lastInteractedDeviceId = id;
+      updated.push(device);
+    });
+
+    if (updated.length === 0) return [];
+    updated.forEach((dev) => {
+      eventBus.emit('device:logical-moved', { deviceId: dev.id, logicalPosition: { ...dev.logicalPosition } });
+    });
+    return updated;
+  }
+
+  /**
    * Update coordinates for multiple devices in a single group move operation
    * @param {Array<{id: string, position: {x: number, y: number}}>} moves
    * @param {{syncRenderer?: boolean}} [options]

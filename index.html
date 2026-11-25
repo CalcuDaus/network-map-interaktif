@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="screen-orientation" content="landscape">
-  <meta name="theme-color" content="#2a7c13">
+  <meta name="theme-color" content="#183346">
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/svg+xml" href="assets/icons/icon.svg">
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
@@ -28,6 +28,7 @@
   <link rel="stylesheet" href="css/layout.css?v=20261123-buildiso-v36">
   <link rel="stylesheet" href="css/components.css?v=20261123-buildiso-v36">
   <link rel="stylesheet" href="css/map.css?v=20261123-buildiso-v36">
+  <link rel="stylesheet" href="css/topology.css?v=20261123-buildiso-v36">
 
   <!-- Vendor Libraries (Offline-First with CDN fallback) -->
   <script src="assets/vendor/konva.min.js"></script>
@@ -59,6 +60,15 @@
     (function () {
       const savedTheme = localStorage.getItem('netmap-theme') || 'light';
       document.documentElement.setAttribute('data-theme', savedTheme);
+      try {
+        const cached = JSON.parse(localStorage.getItem('netmap_theme_vars_cache_v1') || 'null');
+        const vars = cached && cached[savedTheme];
+        if (vars && typeof vars === 'object') {
+          Object.keys(vars).forEach(function (k) {
+            document.documentElement.style.setProperty(k, vars[k]);
+          });
+        }
+      } catch (e) { }
     })();
   </script>
 </head>
@@ -144,8 +154,13 @@
 
         <div class="divider-vertical"></div>
 
-        <!-- 2D / 3D Map View Switcher -->
+        <!-- Topologi / 2D / 3D Map View Switcher -->
         <div class="segmented-control view-switcher" role="group" aria-label="Tampilan Peta">
+          <button id="btn-view-topology" class="segmented-item view-switch-btn ws-network-only" data-view="topology"
+            title="Mode Topologi Logis interaktif ala Cisco Packet Tracer">
+            <i data-lucide="git-fork" style="width: 14px; height: 14px;"></i>
+            <span>Topologi</span>
+          </button>
           <button id="btn-view-2d" class="segmented-item view-switch-btn active" data-view="2d"
             title="Tampilan Denah 2D (Konva)">
             <i data-lucide="map" style="width: 14px; height: 14px;"></i>
@@ -293,7 +308,7 @@
                   <span>Tampilkan Link Nirkabel</span>
                 </label>
                 <label class="vf-check-row">
-                  <input type="checkbox" id="filter-toggle-coverage" checked style="accent-color: #2a7c13;">
+                  <input type="checkbox" id="filter-toggle-coverage" checked style="accent-color: #2a5367;">
                   <span>Tampilkan Cakupan Sinyal WiFi</span>
                 </label>
                 <label class="vf-check-row vf-check-focus"
@@ -352,10 +367,48 @@
               </span>
               <div class="gs-header-actions">
                 <button id="btn-toggle-theme" type="button" class="btn btn-secondary btn-sm gs-theme-btn"
-                  title="Ganti Tema (Botanical Cream / Forest Dark)">
+                  title="Ganti Mode Terang / Gelap">
                   <i data-lucide="moon" id="theme-toggle-icon" style="width: 13px; height: 13px;"></i>
                   <span>Mode Gelap</span>
                 </button>
+              </div>
+            </div>
+
+            <!-- Theme Preset & Custom Color Studio -->
+            <div id="gs-theme-studio" class="gs-theme-studio">
+              <div class="gs-theme-studio-head">
+                <span class="gs-theme-studio-title">
+                  <i data-lucide="palette" style="width: 13px; height: 13px; color: var(--accent-blue);"></i>
+                  <span>Tema &amp; Warna</span>
+                </span>
+                <div style="display: inline-flex; align-items: center; gap: 5px;">
+                  <span id="gs-active-palette-badge" class="gs-status-badge">Ocean Slate</span>
+                  <button id="btn-theme-reset-colors" type="button" class="btn btn-secondary btn-sm gs-reset-theme-btn"
+                    title="Kembalikan warna kustom ke preset tema aktif">Reset</button>
+                </div>
+              </div>
+              <div id="gs-palette-grid" class="gs-palette-grid" role="radiogroup" aria-label="Pilih Preset Palet Tema"></div>
+              <div id="gs-custom-color-row" class="gs-custom-color-row">
+                <label class="gs-color-chip" title="Warna Aksen Utama (Tombol, Fokus &amp; Border Aktif)">
+                  <input type="color" id="input-theme-accent1" value="#2a5367">
+                  <span>Utama</span>
+                </label>
+                <label class="gs-color-chip" title="Warna Aksen Kedua (Highlight &amp; Garis Bantu)">
+                  <input type="color" id="input-theme-accent2" value="#537b8e">
+                  <span>Aksen 2</span>
+                </label>
+                <label class="gs-color-chip" title="Warna Latar Belakang Utama Kanvas &amp; Dasar">
+                  <input type="color" id="input-theme-bg1" value="#e3edf0">
+                  <span>Latar</span>
+                </label>
+                <label class="gs-color-chip" title="Warna Toolbar &amp; Sidebar Panel">
+                  <input type="color" id="input-theme-bg2" value="#d4e3e8">
+                  <span>Panel</span>
+                </label>
+                <label class="gs-color-chip" title="Warna Teks Utama">
+                  <input type="color" id="input-theme-text" value="#0b1620">
+                  <span>Teks</span>
+                </label>
               </div>
             </div>
 
@@ -548,7 +601,8 @@
               <i data-lucide="network" style="width: 13px; height: 13px;"></i>
             </button>
           </div>
-          <div class="mob-dock-seg" role="group" aria-label="Tampilan 2D 3D">
+          <div class="mob-dock-seg" role="group" aria-label="Tampilan Topologi 2D 3D">
+            <button type="button" id="btn-mob-view-topology" class="mob-dock-seg-btn ws-network-only" data-mob-view="topology" title="Mode Topologi">Topo</button>
             <button type="button" id="btn-mob-view-2d" class="mob-dock-seg-btn active" data-mob-view="2d">2D</button>
             <button type="button" id="btn-mob-view-3d" class="mob-dock-seg-btn" data-mob-view="3d">3D</button>
           </div>
@@ -621,6 +675,9 @@
           <i data-lucide="minimize-2" style="width: 14px; height: 14px;"></i>
           <span>Keluar Fullscreen</span>
         </button>
+
+        <!-- Cisco Packet Tracer Interactive Topology Container -->
+        <div id="topology-workspace-container" class="topology-workspace-container hidden" style="display: none;" aria-label="Kanvas Mode Topologi"></div>
 
         <!-- Konva Stage Container -->
         <div id="konva-stage-container"></div>

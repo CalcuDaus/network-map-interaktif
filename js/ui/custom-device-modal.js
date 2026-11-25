@@ -33,7 +33,7 @@ export class CustomDeviceModal {
     this.uploadedImageDataUrl = '';
     this.extractedGlbPorts = [];
     this.markerStyle = 'rounded'; // 'rounded' | 'circle' | 'icon-only'
-    this.markerColor = '#2a7c13';
+    this.markerColor = '#2a5367';
 
     this.createModalDOM();
     this.bindEvents();
@@ -56,17 +56,17 @@ export class CustomDeviceModal {
     `;
 
     this.modalEl.innerHTML = `
-      <div style="background-color: var(--bg-secondary, #fbe6c2); border: 1px solid var(--border-color, #e5cca0); border-radius: 12px; width: 100%; max-width: 780px; max-height: 92vh; display: flex; flex-direction: column; box-shadow: 0 20px 40px rgba(0,0,0,0.3); overflow: hidden;">
+      <div style="background-color: var(--bg-secondary, #d4e3e8); border: 1px solid var(--border-color, #9ab7c1); border-radius: 12px; width: 100%; max-width: 780px; max-height: 92vh; display: flex; flex-direction: column; box-shadow: 0 20px 40px rgba(0,0,0,0.3); overflow: hidden;">
         
         <!-- Header -->
-        <div style="height: 54px; border-bottom: 1px solid var(--border-color, #e5cca0); background: var(--bg-tertiary, #f2dac8); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; flex-shrink: 0;">
+        <div style="height: 54px; border-bottom: 1px solid var(--border-color, #9ab7c1); background: var(--bg-tertiary, #c4d7df); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; flex-shrink: 0;">
           <div style="display: flex; align-items: center; gap: 10px;">
-            <div style="width: 28px; height: 28px; border-radius: 6px; background: rgba(42, 124, 19, 0.15); display: flex; align-items: center; justify-content: center; color: var(--accent-blue, #2a7c13);">
+            <div style="width: 28px; height: 28px; border-radius: 6px; background: rgba(42, 83, 103, 0.15); display: flex; align-items: center; justify-content: center; color: var(--accent-blue, #2a5367);">
               <i data-lucide="sparkles" style="width: 17px; height: 17px;"></i>
             </div>
             <div>
-              <span style="font-size: 15px; font-weight: 700; color: var(--text-primary, #18350d); display: block; line-height: 1.2;">Tambah Perangkat Kustom</span>
-              <span style="font-size: 11px; color: var(--text-muted, #678458);">Buat perangkat baru dengan ikon vektor atau gambar kustom Anda sendiri</span>
+              <span style="font-size: 15px; font-weight: 700; color: var(--text-primary, #0b1620); display: block; line-height: 1.2;">Tambah Perangkat Kustom</span>
+              <span style="font-size: 11px; color: var(--text-muted, #537b8e);">Buat perangkat baru dengan ikon vektor atau gambar kustom Anda sendiri</span>
             </div>
           </div>
           <button id="btn-custom-dev-close" class="btn btn-icon btn-sm" title="Tutup">
@@ -83,21 +83,21 @@ export class CustomDeviceModal {
             <div style="display: flex; flex-direction: column; gap: 12px;">
               
               <!-- Basic Info Card -->
-              <div class="info-card" style="display: flex; flex-direction: column; gap: 10px; background: var(--bg-primary, #fff8cf); border: 1px solid var(--border-color, #e5cca0); border-radius: 8px; padding: 12px;">
-                <span class="section-label" style="font-size: 11px; font-weight: 700; color: var(--accent-blue, #2a7c13); text-transform: uppercase; margin-bottom: 2px;">
+              <div class="info-card" style="display: flex; flex-direction: column; gap: 10px; background: var(--bg-primary, #e3edf0); border: 1px solid var(--border-color, #9ab7c1); border-radius: 8px; padding: 12px;">
+                <span class="section-label" style="font-size: 11px; font-weight: 700; color: var(--accent-blue, #2a5367); text-transform: uppercase; margin-bottom: 2px;">
                   1. Identitas Perangkat
                 </span>
 
                 <div style="display: flex; flex-direction: column; gap: 3px;">
                   <label style="font-size: 11.5px; font-weight: 600; color: var(--text-primary);">Nama Perangkat *</label>
                   <input type="text" id="cd-name" placeholder="contoh: OLT GPON Gedung A / Smart TV" 
-                         style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 7px 10px; font-size: 12.5px; color: var(--text-primary); font-family: inherit;">
+                         style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #9ab7c1); border-radius: 6px; padding: 7px 10px; font-size: 12.5px; color: var(--text-primary); font-family: inherit;">
                 </div>
 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                   <div style="display: flex; flex-direction: column; gap: 3px;">
                     <label style="font-size: 11.5px; font-weight: 600; color: var(--text-primary);">Kategori Jaringan</label>
-                    <select id="cd-category" style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 6px 8px; font-size: 12px; color: var(--text-primary); font-family: inherit;">
+                    <select id="cd-category" style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #9ab7c1); border-radius: 6px; padding: 6px 8px; font-size: 12px; color: var(--text-primary); font-family: inherit;">
                       <option value="core">Core Network</option>
                       <option value="distribution" selected>Distribution</option>
                       <option value="infrastructure">Infrastructure</option>
@@ -107,7 +107,7 @@ export class CustomDeviceModal {
 
                   <div style="display: flex; flex-direction: column; gap: 3px;">
                     <label style="font-size: 11.5px; font-weight: 600; color: var(--text-primary);">Tipe / Basis</label>
-                    <select id="cd-type" style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 6px 8px; font-size: 12px; color: var(--text-primary); font-family: inherit;">
+                    <select id="cd-type" style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #9ab7c1); border-radius: 6px; padding: 6px 8px; font-size: 12px; color: var(--text-primary); font-family: inherit;">
                       <option value="router">Router</option>
                       <option value="main-router">Core Router / CCR</option>
                       <option value="switch">Switch</option>
@@ -183,18 +183,18 @@ export class CustomDeviceModal {
                   <div style="display: flex; flex-direction: column; gap: 3px;">
                     <label style="font-size: 11.5px; font-weight: 600; color: var(--text-primary);">Merk / Brand</label>
                     <input type="text" id="cd-brand" placeholder="contoh: MikroTik, Cisco, Ruijie" 
-                           style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 6px 8px; font-size: 12px; color: var(--text-primary); font-family: inherit;">
+                           style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #9ab7c1); border-radius: 6px; padding: 6px 8px; font-size: 12px; color: var(--text-primary); font-family: inherit;">
                   </div>
                   <div style="display: flex; flex-direction: column; gap: 3px;">
                     <label style="font-size: 11.5px; font-weight: 600; color: var(--text-primary);">Model / Seri</label>
                     <input type="text" id="cd-model" placeholder="contoh: CCR2004, RG-ES205" 
-                           style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 6px 8px; font-size: 12px; color: var(--text-primary); font-family: inherit;">
+                           style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #9ab7c1); border-radius: 6px; padding: 6px 8px; font-size: 12px; color: var(--text-primary); font-family: inherit;">
                   </div>
                 </div>
 
                 <div style="display: flex; flex-direction: column; gap: 3px;">
                   <label style="font-size: 11.5px; font-weight: 600; color: var(--text-primary);">Status Operasional Awal</label>
-                  <select id="cd-status" style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 6px 8px; font-size: 12px; color: var(--text-primary); font-family: inherit;">
+                  <select id="cd-status" style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #9ab7c1); border-radius: 6px; padding: 6px 8px; font-size: 12px; color: var(--text-primary); font-family: inherit;">
                     <option value="online">Online (Aktif / Normal)</option>
                     <option value="warning">Warning (Dalam Perawatan / Waspada)</option>
                     <option value="offline">Offline (Tidak Aktif)</option>
@@ -204,8 +204,8 @@ export class CustomDeviceModal {
               </div>
 
               <!-- Network Config Card -->
-              <div class="info-card" style="display: flex; flex-direction: column; gap: 8px; background: var(--bg-primary, #fff8cf); border: 1px solid var(--border-color, #e5cca0); border-radius: 8px; padding: 12px;">
-                <span class="section-label" style="font-size: 11px; font-weight: 700; color: var(--accent-blue, #2a7c13); text-transform: uppercase; margin-bottom: 2px;">
+              <div class="info-card" style="display: flex; flex-direction: column; gap: 8px; background: var(--bg-primary, #e3edf0); border: 1px solid var(--border-color, #9ab7c1); border-radius: 8px; padding: 12px;">
+                <span class="section-label" style="font-size: 11px; font-weight: 700; color: var(--accent-blue, #2a5367); text-transform: uppercase; margin-bottom: 2px;">
                   2. Konfigurasi Jaringan (Opsional)
                 </span>
                 
@@ -213,29 +213,29 @@ export class CustomDeviceModal {
                   <div style="display: flex; flex-direction: column; gap: 3px;">
                     <label style="font-size: 11px; font-weight: 600; color: var(--text-primary);">Alamat IP (IPv4)</label>
                     <input type="text" id="cd-ip" placeholder="192.168.1.100" 
-                           style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 5px 8px; font-size: 11.5px; font-family: var(--font-mono); color: var(--text-primary);">
+                           style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #9ab7c1); border-radius: 6px; padding: 5px 8px; font-size: 11.5px; font-family: var(--font-mono); color: var(--text-primary);">
                   </div>
                   <div style="display: flex; flex-direction: column; gap: 3px;">
                     <label style="font-size: 11px; font-weight: 600; color: var(--text-primary);">VLAN ID</label>
                     <input type="number" id="cd-vlan" min="1" max="4094" placeholder="1" value="1" 
-                           style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 5px 8px; font-size: 11.5px; font-family: var(--font-mono); color: var(--text-primary);">
+                           style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #9ab7c1); border-radius: 6px; padding: 5px 8px; font-size: 11.5px; font-family: var(--font-mono); color: var(--text-primary);">
                   </div>
                 </div>
               </div>
 
               <!-- Wireless Coverage Card -->
-              <div class="info-card" style="display: flex; flex-direction: column; gap: 10px; background: var(--bg-primary, #fff8cf); border: 1px solid var(--border-color, #e5cca0); border-radius: 8px; padding: 12px;">
+              <div class="info-card" style="display: flex; flex-direction: column; gap: 10px; background: var(--bg-primary, #e3edf0); border: 1px solid var(--border-color, #9ab7c1); border-radius: 8px; padding: 12px;">
                 <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;">
-                  <input type="checkbox" id="cd-wireless-enable" style="accent-color: var(--accent-blue, #2a7c13); width: 15px; height: 15px;">
+                  <input type="checkbox" id="cd-wireless-enable" style="accent-color: var(--accent-blue, #2a5367); width: 15px; height: 15px;">
                   <span style="font-size: 11.5px; font-weight: 700; color: var(--text-primary);">Aktifkan Area Cakupan Sinyal Nirkabel</span>
                 </label>
 
-                <div id="cd-wireless-controls" style="display: none; flex-direction: column; gap: 8px; padding-top: 4px; border-top: 1px dashed var(--border-light, #edd8b5);">
+                <div id="cd-wireless-controls" style="display: none; flex-direction: column; gap: 8px; padding-top: 4px; border-top: 1px dashed var(--border-light, #b8ced6);">
                   <div style="display: flex; align-items: center; justify-content: space-between; font-size: 11px;">
                     <span style="font-weight: 600; color: var(--text-primary);">Radius Jangkauan:</span>
-                    <span id="cd-radius-display" style="font-weight: 700; color: var(--accent-blue, #2a7c13); font-family: var(--font-mono);">30 meter</span>
+                    <span id="cd-radius-display" style="font-weight: 700; color: var(--accent-blue, #2a5367); font-family: var(--font-mono);">30 meter</span>
                   </div>
-                  <input type="range" id="cd-wireless-radius" min="10" max="250" step="5" value="30" style="accent-color: var(--accent-blue, #2a7c13); width: 100%;">
+                  <input type="range" id="cd-wireless-radius" min="10" max="250" step="5" value="30" style="accent-color: var(--accent-blue, #2a5367); width: 100%;">
                   
                   <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
                     <select id="cd-wireless-band" style="background: var(--bg-elevated); border: 1px solid var(--border-color); border-radius: 4px; padding: 4px 6px; font-size: 11px;">
@@ -244,7 +244,7 @@ export class CustomDeviceModal {
                       <option value="2.4ghz">2.4 GHz Long-Range</option>
                       <option value="ptp">PtP Bridge Directive</option>
                     </select>
-                    <input type="color" id="cd-wireless-color" value="#76c457" title="Warna Lingkaran Sinyal" style="width: 100%; height: 26px; border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer; padding: 1px;">
+                    <input type="color" id="cd-wireless-color" value="#537b8e" title="Warna Lingkaran Sinyal" style="width: 100%; height: 26px; border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer; padding: 1px;">
                   </div>
                 </div>
               </div>
@@ -255,16 +255,16 @@ export class CustomDeviceModal {
             <div style="display: flex; flex-direction: column; gap: 12px;">
               
               <!-- Live Preview Card -->
-              <div class="info-card" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; background: var(--bg-primary, #fff8cf); border: 1px solid var(--border-color, #e5cca0); border-radius: 8px; padding: 14px; text-align: center;">
+              <div class="info-card" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; background: var(--bg-primary, #e3edf0); border: 1px solid var(--border-color, #9ab7c1); border-radius: 8px; padding: 14px; text-align: center;">
                 <span style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">
                   Live Marker Preview (Tampilan Peta)
                 </span>
 
-                <div id="cd-marker-preview-box" style="width: 68px; height: 68px; display: flex; align-items: center; justify-content: center; background: #18350d; border: 2.5px solid var(--accent-cyan, #76c457); border-radius: 12px; position: relative; box-shadow: 0 6px 14px rgba(0,0,0,0.3); transition: all 0.2s ease;">
+                <div id="cd-marker-preview-box" style="width: 68px; height: 68px; display: flex; align-items: center; justify-content: center; background: #0b1620; border: 2.5px solid var(--accent-cyan, #537b8e); border-radius: 12px; position: relative; box-shadow: 0 6px 14px rgba(0,0,0,0.3); transition: all 0.2s ease;">
                   <div id="cd-preview-graphic" style="width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;">
                     <!-- Injected via updatePreview -->
                   </div>
-                  <span id="cd-preview-status-dot" style="position: absolute; top: -4px; right: -4px; width: 11px; height: 11px; border-radius: 50%; background-color: #22c55e; border: 2px solid #18350d;"></span>
+                  <span id="cd-preview-status-dot" style="position: absolute; top: -4px; right: -4px; width: 11px; height: 11px; border-radius: 50%; background-color: #22c55e; border: 2px solid #0b1620;"></span>
                 </div>
 
                 <div style="display: flex; flex-direction: column; gap: 2px; align-items: center;">
@@ -276,7 +276,7 @@ export class CustomDeviceModal {
                   </span>
                 </div>
 
-                <div style="width: 100%; display: flex; flex-direction: column; gap: 4px; border-top: 1px solid var(--border-light, #edd8b5); padding-top: 8px;">
+                <div style="width: 100%; display: flex; flex-direction: column; gap: 4px; border-top: 1px solid var(--border-light, #b8ced6); padding-top: 8px;">
                   <label style="font-size: 11px; font-weight: 600; color: var(--text-primary); text-align: left;">Bentuk Marker</label>
                   <select id="cd-marker-style" style="background: var(--bg-elevated); border: 1px solid var(--border-color); border-radius: 6px; padding: 5px 8px; font-size: 11.5px; color: var(--text-primary);">
                     <option value="rounded">Kotak Melengkung (Default)</option>
@@ -287,7 +287,7 @@ export class CustomDeviceModal {
               </div>
 
               <!-- Visual Selector: Tabs for Icon vs Image -->
-              <div class="info-card" style="display: flex; flex-direction: column; gap: 10px; background: var(--bg-primary, #fff8cf); border: 1px solid var(--border-color, #e5cca0); border-radius: 8px; padding: 12px;">
+              <div class="info-card" style="display: flex; flex-direction: column; gap: 10px; background: var(--bg-primary, #e3edf0); border: 1px solid var(--border-color, #9ab7c1); border-radius: 8px; padding: 12px;">
                 
                 <div style="display: flex; align-items: center; justify-content: space-between;">
                   <span class="section-label" style="font-size: 11px; font-weight: 700; color: var(--accent-blue); text-transform: uppercase; margin: 0;">
@@ -317,7 +317,7 @@ export class CustomDeviceModal {
 
                 <!-- Tab 2: Custom Image Upload -->
                 <div id="tab-content-image" style="display: none; flex-direction: column; gap: 8px;">
-                  <div id="cd-dropzone" style="border: 2px dashed var(--accent-blue); border-radius: 8px; padding: 14px; text-align: center; background: rgba(42, 124, 19, 0.05); cursor: pointer; transition: all 0.2s ease;">
+                  <div id="cd-dropzone" style="border: 2px dashed var(--accent-blue); border-radius: 8px; padding: 14px; text-align: center; background: rgba(42, 83, 103, 0.05); cursor: pointer; transition: all 0.2s ease;">
                     <i data-lucide="upload-cloud" style="width: 26px; height: 26px; color: var(--accent-blue); margin: 0 auto 6px auto; display: block;"></i>
                     <span style="font-size: 11.5px; font-weight: 600; color: var(--text-primary); display: block;">Pilih File Gambar Komputer</span>
                     <span style="font-size: 10px; color: var(--text-muted); display: block;">PNG, JPG, SVG, WebP (maks 2MB)</span>
@@ -344,7 +344,7 @@ export class CustomDeviceModal {
               </div>
 
               <!-- 3D Model & Elevation (Optional) -->
-              <div class="info-card" style="display: flex; flex-direction: column; gap: 8px; background: var(--bg-primary, #fff8cf); border: 1px solid var(--border-color, #e5cca0); border-radius: 8px; padding: 12px;">
+              <div class="info-card" style="display: flex; flex-direction: column; gap: 8px; background: var(--bg-primary, #e3edf0); border: 1px solid var(--border-color, #9ab7c1); border-radius: 8px; padding: 12px;">
                 <span class="section-label" style="font-size: 11px; font-weight: 700; color: var(--accent-blue); text-transform: uppercase; margin: 0;">
                   4. Model 3D & Elevasi (Opsional)
                 </span>
@@ -361,7 +361,7 @@ export class CustomDeviceModal {
                     <input type="text" id="cd-3d-glb-url" placeholder="Atau URL/path .glb/.gltf (kosong = otomatis)"
                            style="flex: 1; min-width: 0; background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color); border-radius: 6px; padding: 5px 8px; font-size: 11px; color: var(--text-primary); font-family: var(--font-mono);">
                   </div>
-                  <div id="cd-3d-glb-port-status" style="font-size: 10.5px; color: var(--accent-blue, #2a7c13); font-weight: 600; display: none;"></div>
+                  <div id="cd-3d-glb-port-status" style="font-size: 10.5px; color: var(--accent-blue, #2a5367); font-weight: 600; display: none;"></div>
                 </div>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
                   <div style="display: flex; flex-direction: column; gap: 2px;">
@@ -402,7 +402,7 @@ export class CustomDeviceModal {
         </div>
 
         <!-- Footer Actions -->
-        <div style="height: 58px; border-top: 1px solid var(--border-color, #e5cca0); background: var(--bg-tertiary, #f2dac8); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; flex-shrink: 0;">
+        <div style="height: 58px; border-top: 1px solid var(--border-color, #9ab7c1); background: var(--bg-tertiary, #c4d7df); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; flex-shrink: 0;">
           <button id="btn-custom-dev-cancel" class="btn btn-secondary btn-sm" style="font-size: 12px; padding: 6px 14px;">
             Batal
           </button>
@@ -412,7 +412,7 @@ export class CustomDeviceModal {
               <i data-lucide="bookmark" style="width: 14px; height: 14px;"></i>
               <span>Simpan ke Library Saja</span>
             </button>
-            <button id="btn-custom-dev-place-now" class="btn btn-primary btn-sm" style="font-size: 12px; padding: 6px 16px; background-color: var(--accent-blue, #2a7c13); color: #fff8cf; font-weight: 600;">
+            <button id="btn-custom-dev-place-now" class="btn btn-primary btn-sm" style="font-size: 12px; padding: 6px 16px; background-color: var(--accent-blue, #2a5367); color: #e3edf0; font-weight: 600;">
               <i data-lucide="check" style="width: 14px; height: 14px;"></i>
               <span>Pasang ke Peta Sekarang</span>
             </button>
@@ -439,13 +439,13 @@ export class CustomDeviceModal {
     availableKeys.forEach((key) => {
       const def = NETWORK_ICON_DEFS[key];
       const isSelected = key === this.selectedIcon;
-      const activeBorder = isSelected ? 'border: 2px solid var(--accent-blue, #2a7c13); background: rgba(42,124,19,0.12);' : 'border: 1px solid var(--border-light, #edd8b5); background: var(--bg-primary, #fff8cf);';
+      const activeBorder = isSelected ? 'border: 2px solid var(--accent-blue, #2a5367); background: rgba(42, 83, 103,0.12);' : 'border: 1px solid var(--border-light, #b8ced6); background: var(--bg-primary, #e3edf0);';
 
       html += `
         <div class="custom-icon-choice" data-icon-key="${key}" title="${def.name}"
              style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 6px 4px; border-radius: 6px; cursor: pointer; transition: all 0.12s ease; ${activeBorder}">
           <div style="width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;">
-            ${getDeviceIconSvg(key, { color: '#2a7c13', size: 22 })}
+            ${getDeviceIconSvg(key, { color: '#2a5367', size: 22 })}
           </div>
           <span style="font-size: 9px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;">
             ${def.name.split(' ')[0]}
@@ -477,11 +477,11 @@ export class CustomDeviceModal {
       const key = el.getAttribute('data-icon-key');
       const isSelected = key === this.selectedIcon && !this.uploadedImageDataUrl;
       if (isSelected) {
-        el.style.border = '2px solid var(--accent-blue, #2a7c13)';
-        el.style.background = 'rgba(42,124,19,0.12)';
+        el.style.border = '2px solid var(--accent-blue, #2a5367)';
+        el.style.background = 'rgba(42, 83, 103,0.12)';
       } else {
-        el.style.border = '1px solid var(--border-light, #edd8b5)';
-        el.style.background = 'var(--bg-primary, #fff8cf)';
+        el.style.border = '1px solid var(--border-light, #b8ced6)';
+        el.style.background = 'var(--bg-primary, #e3edf0)';
       }
     });
   }
@@ -557,18 +557,18 @@ export class CustomDeviceModal {
     dropzone?.addEventListener('dragover', (e) => {
       e.preventDefault();
       dropzone.style.borderColor = 'var(--accent-cyan)';
-      dropzone.style.background = 'rgba(118, 196, 87, 0.15)';
+      dropzone.style.background = 'rgba(83, 123, 142, 0.15)';
     });
 
     dropzone?.addEventListener('dragleave', () => {
       dropzone.style.borderColor = 'var(--accent-blue)';
-      dropzone.style.background = 'rgba(42, 124, 19, 0.05)';
+      dropzone.style.background = 'rgba(42, 83, 103, 0.05)';
     });
 
     dropzone?.addEventListener('drop', (e) => {
       e.preventDefault();
       dropzone.style.borderColor = 'var(--accent-blue)';
-      dropzone.style.background = 'rgba(42, 124, 19, 0.05)';
+      dropzone.style.background = 'rgba(42, 83, 103, 0.05)';
       const file = e.dataTransfer.files?.[0];
       if (file && file.type.startsWith('image/')) {
         this.processImageFile(file);
@@ -748,7 +748,7 @@ export class CustomDeviceModal {
         box.style.boxShadow = 'none';
       } else {
         box.style.borderRadius = '12px';
-        box.style.background = '#18350d';
+        box.style.background = '#0b1620';
         box.style.boxShadow = '0 6px 14px rgba(0,0,0,0.3)';
       }
     }
@@ -800,7 +800,7 @@ export class CustomDeviceModal {
     if (wirelessEnabled) {
       const radius = parseFloat(this.modalEl.querySelector('#cd-wireless-radius')?.value || '30');
       const band = this.modalEl.querySelector('#cd-wireless-band')?.value || 'dual-band';
-      const color = this.modalEl.querySelector('#cd-wireless-color')?.value || '#76c457';
+      const color = this.modalEl.querySelector('#cd-wireless-color')?.value || '#537b8e';
       wirelessCoverage = {
         enabled: true,
         radiusMeters: radius,

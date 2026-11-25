@@ -62,8 +62,8 @@ export class CableDrawingTool {
       left: 50%;
       transform: translateX(-50%);
       z-index: 62;
-      background: var(--bg-secondary, #fbe6c2);
-      border: 1px solid var(--border-color, #e5cca0);
+      background: var(--bg-secondary, #d4e3e8);
+      border: 1px solid var(--border-color, #9ab7c1);
       border-radius: 999px;
       padding: 6px 14px;
       box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
@@ -75,7 +75,7 @@ export class CableDrawingTool {
     `;
 
     this.penHudEl.innerHTML = `
-      <span style="font-weight: 700; color: var(--accent-blue, #2a7c13); display: inline-flex; align-items: center; gap: 4px;">
+      <span style="font-weight: 700; color: var(--accent-blue, #2a5367); display: inline-flex; align-items: center; gap: 4px;">
         Pen Tool Kabel:
       </span>
       <select id="pen-hud-path-style" style="background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 6px; padding: 3px 7px; font-size: 11px; color: var(--text-primary); font-weight: 600;">
@@ -248,7 +248,7 @@ export class CableDrawingTool {
     this.previewLine = new Konva.Line({
       name: 'cable-preview-line',
       points: [],
-      stroke: '#2a7c13',
+      stroke: '#2a5367',
       strokeWidth: 3,
       dash: [6, 4],
       lineCap: 'round',

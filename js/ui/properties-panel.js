@@ -221,6 +221,13 @@ export class PropertiesPanel {
     const radiusMeters = cov?.radiusMeters || 25;
     const radiusPixels = metersToPixels(radiusMeters);
     const areaM2 = calculateCoverageArea(radiusMeters);
+    const hatchStyle = ['diagonal', 'reverse', 'cross'].includes(cov?.hatchStyle) ? cov.hatchStyle : 'diagonal';
+    const hatchSpacing = clamp(Number(cov?.hatchSpacing ?? 14) || 14, 6, 36);
+    const hatchThickness = clamp(Number(cov?.hatchThickness ?? 1.2) || 1.2, 0.5, 4);
+    const hatchOpacity = clamp(Number(cov?.hatchOpacity ?? 0.35) || 0.35, 0.05, 0.95);
+    const hatchAreaPercent = clamp(Number(cov?.hatchAreaPercent ?? 100) || 100, 25, 100);
+    const fillOpacity = clamp(Number(cov?.opacity ?? 0.18) || 0.18, 0.05, 0.6);
+    const hatchAreaMeters = Math.round((radiusMeters * hatchAreaPercent) / 100);
     const spatial = device.spatial3d || getDefaultSpatial3d(device.type);
     const inv = device.inventory || {};
     const specs = device.specs || {};
@@ -238,7 +245,7 @@ export class PropertiesPanel {
 
     const multiBannerHtml = selectedCount > 1
       ? `
-        <div id="prop-multiselect-banner" style="background: rgba(42, 124, 19, 0.14); border: 1px solid rgba(42, 124, 19, 0.45); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px;">
+        <div id="prop-multiselect-banner" style="background: rgba(42, 83, 103, 0.14); border: 1px solid rgba(42, 83, 103, 0.45); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px;">
           <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
             <span style="font-size: 12px; font-weight: 700; color: var(--accent-green); display: inline-flex; align-items: center; gap: 5px;">
               <i data-lucide="layers" style="width: 14px; height: 14px;"></i>
@@ -328,12 +335,12 @@ export class PropertiesPanel {
           <div class="info-card" style="display: flex; flex-direction: column; gap: 12px;">
             <!-- Live Marker Preview & Style Selector -->
             <div style="display: flex; align-items: center; gap: 12px; background: var(--bg-tertiary); padding: 10px; border-radius: 6px; border: 1px solid var(--border-color);">
-              <div id="prop-marker-preview" style="width: 52px; height: 52px; display: flex; align-items: center; justify-content: center; background: #18350d; border: 2px solid ${cat.color}; border-radius: ${device.markerStyle === 'circle' ? '50%' : device.markerStyle === 'icon-only' ? '4px' : '10px'}; position: relative; flex-shrink: 0; box-shadow: 0 4px 10px rgba(0,0,0,0.35);">
+              <div id="prop-marker-preview" style="width: 52px; height: 52px; display: flex; align-items: center; justify-content: center; background: #0b1620; border: 2px solid ${cat.color}; border-radius: ${device.markerStyle === 'circle' ? '50%' : device.markerStyle === 'icon-only' ? '4px' : '10px'}; position: relative; flex-shrink: 0; box-shadow: 0 4px 10px rgba(0,0,0,0.35);">
                 ${device.customImage
         ? `<img src="${device.customImage}" style="width: 32px; height: 32px; object-fit: contain; border-radius: 4px;" alt="Custom">`
         : `<div style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">${getDeviceIconSvg(device.customIcon || getDefaultIconForType(device.type), { color: cat.color, size: 28 })}</div>`
       }
-                <span style="position: absolute; top: -3px; right: -3px; width: 10px; height: 10px; border-radius: 50%; background-color: ${statusDef.color}; border: 2px solid #18350d;"></span>
+                <span style="position: absolute; top: -3px; right: -3px; width: 10px; height: 10px; border-radius: 50%; background-color: ${statusDef.color}; border: 2px solid #0b1620;"></span>
               </div>
 
               <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
@@ -360,7 +367,7 @@ export class PropertiesPanel {
         return `
                     <button type="button" class="btn-icon-choice ${isCurrent ? 'active' : ''}" 
                             data-icon-key="${key}" title="${def.name}"
-                            style="display: flex; align-items: center; justify-content: center; width: 100%; aspect-ratio: 1; border-radius: 5px; border: 1px solid ${isCurrent ? 'var(--accent-sky)' : 'transparent'}; background: ${isCurrent ? 'rgba(118, 196, 87, 0.25)' : 'var(--bg-primary)'}; cursor: pointer; padding: 4px; transition: all 120ms ease;">
+                            style="display: flex; align-items: center; justify-content: center; width: 100%; aspect-ratio: 1; border-radius: 5px; border: 1px solid ${isCurrent ? 'var(--accent-sky)' : 'transparent'}; background: ${isCurrent ? 'rgba(83, 123, 142, 0.25)' : 'var(--bg-primary)'}; cursor: pointer; padding: 4px; transition: all 120ms ease;">
                       <div style="width: 22px; height: 22px; pointer-events: none; display: flex; align-items: center; justify-content: center;">
                         ${getDeviceIconSvg(key, { color: isCurrent ? 'var(--accent-moss)' : 'var(--text-primary)', size: 20 })}
                       </div>
@@ -420,7 +427,7 @@ export class PropertiesPanel {
             <div style="background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
               <div style="display: flex; flex-direction: column;">
                 <span style="font-size: 10px; color: var(--text-muted); text-transform: uppercase;">Jarak / Radius</span>
-                <span id="metric-radius-val" style="font-size: 16px; font-weight: 700; color: ${cov?.color || '#76c457'}; font-family: var(--font-mono);">
+                <span id="metric-radius-val" style="font-size: 16px; font-weight: 700; color: ${cov?.color || '#537b8e'}; font-family: var(--font-mono);">
                   ${radiusMeters} m
                 </span>
                 <span id="metric-pixels-val" style="font-size: 10px; color: var(--text-muted);">
@@ -495,9 +502,9 @@ export class PropertiesPanel {
               <div style="display: flex; flex-direction: column; gap: 3px;">
                 <label style="font-size: 11px; color: var(--text-muted);">Warna Sinyal</label>
                 <div style="display: flex; gap: 4px; align-items: center; margin-top: 2px;">
-                  ${['#76c457', '#06b6d4', '#f59e0b', '#2a7c13', '#a855f7'].map(c => `
-                    <button type="button" class="btn-cov-color ${(cov?.color || '#76c457') === c ? 'active' : ''}" data-color="${c}"
-                            style="width: 20px; height: 20px; border-radius: 50%; background: ${c}; border: 2px solid ${(cov?.color || '#76c457') === c ? 'var(--text-primary)' : 'transparent'}; cursor: pointer; padding: 0;"></button>
+                  ${['#537b8e', '#06b6d4', '#f59e0b', '#2a5367', '#a855f7'].map(c => `
+                    <button type="button" class="btn-cov-color ${(cov?.color || '#537b8e') === c ? 'active' : ''}" data-color="${c}"
+                            style="width: 20px; height: 20px; border-radius: 50%; background: ${c}; border: 2px solid ${(cov?.color || '#537b8e') === c ? 'var(--text-primary)' : 'transparent'}; cursor: pointer; padding: 0;"></button>
                   `).join('')}
                 </div>
               </div>
@@ -513,6 +520,67 @@ export class PropertiesPanel {
                 <input type="checkbox" id="prop-coverage-label" ${cov?.showLabel !== false ? 'checked' : ''} style="accent-color: var(--accent-blue);">
                 <span>Label di Denah</span>
               </label>
+            </div>
+
+            <!-- Sub-Panel: Pengaturan Area Arsiran Diagonal -->
+            <div id="prop-coverage-hatch-settings" style="display: ${cov?.hatch !== false ? 'flex' : 'none'}; flex-direction: column; gap: 8px; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 6px; padding: 9px 10px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px;">
+                <span style="font-size: 10.5px; font-weight: 700; color: var(--text-primary); display: inline-flex; align-items: center; gap: 5px;">
+                  ${uiIcon('sliders', 12)} <span>Pengaturan Area Arsiran Diagonal</span>
+                </span>
+                <button type="button" id="btn-coverage-hatch-reset" class="btn btn-secondary btn-sm" style="font-size: 9.5px; padding: 1px 6px; height: auto;" title="Kembalikan pengaturan arsiran ke default">
+                  Reset
+                </button>
+              </div>
+
+              <div style="display: flex; flex-direction: column; gap: 3px;">
+                <label for="prop-coverage-hatch-style" style="font-size: 10.5px; color: var(--text-muted);">Pola Garis Arsiran</label>
+                <select id="prop-coverage-hatch-style" style="background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px; font-size: 11px; padding: 4px 6px;">
+                  <option value="diagonal" ${hatchStyle === 'diagonal' ? 'selected' : ''}>Diagonal Miring (/)</option>
+                  <option value="reverse" ${hatchStyle === 'reverse' ? 'selected' : ''}>Diagonal Balik (\\)</option>
+                  <option value="cross" ${hatchStyle === 'cross' ? 'selected' : ''}>Silang / Grid (X)</option>
+                </select>
+              </div>
+
+              <div style="display: flex; flex-direction: column; gap: 2px;">
+                <div style="display: flex; justify-content: space-between; font-size: 10.5px;">
+                  <span style="color: var(--text-muted);">Cakupan Area Arsiran</span>
+                  <strong id="val-hatch-area" style="color: var(--text-primary); font-family: var(--font-mono);">${hatchAreaPercent}% (${hatchAreaMeters}m)</strong>
+                </div>
+                <input type="range" id="prop-coverage-hatch-area" min="25" max="100" step="5" value="${hatchAreaPercent}" style="width: 100%; accent-color: var(--accent-blue); cursor: pointer;">
+              </div>
+
+              <div style="display: flex; flex-direction: column; gap: 2px;">
+                <div style="display: flex; justify-content: space-between; font-size: 10.5px;">
+                  <span style="color: var(--text-muted);">Jarak / Kerapatan Garis</span>
+                  <strong id="val-hatch-spacing" style="color: var(--text-primary); font-family: var(--font-mono);">${hatchSpacing} px</strong>
+                </div>
+                <input type="range" id="prop-coverage-hatch-spacing" min="6" max="36" step="1" value="${hatchSpacing}" style="width: 100%; accent-color: var(--accent-blue); cursor: pointer;">
+              </div>
+
+              <div style="display: flex; flex-direction: column; gap: 2px;">
+                <div style="display: flex; justify-content: space-between; font-size: 10.5px;">
+                  <span style="color: var(--text-muted);">Ketebalan Garis Arsiran</span>
+                  <strong id="val-hatch-thickness" style="color: var(--text-primary); font-family: var(--font-mono);">${hatchThickness} px</strong>
+                </div>
+                <input type="range" id="prop-coverage-hatch-thickness" min="0.5" max="4" step="0.5" value="${hatchThickness}" style="width: 100%; accent-color: var(--accent-blue); cursor: pointer;">
+              </div>
+
+              <div style="display: flex; flex-direction: column; gap: 2px;">
+                <div style="display: flex; justify-content: space-between; font-size: 10.5px;">
+                  <span style="color: var(--text-muted);">Ketajaman Garis Arsiran</span>
+                  <strong id="val-hatch-opacity" style="color: var(--text-primary); font-family: var(--font-mono);">${Math.round(hatchOpacity * 100)}%</strong>
+                </div>
+                <input type="range" id="prop-coverage-hatch-opacity" min="10" max="95" step="5" value="${Math.round(hatchOpacity * 100)}" style="width: 100%; accent-color: var(--accent-blue); cursor: pointer;">
+              </div>
+
+              <div style="display: flex; flex-direction: column; gap: 2px;">
+                <div style="display: flex; justify-content: space-between; font-size: 10.5px;">
+                  <span style="color: var(--text-muted);">Opasitas Warna Dasar Area</span>
+                  <strong id="val-fill-opacity" style="color: var(--text-primary); font-family: var(--font-mono);">${Math.round(fillOpacity * 100)}%</strong>
+                </div>
+                <input type="range" id="prop-coverage-fill-opacity" min="5" max="60" step="5" value="${Math.round(fillOpacity * 100)}" style="width: 100%; accent-color: var(--accent-blue); cursor: pointer;">
+              </div>
             </div>
 
           </div>
@@ -857,6 +925,50 @@ export class PropertiesPanel {
       eventBus.emit('viewport:center-on', this.currentDevice.position);
     });
 
+    // Live sync device name (updates 2D Map, Topology Mode, and Modal immediately as user edits)
+    const nameInput = document.getElementById('prop-device-name');
+    if (nameInput) {
+      nameInput.addEventListener('input', (e) => {
+        const nextName = String(e.target.value || '').trim();
+        if (!nextName) return;
+        this.currentDevice.name = nextName;
+        this.deviceManager.updateDevice(devId, { name: nextName });
+      });
+      nameInput.addEventListener('change', (e) => {
+        const nextName = String(e.target.value || '').trim() || 'Unnamed Device';
+        e.target.value = nextName;
+        this.currentDevice.name = nextName;
+        this.deviceManager.updateDevice(devId, { name: nextName });
+      });
+      nameInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          e.target.blur();
+        }
+      });
+    }
+
+    // Live sync inline identity / network / spec inputs on change (or Enter) without losing focus
+    const inlineFieldIds = [
+      'prop-brand', 'prop-model', 'prop-purchase-year', 'prop-funding-source',
+      'prop-location', 'prop-spec-summary', 'prop-ip', 'prop-subnet',
+      'prop-vlan', 'prop-gateway', 'prop-ssid', 'prop-mac',
+      'prop-hostname', 'prop-firmware', 'prop-installed', 'prop-notes'
+    ];
+    inlineFieldIds.forEach((fid) => {
+      const el = document.getElementById(fid);
+      if (!el) return;
+      el.addEventListener('change', () => this.saveForm(devId, { rerender: false }));
+      if (el.tagName === 'INPUT') {
+        el.addEventListener('keydown', (ev) => {
+          if (ev.key === 'Enter') {
+            ev.preventDefault();
+            el.blur();
+          }
+        });
+      }
+    });
+
     // Marker shape style change
     document.getElementById('prop-marker-style')?.addEventListener('change', (e) => {
       const style = e.target.value;
@@ -920,18 +1032,33 @@ export class PropertiesPanel {
     // Wireless Coverage Handlers
     const covEnable = document.getElementById('prop-coverage-enable');
     const covControls = document.getElementById('prop-coverage-controls');
+    const hatchSettingsEl = document.getElementById('prop-coverage-hatch-settings');
+    const ensureCoverage = () => {
+      if (!this.currentDevice.wirelessCoverage) {
+        this.currentDevice.wirelessCoverage = {
+          enabled: true,
+          radiusMeters: 25,
+          color: '#537b8e',
+          opacity: 0.18,
+          hatch: true,
+          hatchStyle: 'diagonal',
+          hatchSpacing: 14,
+          hatchThickness: 1.2,
+          hatchOpacity: 0.35,
+          hatchAngle: 45,
+          hatchAreaPercent: 100,
+          band: 'dual-band',
+          showLabel: true
+        };
+      }
+      return this.currentDevice.wirelessCoverage;
+    };
+
     covEnable?.addEventListener('change', (e) => {
       const isEnabled = e.target.checked;
       if (covControls) covControls.style.display = isEnabled ? 'flex' : 'none';
 
-      const currentCov = this.currentDevice.wirelessCoverage || {
-        radiusMeters: 25,
-        color: '#76c457',
-        opacity: 0.18,
-        hatch: true,
-        band: 'dual-band',
-        showLabel: true
-      };
+      const currentCov = ensureCoverage();
       this.currentDevice.wirelessCoverage = {
         ...currentCov,
         enabled: isEnabled
@@ -949,11 +1076,16 @@ export class PropertiesPanel {
       const metricPixels = document.getElementById('metric-pixels-val');
       const metricArea = document.getElementById('metric-area-val');
       const metricDiameter = document.getElementById('metric-diameter-val');
+      const hatchAreaVal = document.getElementById('val-hatch-area');
 
       if (metricRadius) metricRadius.textContent = `${meters} m`;
       if (metricPixels) metricPixels.textContent = `≈ ${Math.round(radiusPx)} px di denah`;
       if (metricArea) metricArea.textContent = formatCoverageArea(area);
       if (metricDiameter) metricDiameter.textContent = `Diameter: ${meters * 2} m`;
+      if (hatchAreaVal) {
+        const pct = Number(this.currentDevice?.wirelessCoverage?.hatchAreaPercent ?? 100);
+        hatchAreaVal.textContent = `${pct}% (${Math.round((meters * pct) / 100)}m)`;
+      }
     };
 
     const handleRadiusChange = (meters) => {
@@ -962,11 +1094,9 @@ export class PropertiesPanel {
       if (covMetersInput) covMetersInput.value = validMeters;
       updateMetricsDisplay(validMeters);
 
-      if (!this.currentDevice.wirelessCoverage) {
-        this.currentDevice.wirelessCoverage = { enabled: true, color: '#76c457', opacity: 0.18, hatch: true, band: 'dual-band', showLabel: true };
-      }
-      this.currentDevice.wirelessCoverage.radiusMeters = validMeters;
-      this.deviceManager.updateDevice(devId, { wirelessCoverage: this.currentDevice.wirelessCoverage });
+      const covObj = ensureCoverage();
+      covObj.radiusMeters = validMeters;
+      this.deviceManager.updateDevice(devId, { wirelessCoverage: covObj });
     };
 
     covSlider?.addEventListener('input', (e) => handleRadiusChange(e.target.value));
@@ -977,13 +1107,11 @@ export class PropertiesPanel {
       btn.addEventListener('click', () => {
         const meters = parseInt(btn.dataset.meters, 10);
         const band = btn.dataset.band;
-        if (!this.currentDevice.wirelessCoverage) {
-          this.currentDevice.wirelessCoverage = { enabled: true, color: '#76c457', opacity: 0.18, hatch: true, band: 'dual-band', showLabel: true };
-        }
-        this.currentDevice.wirelessCoverage.enabled = true;
-        this.currentDevice.wirelessCoverage.radiusMeters = meters;
-        if (band) this.currentDevice.wirelessCoverage.band = band;
-        const updated = this.deviceManager.updateDevice(devId, { wirelessCoverage: this.currentDevice.wirelessCoverage });
+        const covObj = ensureCoverage();
+        covObj.enabled = true;
+        covObj.radiusMeters = meters;
+        if (band) covObj.band = band;
+        const updated = this.deviceManager.updateDevice(devId, { wirelessCoverage: covObj });
         if (updated) this.renderDeviceForm(updated);
       });
     });
@@ -1006,11 +1134,78 @@ export class PropertiesPanel {
       });
     });
 
-    // Hatch toggle
+    // Hatch toggle & Diagonal Hatching Area Settings
     document.getElementById('prop-coverage-hatch')?.addEventListener('change', (e) => {
-      if (!this.currentDevice.wirelessCoverage) return;
-      this.currentDevice.wirelessCoverage.hatch = e.target.checked;
-      this.deviceManager.updateDevice(devId, { wirelessCoverage: this.currentDevice.wirelessCoverage });
+      const covObj = ensureCoverage();
+      covObj.hatch = e.target.checked;
+      if (hatchSettingsEl) hatchSettingsEl.style.display = e.target.checked ? 'flex' : 'none';
+      this.deviceManager.updateDevice(devId, { wirelessCoverage: covObj });
+    });
+
+    document.getElementById('prop-coverage-hatch-style')?.addEventListener('change', (e) => {
+      const covObj = ensureCoverage();
+      covObj.hatchStyle = ['diagonal', 'reverse', 'cross'].includes(e.target.value) ? e.target.value : 'diagonal';
+      this.deviceManager.updateDevice(devId, { wirelessCoverage: covObj });
+    });
+
+    document.getElementById('prop-coverage-hatch-area')?.addEventListener('input', (e) => {
+      const covObj = ensureCoverage();
+      const pct = clamp(parseInt(e.target.value, 10) || 100, 25, 100);
+      covObj.hatchAreaPercent = pct;
+      const meters = Number(covObj.radiusMeters || 25);
+      const labelEl = document.getElementById('val-hatch-area');
+      if (labelEl) labelEl.textContent = `${pct}% (${Math.round((meters * pct) / 100)}m)`;
+      this.deviceManager.updateDevice(devId, { wirelessCoverage: covObj });
+    });
+
+    document.getElementById('prop-coverage-hatch-spacing')?.addEventListener('input', (e) => {
+      const covObj = ensureCoverage();
+      const spacing = clamp(parseInt(e.target.value, 10) || 14, 6, 36);
+      covObj.hatchSpacing = spacing;
+      const labelEl = document.getElementById('val-hatch-spacing');
+      if (labelEl) labelEl.textContent = `${spacing} px`;
+      this.deviceManager.updateDevice(devId, { wirelessCoverage: covObj });
+    });
+
+    document.getElementById('prop-coverage-hatch-thickness')?.addEventListener('input', (e) => {
+      const covObj = ensureCoverage();
+      const thickness = clamp(parseFloat(e.target.value) || 1.2, 0.5, 4);
+      covObj.hatchThickness = thickness;
+      const labelEl = document.getElementById('val-hatch-thickness');
+      if (labelEl) labelEl.textContent = `${thickness} px`;
+      this.deviceManager.updateDevice(devId, { wirelessCoverage: covObj });
+    });
+
+    document.getElementById('prop-coverage-hatch-opacity')?.addEventListener('input', (e) => {
+      const covObj = ensureCoverage();
+      const pct = clamp(parseInt(e.target.value, 10) || 35, 10, 95);
+      covObj.hatchOpacity = Number((pct / 100).toFixed(2));
+      const labelEl = document.getElementById('val-hatch-opacity');
+      if (labelEl) labelEl.textContent = `${pct}%`;
+      this.deviceManager.updateDevice(devId, { wirelessCoverage: covObj });
+    });
+
+    document.getElementById('prop-coverage-fill-opacity')?.addEventListener('input', (e) => {
+      const covObj = ensureCoverage();
+      const pct = clamp(parseInt(e.target.value, 10) || 18, 5, 60);
+      covObj.opacity = Number((pct / 100).toFixed(2));
+      const labelEl = document.getElementById('val-fill-opacity');
+      if (labelEl) labelEl.textContent = `${pct}%`;
+      this.deviceManager.updateDevice(devId, { wirelessCoverage: covObj });
+    });
+
+    document.getElementById('btn-coverage-hatch-reset')?.addEventListener('click', () => {
+      const covObj = ensureCoverage();
+      covObj.hatch = true;
+      covObj.hatchStyle = 'diagonal';
+      covObj.hatchSpacing = 14;
+      covObj.hatchThickness = 1.2;
+      covObj.hatchOpacity = 0.35;
+      covObj.hatchAngle = 45;
+      covObj.hatchAreaPercent = 100;
+      covObj.opacity = 0.18;
+      const updated = this.deviceManager.updateDevice(devId, { wirelessCoverage: covObj });
+      if (updated) this.renderDeviceForm(updated);
     });
 
     // Label toggle
@@ -1221,7 +1416,7 @@ export class PropertiesPanel {
     });
   }
 
-  saveForm(devId) {
+  saveForm(devId, { rerender = true } = {}) {
     const nameInput = document.getElementById('prop-device-name');
     const brandInput = document.getElementById('prop-brand');
     const modelInput = document.getElementById('prop-model');
@@ -1303,7 +1498,10 @@ export class PropertiesPanel {
 
     const updated = this.deviceManager.updateDevice(devId, updates);
     if (updated) {
-      this.renderDeviceForm(updated);
+      this.currentDevice = updated;
+      if (rerender) {
+        this.renderDeviceForm(updated);
+      }
     }
   }
 

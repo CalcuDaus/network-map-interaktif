@@ -5,6 +5,7 @@
 
 import { eventBus } from '../core/event-bus.js';
 import { stateManager } from '../core/state-manager.js';
+import { themeManager, THEME_PALETTES } from '../core/theme-manager.js';
 import { formatZoomPercentage } from '../utils/helpers.js';
 
 export class Toolbar {
@@ -250,6 +251,100 @@ export class Toolbar {
       this.closeNavbarDropdowns();
       eventBus.emit('modal:open-map-scale');
     });
+
+    this.setupThemeCustomizer();
+  }
+
+  /** Renders preset palette cards & custom color pickers inside General Settings. */
+  setupThemeCustomizer() {
+    this.themePaletteGridEl = document.getElementById('gs-palette-grid');
+    this.themePaletteBadgeEl = document.getElementById('gs-active-palette-badge');
+    this.btnResetThemeColors = document.getElementById('btn-theme-reset-colors');
+    this.themeColorInputs = {
+      accentPrimary: document.getElementById('input-theme-accent1'),
+      accentSecondary: document.getElementById('input-theme-accent2'),
+      bgPrimary: document.getElementById('input-theme-bg1'),
+      bgSecondary: document.getElementById('input-theme-bg2'),
+      textPrimary: document.getElementById('input-theme-text')
+    };
+
+    if (this.themePaletteGridEl) {
+      this.themePaletteGridEl.innerHTML = THEME_PALETTES.map((pal) => {
+        const sw = [pal.swatches[0], pal.swatches[2], pal.swatches[3], pal.swatches[5]];
+        return `
+          <button type="button" class="gs-palette-card" data-theme-palette="${pal.id}" title="${pal.name} — ${pal.subtitle}" role="radio" aria-checked="false">
+            <span class="gs-palette-swatches">
+              ${sw.map((hex) => `<span style="background:${hex};"></span>`).join('')}
+            </span>
+            <span class="gs-palette-name">${pal.name}</span>
+          </button>
+        `;
+      }).join('');
+
+      this.themePaletteGridEl.querySelectorAll('[data-theme-palette]')?.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const paletteId = btn.getAttribute('data-theme-palette');
+          if (paletteId) {
+            themeManager.setPalette(paletteId);
+          }
+        });
+      });
+    }
+
+    Object.entries(this.themeColorInputs).forEach(([key, inputEl]) => {
+      if (!inputEl) return;
+      inputEl.addEventListener('input', (e) => {
+        themeManager.setCustomColor(key, e.target.value);
+      });
+    });
+
+    this.btnResetThemeColors?.addEventListener('click', () => {
+      themeManager.resetCustomColors();
+    });
+
+    eventBus.on('theme:changed', () => {
+      this.syncThemeToggleButton();
+      this.syncThemeStudioUI();
+    });
+
+    this.syncThemeToggleButton();
+    this.syncThemeStudioUI();
+  }
+
+  syncThemeToggleButton() {
+    if (!this.btnToggleTheme) return;
+    const isDark = themeManager.getMode() === 'dark';
+    const palName = themeManager.getActivePalette()?.name || 'Ocean Slate';
+    this.btnToggleTheme.innerHTML = `<i data-lucide="${isDark ? 'sun' : 'moon'}" id="theme-toggle-icon" style="width: 13px; height: 13px;"></i><span>${isDark ? 'Mode Terang' : 'Mode Gelap'}</span>`;
+    this.btnToggleTheme.title = isDark ? `Beralih ke Mode Terang (${palName})` : `Beralih ke Mode Gelap (${palName})`;
+    if (window.lucide && typeof window.lucide.createIcons === 'function') {
+      window.lucide.createIcons();
+    }
+  }
+
+  syncThemeStudioUI() {
+    const activeId = themeManager.getPaletteId();
+    const activePal = themeManager.getActivePalette();
+    const hasCustom = themeManager.hasCustomOverrides();
+    const tokens = themeManager.getCurrentTokens();
+
+    this.themePaletteGridEl?.querySelectorAll('[data-theme-palette]')?.forEach((btn) => {
+      const isMatch = btn.getAttribute('data-theme-palette') === activeId;
+      btn.classList?.toggle('active', isMatch);
+      btn.setAttribute?.('aria-checked', isMatch ? 'true' : 'false');
+    });
+
+    if (this.themePaletteBadgeEl && activePal) {
+      this.themePaletteBadgeEl.textContent = hasCustom ? `${activePal.name} • Kustom` : activePal.name;
+    }
+
+    if (this.themeColorInputs) {
+      Object.entries(this.themeColorInputs).forEach(([key, inputEl]) => {
+        if (inputEl && tokens[key] && document.activeElement !== inputEl) {
+          inputEl.value = tokens[key];
+        }
+      });
+    }
   }
 
   /** Shows or hides the bottom footer status bar cleanly & notifies canvases to resize. */
@@ -309,28 +404,18 @@ export class Toolbar {
   }
 
   initTheme() {
-    const savedTheme = localStorage.getItem('netmap-theme') || 'light';
-    this.applyTheme(savedTheme);
+    themeManager.init();
+    this.syncThemeToggleButton();
   }
 
   applyTheme(theme) {
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('netmap-theme', theme);
-
-    if (this.btnToggleTheme) {
-      const isDark = theme === 'dark';
-      this.btnToggleTheme.innerHTML = `<i data-lucide="${isDark ? 'sun' : 'moon'}" id="theme-toggle-icon" style="width: 13px; height: 13px;"></i><span>${isDark ? 'Mode Terang' : 'Mode Gelap'}</span>`;
-      this.btnToggleTheme.title = isDark ? 'Beralih ke Tema Botanical Cream (Terang)' : 'Beralih ke Tema Forest Pine (Gelap)';
-      if (window.lucide && typeof window.lucide.createIcons === 'function') {
-        window.lucide.createIcons();
-      }
-    }
+    themeManager.setMode(theme);
+    this.syncThemeToggleButton();
   }
 
   toggleTheme() {
-    const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
-    const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
-    this.applyTheme(nextTheme);
+    themeManager.toggleMode();
+    this.syncThemeToggleButton();
   }
 
   toggleWorkspaceFullscreen() {

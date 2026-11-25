@@ -7,10 +7,10 @@
    Canvas & Stage
    -------------------------------------------------------------------------- */
 #map-viewport {
-  background-color: #f7eed7;
+  background-color: var(--bg-primary, #e3edf0);
   background-image:
-    radial-gradient(rgba(42, 124, 19, 0.12) 1px, transparent 0),
-    radial-gradient(rgba(42, 124, 19, 0.05) 1px, transparent 0);
+    radial-gradient(rgba(var(--theme-accent-rgb, 42, 83, 103), 0.14) 1px, transparent 0),
+    radial-gradient(rgba(var(--theme-accent-rgb, 42, 83, 103), 0.06) 1px, transparent 0);
   background-size: 24px 24px, 120px 120px;
   background-position: 0 0, 12px 12px;
   contain: layout style paint;
@@ -23,10 +23,10 @@
 }
 
 [data-theme="dark"] #map-viewport {
-  background-color: #0b1408;
+  background-color: var(--bg-primary, #0b1620);
   background-image:
-    radial-gradient(rgba(118, 196, 87, 0.15) 1px, transparent 0),
-    radial-gradient(rgba(118, 196, 87, 0.08) 1px, transparent 0);
+    radial-gradient(rgba(var(--theme-accent2-rgb, 154, 183, 193), 0.16) 1px, transparent 0),
+    radial-gradient(rgba(var(--theme-accent2-rgb, 154, 183, 193), 0.08) 1px, transparent 0);
   background-size: 24px 24px, 120px 120px;
   background-position: 0 0, 12px 12px;
 }
@@ -176,7 +176,7 @@
 .spinner {
   width: 44px;
   height: 44px;
-  border: 3px solid rgba(118, 196, 87, 0.2);
+  border: 3px solid rgba(83, 123, 142, 0.2);
   border-top-color: var(--palette-leaf);
   border-radius: var(--radius-full);
   animation: spin 0.9s linear infinite;
@@ -466,8 +466,8 @@
 .map-3d-marquee {
   position: absolute;
   pointer-events: none;
-  border: 1.75px dashed #2a7c13;
-  background-color: rgba(118, 196, 87, 0.16);
+  border: 1.75px dashed #2a5367;
+  background-color: rgba(83, 123, 142, 0.16);
   border-radius: 4px;
   z-index: 12;
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.25) inset;
@@ -741,17 +741,17 @@
 }
 
 .sim-port-card.is-connected {
-  border-color: rgba(42, 124, 19, 0.45);
+  border-color: rgba(42, 83, 103, 0.45);
 }
 
 [data-theme="dark"] .sim-port-card.is-connected {
-  border-color: rgba(118, 196, 87, 0.45);
+  border-color: rgba(83, 123, 142, 0.45);
 }
 
 .sim-port-card.is-cable-selected {
   border-color: var(--accent-blue);
   box-shadow: 0 0 0 1px var(--accent-blue) inset;
-  background-color: rgba(42, 124, 19, 0.12);
+  background-color: rgba(42, 83, 103, 0.12);
 }
 
 .sim-port-card.is-pending-source {
@@ -941,8 +941,8 @@
 .hud-3d-crosshair::after {
   content: '';
   position: absolute;
-  background-color: rgba(255, 248, 207, 0.92);
-  box-shadow: 0 0 3px rgba(14, 25, 11, 0.95);
+  background-color: rgba(227, 237, 240, 0.92);
+  box-shadow: 0 0 3px rgba(11, 22, 32, 0.95);
 }
 
 .hud-3d-crosshair::before {
@@ -1225,7 +1225,7 @@ body.is-mobile-touch.workspace-fullscreen .mobile-fs-dock {
   height: 112px;
   border-radius: 50%;
   background: rgba(15, 23, 42, 0.42);
-  border: 2px solid rgba(255, 248, 207, 0.55);
+  border: 2px solid rgba(227, 237, 240, 0.55);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35), inset 0 0 18px rgba(0, 0, 0, 0.25);
   display: flex;
   align-items: center;
@@ -1234,8 +1234,8 @@ body.is-mobile-touch.workspace-fullscreen .mobile-fs-dock {
 }
 
 .mob-joystick-base.is-sprinting {
-  border-color: var(--accent-leaf, #76c457);
-  box-shadow: 0 0 18px rgba(118, 196, 87, 0.55), inset 0 0 16px rgba(118, 196, 87, 0.25);
+  border-color: var(--accent-leaf, #537b8e);
+  box-shadow: 0 0 18px rgba(83, 123, 142, 0.55), inset 0 0 16px rgba(83, 123, 142, 0.25);
 }
 
 .mob-joystick-knob {
@@ -1243,7 +1243,7 @@ body.is-mobile-touch.workspace-fullscreen .mobile-fs-dock {
   height: 48px;
   border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, #ffffff, #cbd5e1);
-  border: 2px solid rgba(42, 124, 19, 0.9);
+  border: 2px solid rgba(42, 83, 103, 0.9);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
   transform: translate3d(0, 0, 0);
   pointer-events: none;
@@ -1255,8 +1255,8 @@ body.is-mobile-touch.workspace-fullscreen .mobile-fs-dock {
   top: -10px;
   padding: 1px 6px;
   border-radius: 999px;
-  background: var(--accent-blue, #2a7c13);
-  color: #fff8cf;
+  background: var(--accent-blue, #2a5367);
+  color: #e3edf0;
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.6px;
@@ -1295,9 +1295,9 @@ body.is-mobile-touch.workspace-fullscreen .mobile-fs-dock {
   height: 30px;
   padding: 0 10px;
   border-radius: 999px;
-  border: 1.5px solid rgba(255, 248, 207, 0.65);
+  border: 1.5px solid rgba(227, 237, 240, 0.65);
   background: rgba(15, 23, 42, 0.72);
-  color: #fff8cf;
+  color: #e3edf0;
   font-size: 11px;
   font-weight: 700;
   display: inline-flex;
@@ -1323,9 +1323,9 @@ body.is-mobile-touch.workspace-fullscreen .mobile-fs-dock {
   width: 52px;
   height: 52px;
   border-radius: 50%;
-  border: 2px solid rgba(255, 248, 207, 0.7);
+  border: 2px solid rgba(227, 237, 240, 0.7);
   background: rgba(15, 23, 42, 0.62);
-  color: #fff8cf;
+  color: #e3edf0;
   font-size: 10px;
   font-weight: 700;
   display: inline-flex;
@@ -1349,8 +1349,8 @@ body.is-mobile-touch.workspace-fullscreen .mobile-fs-dock {
 
 .mob-action-btn.is-carry:not(:disabled),
 .mob-action-btn.is-drop {
-  border-color: var(--accent-leaf, #76c457);
-  background: rgba(42, 124, 19, 0.84);
+  border-color: var(--accent-leaf, #537b8e);
+  background: rgba(42, 83, 103, 0.84);
 }
 
 .mob-action-btn.is-inspect.is-ready {
@@ -1366,9 +1366,9 @@ body.is-mobile-touch.workspace-fullscreen .mobile-fs-dock {
   width: 72px;
   height: 72px;
   border-radius: 50%;
-  border: 2.5px solid rgba(255, 248, 207, 0.85);
-  background: rgba(42, 124, 19, 0.78);
-  color: #fff8cf;
+  border: 2.5px solid rgba(227, 237, 240, 0.85);
+  background: rgba(42, 83, 103, 0.78);
+  color: #e3edf0;
   font-size: 9.5px;
   font-weight: 800;
   letter-spacing: 0.4px;
@@ -1760,8 +1760,8 @@ body.is-mobile-touch .hud-3d-avatar-bar .avatar-bar-nearest {
   padding: 0 9px;
   border-radius: 999px;
   background: rgba(15, 23, 42, 0.72);
-  color: #fff8cf;
-  border: 1px solid rgba(255, 248, 207, 0.55);
+  color: #e3edf0;
+  border: 1px solid rgba(227, 237, 240, 0.55);
   font-size: 10.5px;
   font-weight: 700;
   display: none;
@@ -1975,7 +1975,7 @@ body.is-mobile-touch .map-hud-controls {
 .mob-dock-btn.is-portrait-hint {
   border-color: var(--accent-blue);
   color: var(--accent-blue);
-  background-color: rgba(42, 124, 19, 0.12);
+  background-color: rgba(42, 83, 103, 0.12);
 }
 
 body.is-mobile-touch.is-mobile-portrait .mobile-fs-dock {
@@ -2708,8 +2708,8 @@ body.is-mobile-touch .hud-3d-houseflipper-tip {
    Phase 6 — Touch-Friendly LED Port Faceplate Strip & Quick WinBox/Ping Actions
    ========================================================================== */
 .sim-action-btn.is-sim-winbox {
-  background: rgba(42, 124, 19, 0.16);
-  border-color: rgba(42, 124, 19, 0.45);
+  background: rgba(42, 83, 103, 0.16);
+  border-color: rgba(42, 83, 103, 0.45);
   color: var(--accent-green);
   font-weight: 700;
 }
@@ -3175,7 +3175,7 @@ body.is-mobile-touch .hud-3d-sim-inspector .sim-action-btn {
 
 .js-tracker-progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #2a7c13, #22c55e);
+  background: linear-gradient(90deg, #2a5367, #22c55e);
   transition: width 0.25s ease;
 }
 
@@ -3348,7 +3348,7 @@ body[data-workspace="build"] #avatar-sim-device-deck {
 
 .roomdoc-collision-toggle input[type="checkbox"] {
   margin-top: 2px;
-  accent-color: var(--accent-green, #2a7c13);
+  accent-color: var(--accent-green, #2a5367);
 }
 
 .roomdoc-collision-hint {

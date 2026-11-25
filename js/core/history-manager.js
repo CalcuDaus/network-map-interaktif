@@ -116,6 +116,10 @@ export class HistoryManager {
       handleMutation('Geser Perangkat');
     });
 
+    eventBus.on('device:logical-moved', () => {
+      handleMutation('Geser Node Topologi');
+    });
+
     eventBus.on('connection:added', (cable) => {
       handleMutation(`Tambah Kabel "${cable?.name || ''}"`);
     });

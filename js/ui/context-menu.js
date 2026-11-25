@@ -153,11 +153,11 @@ export class ContextMenu {
       iconHtml = `<img src="${device.customImage}" alt="${escapeHtml(device.name)}" />`;
     } else {
       const iconKey = device.icon || device.customIcon || getDefaultIconForType(device.type);
-      iconHtml = getDeviceIconSvg(iconKey, { color: '#2a7c13', size: 20 });
+      iconHtml = getDeviceIconSvg(iconKey, { color: '#2a5367', size: 20 });
     }
 
     const ipText = device.network?.ip || device.ip || 'Tanpa Alamat IP';
-    const statusColor = statusDef.color || '#2a7c13';
+    const statusColor = statusDef.color || '#2a5367';
 
     const actionBarHtml = `
       <div class="context-menu-action-bar">

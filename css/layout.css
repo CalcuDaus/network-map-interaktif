@@ -58,7 +58,7 @@
   align-items: center;
   justify-content: center;
   color: var(--palette-cream);
-  box-shadow: 0 0 10px rgba(118, 196, 87, 0.45);
+  box-shadow: 0 0 10px rgba(83, 123, 142, 0.45);
 }
 
 .brand-text-group {
@@ -582,12 +582,123 @@ body.workspace-fullscreen .hud-3d-exit-fs-btn {
 .navbar-settings-panel {
   left: auto;
   right: 0;
-  min-width: 390px;
-  max-width: min(410px, calc(100vw - 24px));
-  max-height: min(82vh, 520px);
+  min-width: 416px;
+  max-width: min(438px, calc(100vw - 24px));
+  max-height: min(86vh, 650px);
   overflow-y: auto;
   padding: 10px 12px;
   gap: 10px;
+}
+
+/* Theme & Custom Color Studio inside General Settings */
+.gs-theme-studio {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 9px 10px;
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+}
+
+.gs-theme-studio-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.gs-theme-studio-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.gs-reset-theme-btn {
+  padding: 2px 7px !important;
+  height: auto !important;
+  font-size: 10px !important;
+  font-weight: 700;
+}
+
+.gs-palette-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.gs-palette-card {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 6px 7px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.gs-palette-card:hover {
+  border-color: var(--accent-blue);
+  background: var(--bg-tertiary);
+}
+
+.gs-palette-card.active {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 1.5px var(--accent-blue);
+  background: var(--bg-elevated);
+}
+
+.gs-palette-swatches {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  height: 12px;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid rgba(11, 22, 32, 0.16);
+}
+
+.gs-palette-name {
+  font-size: 10.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gs-custom-color-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 5px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border-color);
+}
+
+.gs-color-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.gs-color-chip input[type="color"] {
+  width: 100%;
+  height: 24px;
+  padding: 1px;
+  border-radius: 5px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-elevated);
+  cursor: pointer;
 }
 
 .gs-header-actions {
@@ -755,12 +866,12 @@ body.workspace-fullscreen .hud-3d-exit-fs-btn {
 
 .sidebar-tab-btn:hover {
   color: var(--text-primary);
-  background-color: rgba(42, 124, 19, 0.08);
+  background-color: rgba(42, 83, 103, 0.08);
 }
 
 .sidebar-tab-btn.active {
   background-color: var(--bg-primary);
-  color: var(--accent-blue, #2a7c13);
+  color: var(--accent-blue, #2a5367);
   border-color: var(--border-color);
   box-shadow: var(--shadow-sm);
 }
@@ -773,8 +884,8 @@ body.workspace-fullscreen .hud-3d-exit-fs-btn {
   height: 16px;
   padding: 0 5px;
   border-radius: 999px;
-  background-color: rgba(42, 124, 19, 0.16);
-  color: var(--accent-blue, #2a7c13);
+  background-color: rgba(42, 83, 103, 0.16);
+  color: var(--accent-blue, #2a5367);
   font-size: 10px;
   font-family: var(--font-mono);
   font-weight: 700;
@@ -854,8 +965,8 @@ body.workspace-fullscreen .hud-3d-exit-fs-btn {
 }
 
 .ps-filter-pill.active {
-  background-color: var(--accent-blue, #2a7c13);
-  border-color: var(--accent-blue, #2a7c13);
+  background-color: var(--accent-blue, #2a5367);
+  border-color: var(--accent-blue, #2a5367);
   color: var(--text-inverse, #ffffff);
 }
 
@@ -932,7 +1043,7 @@ body.workspace-fullscreen .hud-3d-exit-fs-btn {
 }
 
 .ps-layer-group.has-selected {
-  border-color: var(--accent-blue, #2a7c13);
+  border-color: var(--accent-blue, #2a5367);
 }
 
 .ps-layer-group-header {
@@ -1032,8 +1143,8 @@ body.workspace-fullscreen .hud-3d-exit-fs-btn {
 }
 
 .ps-subtype-chip.active {
-  background-color: var(--accent-blue, #2a7c13);
-  border-color: var(--accent-blue, #2a7c13);
+  background-color: var(--accent-blue, #2a5367);
+  border-color: var(--accent-blue, #2a5367);
   color: #ffffff;
 }
 
@@ -1062,8 +1173,8 @@ body.workspace-fullscreen .hud-3d-exit-fs-btn {
 }
 
 .ps-layer-row.is-selected {
-  background-color: rgba(42, 124, 19, 0.16);
-  box-shadow: inset 3px 0 0 var(--accent-blue, #2a7c13);
+  background-color: rgba(42, 83, 103, 0.16);
+  box-shadow: inset 3px 0 0 var(--accent-blue, #2a5367);
 }
 
 .ps-layer-row.is-hidden-layer .ps-layer-thumb,
@@ -1076,7 +1187,7 @@ body.workspace-fullscreen .hud-3d-exit-fs-btn {
   width: 26px;
   height: 26px;
   border-radius: 6px;
-  background-color: #18350d;
+  background-color: #0b1620;
   border: 1.5px solid var(--accent-blue);
   display: flex;
   align-items: center;
@@ -1091,7 +1202,7 @@ body.workspace-fullscreen .hud-3d-exit-fs-btn {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  border: 1.5px solid #18350d;
+  border: 1.5px solid #0b1620;
 }
 
 .ps-layer-info {
@@ -1163,7 +1274,7 @@ body.workspace-fullscreen .hud-3d-exit-fs-btn {
 .ps-row-action-btn:hover {
   background-color: var(--bg-tertiary);
   border-color: var(--border-color);
-  color: var(--accent-blue, #2a7c13);
+  color: var(--accent-blue, #2a5367);
 }
 
 .ps-layers-footer {
@@ -1701,7 +1812,7 @@ body.is-mobile-touch.mobile-dock-minimized #hud-3d-controls {
 }
 
 .session-guard-banner.is-readonly {
-  background: linear-gradient(90deg, rgba(245, 158, 11, 0.14), rgba(42, 124, 19, 0.08));
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.14), rgba(42, 83, 103, 0.08));
   color: var(--text-primary);
 }
 
@@ -1711,7 +1822,7 @@ body.is-mobile-touch.mobile-dock-minimized #hud-3d-controls {
 }
 
 .session-guard-banner.is-admin {
-  background: rgba(42, 124, 19, 0.08);
+  background: rgba(42, 83, 103, 0.08);
   color: var(--text-secondary);
 }
 

@@ -53,8 +53,8 @@ export function formatCoverageArea(areaM2) {
  * Preset wireless coverage templates for network engineers
  */
 export const WIRELESS_PRESETS = [
-  { id: 'indoor-small', name: 'Indoor AP Ringan (15 m)', meters: 15, band: '5ghz', color: '#76c457' },
-  { id: 'indoor-std', name: 'Standard Enterprise AP (25 m)', meters: 25, band: 'dual-band', color: '#76c457' },
+  { id: 'indoor-small', name: 'Indoor AP Ringan (15 m)', meters: 15, band: '5ghz', color: '#537b8e' },
+  { id: 'indoor-std', name: 'Standard Enterprise AP (25 m)', meters: 25, band: 'dual-band', color: '#537b8e' },
   { id: 'indoor-high', name: 'High-Density Gedung (35 m)', meters: 35, band: 'dual-band', color: '#06b6d4' },
   { id: 'outdoor-ap', name: 'Outdoor AP Lapangan (50 m)', meters: 50, band: '2.4ghz', color: '#f59e0b' },
   { id: 'ptp-bridge', name: 'PtP Wireless Bridge (100 m)', meters: 100, band: 'ptp', color: '#a855f7' }
@@ -122,9 +122,15 @@ export class WirelessCoverageRenderer {
 
     const radiusMeters = cov.radiusMeters || 25;
     const radiusPixels = metersToPixels(radiusMeters, this.naturalWidth);
-    const color = cov.color || '#76c457';
+    const color = cov.color || '#537b8e';
     const opacity = typeof cov.opacity === 'number' ? cov.opacity : 0.18;
     const hatch = cov.hatch !== undefined ? Boolean(cov.hatch) : true;
+    const hatchStyle = ['diagonal', 'reverse', 'cross'].includes(cov.hatchStyle) ? cov.hatchStyle : 'diagonal';
+    const hatchSpacing = clamp(typeof cov.hatchSpacing === 'number' ? cov.hatchSpacing : 14, 6, 48);
+    const hatchThickness = clamp(typeof cov.hatchThickness === 'number' ? cov.hatchThickness : 1.2, 0.5, 5);
+    const hatchOpacity = clamp(typeof cov.hatchOpacity === 'number' ? cov.hatchOpacity : 0.35, 0.05, 0.95);
+    const hatchAngle = clamp(typeof cov.hatchAngle === 'number' ? cov.hatchAngle : 45, 5, 85);
+    const hatchAreaPercent = clamp(typeof cov.hatchAreaPercent === 'number' ? cov.hatchAreaPercent : 100, 25, 100);
     const band = cov.band || 'dual-band';
 
     // 1. Hatched & Filled Coverage Circle Shape
@@ -135,8 +141,14 @@ export class WirelessCoverageRenderer {
       sceneFunc: (context, shape) => {
         const r = shape.getAttr('radiusPixels') || radiusPixels;
         const curColor = shape.getAttr('color') || color;
-        const curOpacity = shape.getAttr('opacity') || opacity;
+        const curOpacity = shape.getAttr('opacity') ?? opacity;
         const curHatch = shape.getAttr('hatch') !== undefined ? shape.getAttr('hatch') : hatch;
+        const curHatchStyle = shape.getAttr('hatchStyle') || hatchStyle;
+        const curHatchSpacing = shape.getAttr('hatchSpacing') || hatchSpacing;
+        const curHatchThickness = shape.getAttr('hatchThickness') || hatchThickness;
+        const curHatchOpacity = shape.getAttr('hatchOpacity') ?? hatchOpacity;
+        const curHatchAngle = shape.getAttr('hatchAngle') ?? hatchAngle;
+        const curHatchAreaPct = shape.getAttr('hatchAreaPercent') ?? hatchAreaPercent;
         const curBand = shape.getAttr('band') || band;
 
         context.save();
@@ -149,21 +161,54 @@ export class WirelessCoverageRenderer {
         context.globalAlpha = curOpacity;
         context.fill();
 
-        // Diagonal Hatching (Arsiran) in a SINGLE batched path call
+        // Diagonal Hatching (Arsiran) in a SINGLE batched path call per pass
         if (curHatch) {
+          const hatchRadius = r * (clamp(curHatchAreaPct, 25, 100) / 100);
           context.save();
-          context.clip();
-          context.strokeStyle = curColor;
-          context.lineWidth = 1;
-          context.globalAlpha = curOpacity * 1.6;
-          const step = 14;
           context.beginPath();
-          for (let x = -r * 2; x <= r * 2; x += step) {
-            context.moveTo(x - r, -r);
-            context.lineTo(x + r, r);
+          context.arc(0, 0, hatchRadius, 0, Math.PI * 2, false);
+          context.closePath();
+          context.clip();
+
+          context.strokeStyle = curColor;
+          context.lineWidth = clamp(curHatchThickness, 0.5, 5);
+          context.globalAlpha = clamp(curHatchOpacity, 0.05, 0.95);
+
+          const drawRotatedLines = (deg) => {
+            context.save();
+            context.rotate((deg * Math.PI) / 180);
+            const span = hatchRadius * 1.5;
+            const step = clamp(curHatchSpacing, 6, 48);
+            context.beginPath();
+            for (let x = -span; x <= span; x += step) {
+              context.moveTo(x, -span);
+              context.lineTo(x, span);
+            }
+            context.stroke();
+            context.restore();
+          };
+
+          if (curHatchStyle === 'reverse') {
+            drawRotatedLines(-curHatchAngle);
+          } else if (curHatchStyle === 'cross') {
+            drawRotatedLines(curHatchAngle);
+            drawRotatedLines(curHatchAngle + 90);
+          } else {
+            drawRotatedLines(curHatchAngle);
           }
-          context.stroke();
           context.restore();
+
+          if (curHatchAreaPct < 100) {
+            context.save();
+            context.beginPath();
+            context.arc(0, 0, hatchRadius, 0, Math.PI * 2, false);
+            context.strokeStyle = curColor;
+            context.lineWidth = 1.1;
+            context.globalAlpha = Math.min(0.85, clamp(curHatchOpacity, 0.05, 0.95) + 0.15);
+            context.setLineDash([4, 3]);
+            context.stroke();
+            context.restore();
+          }
         }
 
         // Inner Core Ring for Dual-Band 5GHz
@@ -199,6 +244,12 @@ export class WirelessCoverageRenderer {
     coverageShape.setAttr('color', color);
     coverageShape.setAttr('opacity', opacity);
     coverageShape.setAttr('hatch', hatch);
+    coverageShape.setAttr('hatchStyle', hatchStyle);
+    coverageShape.setAttr('hatchSpacing', hatchSpacing);
+    coverageShape.setAttr('hatchThickness', hatchThickness);
+    coverageShape.setAttr('hatchOpacity', hatchOpacity);
+    coverageShape.setAttr('hatchAngle', hatchAngle);
+    coverageShape.setAttr('hatchAreaPercent', hatchAreaPercent);
     coverageShape.setAttr('band', band);
     this.cacheShape(coverageShape, radiusPixels);
     group.add(coverageShape);
@@ -216,7 +267,7 @@ export class WirelessCoverageRenderer {
     const labelTextContent = `WiFi ${radiusMeters}m • ${formatCoverageArea(areaM2)} (${bandLabel})`;
 
     const labelBg = new Konva.Tag({
-      fill: 'rgba(24, 53, 13, 0.92)',
+      fill: 'rgba(11, 22, 32, 0.92)',
       stroke: color,
       strokeWidth: 1.1,
       cornerRadius: 4,
@@ -230,7 +281,7 @@ export class WirelessCoverageRenderer {
       fontSize: 10,
       fontFamily: "'Poppins', -apple-system, BlinkMacSystemFont, sans-serif",
       fontStyle: '600',
-      fill: '#fff8cf',
+      fill: '#e3edf0',
       padding: 4,
       align: 'center',
       perfectDrawEnabled: false
@@ -342,9 +393,15 @@ export class WirelessCoverageRenderer {
 
     const radiusMeters = cov.radiusMeters || 25;
     const radiusPixels = metersToPixels(radiusMeters, this.naturalWidth);
-    const color = cov.color || '#76c457';
+    const color = cov.color || '#537b8e';
     const opacity = typeof cov.opacity === 'number' ? cov.opacity : 0.18;
     const hatch = cov.hatch !== undefined ? Boolean(cov.hatch) : true;
+    const hatchStyle = ['diagonal', 'reverse', 'cross'].includes(cov.hatchStyle) ? cov.hatchStyle : 'diagonal';
+    const hatchSpacing = clamp(typeof cov.hatchSpacing === 'number' ? cov.hatchSpacing : 14, 6, 48);
+    const hatchThickness = clamp(typeof cov.hatchThickness === 'number' ? cov.hatchThickness : 1.2, 0.5, 5);
+    const hatchOpacity = clamp(typeof cov.hatchOpacity === 'number' ? cov.hatchOpacity : 0.35, 0.05, 0.95);
+    const hatchAngle = clamp(typeof cov.hatchAngle === 'number' ? cov.hatchAngle : 45, 5, 85);
+    const hatchAreaPercent = clamp(typeof cov.hatchAreaPercent === 'number' ? cov.hatchAreaPercent : 100, 25, 100);
     const band = cov.band || 'dual-band';
 
     // Update Shape & Re-cache bitmap
@@ -355,6 +412,12 @@ export class WirelessCoverageRenderer {
       shape.setAttr('color', color);
       shape.setAttr('opacity', opacity);
       shape.setAttr('hatch', hatch);
+      shape.setAttr('hatchStyle', hatchStyle);
+      shape.setAttr('hatchSpacing', hatchSpacing);
+      shape.setAttr('hatchThickness', hatchThickness);
+      shape.setAttr('hatchOpacity', hatchOpacity);
+      shape.setAttr('hatchAngle', hatchAngle);
+      shape.setAttr('hatchAreaPercent', hatchAreaPercent);
       shape.setAttr('band', band);
       this.cacheShape(shape, radiusPixels);
     }

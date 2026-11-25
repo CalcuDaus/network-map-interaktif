@@ -20,12 +20,16 @@ export class WorkspaceController {
     map3DEngine = null,
     buildStudioPalette = null,
     packetTracerPanel = null,
+    ptDeviceWindow = null,
+    packetTracerCanvas = null,
     deviceManager = null,
     cableManager = null
   } = {}) {
     this.map3DEngine = map3DEngine;
     this.buildStudioPalette = buildStudioPalette;
     this.packetTracerPanel = packetTracerPanel;
+    this.ptDeviceWindow = ptDeviceWindow;
+    this.packetTracerCanvas = packetTracerCanvas;
     this.deviceManager = deviceManager;
     this.cableManager = cableManager;
     this._applying = false;
@@ -160,7 +164,9 @@ export class WorkspaceController {
     }
 
     if (isBuild) {
-      if (open3D && stateManager.getViewMode() !== '3d') {
+      if (stateManager.getViewMode() === 'topology') {
+        stateManager.setViewMode(open3D ? '3d' : '2d');
+      } else if (open3D && stateManager.getViewMode() !== '3d') {
         stateManager.setViewMode('3d');
       }
       const curMode = stateManager.getMode();
@@ -168,6 +174,8 @@ export class WorkspaceController {
         stateManager.setMode('select');
       }
       this.packetTracerPanel?.hide?.();
+      this.ptDeviceWindow?.hide?.();
+      this.packetTracerCanvas?.deactivate?.();
       this.map3DEngine?.exitSimulatorFocus?.({ restoreCamera: false });
       this.map3DEngine?.cancelAvatarCablePull?.({ silent: true });
       this.map3DEngine?.dropCarriedDevicesOnly?.();

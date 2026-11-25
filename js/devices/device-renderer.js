@@ -115,16 +115,16 @@ export class DeviceRenderer {
     // 1. Selection Ring (Glowing ring around marker)
     const selectionRing = new Konva.Rect({
       name: 'selection-ring',
-      x: -24,
-      y: -24,
-      width: 48,
-      height: 48,
-      cornerRadius: 12,
-      stroke: '#2a7c13',
-      strokeWidth: 2,
+      x: -28,
+      y: -28,
+      width: 56,
+      height: 56,
+      cornerRadius: 14,
+      stroke: '#2a5367',
+      strokeWidth: 2.2,
       dash: [6, 4],
       visible: isSelected,
-      shadowColor: '#76c457',
+      shadowColor: '#537b8e',
       shadowBlur: 10,
       perfectDrawEnabled: false,
       shadowForStrokeEnabled: false,
@@ -133,18 +133,18 @@ export class DeviceRenderer {
     this.cacheNodeSafe(selectionRing, 14);
     group.add(selectionRing);
 
-    // 2. Base Shape (Marker Background Card)
+    // 2. Base Shape (High-contrast Marker Background Card)
     const baseCard = new Konva.Rect({
       name: 'base-card',
-      x: -18,
-      y: -18,
-      width: 36,
-      height: 36,
-      cornerRadius: 8,
-      fill: '#18350d',
+      x: -22,
+      y: -22,
+      width: 44,
+      height: 44,
+      cornerRadius: 11,
+      fill: '#f5f9fa',
       stroke: cat.color,
-      strokeWidth: 2,
-      shadowColor: 'rgba(0, 0, 0, 0.4)',
+      strokeWidth: 2.2,
+      shadowColor: 'rgba(0, 0, 0, 0.45)',
       shadowBlur: 8,
       shadowOffset: { x: 0, y: 3 },
       shadowOpacity: 0.5,
@@ -156,10 +156,10 @@ export class DeviceRenderer {
     // 3. Graphic Icon / Custom Image Node
     const iconImage = new Konva.Image({
       name: 'device-icon-image',
-      x: -12,
-      y: -12,
-      width: 24,
-      height: 24,
+      x: -19,
+      y: -19,
+      width: 38,
+      height: 38,
       perfectDrawEnabled: false,
       listening: false
     });
@@ -169,9 +169,9 @@ export class DeviceRenderer {
     const iconCode = this.getDeviceShortCode(device.type);
     const iconText = new Konva.Text({
       name: 'icon-text',
-      x: -18,
+      x: -22,
       y: -10,
-      width: 36,
+      width: 44,
       text: iconCode,
       fontSize: 11,
       fontFamily: 'ui-monospace, monospace',
@@ -190,11 +190,11 @@ export class DeviceRenderer {
     // 4. Status Indicator Badge (Top-Right Corner)
     const statusDot = new Konva.Circle({
       name: 'status-dot',
-      x: 16,
-      y: -16,
+      x: 18,
+      y: -18,
       radius: 5,
       fill: statusDef.color,
-      stroke: '#18350d',
+      stroke: '#ffffff',
       strokeWidth: 1.5,
       perfectDrawEnabled: false,
       shadowForStrokeEnabled: false,
@@ -202,10 +202,10 @@ export class DeviceRenderer {
     });
     group.add(statusDot);
 
-    // 5. Label Container (Pill under marker)
+    // 5. Label Container (Crisp high-contrast pill under marker)
     const labelGroup = new Konva.Group({
       name: 'label-group',
-      y: 24,
+      y: 28,
       listening: false
     });
 
@@ -214,8 +214,8 @@ export class DeviceRenderer {
       text: this.formatLabel(device),
       fontSize: 10,
       fontFamily: "'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-      fill: '#fff8cf',
-      padding: 3,
+      fill: '#e3edf0',
+      padding: 4,
       align: 'center',
       perfectDrawEnabled: false,
       listening: false
@@ -224,6 +224,19 @@ export class DeviceRenderer {
     // Center label relative to marker
     labelText.offsetX(labelText.width() / 2);
 
+    const labelBg = new Konva.Rect({
+      name: 'label-bg',
+      x: -labelText.width() / 2 - 4,
+      y: -1,
+      width: labelText.width() + 8,
+      height: labelText.height() + 2,
+      cornerRadius: 5,
+      fill: 'rgba(11, 22, 32, 0.86)',
+      perfectDrawEnabled: false,
+      listening: false
+    });
+
+    labelGroup.add(labelBg);
     labelGroup.add(labelText);
     group.add(labelGroup);
 
@@ -411,11 +424,17 @@ export class DeviceRenderer {
     const statusDot = group.findOne('.status-dot');
     if (statusDot) statusDot.fill(statusDef.color);
 
-    // Label text
+    // Label text & dark pill background
     const labelText = group.findOne('.label-text');
+    const labelBg = group.findOne('.label-bg');
     if (labelText) {
       labelText.text(this.formatLabel(device));
       labelText.offsetX(labelText.width() / 2);
+      if (labelBg) {
+        labelBg.x(-labelText.width() / 2 - 4);
+        labelBg.width(labelText.width() + 8);
+        labelBg.height(labelText.height() + 2);
+      }
     }
   }
 
@@ -435,17 +454,17 @@ export class DeviceRenderer {
     if (baseCard) {
       if (typeof baseCard.clearCache === 'function') baseCard.clearCache();
       if (style === 'circle') {
-        baseCard.cornerRadius(18);
-        baseCard.fill('#18350d');
+        baseCard.cornerRadius(22);
+        baseCard.fill('#f5f9fa');
         baseCard.stroke(cat.color);
         baseCard.shadowOpacity(0.5);
       } else if (style === 'icon-only') {
-        baseCard.fill('rgba(24, 53, 13, 0.45)');
+        baseCard.fill('rgba(245, 249, 250, 0.88)');
         baseCard.stroke('transparent');
         baseCard.shadowOpacity(0.2);
       } else {
-        baseCard.cornerRadius(8);
-        baseCard.fill('#18350d');
+        baseCard.cornerRadius(11);
+        baseCard.fill('#f5f9fa');
         baseCard.stroke(cat.color);
         baseCard.shadowOpacity(0.5);
       }

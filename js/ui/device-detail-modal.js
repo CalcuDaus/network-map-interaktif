@@ -312,7 +312,7 @@ export class DeviceDetailModal {
         iconBox.innerHTML = `<img src="${this.escapeAttr(dev.customImage)}" alt="${this.escapeAttr(dev.name)}">`;
       } else {
         const iconKey = dev.customIcon || getDefaultIconForType(dev.type);
-        iconBox.innerHTML = getDeviceIconSvg(iconKey, { color: cat.color || '#2a7c13', size: 24 });
+        iconBox.innerHTML = getDeviceIconSvg(iconKey, { color: cat.color || '#2a5367', size: 24 });
       }
     }
 
@@ -329,9 +329,9 @@ export class DeviceDetailModal {
 
     if (catBadge) {
       catBadge.textContent = cat.name || dev.category;
-      catBadge.style.color = cat.color || '#2a7c13';
-      catBadge.style.background = cat.badgeBg || 'rgba(42,124,19,0.12)';
-      catBadge.style.borderColor = `${cat.color || '#2a7c13'}44`;
+      catBadge.style.color = cat.color || '#2a5367';
+      catBadge.style.background = cat.badgeBg || 'rgba(42, 83, 103,0.12)';
+      catBadge.style.borderColor = `${cat.color || '#2a5367'}44`;
     }
 
     if (subEl) {
@@ -1258,5 +1258,5 @@ function getFundingBadgeColor(source) {
   if (s.includes('bos')) return '#059669';
   if (s.includes('apbd') || s.includes('apbn')) return '#7c3aed';
   if (s.includes('komite') || s.includes('hibah')) return '#d97706';
-  return '#2a7c13';
+  return '#2a5367';
 }

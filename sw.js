@@ -13,6 +13,7 @@ const CORE_ASSETS = [
   './css/layout.css',
   './css/components.css',
   './css/map.css',
+  './css/topology.css',
   './js/bundle.js',
   './assets/icons/icon.svg',
   './assets/icons/icon-192.png',

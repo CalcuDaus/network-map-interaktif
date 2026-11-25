@@ -111,6 +111,7 @@ export class ProjectStorage {
     eventBus.on('device:updated', handleMutation);
     eventBus.on('device:deleted', handleMutation);
     eventBus.on('device:moved', handleMutation);
+    eventBus.on('device:logical-moved', handleMutation);
 
     eventBus.on('connection:added', handleMutation);
     eventBus.on('connection:updated', handleMutation);

@@ -1,4 +1,4 @@
-# Performance & Next-Gen Architecture Plan — SmartSchool NetMap 3D
+ # Performance & Next-Gen Architecture Plan — SmartSchool NetMap 3D
 
 Dokumen ini adalah panduan teknis (*engineering plan*) untuk mengoptimalkan performa aplikasi **SmartSchool NetMap 3D** (`heatmap.smknegeri1beringin.sch.id`) ke level paling mutakhir di ekosistem web 3D modern. Fokus utamanya adalah menjaga aplikasi tetap stabil di **60–120 FPS**, baik di PC lab sekolah (tanpa GPU diskrit / iGPU) maupun di ponsel siswa saat menggunakan kontrol joystick virtual.
 

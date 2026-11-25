@@ -170,16 +170,16 @@ export class VendorQuickInsertModal {
     `;
 
     this.modalEl.innerHTML = `
-      <div style="background-color: var(--bg-secondary, #fbe6c2); border: 1px solid var(--border-color, #e5cca0); border-radius: 12px; width: 100%; max-width: 800px; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 20px 40px rgba(0,0,0,0.3); overflow: hidden;">
+      <div style="background-color: var(--bg-secondary, #d4e3e8); border: 1px solid var(--border-color, #9ab7c1); border-radius: 12px; width: 100%; max-width: 800px; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 20px 40px rgba(0,0,0,0.3); overflow: hidden;">
         <!-- Header -->
-        <div style="min-height: 54px; border-bottom: 1px solid var(--border-color, #e5cca0); background: var(--bg-tertiary, #f2dac8); display: flex; align-items: center; justify-content: space-between; padding: 8px 20px; gap: 12px; flex-shrink: 0;">
+        <div style="min-height: 54px; border-bottom: 1px solid var(--border-color, #9ab7c1); background: var(--bg-tertiary, #c4d7df); display: flex; align-items: center; justify-content: space-between; padding: 8px 20px; gap: 12px; flex-shrink: 0;">
           <div style="display: flex; align-items: center; gap: 10px; min-width: 0;">
-            <div style="width: 30px; height: 30px; border-radius: 7px; background: rgba(42, 124, 19, 0.16); display: flex; align-items: center; justify-content: center; color: var(--accent-blue, #2a7c13); flex-shrink: 0;">
+            <div style="width: 30px; height: 30px; border-radius: 7px; background: rgba(42, 83, 103, 0.16); display: flex; align-items: center; justify-content: center; color: var(--accent-blue, #2a5367); flex-shrink: 0;">
               <i data-lucide="zap" style="width: 17px; height: 17px;"></i>
             </div>
             <div style="min-width: 0;">
-              <span id="vi-modal-title" style="font-size: 15px; font-weight: 700; color: var(--text-primary, #18350d); display: block; line-height: 1.2;">Insert Cepat Perangkat</span>
-              <span id="vi-modal-subtitle" style="font-size: 11px; color: var(--text-muted, #678458);">Pilih paket atau jumlah unit perangkat</span>
+              <span id="vi-modal-title" style="font-size: 15px; font-weight: 700; color: var(--text-primary, #0b1620); display: block; line-height: 1.2;">Insert Cepat Perangkat</span>
+              <span id="vi-modal-subtitle" style="font-size: 11px; color: var(--text-muted, #537b8e);">Pilih paket atau jumlah unit perangkat</span>
             </div>
           </div>
 
@@ -201,7 +201,7 @@ export class VendorQuickInsertModal {
           <!-- Preset Bundles -->
           <div style="display: flex; flex-direction: column; gap: 6px;">
             <div style="display: flex; align-items: center; justify-content: space-between;">
-              <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--accent-blue, #2a7c13);">1. Paket Topologi Cepat (Opsional)</span>
+              <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--accent-blue, #2a5367);">1. Paket Topologi Cepat (Opsional)</span>
               <button type="button" id="btn-vi-clear-all" class="btn btn-secondary btn-sm" style="font-size: 10.5px; padding: 2px 8px;">Reset 0</button>
             </div>
             <div id="vi-presets-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 8px;"></div>
@@ -209,32 +209,32 @@ export class VendorQuickInsertModal {
 
           <!-- Hardware List -->
           <div style="display: flex; flex-direction: column; gap: 6px;">
-            <span id="vi-catalog-heading" style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--accent-blue, #2a7c13);">2. Pilih Model & Jumlah Unit</span>
+            <span id="vi-catalog-heading" style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--accent-blue, #2a5367);">2. Pilih Model & Jumlah Unit</span>
             <div id="vi-catalog-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px;"></div>
           </div>
 
           <!-- Auto Configuration -->
-          <div style="background: var(--bg-primary, #fff8cf); border: 1px solid var(--border-color, #e5cca0); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 10px;">
-            <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--accent-blue, #2a7c13);">3. Pengaturan Otomatis (IP, Prefix & Status)</span>
+          <div style="background: var(--bg-primary, #e3edf0); border: 1px solid var(--border-color, #9ab7c1); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 10px;">
+            <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--accent-blue, #2a5367);">3. Pengaturan Otomatis (IP, Prefix & Status)</span>
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px;">
               <div style="display: flex; flex-direction: column; gap: 3px;">
                 <label style="font-size: 11px; font-weight: 600; color: var(--text-primary);">Prefix Nama (Opsional)</label>
                 <input type="text" id="vi-prefix-name" placeholder="misal: Gedung-A"
-                       style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 6px 8px; font-size: 12px; color: var(--text-primary);">
+                       style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #9ab7c1); border-radius: 6px; padding: 6px 8px; font-size: 12px; color: var(--text-primary);">
               </div>
               <div style="display: flex; flex-direction: column; gap: 3px;">
                 <label style="font-size: 11px; font-weight: 600; color: var(--text-primary);">IP Awal (Auto Increment)</label>
                 <input type="text" id="vi-start-ip" value="192.168.88.1" placeholder="contoh: 192.168.88.1"
-                       style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 6px 8px; font-size: 12px; color: var(--text-primary); font-family: var(--font-mono);">
+                       style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #9ab7c1); border-radius: 6px; padding: 6px 8px; font-size: 12px; color: var(--text-primary); font-family: var(--font-mono);">
               </div>
               <div style="display: flex; flex-direction: column; gap: 3px;">
                 <label style="font-size: 11px; font-weight: 600; color: var(--text-primary);">VLAN Default</label>
                 <input type="number" id="vi-vlan" value="1" min="1" max="4094"
-                       style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 6px 8px; font-size: 12px; color: var(--text-primary); font-family: var(--font-mono);">
+                       style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #9ab7c1); border-radius: 6px; padding: 6px 8px; font-size: 12px; color: var(--text-primary); font-family: var(--font-mono);">
               </div>
               <div style="display: flex; flex-direction: column; gap: 3px;">
                 <label style="font-size: 11px; font-weight: 600; color: var(--text-primary);">Status Awal</label>
-                <select id="vi-status" style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #e5cca0); border-radius: 6px; padding: 6px 8px; font-size: 12px; color: var(--text-primary);">
+                <select id="vi-status" style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #9ab7c1); border-radius: 6px; padding: 6px 8px; font-size: 12px; color: var(--text-primary);">
                   <option value="online" selected>Online</option>
                   <option value="warning">Warning</option>
                   <option value="offline">Offline</option>
@@ -246,7 +246,7 @@ export class VendorQuickInsertModal {
         </div>
 
         <!-- Footer -->
-        <div style="height: 58px; border-top: 1px solid var(--border-color, #e5cca0); background: var(--bg-tertiary, #f2dac8); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; flex-shrink: 0;">
+        <div style="height: 58px; border-top: 1px solid var(--border-color, #9ab7c1); background: var(--bg-tertiary, #c4d7df); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; flex-shrink: 0;">
           <span id="vi-total-summary" style="font-size: 12px; font-weight: 600; color: var(--text-primary);">Total dipilih: 2 perangkat</span>
           <div style="display: flex; gap: 8px;">
             <button type="button" id="btn-vi-cancel" class="btn btn-secondary btn-sm">Batal</button>
@@ -283,7 +283,7 @@ export class VendorQuickInsertModal {
     if (presetsGrid) {
       presetsGrid.innerHTML = profile.presets.map((preset) => `
         <button type="button" class="btn-vi-preset" data-preset-id="${preset.id}"
-                style="text-align: left; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border-color, #e5cca0); background: var(--bg-primary, #fff8cf); cursor: pointer; display: flex; flex-direction: column; gap: 2px; transition: all 0.15s ease;">
+                style="text-align: left; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border-color, #9ab7c1); background: var(--bg-primary, #e3edf0); cursor: pointer; display: flex; flex-direction: column; gap: 2px; transition: all 0.15s ease;">
           <span style="font-size: 12px; font-weight: 700; color: var(--text-primary);">${preset.label}</span>
           <span style="font-size: 10px; color: var(--text-muted); line-height: 1.25;">${preset.hint}</span>
         </button>
@@ -299,7 +299,7 @@ export class VendorQuickInsertModal {
 
         return `
           <div class="vi-qty-card" data-type="${item.type}"
-               style="background: var(--bg-primary, #fff8cf); border: 1.5px solid ${qty > 0 ? cat.color : 'var(--border-color, #e5cca0)'}; border-radius: 8px; padding: 8px 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px; transition: border-color 0.15s ease;">
+               style="background: var(--bg-primary, #e3edf0); border: 1.5px solid ${qty > 0 ? cat.color : 'var(--border-color, #9ab7c1)'}; border-radius: 8px; padding: 8px 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px; transition: border-color 0.15s ease;">
             <div style="display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1;">
               <div style="width: 28px; height: 28px; border-radius: 6px; background: rgba(0,0,0,0.06); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
                 ${iconSvg}
@@ -416,7 +416,7 @@ export class VendorQuickInsertModal {
     if (card) {
       const def = this.getProfile().catalog.find((i) => i.type === type);
       const cat = DEVICE_CATEGORIES[def?.category] || DEVICE_CATEGORIES.core;
-      card.style.borderColor = safeQty > 0 ? cat.color : 'var(--border-color, #e5cca0)';
+      card.style.borderColor = safeQty > 0 ? cat.color : 'var(--border-color, #9ab7c1)';
     }
 
     this.updateSummary();

@@ -2476,7 +2476,7 @@ class Map3DSubsystemsMixin {
       this.syncRemoteAvatars(peers || authManager.getRemotePeers());
     }), eventBus.on("auth:changed", () => {
       let u = authManager.getCurrentUser?.();
-      this.avatarGroup && updateRobloxAvatarLabel(this.avatarGroup, u ? `@${u.username}` : "Teknisi Jaringan", "#76c457"), this.syncRemoteAvatars(authManager.getRemotePeers());
+      this.avatarGroup && updateRobloxAvatarLabel(this.avatarGroup, u ? `@${u.username}` : "Teknisi Jaringan", "#537b8e"), this.syncRemoteAvatars(authManager.getRemotePeers());
     }), eventBus.on("mode:changed", ({ mode }) => {
       this.container && this.container.classList.toggle("mode-draw-cable", mode === "draw-cable"), mode !== "draw-cable" && (this.pendingCableSourceId = null, this.pendingCableSourcePort = "", this.pending3dWaypoints = [], this.isActive && (this.syncDevices(), this.syncCables(), this.simulatorFocusedDeviceId && this.renderSimulatorInspectorHud(this.simulatorFocusedDeviceId)));
     }), eventBus.on("pen-tool:options-changed", ({ pathStyle, category }) => {

@@ -7,6 +7,7 @@
 import { DEVICE_CATEGORIES } from '../devices/device-library.js';
 import { getDeviceIconSvg, getDefaultIconForType } from '../devices/device-icon-factory.js';
 import { getBuiltinGlbCustomTemplates } from '../devices/device-schema.js';
+import { getEndDeviceSlots } from '../devices/end-device-slots.js';
 import { eventBus } from '../core/event-bus.js';
 import { stateManager } from '../core/state-manager.js';
 import { isMobileTouchDevice } from '../utils/helpers.js';
@@ -176,7 +177,7 @@ export class DevicePalette {
         <div style="display: flex; flex-direction: column; gap: 6px;">
           <button id="btn-add-custom-device" class="btn btn-secondary btn-sm" 
                   title="Tambahkan perangkat jaringan 3D (.GLB) kustom Anda sendiri ke library"
-                  style="width: 100%; justify-content: center; gap: 6px; font-weight: 700; padding: 8px 10px; height: auto; border: 1.5px dashed var(--accent-blue, #2a7c13); background: var(--bg-tertiary, #f2dac8); color: var(--accent-blue, #2a7c13); cursor: pointer; border-radius: 8px; box-shadow: var(--shadow-sm);">
+                  style="width: 100%; justify-content: center; gap: 6px; font-weight: 700; padding: 8px 10px; height: auto; border: 1.5px dashed var(--accent-blue, #2a5367); background: var(--bg-tertiary, #c4d7df); color: var(--accent-blue, #2a5367); cursor: pointer; border-radius: 8px; box-shadow: var(--shadow-sm);">
             <i data-lucide="plus-circle" style="width: 15px; height: 15px; flex-shrink: 0;"></i>
             <span>Tambah Perangkat 3D (.GLB)</span>
           </button>
@@ -263,7 +264,14 @@ export class DevicePalette {
     const allGlbItems = this.customTemplates.filter((t) => this._hasGlbModel(t));
     const matchedCustom = allGlbItems.filter((t) => this.matchesBrandFilter(t) && this.matchesSearch(t));
 
-    if (matchedCustom.length === 0) {
+    const endDeviceSlots = getEndDeviceSlots().filter((slot) => {
+      if (this.activeFilter === 'mikrotik' || this.activeFilter === 'ruijie' || this.activeFilter === 'tplink') {
+        return false;
+      }
+      return this.matchesSearch(slot);
+    });
+
+    if (matchedCustom.length === 0 && endDeviceSlots.length === 0) {
       return `
         <div style="padding: 18px 12px; text-align: center; color: var(--text-muted); font-size: 11.5px; background: var(--bg-primary); border-radius: 8px; border: 1px dashed var(--border-color); display: flex; flex-direction: column; gap: 8px; align-items: center;">
           <span>${this.searchQuery
@@ -271,7 +279,7 @@ export class DevicePalette {
             : 'Belum ada perangkat 3D (.GLB) di kategori ini.'}</span>
           ${allGlbItems.length < getBuiltinGlbCustomTemplates().length ? `
             <button type="button" class="btn-restore-builtin-glbs"
-                    style="font-size: 11px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--accent-blue, #2a7c13); background: rgba(42,124,19,0.08); color: var(--accent-blue, #2a7c13); font-weight: 600; cursor: pointer;">
+                    style="font-size: 11px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--accent-blue, #2a5367); background: rgba(42, 83, 103,0.08); color: var(--accent-blue, #2a5367); font-weight: 600; cursor: pointer;">
               Pulihkan Model .GLB Bawaan
             </button>
           ` : ''}
@@ -279,66 +287,128 @@ export class DevicePalette {
       `;
     }
 
-    let html = `
-      <div class="palette-category-group" style="display: flex; flex-direction: column; gap: 6px;">
-        <div class="category-header" style="display: flex; align-items: center; justify-content: space-between; padding: 2px 4px;">
-          <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--accent-blue, #2a7c13); display: flex; align-items: center; gap: 5px;">
-            <i data-lucide="box" style="width: 13px; height: 13px; color: var(--accent-blue, #2a7c13);"></i>
-            <span>Perangkat 3D (.GLB)</span>
-          </span>
-          <span style="font-size: 10px; color: var(--accent-blue, #2a7c13); background: rgba(42, 124, 19, 0.12); padding: 1px 6px; border-radius: 4px; font-weight: 700;">
-            ${matchedCustom.length}
-          </span>
-        </div>
-        <div class="palette-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;">
-    `;
-
-    matchedCustom.forEach((tmpl) => {
-      const catKey = tmpl.category === 'end-device' ? 'endDevice' : tmpl.category;
-      const cat = DEVICE_CATEGORIES[catKey] || DEVICE_CATEGORIES.core;
-      const catColor = cat.color || '#2a7c13';
-      const isSelected = this.activeCustomTemplateToPlace?.id === tmpl.id;
-      let thumbHtml = '';
-      if (tmpl.customImage) {
-        thumbHtml = `<img src="${tmpl.customImage}" style="width: 18px; height: 18px; object-fit: contain; border-radius: 2px;" alt="${escapeHtml(tmpl.name)}" />`;
-      } else {
-        const iconKey = tmpl.customIcon || getDefaultIconForType(tmpl.type || 'router');
-        thumbHtml = getDeviceIconSvg(iconKey, { color: catColor, size: 16 });
-      }
-
+    let html = '';
+    if (matchedCustom.length > 0) {
       html += `
-        <div class="palette-item palette-item-custom ${isSelected ? 'active-placement' : ''}" 
-             draggable="true" 
-             data-custom-template-id="${tmpl.id}"
-             data-device-type="${tmpl.type || 'custom'}"
-             data-category="${catKey || 'core'}"
-             style="background-color: var(--bg-primary); border: 1.5px solid var(--accent-cyan, #76c457); border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 4px; cursor: grab; transition: all 150ms ease; position: relative;">
-          <div style="display: flex; align-items: center; justify-content: space-between;">
-            <div style="display: flex; align-items: center; gap: 6px; min-width: 0;">
-              <div style="width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.06); border-radius: 4px; flex-shrink: 0; overflow: hidden;">
-                ${thumbHtml}
+        <div class="palette-category-group" style="display: flex; flex-direction: column; gap: 6px;">
+          <div class="category-header" style="display: flex; align-items: center; justify-content: space-between; padding: 2px 4px;">
+            <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--accent-blue, #2a5367); display: flex; align-items: center; gap: 5px;">
+              <i data-lucide="box" style="width: 13px; height: 13px; color: var(--accent-blue, #2a5367);"></i>
+              <span>Perangkat 3D (.GLB)</span>
+            </span>
+            <span style="font-size: 10px; color: var(--accent-blue, #2a5367); background: rgba(42, 83, 103, 0.12); padding: 1px 6px; border-radius: 4px; font-weight: 700;">
+              ${matchedCustom.length}
+            </span>
+          </div>
+          <div class="palette-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;">
+      `;
+
+      matchedCustom.forEach((tmpl) => {
+        const catKey = tmpl.category === 'end-device' ? 'endDevice' : tmpl.category;
+        const cat = DEVICE_CATEGORIES[catKey] || DEVICE_CATEGORIES.core;
+        const catColor = cat.color || '#2a5367';
+        const isSelected = this.activeCustomTemplateToPlace?.id === tmpl.id;
+        let thumbHtml = '';
+        if (tmpl.customImage) {
+          thumbHtml = `<img src="${tmpl.customImage}" style="width: 24px; height: 24px; object-fit: contain; border-radius: 3px;" alt="${escapeHtml(tmpl.name)}" />`;
+        } else {
+          const iconKey = tmpl.customIcon || getDefaultIconForType(tmpl.type || 'router');
+          thumbHtml = getDeviceIconSvg(iconKey, { color: catColor, size: 24 });
+        }
+
+        html += `
+          <div class="palette-item palette-item-custom ${isSelected ? 'active-placement' : ''}" 
+               draggable="true" 
+               data-custom-template-id="${tmpl.id}"
+               data-device-type="${tmpl.type || 'custom'}"
+               data-category="${catKey || 'core'}"
+               style="background-color: var(--bg-primary); border: 1.5px solid var(--accent-cyan, #537b8e); border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 4px; cursor: grab; transition: all 150ms ease; position: relative;">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <div style="display: flex; align-items: center; gap: 6px; min-width: 0;">
+                <div style="width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.75); border-radius: 5px; flex-shrink: 0; overflow: hidden;">
+                  ${thumbHtml}
+                </div>
+                <span style="font-size: 9px; font-weight: 700; color: ${catColor}; font-family: var(--font-mono); text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                  ${(tmpl.brand || tmpl.type || 'GLB').substring(0, 4)}
+                </span>
               </div>
-              <span style="font-size: 9px; font-weight: 700; color: ${catColor}; font-family: var(--font-mono); text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                ${(tmpl.brand || tmpl.type || 'GLB').substring(0, 4)}
+              <button class="btn-delete-template" data-template-id="${tmpl.id}" title="Hapus model .GLB ini dari Library" 
+                      style="background: transparent; border: none; padding: 0 2px; cursor: pointer; color: var(--text-muted); font-size: 15px; line-height: 1; border-radius: 3px; transition: color 0.1s ease;">
+                &times;
+              </button>
+            </div>
+            <div class="palette-item-name" title="${escapeHtml(tmpl.name)}">
+              ${escapeHtml(tmpl.name)}
+            </div>
+            <div class="palette-item-sub" style="display: flex; align-items: center; justify-content: space-between; gap: 4px;" title="${escapeHtml(tmpl.brand || '')} ${escapeHtml(tmpl.model || '')}">
+              <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${tmpl.brand ? `${escapeHtml(tmpl.brand)} ${escapeHtml(tmpl.model || '')}` : (escapeHtml(tmpl.model) || '3D Model')}</span>
+              <span style="font-size: 8.5px; font-weight: 700; color: var(--accent-blue, #2a5367); background: rgba(42, 83, 103,0.12); padding: 0 4px; border-radius: 3px; flex-shrink: 0;">3D .GLB</span>
+            </div>
+          </div>
+        `;
+      });
+
+      html += `</div></div>`;
+    }
+
+    if (endDeviceSlots.length > 0) {
+      html += `
+        <div class="palette-category-group" style="display: flex; flex-direction: column; gap: 6px;">
+          <div class="category-header" style="display: flex; align-items: center; justify-content: space-between; padding: 2px 4px;">
+            <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-secondary); display: flex; align-items: center; gap: 5px;">
+              <i data-lucide="monitor-smartphone" style="width: 13px; height: 13px; color: var(--accent-blue, #2a5367);"></i>
+              <span>End-Device &amp; WAN (Slot Siap 3D)</span>
+            </span>
+            <span style="font-size: 10px; color: var(--text-secondary); background: var(--bg-primary); border: 1px solid var(--border-color); padding: 1px 6px; border-radius: 4px; font-weight: 700;">
+              ${endDeviceSlots.length}
+            </span>
+          </div>
+          <div class="palette-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px;">
+      `;
+
+      endDeviceSlots.forEach((slot) => {
+        const catKey = slot.category === 'end-device' ? 'endDevice' : slot.category;
+        const cat = DEVICE_CATEGORIES[catKey] || DEVICE_CATEGORIES.endDevice || DEVICE_CATEGORIES.core;
+        const catColor = cat?.color || '#059669';
+        const hasLinkedGlb = Boolean(slot.spatial3d?.customModelUrl);
+        const isSelected = this.activeCustomTemplateToPlace?.slotId === slot.slotId;
+        const iconKey = slot.customIcon || getDefaultIconForType(slot.type);
+        const thumbHtml = getDeviceIconSvg(iconKey, { color: catColor, size: 24 });
+
+        html += `
+          <div class="palette-item palette-item-slot ${isSelected ? 'active-placement' : ''}"
+               draggable="true"
+               data-end-device-slot-id="${slot.slotId}"
+               data-device-type="${slot.type}"
+               data-category="${catKey || 'endDevice'}"
+               title="${escapeHtml(slot.description || slot.name)}"
+               style="background-color: var(--bg-primary); border: 1.5px ${hasLinkedGlb ? 'solid' : 'dashed'} ${hasLinkedGlb ? 'var(--accent-cyan, #537b8e)' : 'var(--border-color)'}; border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 4px; cursor: grab; transition: all 150ms ease; position: relative;">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <div style="display: flex; align-items: center; gap: 6px; min-width: 0;">
+                <div style="width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.75); border-radius: 5px; flex-shrink: 0; overflow: hidden;">
+                  ${thumbHtml}
+                </div>
+                <span style="font-size: 9px; font-weight: 700; color: ${catColor}; font-family: var(--font-mono); text-transform: uppercase;">
+                  ${escapeHtml(slot.badgeCode || 'END')}
+                </span>
+              </div>
+            </div>
+            <div class="palette-item-name" title="${escapeHtml(slot.name)}">
+              ${escapeHtml(slot.name)}
+            </div>
+            <div class="palette-item-sub" style="display: flex; align-items: center; justify-content: space-between; gap: 4px;">
+              <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(slot.model || 'End-Device')}</span>
+              <span style="font-size: 8px; font-weight: 700; color: ${hasLinkedGlb ? 'var(--accent-blue, #2a5367)' : 'var(--text-muted)'}; background: ${hasLinkedGlb ? 'rgba(42, 83, 103,0.12)' : 'rgba(100,116,139,0.14)'}; padding: 0 4px; border-radius: 3px; flex-shrink: 0;">
+                ${hasLinkedGlb ? '3D .GLB' : 'Slot 3D'}
               </span>
             </div>
-            <button class="btn-delete-template" data-template-id="${tmpl.id}" title="Hapus model .GLB ini dari Library" 
-                    style="background: transparent; border: none; padding: 0 2px; cursor: pointer; color: var(--text-muted); font-size: 15px; line-height: 1; border-radius: 3px; transition: color 0.1s ease;">
-              &times;
-            </button>
           </div>
-          <div class="palette-item-name" title="${escapeHtml(tmpl.name)}">
-            ${escapeHtml(tmpl.name)}
-          </div>
-          <div class="palette-item-sub" style="display: flex; align-items: center; justify-content: space-between; gap: 4px;" title="${escapeHtml(tmpl.brand || '')} ${escapeHtml(tmpl.model || '')}">
-            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${tmpl.brand ? `${escapeHtml(tmpl.brand)} ${escapeHtml(tmpl.model || '')}` : (escapeHtml(tmpl.model) || '3D Model')}</span>
-            <span style="font-size: 8.5px; font-weight: 700; color: var(--accent-blue, #2a7c13); background: rgba(42,124,19,0.12); padding: 0 4px; border-radius: 3px; flex-shrink: 0;">3D .GLB</span>
-          </div>
-        </div>
-      `;
-    });
+        `;
+      });
 
-    html += `</div></div>`;
+      html += `</div></div>`;
+    }
+
     return html;
   }
 
@@ -439,11 +509,15 @@ export class DevicePalette {
         itemEl.classList.add('dragging');
 
         const customTmplId = itemEl.getAttribute('data-custom-template-id');
+        const slotId = itemEl.getAttribute('data-end-device-slot-id');
         let payload;
 
         if (customTmplId) {
           const tmpl = this.customTemplates.find((t) => t.id === customTmplId);
           payload = JSON.stringify({ isCustom: true, ...tmpl });
+        } else if (slotId) {
+          const slotTmpl = getEndDeviceSlots().find((s) => s.slotId === slotId);
+          payload = JSON.stringify(slotTmpl || { type: itemEl.getAttribute('data-device-type') });
         } else {
           const type = itemEl.getAttribute('data-device-type');
           const category = itemEl.getAttribute('data-category');
@@ -461,6 +535,7 @@ export class DevicePalette {
 
       itemEl.addEventListener('click', () => {
         const customTmplId = itemEl.getAttribute('data-custom-template-id');
+        const slotId = itemEl.getAttribute('data-end-device-slot-id');
 
         if (customTmplId) {
           const tmpl = this.customTemplates.find((t) => t.id === customTmplId);
@@ -474,6 +549,19 @@ export class DevicePalette {
           eventBus.emit('palette:selected-to-place', {
             type: this.activeTypeToPlace,
             customDeviceData: tmpl
+          });
+        } else if (slotId) {
+          const slotTmpl = getEndDeviceSlots().find((s) => s.slotId === slotId);
+          this.activeCustomTemplateToPlace = slotTmpl;
+          this.activeTypeToPlace = slotTmpl?.type || itemEl.getAttribute('data-device-type') || 'pc';
+          stateManager.setMode('add-device');
+
+          this.container.querySelectorAll('.palette-item').forEach((el) => el.classList.remove('active-placement'));
+          itemEl.classList.add('active-placement');
+
+          eventBus.emit('palette:selected-to-place', {
+            type: this.activeTypeToPlace,
+            customDeviceData: slotTmpl
           });
         } else {
           const type = itemEl.getAttribute('data-device-type');

@@ -44,16 +44,16 @@ export class Device3DModelModal {
     `;
 
     this.modalEl.innerHTML = `
-      <div style="background-color: var(--bg-secondary, #fbe6c2); border: 1px solid var(--border-color, #e5cca0); border-radius: 12px; width: 100%; max-width: 640px; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 20px 40px rgba(0,0,0,0.3); overflow: hidden;">
+      <div style="background-color: var(--bg-secondary, #d4e3e8); border: 1px solid var(--border-color, #9ab7c1); border-radius: 12px; width: 100%; max-width: 640px; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 20px 40px rgba(0,0,0,0.3); overflow: hidden;">
         <!-- Header -->
-        <div style="height: 54px; border-bottom: 1px solid var(--border-color, #e5cca0); background: var(--bg-tertiary, #f2dac8); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; flex-shrink: 0;">
+        <div style="height: 54px; border-bottom: 1px solid var(--border-color, #9ab7c1); background: var(--bg-tertiary, #c4d7df); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; flex-shrink: 0;">
           <div style="display: flex; align-items: center; gap: 10px;">
-            <div style="width: 30px; height: 30px; border-radius: 7px; background: rgba(59, 130, 246, 0.16); display: flex; align-items: center; justify-content: center; color: var(--accent-blue, #2a7c13);">
+            <div style="width: 30px; height: 30px; border-radius: 7px; background: rgba(59, 130, 246, 0.16); display: flex; align-items: center; justify-content: center; color: var(--accent-blue, #2a5367);">
               <i data-lucide="cpu" style="width: 17px; height: 17px;"></i>
             </div>
             <div>
-              <span style="font-size: 15px; font-weight: 700; color: var(--text-primary, #18350d); display: block; line-height: 1.2;">Model 3D Perangkat (.GLB / .GLTF)</span>
-              <span style="font-size: 11px; color: var(--text-muted, #678458);">Pasang model 3D nyata untuk Router, Server, Switch, AP, CCTV, atau perangkat lain</span>
+              <span style="font-size: 15px; font-weight: 700; color: var(--text-primary, #0b1620); display: block; line-height: 1.2;">Model 3D Perangkat (.GLB / .GLTF)</span>
+              <span style="font-size: 11px; color: var(--text-muted, #537b8e);">Pasang model 3D nyata untuk Router, Server, Switch, AP, CCTV, atau perangkat lain</span>
             </div>
           </div>
           <button id="btn-dev3d-close" class="btn btn-icon btn-sm" title="Tutup">
@@ -66,12 +66,12 @@ export class Device3DModelModal {
           <!-- Target Device Picker -->
           <div style="display: flex; flex-direction: column; gap: 4px;">
             <label style="font-size: 11.5px; font-weight: 700; color: var(--text-primary);">1. Pilih Perangkat Target</label>
-            <select id="dev3d-select-device" style="background: var(--bg-primary, #fff8cf); border: 1px solid var(--border-color); border-radius: 7px; padding: 8px 10px; font-size: 12.5px; color: var(--text-primary); font-family: inherit;">
+            <select id="dev3d-select-device" style="background: var(--bg-primary, #e3edf0); border: 1px solid var(--border-color); border-radius: 7px; padding: 8px 10px; font-size: 12.5px; color: var(--text-primary); font-family: inherit;">
             </select>
           </div>
 
           <!-- 3D Model File / URL -->
-          <div style="background: var(--bg-primary, #fff8cf); border: 1px solid var(--border-color); border-radius: 9px; padding: 12px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="background: var(--bg-primary, #e3edf0); border: 1px solid var(--border-color); border-radius: 9px; padding: 12px; display: flex; flex-direction: column; gap: 10px;">
             <div style="display: flex; align-items: center; justify-content: space-between;">
               <span style="font-size: 11.5px; font-weight: 700; color: var(--text-primary);">2. Sumber Model 3D (.glb / .gltf)</span>
               <span id="dev3d-model-badge" style="font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: rgba(100,116,139,0.14); color: var(--text-muted);">
@@ -82,7 +82,7 @@ export class Device3DModelModal {
             <input type="file" id="dev3d-file-input" accept=".glb,.gltf" style="display: none;">
             <div style="display: flex; flex-direction: column; gap: 6px;">
               <label style="font-size: 11px; color: var(--text-muted);">Pilih Model 3D .GLB Bawaan (Presisi Port 100%):</label>
-              <select id="dev3d-builtin-glb-select" style="background: var(--bg-secondary, #fbe6c2); border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 9px; font-size: 11.5px; color: var(--text-primary);">
+              <select id="dev3d-builtin-glb-select" style="background: var(--bg-secondary, #d4e3e8); border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 9px; font-size: 11.5px; color: var(--text-primary);">
                 <option value="">-- Pilih dari Library Model 3D (.GLB) --</option>
                 ${BUILTIN_GLB_MODELS.map((m) => `<option value="${m.url}">${m.label}</option>`).join('')}
               </select>
@@ -100,7 +100,7 @@ export class Device3DModelModal {
             <div style="display: flex; flex-direction: column; gap: 3px;">
               <label style="font-size: 11px; color: var(--text-muted);">Atau masukkan URL / path model 3D (contoh: <code style="font-size: 10.5px;">assets/models/mikrotik.glb</code>)</label>
               <input type="text" id="dev3d-model-url" placeholder="https://... atau assets/models/device.glb (kosong = model prosedural bawaan)"
-                     style="background: var(--bg-secondary, #fbe6c2); border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 9px; font-size: 11.5px; color: var(--text-primary); font-family: var(--font-mono);">
+                     style="background: var(--bg-secondary, #d4e3e8); border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 9px; font-size: 11.5px; color: var(--text-primary); font-family: var(--font-mono);">
             </div>
 
             <label style="display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--text-primary); cursor: pointer; padding-top: 2px;">
@@ -110,7 +110,7 @@ export class Device3DModelModal {
           </div>
 
           <!-- Spatial 3D Transform -->
-          <div style="background: var(--bg-primary, #fff8cf); border: 1px solid var(--border-color); border-radius: 9px; padding: 12px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="background: var(--bg-primary, #e3edf0); border: 1px solid var(--border-color); border-radius: 9px; padding: 12px; display: flex; flex-direction: column; gap: 10px;">
             <span style="font-size: 11.5px; font-weight: 700; color: var(--text-primary);">3. Posisi, Ukuran &amp; Rotasi 3D</span>
             <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
               <div style="display: flex; flex-direction: column; gap: 3px;">
@@ -158,7 +158,7 @@ export class Device3DModelModal {
           </div>
 
           <!-- Custom 3D Port & Interface Mapping (Packet Tracer Style) -->
-          <div style="background: var(--bg-primary, #fff8cf); border: 1px solid var(--border-color); border-radius: 9px; padding: 12px; display: flex; flex-direction: column; gap: 9px;">
+          <div style="background: var(--bg-primary, #e3edf0); border: 1px solid var(--border-color); border-radius: 9px; padding: 12px; display: flex; flex-direction: column; gap: 9px;">
             <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px;">
               <div>
                 <span style="font-size: 11.5px; font-weight: 700; color: var(--text-primary); display: block;">4. Port Kustom & Soket 3D (Cisco Packet Tracer Mode)</span>
@@ -183,7 +183,7 @@ export class Device3DModelModal {
               <button type="button" id="btn-dev3d-add-port" class="btn btn-secondary btn-sm" style="font-size: 11px; padding: 4px 9px;">
                 + Tambah Port
               </button>
-              <span id="dev3d-port-scan-status" style="font-size: 10.5px; color: var(--accent-blue, #2a7c13); font-weight: 600;"></span>
+              <span id="dev3d-port-scan-status" style="font-size: 10.5px; color: var(--accent-blue, #2a5367); font-weight: 600;"></span>
             </div>
 
             <div style="max-height: 175px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-secondary);">
@@ -210,7 +210,7 @@ export class Device3DModelModal {
         </div>
 
         <!-- Footer -->
-        <div style="height: 54px; border-top: 1px solid var(--border-color, #e5cca0); background: var(--bg-tertiary, #f2dac8); display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 0 20px; flex-shrink: 0;">
+        <div style="height: 54px; border-top: 1px solid var(--border-color, #9ab7c1); background: var(--bg-tertiary, #c4d7df); display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 0 20px; flex-shrink: 0;">
           <button type="button" id="btn-dev3d-cancel" class="btn btn-secondary btn-sm">Tutup</button>
           <button type="button" id="btn-dev3d-save-focus" class="btn btn-primary btn-sm">
             <i data-lucide="check" style="width: 14px; height: 14px;"></i>
@@ -348,8 +348,8 @@ export class Device3DModelModal {
     if (!badge) return;
     if (url) {
       badge.textContent = fileName ? `Custom: ${fileName}` : 'Model Kustom (.GLB/.GLTF)';
-      badge.style.background = 'rgba(42, 124, 19, 0.16)';
-      badge.style.color = 'var(--accent-blue, #2a7c13)';
+      badge.style.background = 'rgba(42, 83, 103, 0.16)';
+      badge.style.color = 'var(--accent-blue, #2a5367)';
     } else {
       badge.textContent = 'Model Bawaan 3D';
       badge.style.background = 'rgba(100,116,139,0.14)';

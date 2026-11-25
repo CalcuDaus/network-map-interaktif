@@ -1,0 +1,536 @@
+/* ==========================================================================
+   SmartSchool NetMap — Cisco Packet Tracer Logical Topology Mode & Terminal UI
+   Theme-aware (Light: Botanical Cream | Dark: Forest Dark)
+   ========================================================================== */
+
+.topology-workspace-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--bg-primary, #e3edf0);
+  background-image:
+    radial-gradient(circle, rgba(var(--theme-accent-rgb, 42, 83, 103), 0.16) 1px, transparent 1px);
+  background-size: 24px 24px;
+  user-select: none;
+  touch-action: none;
+}
+
+[data-theme="dark"] .topology-workspace-container {
+  background-color: var(--bg-primary, #0b1620);
+  background-image:
+    radial-gradient(circle, rgba(var(--theme-accent2-rgb, 154, 183, 193), 0.16) 1px, transparent 1px);
+}
+
+.topology-canvas-el {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: default;
+}
+
+.topology-workspace-container[data-topo-tool="select"] .topology-canvas-el {
+  cursor: default;
+}
+
+.topology-workspace-container[data-topo-tool="auto-connect"] .topology-canvas-el {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Cpath d='M5 1v8M1 5h8' stroke='%23ffffff' stroke-width='3' stroke-linecap='round'/%3E%3Cpath d='M5 1v8M1 5h8' stroke='%231e293b' stroke-width='1.5' stroke-linecap='round'/%3E%3Cpath d='M18 4l-7 11h5l-2 9 8-12h-5z' fill='%23f59e0b' stroke='%23ffffff' stroke-width='2.6' stroke-linejoin='round'/%3E%3Cpath d='M18 4l-7 11h5l-2 9 8-12h-5z' fill='%23f59e0b' stroke='%231e293b' stroke-width='1.1' stroke-linejoin='round'/%3E%3C/svg%3E") 5 5, crosshair;
+}
+
+.topology-workspace-container[data-topo-tool="manual-cable"] .topology-canvas-el {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Cpath d='M5 1v8M1 5h8' stroke='%23ffffff' stroke-width='3' stroke-linecap='round'/%3E%3Cpath d='M5 1v8M1 5h8' stroke='%231e293b' stroke-width='1.5' stroke-linecap='round'/%3E%3Cpath d='M11 8h10v7l-2 2v4h-6v-4l-2-2z' fill='%232563eb' stroke='%23ffffff' stroke-width='2.4' stroke-linejoin='round'/%3E%3Cpath d='M11 8h10v7l-2 2v4h-6v-4l-2-2z' fill='%232563eb' stroke='%230f172a' stroke-width='1' stroke-linejoin='round'/%3E%3Cpath d='M13 8v4M16 8v4M19 8v4M16 21v5' stroke='%23facc15' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E") 5 5, crosshair;
+}
+
+.topology-workspace-container[data-topo-tool="simple-pdu"] .topology-canvas-el {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Ccircle cx='5' cy='5' r='3' fill='%2316a34a' stroke='%23ffffff' stroke-width='1.8'/%3E%3Crect x='7' y='9' width='18' height='13' rx='2.5' fill='%23fef08a' stroke='%23ffffff' stroke-width='2.6'/%3E%3Crect x='7' y='9' width='18' height='13' rx='2.5' fill='%23fef08a' stroke='%2316a34a' stroke-width='1.4'/%3E%3Cpath d='M8.5 11l7.5 6 7.5-6' fill='none' stroke='%2316a34a' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") 5 5, pointer;
+}
+
+/* Top Floating Packet Tracer Toolbar Dock */
+.pt-topo-dock {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 35;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  background: var(--bg-secondary, #d4e3e8);
+  border: 1px solid var(--border-color, #9ab7c1);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+  max-width: calc(100% - 24px);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.pt-topo-dock::-webkit-scrollbar {
+  display: none;
+}
+
+.pt-topo-tool-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.pt-topo-divider {
+  width: 1px;
+  height: 22px;
+  background: var(--border-color, #9ab7c1);
+  flex-shrink: 0;
+  margin: 0 2px;
+}
+
+.pt-topo-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 9px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: var(--bg-primary, #e3edf0);
+  color: var(--text-primary, #1f2937);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.pt-topo-btn:hover {
+  border-color: var(--accent-blue, #2a5367);
+}
+
+.pt-topo-btn.active {
+  background: var(--accent-blue, #2a5367);
+  color: #ffffff;
+  border-color: var(--accent-blue, #2a5367);
+  box-shadow: 0 2px 8px rgba(42, 83, 103, 0.3);
+}
+
+.pt-topo-select {
+  height: 28px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--border-color, #9ab7c1);
+  background: var(--bg-primary, #e3edf0);
+  color: var(--text-primary, #1f2937);
+  cursor: pointer;
+}
+
+/* Status Hint Pill (shows active cabling / PDU step instructions) */
+.pt-topo-hint-pill {
+  position: absolute;
+  top: 62px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 33;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(11, 22, 32, 0.9);
+  color: #e3edf0;
+  border: 1px solid rgba(83, 123, 142, 0.55);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+  max-width: calc(100% - 32px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pt-topo-hint-pill.hidden {
+  display: none;
+}
+
+/* Floating Port Picker Popup next to clicked Node */
+.pt-port-popup {
+  position: absolute;
+  z-index: 45;
+  min-width: 196px;
+  max-width: 240px;
+  max-height: 260px;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary, #d4e3e8);
+  border: 1.5px solid var(--accent-blue, #2a5367);
+  border-radius: 10px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+
+.pt-port-popup.hidden {
+  display: none;
+}
+
+.pt-port-popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--accent-blue, #2a5367);
+  color: #ffffff;
+}
+
+.pt-port-popup-list {
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  gap: 3px;
+  overflow-y: auto;
+}
+
+.pt-port-popup-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color, #9ab7c1);
+  background: var(--bg-primary, #e3edf0);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-family: var(--font-mono, monospace);
+  cursor: pointer;
+  text-align: left;
+}
+
+.pt-port-popup-item:hover:not(:disabled) {
+  border-color: var(--accent-blue, #2a5367);
+  background: rgba(42, 83, 103, 0.1);
+}
+
+.pt-port-popup-item:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+/* Quick Action Pill above/below selected Node */
+.pt-node-quickbar {
+  position: absolute;
+  bottom: 58px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 34;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--bg-secondary, #d4e3e8);
+  border: 1px solid var(--border-color, #9ab7c1);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.16);
+}
+
+.pt-node-quickbar.hidden {
+  display: none;
+}
+
+.pt-node-quick-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--accent-blue, #2a5367);
+  padding-right: 4px;
+  border-right: 1px solid var(--border-color, #9ab7c1);
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Bottom Realtime PDU Status Bar */
+.pt-pdu-bar {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  right: 12px;
+  z-index: 32;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 12px;
+  border-radius: 10px;
+  background: var(--bg-secondary, #d4e3e8);
+  border: 1px solid var(--border-color, #9ab7c1);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.14);
+  font-size: 11.5px;
+}
+
+.pt-pdu-bar.hidden {
+  display: none;
+}
+
+.pt-pdu-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.pt-pdu-status-badge.is-ok {
+  background: rgba(34, 197, 94, 0.18);
+  color: #15803d;
+}
+
+[data-theme="dark"] .pt-pdu-status-badge.is-ok {
+  color: #4ade80;
+}
+
+.pt-pdu-status-badge.is-fail {
+  background: rgba(239, 68, 68, 0.18);
+  color: #b91c1c;
+}
+
+[data-theme="dark"] .pt-pdu-status-badge.is-fail {
+  color: #f87171;
+}
+
+/* ==========================================================================
+   Pluggable Packet Tracer Device Window & Isolated Terminal UI Skin
+   (User will refine .pt-terminal-* styles for final Terminal UI)
+   ========================================================================== */
+.pt-device-window-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1050;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.pt-device-window-backdrop.hidden {
+  display: none;
+}
+
+.pt-device-window {
+  width: min(760px, 100%);
+  max-height: min(86vh, 660px);
+  display: flex;
+  flex-direction: column;
+  border-radius: 14px;
+  background: var(--bg-secondary, #d4e3e8);
+  border: 1.5px solid var(--border-color, #9ab7c1);
+  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.32);
+  overflow: hidden;
+  color: var(--text-primary);
+}
+
+.pt-dw-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color, #9ab7c1);
+  background: var(--bg-tertiary, #c4d7df);
+}
+
+.pt-dw-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px 0 16px;
+  border-bottom: 1px solid var(--border-color, #9ab7c1);
+  background: var(--bg-primary, #e3edf0);
+  overflow-x: auto;
+}
+
+.pt-dw-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.pt-dw-tab.active {
+  background: var(--bg-secondary, #d4e3e8);
+  color: var(--accent-blue, #2a5367);
+  border-color: var(--border-color, #9ab7c1);
+}
+
+.pt-dw-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pt-dw-card {
+  background: var(--bg-primary, #e3edf0);
+  border: 1px solid var(--border-color, #9ab7c1);
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pt-dw-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px;
+}
+
+.pt-dw-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.pt-dw-field input,
+.pt-dw-field select {
+  padding: 6px 9px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color, #9ab7c1);
+  background: var(--bg-secondary, #d4e3e8);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.pt-desktop-launcher {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  gap: 8px;
+}
+
+.pt-desktop-app-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px 10px;
+  border-radius: 10px;
+  border: 1.5px solid var(--border-color, #9ab7c1);
+  background: var(--bg-primary, #e3edf0);
+  color: var(--text-primary);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pt-desktop-app-btn.active {
+  border-color: var(--accent-blue, #2a5367);
+  background: rgba(42, 83, 103, 0.1);
+  color: var(--accent-blue, #2a5367);
+}
+
+/* Isolated Terminal UI Mount Styles (Placeholder ready for custom Terminal design) */
+.pt-terminal-shell {
+  display: flex;
+  flex-direction: column;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid #2a5367;
+  background: #0b1620;
+  color: #e3edf0;
+}
+
+.pt-terminal-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #183346;
+  border-bottom: 1px solid #2a5367;
+  font-size: 11px;
+}
+
+.pt-terminal-screen {
+  min-height: 220px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 10px 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.pt-terminal-line-prompt {
+  color: #9ab7c1;
+  font-weight: 700;
+}
+
+.pt-terminal-line-error {
+  color: #f87171;
+}
+
+.pt-terminal-input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  background: #132838;
+  border-top: 1px solid #2a5367;
+}
+
+.pt-terminal-prompt-prefix {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: #9ab7c1;
+  white-space: nowrap;
+}
+
+.pt-terminal-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #ffffff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+@media (max-width: 768px) {
+  .pt-topo-dock {
+    top: 8px;
+    padding: 5px 8px;
+  }
+  .pt-node-quickbar {
+    bottom: 54px;
+    max-width: calc(100% - 20px);
+    overflow-x: auto;
+  }
+  .pt-pdu-bar {
+    bottom: 8px;
+    font-size: 10.5px;
+    flex-wrap: wrap;
+  }
+}

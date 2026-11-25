@@ -134,7 +134,7 @@ export class DeviceLayersPanel {
         id: 'lib-mikrotik',
         title: 'MikroTik Series',
         icon: 'router',
-        color: '#2a7c13',
+        color: '#2a5367',
         order: 2,
         filterClass: 'mikrotik'
       };
@@ -168,7 +168,7 @@ export class DeviceLayersPanel {
       id: `lib-std-${cat.id}`,
       title: cat.name,
       icon: cat.icon || 'box',
-      color: cat.color || '#2a7c13',
+      color: cat.color || '#2a5367',
       order: catOrderMap[cat.id] || 9,
       filterClass: 'standard'
     };
@@ -202,7 +202,7 @@ export class DeviceLayersPanel {
         id: `cat-${cat.id}`,
         title: cat.name,
         icon: cat.icon || 'layers',
-        color: cat.color || '#2a7c13',
+        color: cat.color || '#2a5367',
         order: catOrderMap[cat.id] || 5,
         filterClass: libGroup.filterClass
       };
@@ -214,7 +214,7 @@ export class DeviceLayersPanel {
         id: `loc-${loc.toLowerCase()}`,
         title: loc,
         icon: 'map-pin',
-        color: '#2a7c13',
+        color: '#2a5367',
         order: loc === 'Tanpa Lokasi / Outdoor' ? 99 : 1,
         filterClass: libGroup.filterClass
       };

@@ -1665,7 +1665,7 @@ export function create3DPortsSubGroup(ports = [], portStatusMap = new Map(), isC
  * @param {string} statusColorHex
  * @returns {THREE.Group}
  */
-export function createDevice3DMesh(device, catColorHex = '#2a7c13', statusColorHex = '#22c55e') {
+export function createDevice3DMesh(device, catColorHex = '#2a5367', statusColorHex = '#22c55e') {
   const type = device.type || 'router';
   const group = new THREE.Group();
   const bodyDark = makeMat(0x1e293b, { metalness: 0.55, roughness: 0.38 });
@@ -1910,7 +1910,7 @@ export function create3DLabelSprite(device, elevationMeters = 0) {
   ctx.fillText(truncateText(ctx, title, width - 48), width / 2, 54);
 
   ctx.font = '600 26px Consolas, monospace';
-  ctx.fillStyle = '#76c457';
+  ctx.fillStyle = '#537b8e';
   ctx.fillText(truncateText(ctx, subText, width - 48), width / 2, 102);
 
   const texture = new THREE.CanvasTexture(canvas);
@@ -1949,7 +1949,7 @@ export const BUILTIN_ROOM_BUILDING_PRESETS = [
     widthMeters: 27.9,
     depthMeters: 9.5,
     heightMeters: 5.25,
-    wallColor: '#2a7c13',
+    wallColor: '#2a5367',
     floorColor: '#1e293b',
     opacity: 0.18,
     isCutaway: true,
@@ -3137,7 +3137,7 @@ export function createBuildingRoomPresetData(presetOrId, { x = 0.5, y = 0.5, exi
     modelScale: 1,
     lockAspectRatio: true,
     rotationY: 0,
-    wallColor: preset.wallColor || '#2a7c13',
+    wallColor: preset.wallColor || '#2a5367',
     floorColor: preset.floorColor || '#1e293b',
     opacity: preset.opacity ?? 0.18,
     passThrough: typeof preset.passThrough === 'boolean'
@@ -3224,7 +3224,7 @@ export function createBuildingSignboard3DGroup(room, summary = null, {
   const hasWarning = statusCounts.warning > 0;
   const accentColor = hasOffline
     ? '#ef4444'
-    : (hasWarning ? '#f59e0b' : (isInspected ? '#2563eb' : (isDark ? '#76c457' : '#2a7c13')));
+    : (hasWarning ? '#f59e0b' : (isInspected ? '#2563eb' : (isDark ? '#537b8e' : '#2a5367')));
 
   // Vertical pin stem connecting roof to floating signboard
   const stemGeo = new THREE.CylinderGeometry(0.055, 0.055, pinHeight, 6);
@@ -3296,7 +3296,7 @@ export function createBuildingSignboard3DGroup(room, summary = null, {
       const codeLabel = truncateText(ctx, codeText, 118);
       const codeW = Math.min(126, ctx.measureText(codeLabel).width + 20);
       const codeX = width - 24 - codeW;
-      ctx.fillStyle = isDark ? 'rgba(118, 196, 87, 0.22)' : 'rgba(42, 124, 19, 0.14)';
+      ctx.fillStyle = isDark ? 'rgba(83, 123, 142, 0.22)' : 'rgba(42, 83, 103, 0.14)';
       roundRect(ctx, codeX, 36, codeW, 34, 10);
       ctx.fill();
       ctx.fillStyle = isDark ? '#a7e38c' : '#1f6410';
@@ -3419,7 +3419,7 @@ export function create3DRoomGroup(room, normToWorldFn, isSelected = false) {
   const w = Math.max(minW, Number(room.widthMeters) || 14);
   const d = Math.max(minD, Number(room.depthMeters) || 12);
   const h = Math.max(minH, Number(room.heightMeters) || 3.5);
-  const wallColor = room.wallColor || '#2a7c13';
+  const wallColor = room.wallColor || '#2a5367';
   const floorColor = room.floorColor || '#1e293b';
   const opacity = typeof room.opacity === 'number' ? room.opacity : 0.22;
   const hasCustomGlb = Boolean(room.customModelUrl);
@@ -3596,7 +3596,7 @@ export const OBJECT3D_PRESETS = {
     rotationY: 0,
     rotationZ: 0,
     color: '#64748b',
-    accentColor: '#2a7c13',
+    accentColor: '#2a5367',
     opacity: 1,
     showEdges: true,
     hasArm: true,
@@ -3613,7 +3613,7 @@ export const OBJECT3D_PRESETS = {
     rotationY: 0,
     rotationZ: 0,
     color: '#1e293b',
-    accentColor: '#2a7c13',
+    accentColor: '#2a5367',
     opacity: 0.45,
     showEdges: true,
     rackUnits: 42,
@@ -3646,7 +3646,7 @@ export const OBJECT3D_PRESETS = {
     rotationY: 0,
     rotationZ: 0,
     color: '#cbd5e1',
-    accentColor: '#2a7c13',
+    accentColor: '#2a5367',
     opacity: 0.92,
     showEdges: true,
     showLabel: false
@@ -3662,7 +3662,7 @@ export const OBJECT3D_PRESETS = {
     rotationY: 0,
     rotationZ: 0,
     color: '#94a3b8',
-    accentColor: '#2a7c13',
+    accentColor: '#2a5367',
     opacity: 0.95,
     showEdges: true,
     showLabel: false
@@ -3751,7 +3751,7 @@ export function createCustomObject3DGroup(obj, normToWorldFn, isSelected = false
   const showEdges = obj.showEdges !== false;
 
   const baseColor = obj.color || '#94a3b8';
-  const accentColor = obj.accentColor || '#2a7c13';
+  const accentColor = obj.accentColor || '#2a5367';
   const edgeColor = isSelected ? 0xfacc15 : accentColor;
 
   const mainMat = makeMat(baseColor, {
@@ -4029,7 +4029,7 @@ export function createCustomObject3DGroup(obj, normToWorldFn, isSelected = false
   return group;
 }
 
-function drawAvatarLabelCanvas(canvas, label, accentHex = '#76c457') {
+function drawAvatarLabelCanvas(canvas, label, accentHex = '#537b8e') {
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
@@ -4037,11 +4037,11 @@ function drawAvatarLabelCanvas(canvas, label, accentHex = '#76c457') {
   ctx.fillStyle = 'rgba(18, 28, 16, 0.92)';
   roundRect(ctx, 8, 8, 304, 60, 14);
   ctx.fill();
-  ctx.strokeStyle = accentHex || '#76c457';
+  ctx.strokeStyle = accentHex || '#537b8e';
   ctx.lineWidth = 3;
   roundRect(ctx, 8, 8, 304, 60, 14);
   ctx.stroke();
-  ctx.fillStyle = '#fff8cf';
+  ctx.fillStyle = '#e3edf0';
   ctx.font = 'bold 24px Poppins, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -4052,12 +4052,12 @@ function drawAvatarLabelCanvas(canvas, label, accentHex = '#76c457') {
  * Dynamically update the floating nameplate above a Roblox technician avatar.
  * @param {THREE.Group} avatarGroup
  * @param {string} newLabel
- * @param {string} [accentHex='#76c457']
+ * @param {string} [accentHex='#537b8e']
  */
-export function updateRobloxAvatarLabel(avatarGroup, newLabel, accentHex = '#76c457') {
+export function updateRobloxAvatarLabel(avatarGroup, newLabel, accentHex = '#537b8e') {
   if (!avatarGroup?.userData) return;
   const safeLabel = String(newLabel || 'Teknisi');
-  const safeAccent = accentHex || avatarGroup.userData.accentHex || '#76c457';
+  const safeAccent = accentHex || avatarGroup.userData.accentHex || '#537b8e';
   if (avatarGroup.userData.currentLabel === safeLabel && avatarGroup.userData.accentHex === safeAccent) {
     return;
   }
@@ -4087,10 +4087,10 @@ export function createRobloxAvatar3DGroup(label = 'Teknisi Jaringan', options = 
   rigRoot.name = 'RobloxAvatarRig';
   root.add(rigRoot);
 
-  const vestHex = options.vestColor !== undefined ? new THREE.Color(options.vestColor).getHex() : 0x2a7c13;
+  const vestHex = options.vestColor !== undefined ? new THREE.Color(options.vestColor).getHex() : 0x2a5367;
   const helmetHex = options.helmetColor !== undefined
     ? new THREE.Color(options.helmetColor).getHex()
-    : (options.isRemote ? vestHex : 0x76c457);
+    : (options.isRemote ? vestHex : 0x537b8e);
   const ringHex = options.ringColor !== undefined ? new THREE.Color(options.ringColor).getHex() : helmetHex;
   const accentCss = options.accentHex || `#${helmetHex.toString(16).padStart(6, '0')}`;
 
@@ -4315,7 +4315,7 @@ export function createFppHandsViewmodelGroup() {
   root.add(swayRoot);
 
   const sleeveMat = makeMat(0x1e293b, { roughness: 0.55, metalness: 0.1 });
-  const vestCuffMat = makeMat(0x2a7c13, { roughness: 0.45 });
+  const vestCuffMat = makeMat(0x2a5367, { roughness: 0.45 });
   const skinMat = makeMat(0xfacc15, { roughness: 0.42 });
   const tabletBodyMat = makeMat(0x0f172a, { roughness: 0.32, metalness: 0.45 });
   const tabletScreenMat = makeMat(0x38bdf8, { emissive: 0x0284c7, emissiveIntensity: 0.85, roughness: 0.18 });
@@ -4366,7 +4366,7 @@ export function createFppCableSpoolViewmodelGroup(cableColorHex = '#2563eb') {
   root.add(swayRoot);
 
   const sleeveMat = makeMat(0x1e293b, { roughness: 0.55, metalness: 0.1 });
-  const vestCuffMat = makeMat(0x2a7c13, { roughness: 0.45 });
+  const vestCuffMat = makeMat(0x2a5367, { roughness: 0.45 });
   const skinMat = makeMat(0xfacc15, { roughness: 0.42 });
   const flangeMat = makeMat(0x334155, { roughness: 0.35, metalness: 0.42 });
   const hubMat = makeMat(0x94a3b8, { roughness: 0.28, metalness: 0.65 });

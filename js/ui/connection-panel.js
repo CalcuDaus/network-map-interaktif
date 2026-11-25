@@ -143,7 +143,7 @@ export class ConnectionPanel {
                 <span style="font-size: 10px; color: var(--accent-blue); font-weight: 600;">TUJUAN (DESTINATION)</span>
                 <span style="font-size: 12px; font-weight: 600; color: var(--text-primary);">${destDev ? this.escapeHtml(destDev.name) : 'Unknown'}</span>
                 <div style="display: flex; align-items: center; gap: 6px; margin-top: 1px;">
-                  <span style="font-size: 10px; font-family: var(--font-mono); padding: 1px 6px; border-radius: 4px; background: rgba(42, 124, 19, 0.14); color: var(--accent-blue); font-weight: 700;">
+                  <span style="font-size: 10px; font-family: var(--font-mono); padding: 1px 6px; border-radius: 4px; background: rgba(42, 83, 103, 0.14); color: var(--accent-blue); font-weight: 700;">
                     Port: ${this.escapeHtml(details.portDestination || 'Auto / Belum dipilih')}
                   </span>
                   <span style="font-size: 10px; color: var(--text-muted); font-family: var(--font-mono);">${destDev?.network?.ip || ''}</span>
@@ -180,7 +180,7 @@ export class ConnectionPanel {
                   <span id="cable-color-preview-dot" style="display: inline-block; width: 12px; height: 12px; border-radius: 50%; background-color: ${activeColor}; border: 1px solid rgba(0,0,0,0.25); box-shadow: 0 0 6px ${activeColor}88;"></span>
                   Warna Garis Kabel
                 </label>
-                <span id="prop-cable-color-mode-badge" style="font-size: 10px; padding: 2px 7px; border-radius: 10px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; ${isCustomColor ? 'background: rgba(245, 158, 11, 0.15); color: #b45309; border: 1px solid rgba(245, 158, 11, 0.3);' : 'background: rgba(42, 124, 19, 0.15); color: var(--accent-green); border: 1px solid rgba(42, 124, 19, 0.3);'}">
+                <span id="prop-cable-color-mode-badge" style="font-size: 10px; padding: 2px 7px; border-radius: 10px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; ${isCustomColor ? 'background: rgba(245, 158, 11, 0.15); color: #b45309; border: 1px solid rgba(245, 158, 11, 0.3);' : 'background: rgba(42, 83, 103, 0.15); color: var(--accent-green); border: 1px solid rgba(42, 83, 103, 0.3);'}">
                   ${isCustomColor ? `${uiIcon('palette', 11)} Custom` : `${uiIcon('zap', 11)} Otomatis (Standar Tipe)`}
                 </span>
               </div>
@@ -215,7 +215,7 @@ export class ConnectionPanel {
                   <button type="button" class="cable-swatch-btn" data-color="#06b6d4" title="Wireless Cyan (#06b6d4)" style="width: 20px; height: 20px; border-radius: 4px; background: #06b6d4; border: 2px solid ${activeColor.toLowerCase() === '#06b6d4' ? 'var(--text-primary)' : 'transparent'}; cursor: pointer;"></button>
                   <button type="button" class="cable-swatch-btn" data-color="#64748b" title="Coaxial Slate (#64748b)" style="width: 20px; height: 20px; border-radius: 4px; background: #64748b; border: 2px solid ${activeColor.toLowerCase() === '#64748b' ? 'var(--text-primary)' : 'transparent'}; cursor: pointer;"></button>
                   <span style="display: inline-block; width: 1px; height: 16px; background: var(--border-color); margin: 0 1px;"></span>
-                  <button type="button" class="cable-swatch-btn" data-color="#2a7c13" title="Tema Forest Green (#2a7c13)" style="width: 20px; height: 20px; border-radius: 4px; background: #2a7c13; border: 2px solid ${activeColor.toLowerCase() === '#2a7c13' ? 'var(--text-primary)' : 'transparent'}; cursor: pointer;"></button>
+                  <button type="button" class="cable-swatch-btn" data-color="#2a5367" title="Tema Forest Green (#2a5367)" style="width: 20px; height: 20px; border-radius: 4px; background: #2a5367; border: 2px solid ${activeColor.toLowerCase() === '#2a5367' ? 'var(--text-primary)' : 'transparent'}; cursor: pointer;"></button>
                   <button type="button" class="cable-swatch-btn" data-color="#22c55e" title="Success Green (#22c55e)" style="width: 20px; height: 20px; border-radius: 4px; background: #22c55e; border: 2px solid ${activeColor.toLowerCase() === '#22c55e' ? 'var(--text-primary)' : 'transparent'}; cursor: pointer;"></button>
                   <button type="button" class="cable-swatch-btn" data-color="#ef4444" title="Critical Red (#ef4444)" style="width: 20px; height: 20px; border-radius: 4px; background: #ef4444; border: 2px solid ${activeColor.toLowerCase() === '#ef4444' ? 'var(--text-primary)' : 'transparent'}; cursor: pointer;"></button>
                   <button type="button" class="cable-swatch-btn" data-color="#ec4899" title="Neon Pink (#ec4899)" style="width: 20px; height: 20px; border-radius: 4px; background: #ec4899; border: 2px solid ${activeColor.toLowerCase() === '#ec4899' ? 'var(--text-primary)' : 'transparent'}; cursor: pointer;"></button>
@@ -308,7 +308,7 @@ export class ConnectionPanel {
 
                 <div style="margin-top: 4px; padding-top: 6px; border-top: 1px dashed var(--border-color); display: flex; align-items: center; justify-content: space-between;">
                   <span style="font-size: 11px; font-weight: 700; color: var(--text-primary);">Total Panjang Fisik:</span>
-                  <span id="bom-total-badge" style="font-size: 12px; font-weight: 700; font-family: var(--font-mono); padding: 3px 8px; border-radius: 4px; background: rgba(42, 124, 19, 0.15); color: var(--accent-green); border: 1px solid rgba(42, 124, 19, 0.35);">
+                  <span id="bom-total-badge" style="font-size: 12px; font-weight: 700; font-family: var(--font-mono); padding: 3px 8px; border-radius: 4px; background: rgba(42, 83, 103, 0.15); color: var(--accent-green); border: 1px solid rgba(42, 83, 103, 0.35);">
                     ${totalPhysical.toFixed(1)} Meter
                   </span>
                 </div>

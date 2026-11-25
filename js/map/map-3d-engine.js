@@ -12,6 +12,7 @@ import { attachMap3DSubsystems } from './map-3d-subsystems.js';
 import { attachMap3DNextGenPerf } from './map-3d-nextgen-perf.js';
 import { eventBus } from '../core/event-bus.js';
 import { stateManager } from '../core/state-manager.js';
+import { themeManager } from '../core/theme-manager.js';
 import { DEVICE_CATEGORIES, DEVICE_STATUSES } from '../devices/device-library.js';
 import { getDefaultSpatial3d, getDefaultDevicePorts } from '../devices/device-schema.js';
 import { CABLE_CATEGORIES } from '../connections/cable-library.js';
@@ -915,8 +916,10 @@ export class Map3DEngine {
   applyThemeColors() {
     if (!this.scene) return;
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-    this.scene.background = new THREE.Color(isDark ? 0x0b160a : 0xeef5e6);
-    this.scene.fog = new THREE.FogExp2(isDark ? 0x0b160a : 0xeef5e6, 0.00035);
+    const tokens = themeManager.getCurrentTokens(isDark ? 'dark' : 'light');
+    const skyHex = tokens?.bgPrimary || (isDark ? '#0b1620' : '#e3edf0');
+    this.scene.background = new THREE.Color(skyHex);
+    this.scene.fog = new THREE.FogExp2(skyHex, 0.00035);
     this.syncBuildingSignboards?.();
     this.markSceneDirty?.(8);
   }
@@ -1008,7 +1011,7 @@ export class Map3DEngine {
     }
 
     const gridSize = Math.max(worldW, worldD) * 1.2;
-    const grid = new THREE.GridHelper(gridSize, 40, 0x2a7c13, 0x94a3b8);
+    const grid = new THREE.GridHelper(gridSize, 40, 0x2a5367, 0x94a3b8);
     grid.position.y = 0.02;
     grid.material.opacity = 0.18;
     grid.material.transparent = true;
@@ -1037,7 +1040,7 @@ export class Map3DEngine {
     const w = Math.max(minW, Number(room.widthMeters) || 14);
     const d = Math.max(minD, Number(room.depthMeters) || 12);
     const h = Math.max(minH, Number(room.heightMeters) || 4);
-    const wallHex = room.wallColor || '#2a7c13';
+    const wallHex = room.wallColor || '#2a5367';
     const floorHex = room.floorColor || '#1e293b';
 
     const floorMesh = new THREE.Mesh(
@@ -2474,7 +2477,7 @@ export class Map3DEngine {
       // Wireless Coverage 3D Volume (Dome + Ground Footprint)
       if (dev.wirelessCoverage?.enabled) {
         const covRadius = Math.max(2, Number(dev.wirelessCoverage.radiusMeters) || 25);
-        const covColor = dev.wirelessCoverage.color || '#76c457';
+        const covColor = dev.wirelessCoverage.color || '#537b8e';
         const covOpacity = typeof dev.wirelessCoverage.opacity === 'number' ? dev.wirelessCoverage.opacity : 0.16;
 
         const discGeo = new THREE.CircleGeometry(covRadius, 40);
@@ -6594,7 +6597,7 @@ export class Map3DEngine {
     if (!this.avatarGroup) {
       this.avatarGroup = createRobloxAvatar3DGroup(localAvatarLabel);
     } else {
-      updateRobloxAvatarLabel(this.avatarGroup, localAvatarLabel, '#76c457');
+      updateRobloxAvatarLabel(this.avatarGroup, localAvatarLabel, '#537b8e');
     }
     const curScale = resolveEngineAvatarScale(this);
     this.avatarCollider = buildScaledAvatarCollider(curScale, this._baseAvatarCollider || BASE_AVATAR_COLLIDER);

@@ -1,7 +1,7 @@
 
 
 # Project Memory — network-map-interaktif
-> 79 notes | Score threshold: >40
+> 86 notes | Score threshold: >40
 
 ## Safety — Never Run Destructive Commands
 
@@ -20,12 +20,13 @@
 
 ## 📝 NOTE: 1 uncommitted file(s) in working tree.\n\n## Project Standards
 
-- Git Commit: feat: initialize project architecture with modular UI compon — confirmed 3x
+- Git Commit: feat: implement interactive 3D map engine, models, and UI co — confirmed 3x
 
 ## Learned Patterns
 
 - When encountering this, fix by: Fixed null crash in Displays — prevents null/undefined runtime crashes (seen 2x)
 - Always: Git Commit: feat: implement interactive 3D map engine, models, and UI co — confirmed 3x (seen 2x)
+- Always: Git Commit: feat: implement interactive 3D map engine, models, and UI co — confirmed 3x (seen 3x)
 - Agent generates new migration for every change (squash related changes)
 - Agent installs packages without checking if already installed
 

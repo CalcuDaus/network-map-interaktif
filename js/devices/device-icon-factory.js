@@ -3,9 +3,61 @@
  * Provides vector SVG network icons, custom image loaders, and canvas texture caching
  */
 
+import { ISO_DEVICE_ICONS } from './device-iso-icons-data.js';
+
 // In-memory cache for HTMLImageElement instances to guarantee 60fps canvas performance
 const iconImageCache = new Map();
 const customImageCache = new Map();
+
+export const ICON_KEY_TO_ISO_MAP = {
+  'router': 'router',
+  'main-router': 'router',
+  'gateway': 'router',
+  'firewall': 'router',
+  'mikrotik-ccr': 'router',
+  'mikrotik-rb': 'router',
+  'ruijie-gateway': 'router',
+  'switch': 'switch',
+  'core-switch': 'switch',
+  'dist-switch': 'switch',
+  'poe-switch': 'switch',
+  'mikrotik-crs': 'switch',
+  'ruijie-switch': 'switch',
+  'tplink-switch': 'switch',
+  'hub': 'hub',
+  'tplink-hub': 'hub',
+  'access-point': 'access-point',
+  'ap': 'access-point',
+  'wireless-bridge': 'access-point',
+  'mikrotik-cap': 'access-point',
+  'mikrotik-lhg': 'access-point',
+  'mikrotik-sxt': 'access-point',
+  'ruijie-rap': 'access-point',
+  'ruijie-est': 'access-point',
+  'olt': 'olt',
+  'odp': 'olt',
+  'ont': 'ont',
+  'onu': 'ont',
+  'fo-terminal': 'ont',
+  'server': 'server',
+  'database': 'server',
+  'storage': 'server',
+  'pc': 'pc',
+  'computer': 'pc',
+  'laptop': 'laptop',
+  'printer': 'printer',
+  'cctv': 'cctv'
+};
+
+/**
+ * Resolve the transparent isometric hardware WebP Data URL for a given icon key, if mapped.
+ * @param {string} iconKey
+ * @returns {string|null}
+ */
+export function getDeviceIsoIconDataUrl(iconKey) {
+  const mappedKey = ICON_KEY_TO_ISO_MAP[iconKey] || iconKey;
+  return ISO_DEVICE_ICONS[mappedKey] || null;
+}
 
 /**
  * Built-in Network Icon Definitions (32x32 Vector SVG)
@@ -15,7 +67,7 @@ export const NETWORK_ICON_DEFS = {
     id: 'router',
     name: 'Router',
     category: 'core',
-    svg: (color = '#76c457', bg = 'none') => `
+    svg: (color = '#537b8e', bg = 'none') => `
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
         <circle cx="16" cy="16" r="13" stroke="${color}" stroke-width="2" fill="${bg}"/>
         <path d="M16 6v7m0 0l-2.5-2.5m2.5 2.5l2.5-2.5" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -29,7 +81,7 @@ export const NETWORK_ICON_DEFS = {
     id: 'main-router',
     name: 'Core Router / CCR',
     category: 'core',
-    svg: (color = '#2a7c13', bg = 'none') => `
+    svg: (color = '#2a5367', bg = 'none') => `
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
         <rect x="3" y="3" width="26" height="26" rx="6" stroke="${color}" stroke-width="2" fill="${bg}"/>
         <circle cx="16" cy="16" r="7.5" stroke="${color}" stroke-width="1.8"/>
@@ -42,7 +94,7 @@ export const NETWORK_ICON_DEFS = {
     id: 'switch',
     name: 'Switch',
     category: 'distribution',
-    svg: (color = '#76c457', bg = 'none') => `
+    svg: (color = '#537b8e', bg = 'none') => `
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
         <rect x="3" y="6" width="26" height="20" rx="4" stroke="${color}" stroke-width="2" fill="${bg}"/>
         <path d="M8 12h16m0 0l-3.5-3m3.5 3l-3.5 3" stroke="${color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
@@ -54,7 +106,7 @@ export const NETWORK_ICON_DEFS = {
     id: 'core-switch',
     name: 'Core / L3 Switch',
     category: 'core',
-    svg: (color = '#2a7c13', bg = 'none') => `
+    svg: (color = '#2a5367', bg = 'none') => `
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
         <rect x="3" y="5" width="26" height="22" rx="4" stroke="${color}" stroke-width="2" fill="${bg}"/>
         <path d="M7 11h7m0 0l-2.5-2.5m2.5 2.5l-2.5 2.5" stroke="${color}" stroke-width="1.6" stroke-linecap="round"/>
@@ -68,7 +120,7 @@ export const NETWORK_ICON_DEFS = {
     id: 'poe-switch',
     name: 'PoE Switch',
     category: 'distribution',
-    svg: (color = '#76c457', bg = 'none') => `
+    svg: (color = '#537b8e', bg = 'none') => `
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
         <rect x="3" y="6" width="26" height="20" rx="4" stroke="${color}" stroke-width="2" fill="${bg}"/>
         <path d="M6 12h9M6 20h9" stroke="${color}" stroke-width="1.8" stroke-linecap="round"/>
@@ -80,7 +132,7 @@ export const NETWORK_ICON_DEFS = {
     id: 'access-point',
     name: 'Wi-Fi Access Point',
     category: 'distribution',
-    svg: (color = '#76c457', bg = 'none') => `
+    svg: (color = '#537b8e', bg = 'none') => `
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
         <circle cx="16" cy="24" r="2.5" fill="${color}"/>
         <path d="M10.5 18.5a7.8 7.8 0 0 1 11 0" stroke="${color}" stroke-width="2.2" stroke-linecap="round"/>
@@ -93,7 +145,7 @@ export const NETWORK_ICON_DEFS = {
     id: 'wireless-bridge',
     name: 'Wireless PtP Bridge',
     category: 'distribution',
-    svg: (color = '#76c457', bg = 'none') => `
+    svg: (color = '#537b8e', bg = 'none') => `
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
         <path d="M16 4v11m-6 13l6-13 6 13m-9-6h6" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         <circle cx="16" cy="4" r="2" fill="${color}"/>
@@ -116,7 +168,7 @@ export const NETWORK_ICON_DEFS = {
     id: 'gateway',
     name: 'Internet Gateway',
     category: 'core',
-    svg: (color = '#2a7c13', bg = 'none') => `
+    svg: (color = '#2a5367', bg = 'none') => `
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
         <circle cx="16" cy="16" r="12" stroke="${color}" stroke-width="2" fill="${bg}"/>
         <path d="M4 16h24M16 4a15 15 0 0 1 0 24M16 4a15 15 0 0 0 0 24" stroke="${color}" stroke-width="1.8"/>
@@ -161,6 +213,42 @@ export const NETWORK_ICON_DEFS = {
         <rect x="3" y="5" width="26" height="17" rx="3" stroke="${color}" stroke-width="2" fill="${bg}"/>
         <path d="M16 22v5M10 27h12" stroke="${color}" stroke-width="2" stroke-linecap="round"/>
         <circle cx="16" cy="19.5" r="1" fill="${color}"/>
+      </svg>
+    `
+  },
+  'pc': {
+    id: 'pc',
+    name: 'PC Desktop',
+    category: 'endDevice',
+    svg: (color = '#059669', bg = 'none') => `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
+        <rect x="3" y="5" width="26" height="17" rx="3" stroke="${color}" stroke-width="2" fill="${bg}"/>
+        <path d="M16 22v5M10 27h12" stroke="${color}" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="16" cy="19.5" r="1" fill="${color}"/>
+      </svg>
+    `
+  },
+  'smartphone': {
+    id: 'smartphone',
+    name: 'Smartphone Wi-Fi',
+    category: 'endDevice',
+    svg: (color = '#059669', bg = 'none') => `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
+        <rect x="9" y="3" width="14" height="26" rx="3" stroke="${color}" stroke-width="2" fill="${bg}"/>
+        <path d="M13 6h6" stroke="${color}" stroke-width="1.6" stroke-linecap="round"/>
+        <circle cx="16" cy="25" r="1.3" fill="${color}"/>
+        <path d="M13 13.5a4.5 4.5 0 0 1 6 0M11 11a7.5 7.5 0 0 1 10 0" stroke="${color}" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+    `
+  },
+  'isp': {
+    id: 'isp',
+    name: 'Cloud / ISP Internet',
+    category: 'core',
+    svg: (color = '#0284c7', bg = 'none') => `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
+        <path d="M8 23h16a5.5 5.5 0 0 0 2-10.7 7.5 7.5 0 0 0-14.6-1.5A5.5 5.5 0 0 0 8 23z" stroke="${color}" stroke-width="2" fill="${bg}" stroke-linejoin="round"/>
+        <circle cx="16" cy="16" r="2.2" fill="${color}"/>
       </svg>
     `
   },
@@ -225,7 +313,7 @@ export const NETWORK_ICON_DEFS = {
     id: 'cloud',
     name: 'Cloud / Internet WAN',
     category: 'core',
-    svg: (color = '#2a7c13', bg = 'none') => `
+    svg: (color = '#2a5367', bg = 'none') => `
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
         <path d="M8 23h16a5.5 5.5 0 0 0 2-10.7 7.5 7.5 0 0 0-14.6-1.5A5.5 5.5 0 0 0 8 23z" stroke="${color}" stroke-width="2" fill="${bg}" stroke-linejoin="round"/>
       </svg>
@@ -283,7 +371,7 @@ export const NETWORK_ICON_DEFS = {
     id: 'custom',
     name: 'Perangkat Kustom',
     category: 'core',
-    svg: (color = '#2a7c13', bg = 'none') => `
+    svg: (color = '#2a5367', bg = 'none') => `
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
         <polygon points="16,3 28,10 28,22 16,29 4,22 4,10" stroke="${color}" stroke-width="2" fill="${bg}"/>
         <circle cx="16" cy="16" r="4" fill="${color}"/>
@@ -294,7 +382,7 @@ export const NETWORK_ICON_DEFS = {
     id: 'mikrotik-ccr',
     name: 'MikroTik CCR Rack',
     category: 'core',
-    svg: (color = '#2a7c13', bg = 'none') => `
+    svg: (color = '#2a5367', bg = 'none') => `
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
         <rect x="2" y="9" width="28" height="14" rx="2.5" stroke="${color}" stroke-width="2" fill="${bg}"/>
         <path d="M5.5 20V12l2.5 4.2L10.5 12v8" stroke="${color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
@@ -313,7 +401,7 @@ export const NETWORK_ICON_DEFS = {
     id: 'mikrotik-rb',
     name: 'MikroTik RouterBOARD',
     category: 'core',
-    svg: (color = '#2a7c13', bg = 'none') => `
+    svg: (color = '#2a5367', bg = 'none') => `
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
         <rect x="3" y="8" width="26" height="16" rx="3" stroke="${color}" stroke-width="2" fill="${bg}"/>
         <path d="M6 12h6M6 15.5h4" stroke="${color}" stroke-width="1.8" stroke-linecap="round"/>
@@ -330,7 +418,7 @@ export const NETWORK_ICON_DEFS = {
     id: 'mikrotik-crs',
     name: 'MikroTik CRS Switch',
     category: 'distribution',
-    svg: (color = '#76c457', bg = 'none') => `
+    svg: (color = '#537b8e', bg = 'none') => `
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
         <rect x="2" y="8" width="28" height="16" rx="2.5" stroke="${color}" stroke-width="2" fill="${bg}"/>
         <path d="M5 12h2.2v2.2H5zm3.4 0h2.2v2.2H8.4zm3.4 0H14v2.2h-2.2zm3.4 0h2.2v2.2h-2.2z" fill="${color}"/>
@@ -347,7 +435,7 @@ export const NETWORK_ICON_DEFS = {
     id: 'mikrotik-cap',
     name: 'MikroTik cAP / hAP Wi-Fi',
     category: 'distribution',
-    svg: (color = '#76c457', bg = 'none') => `
+    svg: (color = '#537b8e', bg = 'none') => `
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
         <ellipse cx="16" cy="21" rx="11" ry="5" stroke="${color}" stroke-width="2" fill="${bg}"/>
         <circle cx="16" cy="21" r="2" fill="${color}"/>
@@ -361,7 +449,7 @@ export const NETWORK_ICON_DEFS = {
     id: 'mikrotik-lhg',
     name: 'MikroTik LHG PtP Dish',
     category: 'distribution',
-    svg: (color = '#76c457', bg = 'none') => `
+    svg: (color = '#537b8e', bg = 'none') => `
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
         <path d="M6 22C6 13.5 12.5 7 21 7" stroke="${color}" stroke-width="2.2" stroke-linecap="round"/>
         <path d="M8.5 23.5L22.5 9.5" stroke="${color}" stroke-width="1.8" stroke-linecap="round"/>
@@ -376,7 +464,7 @@ export const NETWORK_ICON_DEFS = {
     id: 'mikrotik-sxt',
     name: 'MikroTik SXT / mANTBox',
     category: 'distribution',
-    svg: (color = '#76c457', bg = 'none') => `
+    svg: (color = '#537b8e', bg = 'none') => `
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
         <rect x="4" y="7" width="12" height="18" rx="2.5" stroke="${color}" stroke-width="2" fill="${bg}"/>
         <path d="M8 11v10M12 11v10" stroke="${color}" stroke-width="1.6" stroke-linecap="round"/>
@@ -391,7 +479,7 @@ export const NETWORK_ICON_DEFS = {
     id: 'ruijie-gateway',
     name: 'Ruijie EG / NBR Gateway',
     category: 'core',
-    svg: (color = '#2a7c13', bg = 'none') => `
+    svg: (color = '#2a5367', bg = 'none') => `
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
         <rect x="2" y="8" width="28" height="16" rx="3" stroke="${color}" stroke-width="2" fill="${bg}"/>
         <path d="M5.5 20V12h3a2.5 2.5 0 0 1 0 5h-3m2.2 0L10 20" stroke="${color}" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
@@ -408,7 +496,7 @@ export const NETWORK_ICON_DEFS = {
     id: 'ruijie-switch',
     name: 'Ruijie NBS / ES Switch',
     category: 'distribution',
-    svg: (color = '#76c457', bg = 'none') => `
+    svg: (color = '#537b8e', bg = 'none') => `
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
         <rect x="2" y="8" width="28" height="16" rx="2.5" stroke="${color}" stroke-width="2" fill="${bg}"/>
         <path d="M5 12h2v2H5zm3 0h2v2H8zm3 0h2v2h-2zm3 0h2v2h-2zm3 0h2v2h-2z" fill="${color}"/>
@@ -425,7 +513,7 @@ export const NETWORK_ICON_DEFS = {
     id: 'ruijie-rap',
     name: 'Ruijie Reyee RAP AP',
     category: 'distribution',
-    svg: (color = '#76c457', bg = 'none') => `
+    svg: (color = '#537b8e', bg = 'none') => `
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
         <rect x="5" y="12" width="22" height="15" rx="5" stroke="${color}" stroke-width="2" fill="${bg}"/>
         <circle cx="16" cy="19.5" r="2.2" fill="${color}"/>
@@ -438,7 +526,7 @@ export const NETWORK_ICON_DEFS = {
     id: 'ruijie-est',
     name: 'Ruijie EST Wireless Bridge',
     category: 'distribution',
-    svg: (color = '#76c457', bg = 'none') => `
+    svg: (color = '#537b8e', bg = 'none') => `
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
         <rect x="4" y="6" width="12" height="19" rx="3" stroke="${color}" stroke-width="2" fill="${bg}"/>
         <circle cx="10" cy="12" r="2" stroke="${color}" stroke-width="1.6"/>
@@ -452,7 +540,7 @@ export const NETWORK_ICON_DEFS = {
     id: 'tplink-hub',
     name: 'TP-Link Desktop Switch / Hub',
     category: 'distribution',
-    svg: (color = '#76c457', bg = 'none') => `
+    svg: (color = '#537b8e', bg = 'none') => `
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
         <path d="M5 12h22l2 5v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7l2-5z" stroke="${color}" stroke-width="2" stroke-linejoin="round" fill="${bg}"/>
         <path d="M3 17h26" stroke="${color}" stroke-width="1.6"/>
@@ -469,7 +557,7 @@ export const NETWORK_ICON_DEFS = {
     id: 'tplink-switch',
     name: 'TP-Link JetStream Switch',
     category: 'distribution',
-    svg: (color = '#76c457', bg = 'none') => `
+    svg: (color = '#537b8e', bg = 'none') => `
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
         <rect x="2" y="8" width="28" height="16" rx="2.5" stroke="${color}" stroke-width="2" fill="${bg}"/>
         <circle cx="5.5" cy="12" r="1.2" fill="${color}"/>
@@ -481,6 +569,56 @@ export const NETWORK_ICON_DEFS = {
         <rect x="22.5" y="15.5" width="2.5" height="2.5" rx="0.4" stroke="${color}" stroke-width="1.3"/>
         <rect x="26" y="15.5" width="2.5" height="2.5" rx="0.4" stroke="${color}" stroke-width="1.3"/>
         <path d="M5.5 21h21" stroke="${color}" stroke-width="1.4" stroke-linecap="round"/>
+      </svg>
+    `
+  },
+  'hub': {
+    id: 'hub',
+    name: 'Ethernet Hub',
+    category: 'distribution',
+    svg: (color = '#537b8e', bg = 'none') => `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
+        <rect x="4" y="9" width="24" height="14" rx="3" stroke="${color}" stroke-width="2" fill="${bg}"/>
+        <circle cx="9" cy="16" r="1.6" fill="${color}"/>
+        <circle cx="13.5" cy="16" r="1.6" fill="${color}"/>
+        <circle cx="18" cy="16" r="1.6" fill="${color}"/>
+        <circle cx="22.5" cy="16" r="1.6" fill="${color}"/>
+      </svg>
+    `
+  },
+  'olt': {
+    id: 'olt',
+    name: 'OLT Fiber PON',
+    category: 'core',
+    svg: (color = '#2a5367', bg = 'none') => `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
+        <rect x="3" y="7" width="26" height="18" rx="3" stroke="${color}" stroke-width="2" fill="${bg}"/>
+        <path d="M7 13h8M7 18h8M19 13h6M19 18h6" stroke="${color}" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+    `
+  },
+  'ont': {
+    id: 'ont',
+    name: 'ONT / ONU Fiber',
+    category: 'infrastructure',
+    svg: (color = '#d97706', bg = 'none') => `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
+        <rect x="4" y="13" width="24" height="13" rx="3" stroke="${color}" stroke-width="2" fill="${bg}"/>
+        <path d="M10 13V6M22 13V6" stroke="${color}" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="10" cy="19.5" r="1.4" fill="${color}"/>
+        <circle cx="15" cy="19.5" r="1.4" fill="${color}"/>
+        <circle cx="20" cy="19.5" r="1.4" fill="${color}"/>
+      </svg>
+    `
+  },
+  'ap': {
+    id: 'ap',
+    name: 'Access Point Wi-Fi',
+    category: 'distribution',
+    svg: (color = '#537b8e', bg = 'none') => `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
+        <circle cx="16" cy="24" r="2.5" fill="${color}"/>
+        <path d="M10.5 18.5a7.8 7.8 0 0 1 11 0M6.5 14a13.5 13.5 0 0 1 19 0" stroke="${color}" stroke-width="2.2" stroke-linecap="round"/>
       </svg>
     `
   }
@@ -502,17 +640,28 @@ export function getDefaultIconForType(type) {
     'managed-switch': 'switch',
     'poe-switch': 'poe-switch',
     'access-point': 'access-point',
+    'ap': 'access-point',
     'wireless-bridge': 'wireless-bridge',
-    'unmanaged-switch': 'switch',
+    'unmanaged-switch': 'hub',
+    'hub': 'hub',
     'network-rack': 'network-rack',
     'patch-panel': 'switch',
-    'odp': 'odp',
-    'fo-terminal': 'odp',
+    'olt': 'olt',
+    'odp': 'olt',
+    'ont': 'ont',
+    'onu': 'ont',
+    'fo-terminal': 'ont',
     'network-pole': 'wireless-bridge',
     'cctv': 'cctv',
     'nvr': 'server',
     'server': 'server',
     'computer': 'computer',
+    'pc': 'pc',
+    'workstation': 'pc',
+    'smartphone': 'smartphone',
+    'isp': 'isp',
+    'cloud': 'cloud',
+    'internet': 'isp',
     'printer': 'printer',
     'ip-phone': 'ip-phone',
     'storage': 'storage',
@@ -575,7 +724,12 @@ export function getDefaultIconForType(type) {
  * @param {string} [options.bg]
  * @returns {string}
  */
-export function getDeviceIconSvg(iconKey, { color = '#76c457', bg = 'none', size } = {}) {
+export function getDeviceIconSvg(iconKey, { color = '#537b8e', bg = 'none', size } = {}) {
+  const isoUrl = getDeviceIsoIconDataUrl(iconKey);
+  if (isoUrl) {
+    const dim = size || 32;
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="${dim}" height="${dim}" fill="none"><image href="${isoUrl}" x="0" y="0" width="32" height="32" preserveAspectRatio="xMidYMid meet"/></svg>`;
+  }
   const def = NETWORK_ICON_DEFS[iconKey] || NETWORK_ICON_DEFS.router;
   let svg = def.svg(color, bg);
   if (size) {
@@ -590,15 +744,16 @@ export function getDeviceIconSvg(iconKey, { color = '#76c457', bg = 'none', size
  * @param {string} color 
  * @param {Function} callback (HTMLImageElement)
  */
-export function getDeviceIconImage(iconKey, color = '#76c457', callback) {
-  const cacheKey = `${iconKey}:${color}`;
+export function getDeviceIconImage(iconKey, color = '#537b8e', callback) {
+  const isoKey = ICON_KEY_TO_ISO_MAP[iconKey] || iconKey;
+  const isoUrl = getDeviceIsoIconDataUrl(iconKey);
+  const cacheKey = isoUrl ? `iso:${isoKey}` : `${iconKey}:${color}`;
   if (iconImageCache.has(cacheKey)) {
     callback(iconImageCache.get(cacheKey));
     return;
   }
 
-  const svgStr = getDeviceIconSvg(iconKey, { color, bg: 'none' });
-  const dataUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgStr);
+  const dataUrl = isoUrl || ('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(getDeviceIconSvg(iconKey, { color, bg: 'none' })));
 
   const img = new Image();
   img.onload = () => {
