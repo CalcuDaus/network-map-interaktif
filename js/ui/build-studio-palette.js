@@ -70,7 +70,8 @@ const FACILITY_PRESET_IDS = new Set([
   'lorong-bunga-anggrek-web',
   'pohon-mahoni-rindang',
   'pohon-cemara-rindang',
-  'batu-kolam-hiasan'
+  'batu-kolam-hiasan',
+  'joglo-web'
 ]);
 
 const OBJECT_ICON_MAP = {

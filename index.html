@@ -947,58 +947,6 @@
         <!-- Mode Teknisi Roblox Avatar Radar & Control Bar (Bottom Center in 3D Mode) -->
         <div id="hud-3d-avatar-bar" class="hud-3d-avatar-bar hidden" style="display: none;"></div>
 
-        <!-- Dedicated Edit Bangunan 3D Placement Bar (Visible Only in 'build' Workspace) -->
-        <div id="hud-3d-build-studio" class="hud-3d-build-studio hidden" style="display: none;"
-          aria-label="Alat Edit Bangunan 3D">
-          <button type="button" id="btn-studio-grid-snap" class="avatar-sim-chip active" title="Snap grid lantai">
-            <i data-lucide="grid-3x3" style="width: 12px; height: 12px;"></i>
-            <span>Snap: ON</span>
-          </button>
-          <select id="select-studio-grid-size" class="hud-3d-select" title="Ukuran Grid">
-            <option value="0.25">0.25m</option>
-            <option value="0.5" selected>0.50m</option>
-            <option value="1">1.00m</option>
-            <option value="2">2.00m</option>
-          </select>
-          <select id="select-studio-angle-snap" class="hud-3d-select" title="Sudut Putar">
-            <option value="0">360°</option>
-            <option value="15">15°</option>
-            <option value="45" selected>45°</option>
-            <option value="90">90°</option>
-          </select>
-          <button type="button" id="btn-studio-rot-ccw" class="avatar-sim-mini-btn" title="Putar Kiri ([)">
-            <i data-lucide="rotate-ccw" style="width: 12px; height: 12px;"></i>
-          </button>
-          <button type="button" id="btn-studio-rot-cw" class="avatar-sim-mini-btn" title="Putar Kanan (])">
-            <i data-lucide="rotate-cw" style="width: 12px; height: 12px;"></i>
-          </button>
-          <button type="button" id="btn-studio-collision" class="avatar-sim-chip" title="Anti-Tabrakan vs Tembus Bebas">
-            <i data-lucide="shield" style="width: 12px; height: 12px;"></i>
-            <span>Anti-Tabrakan</span>
-          </button>
-          <button type="button" id="btn-studio-surface-snap" class="avatar-sim-chip active" title="Tempel permukaan">
-            <i data-lucide="magnet" style="width: 12px; height: 12px;"></i>
-            <span>Surface</span>
-          </button>
-          <button type="button" id="btn-studio-gizmo" class="avatar-sim-chip" title="Tampilkan Gizmo">
-            <i data-lucide="move" style="width: 12px; height: 12px;"></i>
-            <span>Gizmo: OFF</span>
-          </button>
-          <select id="select-studio-gizmo-mode" class="hud-3d-select" title="Mode Gizmo" style="display: none;">
-            <option value="both" selected>Panah + Putar</option>
-            <option value="translate">Geser</option>
-            <option value="rotate">Putar</option>
-          </select>
-          <button type="button" id="btn-studio-duplicate" class="avatar-sim-chip" title="Duplikat">
-            <i data-lucide="copy" style="width: 12px; height: 12px;"></i>
-            <span>Duplikat</span>
-          </button>
-          <button type="button" id="btn-studio-road" class="avatar-sim-chip" title="Jalan 3D">
-            <i data-lucide="route" style="width: 12px; height: 12px;"></i>
-            <span>Jalan 3D</span>
-          </button>
-        </div>
-
         <!-- City-Builder 3D Road & Modular School Fence Toolbar (Floating Bottom Center) -->
         <div id="hud-3d-road-bar" class="hud-3d-road-bar hidden" style="display: none;"
           aria-label="Alat Bangun Jalan dan Pagar 3D">
@@ -1253,6 +1201,64 @@
         </div>
 
         <div class="sidebar-content">
+          <!-- Docked Edit Bangunan 3D Placement Controls (Inside Properti Sidebar, Visible Only in 'build' 3D Mode) -->
+          <div id="hud-3d-build-studio" class="hud-3d-build-studio is-sidebar-docked hidden" style="display: none;"
+            aria-label="Alat Edit Bangunan 3D">
+            <div class="hud-3d-build-studio-head">
+              <i data-lucide="sliders-horizontal" style="width: 12px; height: 12px;"></i>
+              <span>Alat Penataan 3D</span>
+            </div>
+            <div class="hud-3d-build-studio-grid">
+              <button type="button" id="btn-studio-grid-snap" class="avatar-sim-chip active" title="Snap grid lantai">
+                <i data-lucide="grid-3x3" style="width: 12px; height: 12px;"></i>
+                <span>Snap: ON</span>
+              </button>
+              <select id="select-studio-grid-size" class="hud-3d-select" title="Ukuran Grid">
+                <option value="0.25">0.25m</option>
+                <option value="0.5" selected>0.50m</option>
+                <option value="1">1.00m</option>
+                <option value="2">2.00m</option>
+              </select>
+              <select id="select-studio-angle-snap" class="hud-3d-select" title="Sudut Putar">
+                <option value="0">360°</option>
+                <option value="15">15°</option>
+                <option value="45" selected>45°</option>
+                <option value="90">90°</option>
+              </select>
+              <button type="button" id="btn-studio-rot-ccw" class="avatar-sim-mini-btn" title="Putar Kiri ([)">
+                <i data-lucide="rotate-ccw" style="width: 12px; height: 12px;"></i>
+              </button>
+              <button type="button" id="btn-studio-rot-cw" class="avatar-sim-mini-btn" title="Putar Kanan (])">
+                <i data-lucide="rotate-cw" style="width: 12px; height: 12px;"></i>
+              </button>
+              <button type="button" id="btn-studio-collision" class="avatar-sim-chip" title="Anti-Tabrakan vs Tembus Bebas">
+                <i data-lucide="shield" style="width: 12px; height: 12px;"></i>
+                <span>Anti-Tabrakan</span>
+              </button>
+              <button type="button" id="btn-studio-surface-snap" class="avatar-sim-chip active" title="Tempel permukaan">
+                <i data-lucide="magnet" style="width: 12px; height: 12px;"></i>
+                <span>Surface</span>
+              </button>
+              <button type="button" id="btn-studio-gizmo" class="avatar-sim-chip" title="Tampilkan Gizmo">
+                <i data-lucide="move" style="width: 12px; height: 12px;"></i>
+                <span>Gizmo: OFF</span>
+              </button>
+              <select id="select-studio-gizmo-mode" class="hud-3d-select" title="Mode Gizmo" style="display: none;">
+                <option value="both" selected>Panah + Putar</option>
+                <option value="translate">Geser</option>
+                <option value="rotate">Putar</option>
+              </select>
+              <button type="button" id="btn-studio-duplicate" class="avatar-sim-chip" title="Duplikat">
+                <i data-lucide="copy" style="width: 12px; height: 12px;"></i>
+                <span>Duplikat</span>
+              </button>
+              <button type="button" id="btn-studio-road" class="avatar-sim-chip" title="Jalan &amp; Pagar 3D">
+                <i data-lucide="route" style="width: 12px; height: 12px;"></i>
+                <span>Jalan 3D</span>
+              </button>
+            </div>
+          </div>
+
           <!-- Tab 1: Properties Panel Component Container -->
           <div id="properties-panel-container" data-right-tab-panel="properties"></div>
           <!-- Tab 2: Photoshop-Style Device Layers Container -->

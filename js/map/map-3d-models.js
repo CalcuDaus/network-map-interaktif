@@ -1418,7 +1418,6 @@ function addBox(group, w, h, d, x, y, z, mat) {
  * @returns {Promise<THREE.Group>}
  */
 const LEGACY_BUILDING_GLB_ALIASES = {
-  'assets/models/gedung_utama_kepsek_tu.glb': 'assets/models/gedung_utama_kepsek_tu_cutaway.glb',
   'assets/models/gedung_sekolah_3ruangan.glb': 'assets/models/gedung_sekolah_3ruangan_cutaway.glb',
   'assets/models/gedung_perhotelan_2lantai.glb': 'assets/models/gedung_perhotelan_2lantai_web.glb',
   'assets/models/gedung_perhotelan_2lantai_cutaway.glb': 'assets/models/gedung_perhotelan_2lantai_web.glb'
@@ -2380,6 +2379,19 @@ export const BUILTIN_ROOM_BUILDING_PRESETS = [
     opacity: 0.18,
     isCutaway: true,
     customModelUrl: 'assets/models/gedung_utama_kepsek_tu_cutaway.glb'
+  },
+  {
+    id: 'gedung-kepsek-tu',
+    name: 'Gedung Kepsek & TU',
+    subtitle: 'Gedung Kepsek & TU atap penuh tanpa furnitur dengan pintu interaktif (28×14.9×5.9m)',
+    widthMeters: 27.96,
+    depthMeters: 14.93,
+    heightMeters: 5.9,
+    wallColor: '#2563eb',
+    floorColor: '#1e293b',
+    opacity: 0.18,
+    isCutaway: false,
+    customModelUrl: 'assets/models/gedung_utama_kepsek_tu.glb'
   },
   {
     id: 'gedung-3ruangan-cutaway',
@@ -3630,6 +3642,19 @@ export const BUILTIN_ROOM_BUILDING_PRESETS = [
     isCutaway: false,
     passThrough: false,
     customModelUrl: 'assets/models/batu_kolam_hiasan.glb'
+  },
+  {
+    id: 'joglo-web',
+    name: 'Joglo Sekolah (Web PBR)',
+    subtitle: 'Pendopo joglo sekolah PBR 1K terbuka (9.6×7.6×6.5m)',
+    widthMeters: 9.58,
+    depthMeters: 7.6,
+    heightMeters: 6.54,
+    wallColor: '#92400e',
+    floorColor: '#475569',
+    opacity: 0.18,
+    isCutaway: false,
+    customModelUrl: 'assets/models/joglo_web.glb'
   }
 ];
 

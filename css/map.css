@@ -2236,32 +2236,53 @@ body[data-workspace="network"] #avatar-sim-build-panel {
   color: #ffffff;
 }
 
-/* Compact Desktop Studio Bangunan 3D Floating Bar */
+/* Docked Studio Bangunan 3D Placement Controls (Inside Properti Sidebar, Zero Canvas Obstruction) */
 .hud-3d-build-studio {
-  position: absolute;
-  bottom: 44px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 44;
+  position: static;
+  transform: none;
+  left: auto;
+  bottom: auto;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 8px 9px;
+  border-radius: 10px;
+  background: var(--bg-tertiary);
+  border: 1px solid rgba(217, 119, 6, 0.42);
+  box-shadow: var(--shadow-sm);
+}
+
+.hud-3d-build-studio.hidden {
+  display: none !important;
+}
+
+.hud-3d-build-studio-head {
   display: flex;
   align-items: center;
-  flex-wrap: nowrap;
-  gap: 4px;
-  max-width: calc(100vw - 32px);
-  overflow-x: auto;
-  padding: 5px 8px;
-  border-radius: 10px;
-  background: var(--bg-secondary);
-  border: 1px solid #d97706;
-  box-shadow: var(--shadow-md);
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #d97706;
 }
 
-body:not(.is-mobile-touch) #map-viewport:has(#hud-3d-avatar-bar:not(.hidden).is-minimized) .hud-3d-build-studio {
-  bottom: 66px;
+.hud-3d-build-studio-grid {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
 }
 
-body:not(.is-mobile-touch) #map-viewport:has(#hud-3d-avatar-bar:not(.hidden):not(.is-minimized)) .hud-3d-build-studio {
-  display: none !important;
+.hud-3d-build-studio .avatar-sim-chip,
+.hud-3d-build-studio .avatar-sim-mini-btn,
+.hud-3d-build-studio .hud-3d-select {
+  white-space: nowrap;
+  flex-shrink: 0;
+  height: 26px;
+  line-height: 1;
 }
 
 /* Simple House-Flipper Style Prompt Pill (compact near bottom-center, clear of crosshair view) */
@@ -2293,14 +2314,6 @@ body:not(.is-mobile-touch) #map-viewport:has(#hud-3d-avatar-bar:not(.hidden):not
 
 body:not(.is-mobile-touch) #map-viewport:has(#hud-3d-avatar-bar:not(.hidden).is-minimized) .hud-3d-houseflipper-tip {
   bottom: 46px;
-}
-
-body:not(.is-mobile-touch) #map-viewport:has(#hud-3d-build-studio:not(.hidden)) .hud-3d-houseflipper-tip {
-  bottom: 92px;
-}
-
-body:not(.is-mobile-touch) #map-viewport:has(#hud-3d-avatar-bar:not(.hidden).is-minimized):has(#hud-3d-build-studio:not(.hidden)) .hud-3d-houseflipper-tip {
-  bottom: 108px;
 }
 
 body:not(.is-mobile-touch) #map-viewport:has(#hud-3d-avatar-bar:not(.hidden):not(.is-minimized)) .hud-3d-houseflipper-tip {
