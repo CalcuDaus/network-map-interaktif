@@ -316,8 +316,8 @@ export function extractInteractiveDoorsFromGlbRoot(root) {
     candidateMeshes.push(obj);
   });
   let isBakedSingleMesh = false;
-  if (candidateMeshes.length === 0 && rootSize.y >= 3.0 && Math.max(rootSize.x, rootSize.z) >= 8.0) {
-    const BAKED_NON_BUILDING_RE = /pohon|lapangan|gawang|kandang|tandon|parkiran|tiang|wastafel|tong_sampah|rak_bunga|bunga|kaktus|halte|joglo|pendopo/i;
+  if (candidateMeshes.length === 0 && rootSize.y >= 3.0 && Math.max(rootSize.x, rootSize.z) >= 4.5) {
+    const BAKED_NON_BUILDING_RE = /pohon|lapangan|gawang|kandang|tandon|parkiran|tiang|wastafel|tong_sampah|rak_bunga|bunga|kaktus|halte|joglo|pendopo|lorong|batu_kolam/i;
     root.traverse((obj) => {
       if (!obj?.isMesh || !obj.geometry?.attributes?.position) return;
       const name = String(obj.name || '');
@@ -3655,6 +3655,45 @@ export const BUILTIN_ROOM_BUILDING_PRESETS = [
     opacity: 0.18,
     isCutaway: false,
     customModelUrl: 'assets/models/joglo_web.glb'
+  },
+  {
+    id: 'joglo-kolam-ikan-web',
+    name: 'Joglo Kolam Ikan (Web PBR)',
+    subtitle: 'Pendopo joglo santai di atas kolam ikan PBR 1K (10.7×8.7×6.6m)',
+    widthMeters: 10.75,
+    depthMeters: 8.68,
+    heightMeters: 6.59,
+    wallColor: '#92400e',
+    floorColor: '#0284c7',
+    opacity: 0.18,
+    isCutaway: false,
+    customModelUrl: 'assets/models/joglo_kolam_ikan_web.glb'
+  },
+  {
+    id: 'ruang-guru-web',
+    name: 'Ruang Guru (Web PBR)',
+    subtitle: 'Gedung Ruang Guru sekolah PBR 1K dengan pintu interaktif (15.6×8.8×5.7m)',
+    widthMeters: 15.58,
+    depthMeters: 8.76,
+    heightMeters: 5.65,
+    wallColor: '#0284c7',
+    floorColor: '#1e293b',
+    opacity: 0.18,
+    isCutaway: false,
+    customModelUrl: 'assets/models/ruang_guru_web.glb'
+  },
+  {
+    id: 'ruangan-pmr-uks-web',
+    name: 'Ruangan PMR & UKS (Web PBR)',
+    subtitle: 'Gedung ruang PMR & UKS sekolah PBR 1K dengan pintu interaktif (5.8×7.4×4.9m)',
+    widthMeters: 5.84,
+    depthMeters: 7.44,
+    heightMeters: 4.85,
+    wallColor: '#dc2626',
+    floorColor: '#1e293b',
+    opacity: 0.18,
+    isCutaway: false,
+    customModelUrl: 'assets/models/ruangan_pmr_uks_web.glb'
   }
 ];
 
