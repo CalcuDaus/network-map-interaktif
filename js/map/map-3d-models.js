@@ -12,7 +12,7 @@ const glbCache = new Map(); // url -> Promise<THREE.Group>
 const glbCollisionCache = new Map(); // url -> CollisionProfile
 const OFFLINE_GLB_BUNDLE_URL = 'assets/vendor/glb-offline-bundle.js';
 
-const NON_ENTERABLE_GLB_RE = /(?:^|\/)(?:pohon_|wastafel_|tong_sampah|keran_|plank_|banner_|penunjuk_arah|rak_bunga|tempat_duduk|kandang_burung|tandon_air|mikrotik_|ruijie_|tp_link_|dahua_|hpe_)/i;
+const NON_ENTERABLE_GLB_RE = /(?:^|\/)(?:pohon_|batu_kolam|wastafel_|tong_sampah|keran_|plank_|banner_|penunjuk_arah|rak_bunga|tempat_duduk|kandang_burung|tandon_air|mikrotik_|ruijie_|tp_link_|dahua_|hpe_)/i;
 
 /**
  * Determine whether a GLB URL represents a walk-inside building needing door extraction & triangle collision baking.
@@ -134,6 +134,159 @@ function _buildSubGeometryFromTriangles(mesh, triIndices, pivotWorld = null) {
   return geo;
 }
 
+function _buildPlanarRectGeoFromSourceTris(mesh, srcTriIndices, rect, pivotWorld = null, { asGeometry = false } = {}) {
+  const srcGeo = mesh.geometry;
+  const posAttr = srcGeo.attributes.position;
+  const normAttr = srcGeo.attributes.normal || null;
+  const uvAttr = srcGeo.attributes.uv || null;
+  const idxAttr = srcGeo.index || null;
+  const matWorld = mesh.matrixWorld;
+
+  const p0 = new THREE.Vector3();
+  const p1 = new THREE.Vector3();
+  const p2 = new THREE.Vector3();
+  const e1 = new THREE.Vector3();
+  const e2 = new THREE.Vector3();
+  const cr = new THREE.Vector3();
+
+  let bestTri = srcTriIndices[0];
+  let bestArea = -1;
+  for (const t of srcTriIndices) {
+    const i0 = idxAttr ? idxAttr.getX(t * 3) : (t * 3);
+    const i1 = idxAttr ? idxAttr.getX(t * 3 + 1) : (t * 3 + 1);
+    const i2 = idxAttr ? idxAttr.getX(t * 3 + 2) : (t * 3 + 2);
+    p0.fromBufferAttribute(posAttr, i0).applyMatrix4(matWorld);
+    p1.fromBufferAttribute(posAttr, i1).applyMatrix4(matWorld);
+    p2.fromBufferAttribute(posAttr, i2).applyMatrix4(matWorld);
+    e1.subVectors(p1, p0);
+    e2.subVectors(p2, p0);
+    const area = cr.crossVectors(e1, e2).length();
+    if (area > bestArea) {
+      bestArea = area;
+      bestTri = t;
+    }
+  }
+
+  const i0 = idxAttr ? idxAttr.getX(bestTri * 3) : (bestTri * 3);
+  const i1 = idxAttr ? idxAttr.getX(bestTri * 3 + 1) : (bestTri * 3 + 1);
+  const i2 = idxAttr ? idxAttr.getX(bestTri * 3 + 2) : (bestTri * 3 + 2);
+  p0.fromBufferAttribute(posAttr, i0).applyMatrix4(matWorld);
+  p1.fromBufferAttribute(posAttr, i1).applyMatrix4(matWorld);
+  p2.fromBufferAttribute(posAttr, i2).applyMatrix4(matWorld);
+  const origNorm = new THREE.Vector3().subVectors(p1, p0).cross(new THREE.Vector3().subVectors(p2, p0));
+  if (origNorm.lengthSq() > 1e-10) {
+    origNorm.normalize();
+  } else if (normAttr) {
+    origNorm.fromBufferAttribute(normAttr, i0).normalize();
+  } else {
+    origNorm.set(0, 0, 1);
+  }
+
+  const uv0 = uvAttr ? new THREE.Vector2().fromBufferAttribute(uvAttr, i0) : new THREE.Vector2(0, 0);
+  const uv1 = uvAttr ? new THREE.Vector2().fromBufferAttribute(uvAttr, i1) : new THREE.Vector2(1, 0);
+  const uv2 = uvAttr ? new THREE.Vector2().fromBufferAttribute(uvAttr, i2) : new THREE.Vector2(1, 1);
+
+  const isZPlane = rect.axis === 'z';
+  const aU = isZPlane ? p0.x : p0.z;
+  const aV = p0.y;
+  const bU = isZPlane ? p1.x : p1.z;
+  const bV = p1.y;
+  const cU = isZPlane ? p2.x : p2.z;
+  const cV = p2.y;
+  const uvDenom = (bV - cV) * (aU - cU) + (cU - bU) * (aV - cV);
+
+  const interpUv = (u, v) => {
+    if (Math.abs(uvDenom) < 1e-8) return [0, 0];
+    const w0 = ((bV - cV) * (u - cU) + (cU - bU) * (v - cV)) / uvDenom;
+    const w1 = ((cV - aV) * (u - cU) + (aU - cU) * (v - cV)) / uvDenom;
+    const w2 = 1 - w0 - w1;
+    return [
+      w0 * uv0.x + w1 * uv1.x + w2 * uv2.x,
+      w0 * uv0.y + w1 * uv1.y + w2 * uv2.y
+    ];
+  };
+
+  const toWorld = (u, v) => (isZPlane
+    ? new THREE.Vector3(u, v, rect.fixedCoord)
+    : new THREE.Vector3(rect.fixedCoord, v, u));
+
+  const c00 = toWorld(rect.u0, rect.v0);
+  const c10 = toWorld(rect.u1, rect.v0);
+  const c11 = toWorld(rect.u1, rect.v1);
+  const c01 = toWorld(rect.u0, rect.v1);
+  const uv00 = interpUv(rect.u0, rect.v0);
+  const uv10 = interpUv(rect.u1, rect.v0);
+  const uv11 = interpUv(rect.u1, rect.v1);
+  const uv01 = interpUv(rect.u0, rect.v1);
+
+  const testNorm = new THREE.Vector3().subVectors(c10, c00).cross(new THREE.Vector3().subVectors(c11, c00));
+  const flipWinding = testNorm.dot(origNorm) < 0;
+  const verts = flipWinding
+    ? [[c00, uv00], [c11, uv11], [c10, uv10], [c00, uv00], [c01, uv01], [c11, uv11]]
+    : [[c00, uv00], [c10, uv10], [c11, uv11], [c00, uv00], [c11, uv11], [c01, uv01]];
+
+  const positions = new Float32Array(18);
+  const normals = new Float32Array(18);
+  const uvs = new Float32Array(12);
+  const invWorld = pivotWorld ? null : new THREE.Matrix4().copy(matWorld).invert();
+  const invNormMat = invWorld ? new THREE.Matrix3().getNormalMatrix(invWorld) : null;
+  const localNorm = origNorm.clone();
+  if (invNormMat) localNorm.applyMatrix3(invNormMat).normalize();
+
+  const tmpPos = new THREE.Vector3();
+  for (let i = 0; i < 6; i++) {
+    const [wp, uvp] = verts[i];
+    tmpPos.copy(wp);
+    if (pivotWorld) {
+      tmpPos.sub(pivotWorld);
+    } else if (invWorld) {
+      tmpPos.applyMatrix4(invWorld);
+    }
+    positions[i * 3] = tmpPos.x;
+    positions[i * 3 + 1] = tmpPos.y;
+    positions[i * 3 + 2] = tmpPos.z;
+    normals[i * 3] = localNorm.x;
+    normals[i * 3 + 1] = localNorm.y;
+    normals[i * 3 + 2] = localNorm.z;
+    uvs[i * 2] = uvp[0];
+    uvs[i * 2 + 1] = uvp[1];
+  }
+
+  if (!asGeometry) {
+    return { positions, normals, uvs };
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+  geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+  geo.computeBoundingBox();
+  geo.computeBoundingSphere();
+  return geo;
+}
+
+function _subtractRects2D(baseRect, cutouts) {
+  let rects = [{ u0: baseRect.u0, u1: baseRect.u1, v0: baseRect.v0, v1: baseRect.v1 }];
+  for (const cut of cutouts) {
+    const next = [];
+    for (const r of rects) {
+      const cu0 = Math.max(r.u0, cut.u0);
+      const cu1 = Math.min(r.u1, cut.u1);
+      const cv0 = Math.max(r.v0, cut.v0);
+      const cv1 = Math.min(r.v1, cut.v1);
+      if (cu1 - cu0 <= 0.005 || cv1 - cv0 <= 0.005) {
+        next.push(r);
+        continue;
+      }
+      if (cu0 - r.u0 > 0.005) next.push({ u0: r.u0, u1: cu0, v0: r.v0, v1: r.v1 });
+      if (r.u1 - cu1 > 0.005) next.push({ u0: cu1, u1: r.u1, v0: r.v0, v1: r.v1 });
+      if (cv0 - r.v0 > 0.005) next.push({ u0: cu0, u1: cu1, v0: r.v0, v1: cv0 });
+      if (r.v1 - cv1 > 0.005) next.push({ u0: cu0, u1: cu1, v0: cv1, v1: r.v1 });
+    }
+    rects = next;
+  }
+  return rects;
+}
+
 /**
  * Automatically extract individual door leaves (swinging single/double doors, sliding glass/folding doors,
  * and rolling shutters) from merged school-building GLB meshes and rig each leaf on an accurate hinge pivot.
@@ -162,6 +315,21 @@ export function extractInteractiveDoorsFromGlbRoot(root) {
     if (!DOOR_MESH_CANDIDATE_RE.test(name) || DOOR_MESH_EXCLUDE_RE.test(name)) return;
     candidateMeshes.push(obj);
   });
+  let isBakedSingleMesh = false;
+  if (candidateMeshes.length === 0 && rootSize.y >= 3.0 && Math.max(rootSize.x, rootSize.z) >= 8.0) {
+    const BAKED_NON_BUILDING_RE = /pohon|lapangan|gawang|kandang|tandon|parkiran|tiang|wastafel|tong_sampah|rak_bunga|bunga|kaktus|halte|joglo|pendopo/i;
+    root.traverse((obj) => {
+      if (!obj?.isMesh || !obj.geometry?.attributes?.position) return;
+      const name = String(obj.name || '');
+      if (DOOR_MESH_EXCLUDE_RE.test(name) || BAKED_NON_BUILDING_RE.test(name)) return;
+      candidateMeshes.push(obj);
+    });
+    if (candidateMeshes.length > 0 && candidateMeshes.length <= 4) {
+      isBakedSingleMesh = true;
+    } else {
+      candidateMeshes.length = 0;
+    }
+  }
   if (candidateMeshes.length === 0) return [];
 
   const frames = [];
@@ -289,11 +457,15 @@ export function extractInteractiveDoorsFromGlbRoot(root) {
 
       if (!nearFloor) continue;
       if (tLen < 2 || tLen > 20) continue;
-      if (h < 1.65 || h > 2.65) continue;
-      if (span < 0.48 || span > 2.35) continue;
+      if (isBakedSingleMesh) {
+        if (h < 1.85 || h > 2.75 || span < 0.70 || span > 2.20 || thick > 0.18 || tLen > 16) continue;
+      } else {
+        if (h < 1.65 || h > 2.65) continue;
+        if (span < 0.48 || span > 2.35) continue;
 
-      const isAngledAjar = thick > 0.18 && thick <= 0.44 && span >= 0.72 && (span / Math.max(0.01, thick)) >= 2.2 && tLen <= 16;
-      if (thick > 0.18 && !isAngledAjar) continue;
+        const isAngledAjar = thick > 0.18 && thick <= 0.44 && span >= 0.72 && (span / Math.max(0.01, thick)) >= 2.2 && tLen <= 16;
+        if (thick > 0.18 && !isAngledAjar) continue;
+      }
 
       if (isGlassMesh) {
         // Only full-height entrance glass doors, never upper windows
@@ -466,9 +638,74 @@ export function extractInteractiveDoorsFromGlbRoot(root) {
   }
 
   const allDoors = [];
+  const bakedPairLinks = [];
   for (const isl of rawDoors) {
-    isl.doorIdx = allDoors.length;
-    allDoors.push(isl);
+    if (isBakedSingleMesh && isl.span >= 1.40 && isl.tLen <= 4 && isl.thick <= 0.06) {
+      const leafSpanX = isl.w >= isl.d;
+      const baseCutout = leafSpanX
+        ? { axis: 'z', fixedCoord: isl.cz, u0: isl.mnX, u1: isl.mxX, v0: isl.mnY, v1: isl.mxY }
+        : { axis: 'x', fixedCoord: isl.cx, u0: isl.mnZ, u1: isl.mxZ, v0: isl.mnY, v1: isl.mxY };
+      if (leafSpanX) {
+        const midX = (isl.mnX + isl.mxX) * 0.5;
+        const leftLeaf = {
+          ...isl,
+          mxX: midX, w: midX - isl.mnX, span: midX - isl.mnX, cx: (isl.mnX + midX) * 0.5,
+          isBakedHalfLeaf: true,
+          halfRect: { axis: 'z', fixedCoord: isl.cz, u0: isl.mnX, u1: midX, v0: isl.mnY, v1: isl.mxY },
+          cutoutRect: baseCutout,
+          paired: true, pairSide: 'left', pairMode: 'closed-x'
+        };
+        const rightLeaf = {
+          ...isl,
+          mnX: midX, w: isl.mxX - midX, span: isl.mxX - midX, cx: (midX + isl.mxX) * 0.5,
+          isBakedHalfLeaf: true,
+          halfRect: { axis: 'z', fixedCoord: isl.cz, u0: midX, u1: isl.mxX, v0: isl.mnY, v1: isl.mxY },
+          cutoutRect: baseCutout,
+          paired: true, pairSide: 'right', pairMode: 'closed-x'
+        };
+        leftLeaf.doorIdx = allDoors.length;
+        allDoors.push(leftLeaf);
+        rightLeaf.doorIdx = allDoors.length;
+        allDoors.push(rightLeaf);
+        bakedPairLinks.push([leftLeaf, rightLeaf]);
+      } else {
+        const midZ = (isl.mnZ + isl.mxZ) * 0.5;
+        const leftLeaf = {
+          ...isl,
+          mxZ: midZ, d: midZ - isl.mnZ, span: midZ - isl.mnZ, cz: (isl.mnZ + midZ) * 0.5,
+          isBakedHalfLeaf: true,
+          halfRect: { axis: 'x', fixedCoord: isl.cx, u0: isl.mnZ, u1: midZ, v0: isl.mnY, v1: isl.mxY },
+          cutoutRect: baseCutout,
+          paired: true, pairSide: 'left', pairMode: 'closed-z'
+        };
+        const rightLeaf = {
+          ...isl,
+          mnZ: midZ, d: isl.mxZ - midZ, span: isl.mxZ - midZ, cz: (midZ + isl.mxZ) * 0.5,
+          isBakedHalfLeaf: true,
+          halfRect: { axis: 'x', fixedCoord: isl.cx, u0: midZ, u1: isl.mxZ, v0: isl.mnY, v1: isl.mxY },
+          cutoutRect: baseCutout,
+          paired: true, pairSide: 'right', pairMode: 'closed-z'
+        };
+        leftLeaf.doorIdx = allDoors.length;
+        allDoors.push(leftLeaf);
+        rightLeaf.doorIdx = allDoors.length;
+        allDoors.push(rightLeaf);
+        bakedPairLinks.push([leftLeaf, rightLeaf]);
+      }
+    } else {
+      if (isBakedSingleMesh && isl.thick <= 0.06) {
+        const leafSpanX = isl.w >= isl.d;
+        isl.cutoutRect = leafSpanX
+          ? { axis: 'z', fixedCoord: isl.cz, u0: isl.mnX, u1: isl.mxX, v0: isl.mnY, v1: isl.mxY }
+          : { axis: 'x', fixedCoord: isl.cx, u0: isl.mnZ, u1: isl.mxZ, v0: isl.mnY, v1: isl.mxY };
+      }
+      isl.doorIdx = allDoors.length;
+      allDoors.push(isl);
+    }
+  }
+  for (const [a, b] of bakedPairLinks) {
+    a.pairIdx = b.doorIdx;
+    b.pairIdx = a.doorIdx;
   }
   if (allDoors.length === 0) return [];
 
@@ -582,6 +819,19 @@ export function extractInteractiveDoorsFromGlbRoot(root) {
         openAngle = -inwardSign * Math.PI * 0.52;
       }
       labelKind = 'Pintu Ganda';
+    } else if (isl.pairMode === 'closed-z') {
+      initialOpen = false;
+      const inwardSign = isl.cx < rootCenter.x ? 1 : -1;
+      if (isl.pairSide === 'left') {
+        hinge.set(isl.cx, isl.mnY, isl.mnZ);
+        closedAngle = 0;
+        openAngle = inwardSign * Math.PI * 0.52;
+      } else {
+        hinge.set(isl.cx, isl.mnY, isl.mxZ);
+        closedAngle = 0;
+        openAngle = -inwardSign * Math.PI * 0.52;
+      }
+      labelKind = 'Pintu Ganda';
     } else if (isl.pairMode === 'open-z') {
       initialOpen = true;
       const touchFrame = findTouchingPerpFrame(isl);
@@ -683,6 +933,19 @@ export function extractInteractiveDoorsFromGlbRoot(root) {
       pMesh.userData.isInteractiveDoorMesh = true;
       pMesh.userData.doorIdx = isl.doorIdx;
       pivotGroup.add(pMesh);
+    } else if (isl.isBakedHalfLeaf && isl.halfRect) {
+      const partGeo = _buildPlanarRectGeoFromSourceTris(isl.mesh, isl.tris, isl.halfRect, hinge, { asGeometry: true });
+      const srcMat = Array.isArray(isl.mesh.material) ? isl.mesh.material[0] : isl.mesh.material;
+      const partMat = srcMat && srcMat.side !== THREE.DoubleSide ? srcMat.clone() : srcMat;
+      if (partMat) partMat.side = THREE.DoubleSide;
+      const partMesh = new THREE.Mesh(partGeo, partMat);
+      partMesh.name = `InteractiveDoorLeaf_${isl.doorIdx}`;
+      partMesh.castShadow = true;
+      partMesh.receiveShadow = true;
+      partMesh.userData.isInteractiveDoorMesh = true;
+      partMesh.userData.doorIdx = isl.doorIdx;
+      pivotGroup.add(partMesh);
+      markRemoved(isl.mesh, isl.tris);
     } else {
       addLeafPart(isl.mesh, isl.tris);
       if (Array.isArray(isl.extraParts)) {
@@ -730,19 +993,175 @@ export function extractInteractiveDoorsFromGlbRoot(root) {
     extractedMeta.push({ pivotGroup, meta: pivotGroup.userData.doorMeta });
   }
 
+  // Punch real walkable doorway openings into baked single-mesh walls directly behind doors
+  const extraGeoTrisByMesh = new Map();
+  if (isBakedSingleMesh) {
+    const cutoutsByMesh = new Map();
+    for (const isl of allDoors) {
+      if (!isl.mesh || !isl.cutoutRect) continue;
+      let list = cutoutsByMesh.get(isl.mesh);
+      if (!list) {
+        list = [];
+        cutoutsByMesh.set(isl.mesh, list);
+      }
+      const dup = list.some((c) =>
+        c.axis === isl.cutoutRect.axis
+        && Math.abs(c.fixedCoord - isl.cutoutRect.fixedCoord) < 0.02
+        && Math.abs(c.u0 - isl.cutoutRect.u0) < 0.02
+        && Math.abs(c.v0 - isl.cutoutRect.v0) < 0.02
+      );
+      if (!dup) list.push(isl.cutoutRect);
+    }
+
+    const tmpTri = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+    for (const [mesh, cutouts] of cutoutsByMesh.entries()) {
+      const geo = mesh.geometry;
+      const posAttr = geo.attributes.position;
+      const idxAttr = geo.index || null;
+      const matWorld = mesh.matrixWorld;
+      const removedSet = removedTrisByMesh.get(mesh) || new Set();
+      const triCount = idxAttr ? Math.floor(idxAttr.count / 3) : Math.floor(posAttr.count / 3);
+      const wallGroups = [];
+
+      for (let t = 0; t < triCount; t++) {
+        if (removedSet.has(t)) continue;
+        const i0 = idxAttr ? idxAttr.getX(t * 3) : (t * 3);
+        const i1 = idxAttr ? idxAttr.getX(t * 3 + 1) : (t * 3 + 1);
+        const i2 = idxAttr ? idxAttr.getX(t * 3 + 2) : (t * 3 + 2);
+        tmpTri[0].fromBufferAttribute(posAttr, i0).applyMatrix4(matWorld);
+        tmpTri[1].fromBufferAttribute(posAttr, i1).applyMatrix4(matWorld);
+        tmpTri[2].fromBufferAttribute(posAttr, i2).applyMatrix4(matWorld);
+
+        const mnX = Math.min(tmpTri[0].x, tmpTri[1].x, tmpTri[2].x);
+        const mxX = Math.max(tmpTri[0].x, tmpTri[1].x, tmpTri[2].x);
+        const mnY = Math.min(tmpTri[0].y, tmpTri[1].y, tmpTri[2].y);
+        const mxY = Math.max(tmpTri[0].y, tmpTri[1].y, tmpTri[2].y);
+        const mnZ = Math.min(tmpTri[0].z, tmpTri[1].z, tmpTri[2].z);
+        const mxZ = Math.max(tmpTri[0].z, tmpTri[1].z, tmpTri[2].z);
+        const flatZ = (mxZ - mnZ) <= 0.03;
+        const flatX = (mxX - mnX) <= 0.03;
+        if (!flatZ && !flatX) continue;
+
+        for (const cut of cutouts) {
+          const matchZ = cut.axis === 'z' && flatZ
+            && Math.abs(((mnZ + mxZ) * 0.5) - cut.fixedCoord) <= 0.18
+            && mxX > cut.u0 + 0.05 && mnX < cut.u1 - 0.05
+            && mxY > cut.v0 + 0.05 && mnY < cut.v1 - 0.05;
+          const matchX = cut.axis === 'x' && flatX
+            && Math.abs(((mnX + mxX) * 0.5) - cut.fixedCoord) <= 0.18
+            && mxZ > cut.u0 + 0.05 && mnZ < cut.u1 - 0.05
+            && mxY > cut.v0 + 0.05 && mnY < cut.v1 - 0.05;
+          if (!matchZ && !matchX) continue;
+
+          const planeCoord = cut.axis === 'z' ? ((mnZ + mxZ) * 0.5) : ((mnX + mxX) * 0.5);
+          const uMin = cut.axis === 'z' ? mnX : mnZ;
+          const uMax = cut.axis === 'z' ? mxX : mxZ;
+          const grp = wallGroups.find((g) =>
+            g.axis === cut.axis
+            && Math.abs(g.fixedCoord - planeCoord) < 0.03
+            && uMin <= g.u1 + 0.04 && uMax >= g.u0 - 0.04
+            && mnY <= g.v1 + 0.04 && mxY >= g.v0 - 0.04
+          );
+          if (grp) {
+            grp.u0 = Math.min(grp.u0, uMin);
+            grp.u1 = Math.max(grp.u1, uMax);
+            grp.v0 = Math.min(grp.v0, mnY);
+            grp.v1 = Math.max(grp.v1, mxY);
+            if (!grp.tris.includes(t)) grp.tris.push(t);
+          } else {
+            wallGroups.push({
+              axis: cut.axis,
+              fixedCoord: planeCoord,
+              u0: uMin, u1: uMax, v0: mnY, v1: mxY,
+              tris: [t]
+            });
+          }
+          break;
+        }
+      }
+
+      if (wallGroups.length > 0) {
+        const bakedChunks = [];
+        for (const wg of wallGroups) {
+          const matchingCuts = cutouts
+            .filter((c) => c.axis === wg.axis && Math.abs(c.fixedCoord - wg.fixedCoord) <= 0.18)
+            .map((c) => ({
+              u0: c.u0 + 0.01,
+              u1: c.u1 - 0.01,
+              v0: c.v0,
+              v1: c.v1 - 0.01
+            }));
+          if (matchingCuts.length === 0) continue;
+          const remaining = _subtractRects2D(wg, matchingCuts);
+          markRemoved(mesh, wg.tris);
+          for (const subR of remaining) {
+            bakedChunks.push(_buildPlanarRectGeoFromSourceTris(
+              mesh,
+              wg.tris,
+              { axis: wg.axis, fixedCoord: wg.fixedCoord, ...subR },
+              null,
+              { asGeometry: false }
+            ));
+          }
+        }
+        if (bakedChunks.length > 0) {
+          extraGeoTrisByMesh.set(mesh, bakedChunks);
+          // Ensure single-plane walls remain visible from inside the room too
+          if (mesh.material && !Array.isArray(mesh.material) && mesh.material.side !== THREE.DoubleSide) {
+            mesh.material = mesh.material.clone();
+            mesh.material.side = THREE.DoubleSide;
+          }
+        }
+      }
+    }
+  }
+
   // Strip extracted door triangles from original static meshes so doors don't render twice
   for (const [mesh, removedSet] of removedTrisByMesh.entries()) {
     const info = meshAllIslandsMap.get(mesh);
-    if (!info || removedSet.size === 0) continue;
+    const extraChunks = extraGeoTrisByMesh.get(mesh) || [];
+    if (!info || (removedSet.size === 0 && extraChunks.length === 0)) continue;
     const keepTris = [];
     for (let t = 0; t < info.triCount; t++) {
       if (!removedSet.has(t)) keepTris.push(t);
     }
-    if (keepTris.length === 0) {
+    if (keepTris.length === 0 && extraChunks.length === 0) {
       mesh.visible = false;
       mesh.parent?.remove(mesh);
-    } else {
+    } else if (extraChunks.length === 0) {
       mesh.geometry = _buildSubGeometryFromTriangles(mesh, keepTris, null);
+    } else {
+      const baseGeo = keepTris.length > 0 ? _buildSubGeometryFromTriangles(mesh, keepTris, null) : null;
+      const basePos = baseGeo?.attributes?.position?.array || new Float32Array(0);
+      const baseNorm = baseGeo?.attributes?.normal?.array || null;
+      const baseUv = baseGeo?.attributes?.uv?.array || null;
+      const extraPosCount = extraChunks.reduce((acc, c) => acc + c.positions.length, 0);
+      const extraUvCount = extraChunks.reduce((acc, c) => acc + c.uvs.length, 0);
+
+      const mergedPos = new Float32Array(basePos.length + extraPosCount);
+      mergedPos.set(basePos, 0);
+      const mergedNorm = new Float32Array(basePos.length + extraPosCount);
+      if (baseNorm) mergedNorm.set(baseNorm, 0);
+      const mergedUv = new Float32Array((baseUv ? baseUv.length : (basePos.length / 3) * 2) + extraUvCount);
+      if (baseUv) mergedUv.set(baseUv, 0);
+
+      let pOff = basePos.length;
+      let uOff = baseUv ? baseUv.length : (basePos.length / 3) * 2;
+      for (const ch of extraChunks) {
+        mergedPos.set(ch.positions, pOff);
+        mergedNorm.set(ch.normals, pOff);
+        mergedUv.set(ch.uvs, uOff);
+        pOff += ch.positions.length;
+        uOff += ch.uvs.length;
+      }
+      baseGeo?.dispose?.();
+      const outGeo = new THREE.BufferGeometry();
+      outGeo.setAttribute('position', new THREE.BufferAttribute(mergedPos, 3));
+      outGeo.setAttribute('normal', new THREE.BufferAttribute(mergedNorm, 3));
+      outGeo.setAttribute('uv', new THREE.BufferAttribute(mergedUv, 2));
+      outGeo.computeBoundingBox();
+      outGeo.computeBoundingSphere();
+      mesh.geometry = outGeo;
     }
   }
 
@@ -1000,7 +1419,9 @@ function addBox(group, w, h, d, x, y, z, mat) {
  */
 const LEGACY_BUILDING_GLB_ALIASES = {
   'assets/models/gedung_utama_kepsek_tu.glb': 'assets/models/gedung_utama_kepsek_tu_cutaway.glb',
-  'assets/models/gedung_sekolah_3ruangan.glb': 'assets/models/gedung_sekolah_3ruangan_cutaway.glb'
+  'assets/models/gedung_sekolah_3ruangan.glb': 'assets/models/gedung_sekolah_3ruangan_cutaway.glb',
+  'assets/models/gedung_perhotelan_2lantai.glb': 'assets/models/gedung_perhotelan_2lantai_web.glb',
+  'assets/models/gedung_perhotelan_2lantai_cutaway.glb': 'assets/models/gedung_perhotelan_2lantai_web.glb'
 };
 
 function normalizeGlbCacheKey(url) {
@@ -1099,7 +1520,23 @@ function extractRawPortsFromGlbRoot(root) {
 
 const GLB_IDB_NAME = 'SmartSchoolNetMapGlbCacheV1';
 const GLB_IDB_STORE = 'glb_binaries';
+const GLB_ASSET_REVISIONS = {
+  'assets/models/gedung_lab_pplg_web.glb': 'v2'
+};
 const glbIdbMemoryCache = new Map();
+
+function resolveGlbIdbStorageKey(cacheKey) {
+  const rev = GLB_ASSET_REVISIONS[cacheKey];
+  return rev ? `${cacheKey}::${rev}` : cacheKey;
+}
+
+function resolveGlbHttpFetchUrl(cacheKey) {
+  const rev = GLB_ASSET_REVISIONS[cacheKey];
+  if (!rev || cacheKey.startsWith('data:') || cacheKey.startsWith('blob:') || cacheKey.includes('?')) {
+    return cacheKey;
+  }
+  return `${cacheKey}?rev=${rev}`;
+}
 const glbIdbStats = {
   hits: 0,
   misses: 0,
@@ -1136,9 +1573,10 @@ function openGlbIndexedDb() {
 export async function loadGlbArrayBufferFromIdb(cacheKey) {
   const key = normalizeGlbCacheKey(cacheKey);
   if (!key) return null;
-  if (glbIdbMemoryCache.has(key)) {
+  const storageKey = resolveGlbIdbStorageKey(key);
+  if (glbIdbMemoryCache.has(storageKey)) {
     glbIdbStats.hits += 1;
-    return glbIdbMemoryCache.get(key);
+    return glbIdbMemoryCache.get(storageKey);
   }
   const db = await openGlbIndexedDb();
   if (!db) {
@@ -1149,11 +1587,11 @@ export async function loadGlbArrayBufferFromIdb(cacheKey) {
     try {
       const tx = db.transaction(GLB_IDB_STORE, 'readonly');
       const store = tx.objectStore(GLB_IDB_STORE);
-      const req = store.get(key);
+      const req = store.get(storageKey);
       req.onsuccess = () => {
         const buf = req.result;
         if (buf instanceof ArrayBuffer && buf.byteLength > 0) {
-          glbIdbMemoryCache.set(key, buf);
+          glbIdbMemoryCache.set(storageKey, buf);
           glbIdbStats.hits += 1;
           resolve(buf);
         } else {
@@ -1181,7 +1619,8 @@ export async function loadGlbArrayBufferFromIdb(cacheKey) {
 export async function cacheGlbArrayBufferInIdb(cacheKey, arrayBuffer) {
   const key = normalizeGlbCacheKey(cacheKey);
   if (!key || !(arrayBuffer instanceof ArrayBuffer) || arrayBuffer.byteLength === 0) return false;
-  glbIdbMemoryCache.set(key, arrayBuffer);
+  const storageKey = resolveGlbIdbStorageKey(key);
+  glbIdbMemoryCache.set(storageKey, arrayBuffer);
   glbIdbStats.writes += 1;
   const db = await openGlbIndexedDb();
   if (!db) return true;
@@ -1189,7 +1628,7 @@ export async function cacheGlbArrayBufferInIdb(cacheKey, arrayBuffer) {
     try {
       const tx = db.transaction(GLB_IDB_STORE, 'readwrite');
       const store = tx.objectStore(GLB_IDB_STORE);
-      const req = store.put(arrayBuffer, key);
+      const req = store.put(arrayBuffer, storageKey);
       req.onsuccess = () => resolve(true);
       req.onerror = () => resolve(false);
     } catch {
@@ -1251,7 +1690,7 @@ export function loadCustomGlbModel(url, targetSize = 1.2) {
         try {
           return await parseGlbArrayBuffer(cachedIdbBuffer);
         } catch {
-          glbIdbMemoryCache.delete(cacheKey);
+          glbIdbMemoryCache.delete(resolveGlbIdbStorageKey(cacheKey));
         }
       }
 
@@ -1282,7 +1721,7 @@ export function loadCustomGlbModel(url, targetSize = 1.2) {
       try {
         return await new Promise((resolve, reject) => {
           gltfLoader.load(
-            cacheKey,
+            resolveGlbHttpFetchUrl(cacheKey),
             (gltf) => {
               const root = gltf.scene || (gltf.scenes && gltf.scenes[0]);
               if (!root) reject(new Error('GLB does not contain a scene'));
@@ -1956,30 +2395,17 @@ export const BUILTIN_ROOM_BUILDING_PRESETS = [
     customModelUrl: 'assets/models/gedung_sekolah_3ruangan_cutaway.glb'
   },
   {
-    id: 'gedung-perhotelan-2lantai-cutaway',
-    name: 'Gedung Perhotelan 2 Lantai (Cutaway)',
-    subtitle: '2 lantai atap transparan bersih (25.7×18.1×9.7m)',
-    widthMeters: 25.72,
-    depthMeters: 18.1,
-    heightMeters: 9.67,
-    wallColor: '#16a34a',
-    floorColor: '#1e293b',
-    opacity: 0.18,
-    isCutaway: true,
-    customModelUrl: 'assets/models/gedung_perhotelan_2lantai_cutaway.glb'
-  },
-  {
     id: 'gedung-perhotelan-2lantai',
     name: 'Gedung Perhotelan 2 Lantai',
-    subtitle: '2 lantai atap penuh & lobi hotel (25.7×18.1×9.7m)',
-    widthMeters: 25.72,
-    depthMeters: 18.1,
-    heightMeters: 9.67,
+    subtitle: 'Gedung Perhotelan 2 lantai PBR 1K dengan 7 pintu interaktif & tangga (24.9×13.5×10.2m)',
+    widthMeters: 24.85,
+    depthMeters: 13.5,
+    heightMeters: 10.18,
     wallColor: '#15803d',
     floorColor: '#1e293b',
     opacity: 0.18,
     isCutaway: false,
-    customModelUrl: 'assets/models/gedung_perhotelan_2lantai.glb'
+    customModelUrl: 'assets/models/gedung_perhotelan_2lantai_web.glb'
   },
   {
     id: 'gedung-lab-pplg-2lantai-cutaway',
@@ -2032,6 +2458,32 @@ export const BUILTIN_ROOM_BUILDING_PRESETS = [
     opacity: 0.18,
     isCutaway: false,
     customModelUrl: 'assets/models/gedung_lab_ulw.glb'
+  },
+  {
+    id: 'gedung-lab-pplg-web',
+    name: 'Gedung Lab PPLG 2 Lantai (Web PBR)',
+    subtitle: 'Gedung Lab PPLG 2 lantai PBR 1K dengan pintu interaktif (23.5×10.8×9.1m)',
+    widthMeters: 23.5,
+    depthMeters: 10.8,
+    heightMeters: 9.05,
+    wallColor: '#ea580c',
+    floorColor: '#1e293b',
+    opacity: 0.18,
+    isCutaway: false,
+    customModelUrl: 'assets/models/gedung_lab_pplg_web.glb'
+  },
+  {
+    id: 'gedung-lab-upw-web',
+    name: 'Gedung Lab UPW (Web PBR)',
+    subtitle: 'Gedung Lab UPW PBR 1K dengan pintu interaktif (27.5×11×5.7m)',
+    widthMeters: 27.5,
+    depthMeters: 11.02,
+    heightMeters: 5.65,
+    wallColor: '#0284c7',
+    floorColor: '#1e293b',
+    opacity: 0.18,
+    isCutaway: false,
+    customModelUrl: 'assets/models/gedung_lab_upw_web.glb'
   },
   {
     id: 'gedung-kantin-cutaway',
@@ -3094,6 +3546,90 @@ export const BUILTIN_ROOM_BUILDING_PRESETS = [
     opacity: 0.18,
     isCutaway: false,
     customModelUrl: 'assets/models/pohon_pinus_ekstra_besar.glb'
+  },
+  {
+    id: 'pohon-trembesi-sulur',
+    name: 'Pohon Trembesi Sulur',
+    subtitle: 'Pohon trembesi besar bersulur rimbun (15.3×15×11.7m)',
+    widthMeters: 15.33,
+    depthMeters: 15.01,
+    heightMeters: 11.73,
+    wallColor: '#15803d',
+    floorColor: '#14532d',
+    opacity: 0.18,
+    isCutaway: false,
+    passThrough: true,
+    customModelUrl: 'assets/models/pohon_trembesi_sulur_instanced.glb'
+  },
+  {
+    id: 'pohon-ketapang-kencana',
+    name: 'Pohon Ketapang Kencana',
+    subtitle: 'Pohon ketapang kencana bertingkat rimbun (8.4×8.3×7.6m)',
+    widthMeters: 8.42,
+    depthMeters: 8.25,
+    heightMeters: 7.6,
+    wallColor: '#16a34a',
+    floorColor: '#14532d',
+    opacity: 0.18,
+    isCutaway: false,
+    passThrough: true,
+    customModelUrl: 'assets/models/pohon_ketapang_kencana_instanced.glb'
+  },
+  {
+    id: 'lorong-bunga-anggrek-web',
+    name: 'Lorong Bunga Anggrek (Web PBR)',
+    subtitle: 'Pergola lorong hias bunga anggrek PBR 1K (1.8×3.9×2.4m)',
+    widthMeters: 1.76,
+    depthMeters: 3.86,
+    heightMeters: 2.36,
+    wallColor: '#a855f7',
+    floorColor: '#14532d',
+    opacity: 0.18,
+    isCutaway: false,
+    passThrough: true,
+    customModelUrl: 'assets/models/lorong_bunga_anggrek_web.glb'
+  },
+  {
+    id: 'pohon-mahoni-rindang',
+    name: 'Pohon Mahoni Rindang',
+    subtitle: 'Pohon mahoni besar rindang peneduh kampus (15.9×15.7×13.2m)',
+    widthMeters: 15.87,
+    depthMeters: 15.66,
+    heightMeters: 13.23,
+    wallColor: '#15803d',
+    floorColor: '#14532d',
+    opacity: 0.18,
+    isCutaway: false,
+    passThrough: true,
+    customModelUrl: 'assets/models/pohon_mahoni_rindang_instanced.glb'
+  },
+  {
+    id: 'pohon-cemara-rindang',
+    name: 'Pohon Cemara Rindang',
+    subtitle: 'Pohon cemara tinggi rindang peneduh kampus (10.3×7.6×13.7m)',
+    widthMeters: 10.33,
+    depthMeters: 7.6,
+    heightMeters: 13.68,
+    wallColor: '#166534',
+    floorColor: '#14532d',
+    opacity: 0.18,
+    isCutaway: false,
+    passThrough: true,
+    customModelUrl: 'assets/models/pohon_cemara_rindang_instanced.glb'
+  },
+  {
+    id: 'batu-kolam-hiasan',
+    name: 'Batu Kolam Hiasan',
+    subtitle: 'Taman batu alam dan kolam hias dekoratif kampus (5.5×5.5×2.4m)',
+    widthMeters: 5.52,
+    depthMeters: 5.52,
+    heightMeters: 2.44,
+    wallColor: '#64748b',
+    floorColor: '#0284c7',
+    opacity: 0.18,
+    isCutaway: false,
+    passThrough: false,
+    customModelUrl: 'assets/models/batu_kolam_hiasan.glb'
   }
 ];
 
@@ -3115,7 +3651,7 @@ export function getDefaultObject3dPassThrough(obj) {
   return false;
 }
 
-export function createBuildingRoomPresetData(presetOrId, { x = 0.5, y = 0.5, existingRooms = [], id = '' } = {}) {
+export function createBuildingRoomPresetData(presetOrId, { x = 0.5, y = 0.5, elevationMeters = 0, existingRooms = [], id = '' } = {}) {
   const preset = typeof presetOrId === 'string'
     ? BUILTIN_ROOM_BUILDING_PRESETS.find((b) => b.id === presetOrId)
     : presetOrId;
@@ -3128,6 +3664,7 @@ export function createBuildingRoomPresetData(presetOrId, { x = 0.5, y = 0.5, exi
     presetId: preset.id,
     x,
     y,
+    elevationMeters: Math.max(0, Number(elevationMeters) || 0),
     widthMeters: preset.widthMeters,
     depthMeters: preset.depthMeters,
     heightMeters: preset.heightMeters,
@@ -3206,7 +3743,8 @@ export function createBuildingSignboard3DGroup(room, summary = null, {
 } = {}) {
   const group = new THREE.Group();
   const wPos = normToWorldFn ? normToWorldFn(room?.x ?? 0.5, room?.y ?? 0.5) : { x: 0, z: 0 };
-  const roofY = Math.max(2.6, Number(room?.heightMeters) || 4.5);
+  const elevY = Math.max(0, Number(room?.elevationMeters) || 0);
+  const roofY = elevY + Math.max(2.6, Number(room?.heightMeters) || 4.5);
   const pinHeight = 2.6;
 
   group.position.set(wPos.x, roofY, wPos.z);
@@ -3409,7 +3947,9 @@ export function createBuildingSignboard3DGroup(room, summary = null, {
 export function create3DRoomGroup(room, normToWorldFn, isSelected = false) {
   const group = new THREE.Group();
   const pos = normToWorldFn ? normToWorldFn(room.x ?? 0.5, room.y ?? 0.5) : { x: 0, z: 0 };
-  group.position.set(pos.x, 0, pos.z);
+  const elevY = Math.max(0, Number(room.elevationMeters) || 0);
+  group.position.set(pos.x, elevY, pos.z);
+  group.userData.elevationMeters = elevY;
   const rotX = ((Number(room.rotationX) || 0) * Math.PI) / 180;
   const rotY = ((Number(room.rotationY ?? room.rotationDeg) || 0) * Math.PI) / 180;
   const rotZ = ((Number(room.rotationZ) || 0) * Math.PI) / 180;
@@ -3543,6 +4083,27 @@ export function create3DRoomGroup(room, normToWorldFn, isSelected = false) {
       pushGroup.add(m);
     });
     group.add(pushGroup);
+
+    // 2b. Emerald Z-Elevation Handle (drag up/down to lift building/facility/prop onto roofs or floors)
+    const elevGroup = new THREE.Group();
+    elevGroup.position.set(-Math.min(w * 0.3, 2.2), h + 0.35, 0);
+    const elevMat = makeMat(0x10b981, {
+      emissive: 0x059669,
+      emissiveIntensity: 0.6,
+      roughness: 0.2
+    });
+    const elevUpCone = new THREE.Mesh(new THREE.ConeGeometry(0.28 * handleScale, 0.42 * handleScale, 14), elevMat);
+    elevUpCone.position.y = 0.26 * handleScale;
+    const elevShaft = new THREE.Mesh(new THREE.CylinderGeometry(0.11 * handleScale, 0.11 * handleScale, 0.36 * handleScale, 10), elevMat);
+    const elevDownCone = new THREE.Mesh(new THREE.ConeGeometry(0.28 * handleScale, 0.42 * handleScale, 14), elevMat);
+    elevDownCone.rotation.x = Math.PI;
+    elevDownCone.position.y = -0.26 * handleScale;
+    [elevUpCone, elevShaft, elevDownCone].forEach((m) => {
+      m.userData.roomId = room.id;
+      m.userData.gizmoType = 'room-elevate';
+      elevGroup.add(m);
+    });
+    group.add(elevGroup);
 
     // 3. Yellow Corner Scale Handle (drag to resize Width x Depth)
     const cornerHandle = new THREE.Mesh(
@@ -4704,6 +5265,7 @@ function truncateText(ctx, text, maxWidth) {
 export const ROAD3D_PRESETS = {
   'stepping-slab': {
     style: 'stepping-slab',
+    kind: 'road',
     name: 'Jalan Setapak Beton & Kerikil',
     pathMode: 'smooth',
     widthMeters: 1.55,
@@ -4717,8 +5279,41 @@ export const ROAD3D_PRESETS = {
     curbColor: '#dedad2',
     gravelColor: '#4f4942'
   },
+  'asphalt-school-gravel': {
+    style: 'asphalt-school-gravel',
+    kind: 'road',
+    name: 'Jalan Aspal Sekolah & Bahu Kerikil',
+    pathMode: 'smooth',
+    widthMeters: 5.2,
+    curbWidthMeters: 0.14,
+    curbHeightMeters: 0.1,
+    slabLengthMeters: 3.2,
+    slabGapMeters: 0,
+    sideGutterMeters: 0.62,
+    elevationMeters: 0,
+    slabColor: '#8b8d8f',
+    curbColor: '#d7d5ce',
+    gravelColor: '#8e908c'
+  },
+  'asphalt-courtyard': {
+    style: 'asphalt-courtyard',
+    kind: 'road',
+    name: 'Aspal Halaman Sekolah Luas',
+    pathMode: 'smooth',
+    widthMeters: 8.5,
+    curbWidthMeters: 0.12,
+    curbHeightMeters: 0.06,
+    slabLengthMeters: 4.0,
+    slabGapMeters: 0,
+    sideGutterMeters: 0.18,
+    elevationMeters: 0,
+    slabColor: '#8d8f91',
+    curbColor: '#d4d2cb',
+    gravelColor: '#858784'
+  },
   'paving-block': {
     style: 'paving-block',
+    kind: 'road',
     name: 'Jalan Paving Block Sekolah',
     pathMode: 'smooth',
     widthMeters: 2.6,
@@ -4734,6 +5329,7 @@ export const ROAD3D_PRESETS = {
   },
   'concrete-corridor': {
     style: 'concrete-corridor',
+    kind: 'road',
     name: 'Jalan Rabat Beton Sekolah',
     pathMode: 'smooth',
     widthMeters: 1.9,
@@ -4749,7 +5345,8 @@ export const ROAD3D_PRESETS = {
   },
   'asphalt-campus': {
     style: 'asphalt-campus',
-    name: 'Jalan Aspal Lingkungan',
+    kind: 'road',
+    name: 'Jalan Aspal Lingkungan + Marka',
     pathMode: 'smooth',
     widthMeters: 4.5,
     curbWidthMeters: 0.18,
@@ -4761,8 +5358,63 @@ export const ROAD3D_PRESETS = {
     slabColor: '#334155',
     curbColor: '#cbd5e1',
     gravelColor: '#1e293b'
+  },
+  'school-fence-slotted': {
+    style: 'school-fence-slotted',
+    kind: 'fence',
+    name: 'Pagar Tembok Sekolah (Celah)',
+    pathMode: 'straight',
+    widthMeters: 0.24,
+    heightMeters: 1.35,
+    curbWidthMeters: 0.42,
+    curbHeightMeters: 0.11,
+    slabLengthMeters: 3.0,
+    slabGapMeters: 0.09,
+    sideGutterMeters: 0,
+    elevationMeters: 0,
+    hasSlots: true,
+    passThrough: false,
+    slabColor: '#c6dfb0',
+    curbColor: '#78a238',
+    gravelColor: '#eef3e8'
+  },
+  'school-fence-tall': {
+    style: 'school-fence-tall',
+    kind: 'fence',
+    name: 'Tembok Pembatas Sekolah Tinggi',
+    pathMode: 'straight',
+    widthMeters: 0.26,
+    heightMeters: 2.45,
+    curbWidthMeters: 0.46,
+    curbHeightMeters: 0.12,
+    slabLengthMeters: 3.5,
+    slabGapMeters: 0.09,
+    sideGutterMeters: 0,
+    elevationMeters: 0,
+    hasSlots: false,
+    passThrough: false,
+    slabColor: '#c6dfb0',
+    curbColor: '#78a238',
+    gravelColor: '#eef3e8'
   }
 };
+
+export function isFence3DStyle(roadOrStyle) {
+  if (!roadOrStyle) return false;
+  if (typeof roadOrStyle === 'string') {
+    const preset = ROAD3D_PRESETS[roadOrStyle];
+    return Boolean(preset?.kind === 'fence' || /fence|pagar|tembok/i.test(roadOrStyle));
+  }
+  if (roadOrStyle.kind === 'fence') return true;
+  const style = String(roadOrStyle.style || '');
+  const preset = ROAD3D_PRESETS[style];
+  return Boolean(preset?.kind === 'fence' || /fence|pagar|tembok/i.test(style));
+}
+
+export function getRoad3DTotalLength(road, normToWorldFn) {
+  const { totalLength } = sampleRoad3DPathWorld(road, normToWorldFn);
+  return Number.isFinite(totalLength) ? totalLength : 0;
+}
 
 const _roadTexCache = new Map();
 
@@ -4785,12 +5437,14 @@ function getProceduralRoadGravelTexture(baseHex = '#4f4942') {
     canvas.width = 256;
     canvas.height = 256;
 
-    // Dark soil bed under river pebbles
-    ctx.fillStyle = '#2d2620';
+    const isBrightRiver = baseHex.toLowerCase() === '#8e908c' || baseHex.toLowerCase() === '#858784';
+    ctx.fillStyle = isBrightRiver ? '#6d6b66' : '#2d2620';
     ctx.fillRect(0, 0, 256, 256);
 
-    const rand = _seededRoadRand(71829);
-    const tones = ['#57534e', '#78716c', '#a8a29e', '#6b7280', '#44403c', '#9ca3af', baseHex];
+    const rand = _seededRoadRand(isBrightRiver ? 88421 : 71829);
+    const tones = isBrightRiver
+      ? ['#9ea09d', '#7a7c7a', '#b8b7b2', '#656765', '#c7c5be', '#888a87', baseHex]
+      : ['#57534e', '#78716c', '#a8a29e', '#6b7280', '#44403c', '#9ca3af', baseHex];
     for (let i = 0; i < 420; i++) {
       const px = rand() * 256;
       const py = rand() * 256;
@@ -4853,6 +5507,31 @@ function getProceduralConcreteSlabTexture(style = 'stepping-slab', baseHex = '#d
           ctx.fillRect(c * cw + shift + 2, r * rh + 2, cw - 4, rh - 4);
         }
       }
+    } else if (style === 'asphalt-school-gravel' || style === 'asphalt-courtyard') {
+      // Sun-weathered light/medium grey school campus asphalt (matching real SMK photos: fine aggregate + faint transverse seams, NO lane stripes)
+      for (let i = 0; i < 65; i++) {
+        const shade = 122 + Math.floor(rand() * 34);
+        ctx.fillStyle = `rgba(${shade}, ${shade + 1}, ${shade + 2}, ${0.08 + rand() * 0.12})`;
+        ctx.beginPath();
+        ctx.arc(rand() * 256, rand() * 256, 10 + rand() * 28, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      for (let i = 0; i < 1100; i++) {
+        const shade = 78 + Math.floor(rand() * 98);
+        ctx.fillStyle = `rgba(${shade}, ${shade}, ${shade + 2}, 0.42)`;
+        ctx.fillRect(rand() * 256, rand() * 256, 1.5 + rand() * 2.2, 1.5 + rand() * 2.2);
+      }
+      // Subtle weathered transverse construction seam / hairline crack across width
+      ctx.strokeStyle = 'rgba(66, 68, 70, 0.36)';
+      ctx.lineWidth = 1.25;
+      let sy = 96 + rand() * 64;
+      ctx.beginPath();
+      ctx.moveTo(0, sy);
+      for (let sx = 16; sx <= 256; sx += 16) {
+        sy += (rand() - 0.5) * 3.5;
+        ctx.lineTo(sx, sy);
+      }
+      ctx.stroke();
     } else if (style === 'asphalt-campus') {
       for (let i = 0; i < 650; i++) {
         const shade = 38 + Math.floor(rand() * 38);
@@ -4903,6 +5582,411 @@ function getProceduralConcreteSlabTexture(style = 'stepping-slab', baseHex = '#d
   } catch {
     return null;
   }
+}
+
+function getProceduralFencePlasterTexture(baseHex = '#c6dfb0') {
+  const key = `fence-plaster:${baseHex}`;
+  if (_roadTexCache.has(key)) return _roadTexCache.get(key);
+  try {
+    if (typeof document === 'undefined' || !document.createElement) return null;
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext?.('2d');
+    if (!ctx) return null;
+    canvas.width = 256;
+    canvas.height = 256;
+
+    ctx.fillStyle = baseHex;
+    ctx.fillRect(0, 0, 256, 256);
+
+    const rand = _seededRoadRand(314159);
+    // Subtle plaster stucco grain & natural exterior shading
+    for (let i = 0; i < 140; i++) {
+      const alpha = 0.03 + rand() * 0.06;
+      ctx.fillStyle = rand() > 0.45 ? `rgba(255, 255, 250, ${alpha})` : `rgba(82, 102, 68, ${alpha})`;
+      ctx.beginPath();
+      ctx.arc(rand() * 256, rand() * 256, 6 + rand() * 24, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    for (let i = 0; i < 650; i++) {
+      ctx.fillStyle = rand() > 0.5 ? 'rgba(255,255,255,0.08)' : 'rgba(65,78,52,0.08)';
+      ctx.fillRect(rand() * 256, rand() * 256, 2, 2);
+    }
+    // Subtle lower damp/weathering patina near soil line (bottom of UV)
+    const grad = ctx.createLinearGradient(0, 178, 0, 256);
+    grad.addColorStop(0, 'rgba(72, 78, 60, 0)');
+    grad.addColorStop(1, 'rgba(64, 70, 52, 0.22)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 178, 256, 78);
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    _roadTexCache.set(key, tex);
+    return tex;
+  } catch {
+    return null;
+  }
+}
+
+function _create3DSchoolFenceGroup(road, normToWorldFn, isSelected = false, { isPreview = false } = {}) {
+  const group = new THREE.Group();
+  const preset = ROAD3D_PRESETS[road?.style] || ROAD3D_PRESETS['school-fence-slotted'];
+  const elev = Math.max(0, Number(road?.elevationMeters ?? preset.elevationMeters) || 0);
+  const wallThick = Math.max(0.12, Math.min(1.5, Number(road?.widthMeters ?? preset.widthMeters) || 0.24));
+  const wallH = Math.max(0.45, Math.min(5.5, Number(road?.heightMeters ?? preset.heightMeters) || 1.35));
+  const bayPitch = Math.max(1.2, Math.min(8.0, Number(road?.slabLengthMeters ?? preset.slabLengthMeters) || 3.0));
+  const slotW = Math.max(0.04, Math.min(0.28, Number(road?.slabGapMeters ?? preset.slabGapMeters) || 0.09));
+  const hasSlots = typeof road?.hasSlots === 'boolean' ? road.hasSlots : Boolean(preset.hasSlots);
+  const pillarW = Math.max(wallThick * 1.72, 0.36);
+  const pillarExtraH = Math.max(0.24, Math.min(0.48, wallH * 0.22));
+  const pillarH = wallH + pillarExtraH;
+  const copingH = Math.max(0.08, Math.min(0.16, wallH * 0.085));
+  const opacity = isPreview ? 0.65 : 1.0;
+
+  const { controlWorldPts, samples, totalLength } = sampleRoad3DPathWorld(road, normToWorldFn);
+  if (controlWorldPts.length < 2) return group;
+
+  const wallHex = road?.slabColor || preset.slabColor || '#c6dfb0';
+  const copingHex = road?.curbColor || preset.curbColor || '#78a238';
+  const grooveHex = road?.gravelColor || preset.gravelColor || '#eef3e8';
+
+  const wallTex = getProceduralFencePlasterTexture(wallHex);
+  const wallMat = new THREE.MeshStandardMaterial({
+    color: wallTex ? 0xffffff : wallHex,
+    map: wallTex || undefined,
+    roughness: 0.86,
+    metalness: 0.03,
+    transparent: isPreview,
+    opacity
+  });
+  const copingMat = new THREE.MeshStandardMaterial({
+    color: copingHex,
+    roughness: 0.54,
+    metalness: 0.06,
+    transparent: isPreview,
+    opacity
+  });
+  const grooveMat = new THREE.MeshStandardMaterial({
+    color: grooveHex,
+    roughness: 0.72,
+    metalness: 0.02,
+    transparent: isPreview,
+    opacity
+  });
+  const plinthMat = new THREE.MeshStandardMaterial({
+    color: '#8f9b85',
+    roughness: 0.92,
+    metalness: 0.02,
+    transparent: isPreview,
+    opacity
+  });
+
+  // Build ordered pillar chain: always a pillar at every corner vertex + evenly spaced bay pillars along each span
+  const pathPts = road?.pathMode === 'smooth' && samples.length >= 3
+    ? samples.filter((_, idx) => idx === 0 || idx === samples.length - 1 || idx % 4 === 0).map((s) => s.pos)
+    : controlWorldPts;
+
+  const pillars = [];
+  const bays = [];
+  const addPillarUnique = (x, z, yaw) => {
+    for (const p of pillars) {
+      if (Math.hypot(p.x - x, p.z - z) < 0.16) return p;
+    }
+    const rec = { x, z, yaw };
+    pillars.push(rec);
+    return rec;
+  };
+
+  for (let i = 0; i < pathPts.length - 1; i++) {
+    const a = pathPts[i];
+    const b = pathPts[i + 1];
+    const dx = b.x - a.x;
+    const dz = b.z - a.z;
+    const segLen = Math.hypot(dx, dz);
+    if (segLen < 0.15) continue;
+    const yaw = Math.atan2(dx, dz);
+    const bayCount = Math.max(1, Math.min(80, Math.round(segLen / bayPitch)));
+
+    for (let k = 0; k <= bayCount; k++) {
+      const t = k / bayCount;
+      addPillarUnique(a.x + dx * t, a.z + dz * t, yaw);
+    }
+    for (let k = 0; k < bayCount; k++) {
+      const t0 = k / bayCount;
+      const t1 = (k + 1) / bayCount;
+      const x0 = a.x + dx * t0;
+      const z0 = a.z + dz * t0;
+      const x1 = a.x + dx * t1;
+      const z1 = a.z + dz * t1;
+      bays.push({
+        x: (x0 + x1) * 0.5,
+        z: (z0 + z1) * 0.5,
+        len: Math.hypot(x1 - x0, z1 - z0),
+        yaw
+      });
+    }
+  }
+
+  // 1. Pillars (GPU InstancedMesh: shaft, horizontal white reveal grooves, 2-tier stepped flared olive-green crown)
+  if (pillars.length > 0) {
+    const pCount = pillars.length;
+    const grooveCount = Math.max(2, Math.min(6, Math.round(pillarH / 0.46)));
+    const dummy = new THREE.Object3D();
+
+    const shaftGeo = new THREE.BoxGeometry(pillarW, pillarH, pillarW);
+    const grooveGeo = new THREE.BoxGeometry(pillarW + 0.014, 0.024, pillarW + 0.014);
+    const crownLowGeo = new THREE.BoxGeometry(pillarW + 0.085, 0.058, pillarW + 0.085);
+    const crownTopGeo = new THREE.BoxGeometry(pillarW + 0.165, 0.072, pillarW + 0.165);
+    const crownCapGeo = new THREE.BoxGeometry(pillarW + 0.105, 0.026, pillarW + 0.105);
+
+    const addInstancedOrMeshes = (name, geo, mat, transforms) => {
+      if (transforms.length === 0) return;
+      if (typeof THREE.InstancedMesh === 'function') {
+        const inst = new THREE.InstancedMesh(geo, mat, transforms.length);
+        inst.name = name;
+        inst.castShadow = !isPreview;
+        inst.receiveShadow = true;
+        transforms.forEach((tr, idx) => {
+          dummy.position.set(tr.x, tr.y, tr.z);
+          dummy.rotation.set(0, tr.yaw || 0, 0);
+          dummy.scale.set(tr.sx ?? 1, tr.sy ?? 1, tr.sz ?? 1);
+          dummy.updateMatrix();
+          inst.setMatrixAt(idx, dummy.matrix);
+        });
+        inst.instanceMatrix.needsUpdate = true;
+        inst.computeBoundingSphere?.();
+        group.add(inst);
+      } else {
+        transforms.forEach((tr) => {
+          const m = new THREE.Mesh(geo, mat);
+          m.name = name;
+          m.position.set(tr.x, tr.y, tr.z);
+          m.rotation.y = tr.yaw || 0;
+          m.scale.set(tr.sx ?? 1, tr.sy ?? 1, tr.sz ?? 1);
+          m.castShadow = !isPreview;
+          m.receiveShadow = true;
+          group.add(m);
+        });
+      }
+    };
+
+    const shaftTr = [];
+    const grooveTr = [];
+    const crownLowTr = [];
+    const crownTopTr = [];
+    const crownCapTr = [];
+
+    for (const p of pillars) {
+      shaftTr.push({ x: p.x, y: elev + pillarH * 0.5, z: p.z, yaw: p.yaw });
+      for (let g = 1; g <= grooveCount; g++) {
+        const gy = elev + (pillarH * 0.84) * (g / (grooveCount + 0.45));
+        grooveTr.push({ x: p.x, y: gy, z: p.z, yaw: p.yaw });
+      }
+      crownLowTr.push({ x: p.x, y: elev + pillarH + 0.029, z: p.z, yaw: p.yaw });
+      crownTopTr.push({ x: p.x, y: elev + pillarH + 0.094, z: p.z, yaw: p.yaw });
+      crownCapTr.push({ x: p.x, y: elev + pillarH + 0.143, z: p.z, yaw: p.yaw });
+    }
+
+    addInstancedOrMeshes('FencePillarShafts', shaftGeo, wallMat, shaftTr);
+    addInstancedOrMeshes('FencePillarGrooves', grooveGeo, grooveMat, grooveTr);
+    addInstancedOrMeshes('FencePillarCrownLow', crownLowGeo, copingMat, crownLowTr);
+    addInstancedOrMeshes('FencePillarCrownTop', crownTopGeo, copingMat, crownTopTr);
+    addInstancedOrMeshes('FencePillarCrownCap', crownCapGeo, copingMat, crownCapTr);
+
+    // 2. Wall Bays (with REAL 3D see-through vertical ventilation slots OR solid tall concrete panel + beveled olive-green coping)
+    const unitBoxGeo = new THREE.BoxGeometry(1, 1, 1);
+    const panelTr = [];
+    const copingLowTr = [];
+    const copingTopTr = [];
+    const plinthTr = [];
+    const slotTrimTr = [];
+
+    const bodyH = Math.max(0.25, wallH - copingH);
+    for (const bay of bays) {
+      const clearSpan = Math.max(0.08, bay.len - pillarW * 0.72);
+      const copeSpan = Math.max(0.1, bay.len - pillarW * 0.62);
+      const sinY = Math.sin(bay.yaw);
+      const cosY = Math.cos(bay.yaw);
+
+      // Olive-green 2-tier rounded/beveled coping along top of bay
+      copingLowTr.push({
+        x: bay.x,
+        y: elev + bodyH + copingH * 0.26,
+        z: bay.z,
+        yaw: bay.yaw,
+        sx: wallThick + 0.04,
+        sy: copingH * 0.52,
+        sz: copeSpan
+      });
+      copingTopTr.push({
+        x: bay.x,
+        y: elev + bodyH + copingH * 0.74,
+        z: bay.z,
+        yaw: bay.yaw,
+        sx: wallThick + 0.076,
+        sy: copingH * 0.56,
+        sz: copeSpan
+      });
+
+      // Grounded base plinth kickstrip
+      plinthTr.push({
+        x: bay.x,
+        y: elev + 0.045,
+        z: bay.z,
+        yaw: bay.yaw,
+        sx: wallThick + 0.018,
+        sy: 0.09,
+        sz: clearSpan
+      });
+
+      if (hasSlots && bodyH >= 0.72 && clearSpan >= 0.78) {
+        const slotCount = Math.max(1, Math.min(7, Math.round(clearSpan / 0.66)));
+        const effSlotW = Math.min(slotW, (clearSpan / (slotCount + 1)) * 0.42);
+        const slotH = Math.max(0.20, Math.min(0.62, bodyH * 0.36));
+        const slotBot = Math.max(0.22, bodyH * 0.34);
+        const slotTop = Math.min(bodyH - 0.14, slotBot + slotH);
+        const realSlotH = Math.max(0.14, slotTop - slotBot);
+        const topBandH = Math.max(0.10, bodyH - slotTop);
+
+        // Lower solid wall strip below vertical slots
+        panelTr.push({
+          x: bay.x,
+          y: elev + slotBot * 0.5,
+          z: bay.z,
+          yaw: bay.yaw,
+          sx: wallThick,
+          sy: slotBot,
+          sz: clearSpan
+        });
+        // Upper solid wall strip above vertical slots
+        panelTr.push({
+          x: bay.x,
+          y: elev + slotTop + topBandH * 0.5,
+          z: bay.z,
+          yaw: bay.yaw,
+          sx: wallThick,
+          sy: topBandH,
+          sz: clearSpan
+        });
+
+        // Solid piers separating each real see-through vertical slot
+        const totalSlotsW = slotCount * effSlotW;
+        const pierW = Math.max(0.06, (clearSpan - totalSlotsW) / (slotCount + 1));
+        let cursor = -clearSpan * 0.5;
+        for (let s = 0; s <= slotCount; s++) {
+          const pCenter = cursor + pierW * 0.5;
+          panelTr.push({
+            x: bay.x + sinY * pCenter,
+            y: elev + slotBot + realSlotH * 0.5,
+            z: bay.z + cosY * pCenter,
+            yaw: bay.yaw,
+            sx: wallThick,
+            sy: realSlotH,
+            sz: pierW
+          });
+          cursor += pierW;
+          if (s < slotCount) {
+            const sCenter = cursor + effSlotW * 0.5;
+            // Subtle bottom/top cream sill trim inside each real slot opening
+            slotTrimTr.push({
+              x: bay.x + sinY * sCenter,
+              y: elev + slotBot + 0.012,
+              z: bay.z + cosY * sCenter,
+              yaw: bay.yaw,
+              sx: wallThick + 0.008,
+              sy: 0.024,
+              sz: effSlotW + 0.01
+            });
+            slotTrimTr.push({
+              x: bay.x + sinY * sCenter,
+              y: elev + slotTop - 0.012,
+              z: bay.z + cosY * sCenter,
+              yaw: bay.yaw,
+              sx: wallThick + 0.008,
+              sy: 0.024,
+              sz: effSlotW + 0.01
+            });
+            cursor += effSlotW;
+          }
+        }
+      } else {
+        // Solid privacy wall panel (matches tall perimeter wall in reference photo #1)
+        panelTr.push({
+          x: bay.x,
+          y: elev + bodyH * 0.5,
+          z: bay.z,
+          yaw: bay.yaw,
+          sx: wallThick,
+          sy: bodyH,
+          sz: clearSpan
+        });
+      }
+    }
+
+    addInstancedOrMeshes('FenceWallPanels', unitBoxGeo, wallMat, panelTr);
+    addInstancedOrMeshes('FenceCopingLow', unitBoxGeo, copingMat, copingLowTr);
+    addInstancedOrMeshes('FenceCopingTop', unitBoxGeo, copingMat, copingTopTr);
+    addInstancedOrMeshes('FenceBasePlinth', unitBoxGeo, plinthMat, plinthTr);
+    if (slotTrimTr.length > 0) {
+      addInstancedOrMeshes('FenceSlotTrims', unitBoxGeo, grooveMat, slotTrimTr);
+    }
+  }
+
+  group.traverse((child) => {
+    child.userData.roadId = road.id;
+  });
+  group.userData.roadId = road.id;
+  group.userData.isFence3D = true;
+  group.userData.fenceStats = {
+    pillarCount: pillars.length,
+    bayCount: bays.length,
+    totalLength: Number(totalLength.toFixed(2)),
+    wallHeight: wallH,
+    wallThickness: wallThick,
+    hasSlots
+  };
+
+  if (isSelected && !isPreview) {
+    const gizmoY = elev + pillarH + 0.26;
+    const linePts = samples.map((s) => new THREE.Vector3(s.pos.x, elev + wallH + 0.12, s.pos.z));
+    const lineGeo = new THREE.BufferGeometry().setFromPoints(linePts);
+    const lineMat = new THREE.LineBasicMaterial({ color: 0xfacc15, transparent: true, opacity: 0.95 });
+    const selLine = new THREE.Line(lineGeo, lineMat);
+    selLine.userData.roadId = road.id;
+    group.add(selLine);
+
+    const nodeMat = makeMat(0xfacc15, { emissive: 0xeab308, emissiveIntensity: 0.65, roughness: 0.2 });
+    const midMat = makeMat(0x38bdf8, { emissive: 0x0284c7, emissiveIntensity: 0.6, roughness: 0.2 });
+    const moveMat = makeMat(0xf97316, { emissive: 0xea580c, emissiveIntensity: 0.6, roughness: 0.2 });
+
+    controlWorldPts.forEach((wp, idx) => {
+      const nodeMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.28, 0.24, 16), nodeMat);
+      nodeMesh.position.set(wp.x, gizmoY, wp.z);
+      nodeMesh.userData = { roadId: road.id, gizmoType: 'road-node', nodeIndex: idx };
+      group.add(nodeMesh);
+
+      if (idx < controlWorldPts.length - 1) {
+        const nextWp = controlWorldPts[idx + 1];
+        const midX = (wp.x + nextWp.x) * 0.5;
+        const midZ = (wp.z + nextWp.z) * 0.5;
+        const midMesh = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 12), midMat);
+        midMesh.position.set(midX, elev + wallH + 0.26, midZ);
+        midMesh.userData = { roadId: road.id, gizmoType: 'road-insert-node', insertAfterIndex: idx };
+        group.add(midMesh);
+      }
+    });
+
+    const centerSample = _interpolateRoadSampleAtDist(samples, totalLength * 0.5) || samples[0];
+    if (centerSample) {
+      const movePad = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.36, 0.16, 8), moveMat);
+      movePad.position.set(centerSample.pos.x, gizmoY + 0.22, centerSample.pos.z);
+      movePad.userData = { roadId: road.id, gizmoType: 'road-move' };
+      group.add(movePad);
+    }
+  }
+
+  return group;
 }
 
 /**
@@ -5067,18 +6151,24 @@ function _buildExtrudedRoadRibbonGeo(samples, offsetLeft, offsetRight, bottomY, 
  * Includes interactive vertex handles, segment midpoint '+' handles, and whole-road move handle when selected.
  */
 export function create3DRoadGroup(road, normToWorldFn, isSelected = false, { isPreview = false } = {}) {
+  if (isFence3DStyle(road)) {
+    return _create3DSchoolFenceGroup(road, normToWorldFn, isSelected, { isPreview });
+  }
   const group = new THREE.Group();
   const preset = ROAD3D_PRESETS[road?.style] || ROAD3D_PRESETS['stepping-slab'];
   const style = preset.style;
   const elev = Math.max(0, Number(road?.elevationMeters ?? preset.elevationMeters) || 0);
-  const width = Math.max(0.6, Math.min(14, Number(road?.widthMeters ?? preset.widthMeters) || 1.55));
+  const width = Math.max(0.6, Math.min(24, Number(road?.widthMeters ?? preset.widthMeters) || 1.55));
   const curbW = Math.max(0.04, Math.min(width * 0.25, Number(road?.curbWidthMeters ?? preset.curbWidthMeters) || 0.11));
   const curbH = Math.max(0.03, Math.min(0.4, Number(road?.curbHeightMeters ?? preset.curbHeightMeters) || 0.085));
-  const slabLen = Math.max(0.2, Math.min(4.0, Number(road?.slabLengthMeters ?? preset.slabLengthMeters) || 0.64));
-  const slabGap = Math.max(0.01, Math.min(1.5, Number(road?.slabGapMeters ?? preset.slabGapMeters) || 0.14));
+  const slabLen = Math.max(0.2, Math.min(6.0, Number(road?.slabLengthMeters ?? preset.slabLengthMeters) || 0.64));
+  const slabGap = Math.max(0, Math.min(1.5, Number(road?.slabGapMeters ?? preset.slabGapMeters) ?? 0.14));
+  const isSchoolAsphalt = style === 'asphalt-school-gravel' || style === 'asphalt-courtyard';
   const sideGutter = style === 'stepping-slab'
     ? Math.max(0.04, Math.min((width - curbW * 2) * 0.28, Number(road?.sideGutterMeters ?? preset.sideGutterMeters) || 0.11))
-    : 0;
+    : (isSchoolAsphalt
+      ? Math.max(0, Math.min((width - curbW * 2) * 0.38, Number(road?.sideGutterMeters ?? preset.sideGutterMeters) || 0))
+      : 0);
   const halfW = width * 0.5;
   const innerHalfW = Math.max(0.2, halfW - curbW);
   const opacity = isPreview ? 0.65 : 1.0;
@@ -5270,8 +6360,76 @@ export function create3DRoadGroup(road, normToWorldFn, isSelected = false, { isP
       if (pebMesh.instanceColor) pebMesh.instanceColor.needsUpdate = true;
       group.add(pebMesh);
     }
+  } else if (isSchoolAsphalt) {
+    // Authentic school campus weathered grey asphalt with optional river-pebble gravel shoulders (matching reference photos)
+    const asphaltHalfW = Math.max(0.35, innerHalfW - sideGutter);
+    const deckTopY = elev + Math.max(0.052, Math.min(0.08, curbH - 0.022));
+    const deckGeo = _buildExtrudedRoadRibbonGeo(samples, -asphaltHalfW, asphaltHalfW, elev + 0.022, deckTopY, Math.max(1, asphaltHalfW * 0.65), 2.8);
+    const deckMesh = new THREE.Mesh(deckGeo, slabMat);
+    deckMesh.name = 'RoadSchoolAsphaltSurface';
+    deckMesh.castShadow = !isPreview;
+    deckMesh.receiveShadow = true;
+    group.add(deckMesh);
+
+    // Subtle organic weathered edge bevel where asphalt meets the river-pebble shoulder
+    if (sideGutter >= 0.06 && !isPreview) {
+      const edgeMat = new THREE.MeshStandardMaterial({ color: '#6b6d6e', roughness: 0.92, metalness: 0.02 });
+      const edgeL = new THREE.Mesh(_buildExtrudedRoadRibbonGeo(samples, -asphaltHalfW - 0.06, -asphaltHalfW, elev + 0.024, deckTopY - 0.008, 0.25, 1.4), edgeMat);
+      const edgeR = new THREE.Mesh(_buildExtrudedRoadRibbonGeo(samples, asphaltHalfW, asphaltHalfW + 0.06, elev + 0.024, deckTopY - 0.008, 0.25, 1.4), edgeMat);
+      edgeL.name = 'RoadAsphaltEdgeLeft';
+      edgeR.name = 'RoadAsphaltEdgeRight';
+      edgeL.receiveShadow = true;
+      edgeR.receiveShadow = true;
+      group.add(edgeL, edgeR);
+
+      // 3D River Pebbles scattered along BOTH shoulders via 1 GPU InstancedMesh
+      if (typeof THREE.InstancedMesh === 'function' && totalLength >= 0.6) {
+        const stepDist = 0.42;
+        const rows = Math.min(180, Math.floor(totalLength / stepDist));
+        const perSide = Math.max(1, Math.min(3, Math.round(sideGutter / 0.28)));
+        const maxPebbles = Math.min(680, rows * perSide * 2);
+        if (maxPebbles > 0) {
+          const pebGeo = new THREE.DodecahedronGeometry(0.036, 0);
+          const pebMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.86, metalness: 0.04 });
+          const pebMesh = new THREE.InstancedMesh(pebGeo, pebMat, maxPebbles);
+          pebMesh.name = 'RoadRiverPebbles';
+          const dummy = new THREE.Object3D();
+          const pebPalette = [0x9ea09d, 0x7a7c7a, 0xb8b7b2, 0x656765, 0xc7c5be];
+          const pebRand = _seededRoadRand(20261126);
+          let pIdx = 0;
+          for (let r = 0; r < rows && pIdx < maxPebbles; r++) {
+            const sample = _interpolateRoadSampleAtDist(samples, (r + 0.5) * stepDist);
+            if (!sample) continue;
+            for (const sideSign of [-1, 1]) {
+              for (let c = 0; c < perSide && pIdx < maxPebbles; c++) {
+                const frac = (c + 0.2 + pebRand() * 0.6) / perSide;
+                const lat = sideSign * (asphaltHalfW + 0.08 + frac * Math.max(0.04, sideGutter - 0.14));
+                const along = (pebRand() - 0.5) * stepDist * 0.85;
+                dummy.position.set(
+                  sample.pos.x + sample.right.x * lat + sample.tangent.x * along,
+                  elev + 0.032,
+                  sample.pos.z + sample.right.z * lat + sample.tangent.z * along
+                );
+                dummy.rotation.set(pebRand() * 0.4, pebRand() * Math.PI * 2, pebRand() * 0.4);
+                const sScale = 0.78 + pebRand() * 0.72;
+                dummy.scale.set(sScale * 1.3, sScale * 0.48, sScale * 0.95);
+                dummy.updateMatrix();
+                pebMesh.setMatrixAt(pIdx, dummy.matrix);
+                pebMesh.setColorAt?.(pIdx, new THREE.Color(pebPalette[pIdx % pebPalette.length]));
+                pIdx++;
+              }
+            }
+          }
+          pebMesh.count = pIdx;
+          pebMesh.instanceMatrix.needsUpdate = true;
+          if (pebMesh.instanceColor) pebMesh.instanceColor.needsUpdate = true;
+          pebMesh.computeBoundingSphere?.();
+          group.add(pebMesh);
+        }
+      }
+    }
   } else {
-    // Continuous road surface (paving block / concrete corridor / asphalt campus)
+    // Continuous road surface (paving block / concrete corridor / asphalt campus with lane dashes)
     const deckGeo = _buildExtrudedRoadRibbonGeo(samples, -innerHalfW, innerHalfW, elev + 0.02, elev + Math.max(0.052, curbH - 0.015), innerHalfW * 1.25, 1.3);
     const deckMesh = new THREE.Mesh(deckGeo, slabMat);
     deckMesh.name = 'RoadPavementSurface';

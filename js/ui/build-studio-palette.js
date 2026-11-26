@@ -9,6 +9,7 @@ import {
   BUILTIN_ROOM_BUILDING_PRESETS,
   OBJECT3D_PRESETS,
   ROAD3D_PRESETS,
+  isFence3DStyle,
   createBuildingRoomPresetData
 } from '../map/map-3d-models.js';
 import { escapeHtml, generateId, uiIcon } from '../utils/helpers.js';
@@ -63,7 +64,13 @@ const FACILITY_PRESET_IDS = new Set([
   'pohon-pinang',
   'pohon-mahoni-super-besar',
   'pohon-rindang-super-besar',
-  'pohon-pinus-ekstra-besar'
+  'pohon-pinus-ekstra-besar',
+  'pohon-trembesi-sulur',
+  'pohon-ketapang-kencana',
+  'lorong-bunga-anggrek-web',
+  'pohon-mahoni-rindang',
+  'pohon-cemara-rindang',
+  'batu-kolam-hiasan'
 ]);
 
 const OBJECT_ICON_MAP = {
@@ -143,16 +150,22 @@ export class BuildStudioPalette {
     });
 
     Object.entries(ROAD3D_PRESETS).forEach(([style, preset]) => {
+      const isFence = isFence3DStyle(preset);
+      const isSchoolAsphalt = style === 'asphalt-school-gravel' || style === 'asphalt-courtyard';
       entries.push({
         kind: 'road',
         id: style,
-        category: 'road',
-        badge: 'Jalan 3D',
-        icon: uiIcon('route', 15),
-        color: preset.slabColor || '#94a3b8',
+        category: isFence ? 'fence' : 'road',
+        badge: isFence ? 'Pagar 3D' : 'Jalan 3D',
+        icon: uiIcon(isFence ? 'shield' : 'route', 15),
+        color: isFence ? (preset.curbColor || '#78a238') : (preset.slabColor || '#94a3b8'),
         name: preset.name || style,
-        subtitle: `Lebar ${preset.widthMeters}m • Jalur ${preset.pathMode === 'smooth' ? 'Lengkung' : 'Lurus'}`,
-        dimsText: `L ${preset.widthMeters}m`,
+        subtitle: isFence
+          ? `Tinggi ${preset.heightMeters}m • Tebal ${preset.widthMeters}m • Tiang/${preset.slabLengthMeters}m`
+          : (isSchoolAsphalt
+            ? `Aspal Lebar ${preset.widthMeters}m • Bahu Kerikil ${preset.sideGutterMeters}m`
+            : `Lebar ${preset.widthMeters}m • Jalur ${preset.pathMode === 'smooth' ? 'Lengkung' : 'Lurus'}`),
+        dimsText: isFence ? `T ${preset.heightMeters}m` : `L ${preset.widthMeters}m`,
         preset
       });
     });
@@ -194,9 +207,26 @@ export class BuildStudioPalette {
   placeBuildingPreset(presetId) {
     const pt = this._getPlacementNormPoint();
     const existingRooms = stateManager.getRooms3d();
+    const presetMeta = BUILTIN_ROOM_BUILDING_PRESETS.find((b) => b.id === presetId) || null;
+    let elevationMeters = 0;
+    if (
+      presetMeta
+      && this.map3DEngine?.buildPlacementConfig?.surfaceSnapEnabled
+      && this.map3DEngine?.sampleBuildSupportSurfaceAtWorld
+      && this.map3DEngine?.normToWorld
+    ) {
+      const wPt = this.map3DEngine.normToWorld(pt.x, pt.y);
+      const sup = this.map3DEngine.sampleBuildSupportSurfaceAtWorld(wPt.x, wPt.z, {
+        dragWidth: presetMeta.widthMeters,
+        dragDepth: presetMeta.depthMeters,
+        requireCompatibleSupport: true
+      });
+      elevationMeters = sup?.elevationMeters || 0;
+    }
     const roomData = createBuildingRoomPresetData(presetId, {
       x: pt.x,
       y: pt.y,
+      elevationMeters,
       existingRooms
     });
     if (!roomData) return null;
@@ -221,12 +251,29 @@ export class BuildStudioPalette {
     const pt = this._getPlacementNormPoint();
     const existing = stateManager.getObjects3d();
     const countSame = existing.filter((o) => o.shape === shape).length;
+    let elevationMeters = Number(preset.elevationMeters) || 0;
+    if (
+      this.map3DEngine?.buildPlacementConfig?.surfaceSnapEnabled
+      && this.map3DEngine?.sampleBuildSupportSurfaceAtWorld
+      && this.map3DEngine?.normToWorld
+    ) {
+      const wPt = this.map3DEngine.normToWorld(pt.x, pt.y);
+      const sup = this.map3DEngine.sampleBuildSupportSurfaceAtWorld(wPt.x, wPt.z, {
+        dragWidth: preset.widthMeters,
+        dragDepth: preset.depthMeters,
+        requireCompatibleSupport: false
+      });
+      if (sup?.surfaceSnapped) {
+        elevationMeters = sup.elevationMeters;
+      }
+    }
     const objData = stateManager.addObject3d({
       ...preset,
       id: generateId('obj3d'),
       name: countSame > 0 ? `${preset.name} #${countSame + 1}` : preset.name,
       x: pt.x,
-      y: pt.y
+      y: pt.y,
+      elevationMeters
     });
     if (stateManager.getViewMode() !== '3d') {
       stateManager.setViewMode('3d');
@@ -253,9 +300,12 @@ export class BuildStudioPalette {
     } else if (this.map3DEngine?.setRoadBuildStyle) {
       this.map3DEngine.setRoadBuildStyle(style);
     }
+    const isFence = isFence3DStyle(preset);
     this.map3DEngine?.setNavTool?.('road3d');
     this.map3DEngine?.showStatusHint?.(
-      `Alat Jalan "${preset.name}" siap — Klik titik-titik jalur di permukaan kampus.`
+      isFence
+        ? `Alat Pagar "${preset.name}" siap — Klik titik-titik sudut untuk membangun pagar modular (Klik Kanan / Enter selesai).`
+        : `Alat Jalan "${preset.name}" siap — Klik titik-titik jalur di permukaan kampus.`
     );
     return true;
   }
@@ -269,13 +319,17 @@ export class BuildStudioPalette {
       { id: 'building-cutaway', label: 'Cutaway' },
       { id: 'facility', label: 'Fasilitas' },
       { id: 'structure', label: 'Struktur' },
+      { id: 'fence', label: 'Pagar 3D' },
       { id: 'road', label: 'Jalan 3D' }
     ];
 
     this.container.innerHTML = `
       <div class="build-studio-palette">
         <div class="build-studio-actions">
-          <button type="button" id="btn-bsp-quick-road" class="btn btn-primary btn-sm" title="Aktifkan Alat Gambar Jalan 3D">
+          <button type="button" id="btn-bsp-quick-fence" class="btn btn-primary btn-sm" title="Aktifkan Alat Bangun Pagar Tembok Sekolah Modular">
+            ${uiIcon('shield', 12)} Pagar 3D
+          </button>
+          <button type="button" id="btn-bsp-quick-road" class="btn btn-primary btn-sm" title="Aktifkan Alat Gambar Jalan Aspal &amp; Setapak 3D">
             ${uiIcon('route', 12)} Jalan 3D
           </button>
           <button type="button" id="btn-bsp-room-mgr" class="btn btn-secondary btn-sm" title="Kelola Ruangan 3D / Upload Model .GLB">
@@ -288,7 +342,7 @@ export class BuildStudioPalette {
 
         <div class="palette-search-wrapper" style="margin-top: 8px;">
           <input type="text" id="build-studio-search" class="palette-search-input"
-            placeholder="Cari gedung, kantin, tiang, jalan..."
+            placeholder="Cari gedung, pagar, aspal, tiang, jalan..."
             value="${escapeHtml(this.searchQuery)}" autocomplete="off">
         </div>
 
@@ -327,6 +381,10 @@ export class BuildStudioPalette {
 
   bindEvents() {
     if (!this.container) return;
+
+    this.container.querySelector('#btn-bsp-quick-fence')?.addEventListener('click', () => {
+      this.activateRoadStyle('school-fence-slotted');
+    });
 
     this.container.querySelector('#btn-bsp-quick-road')?.addEventListener('click', () => {
       this.activateRoadStyle('stepping-slab');

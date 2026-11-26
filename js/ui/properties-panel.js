@@ -8,7 +8,7 @@ import { stateManager } from '../core/state-manager.js';
 import { DEVICE_CATEGORIES, DEVICE_STATUSES, DEVICE_CATALOG } from '../devices/device-library.js';
 import { validateIp, validateMac, validateVlan, getDefaultSpatial3d, FUNDING_SOURCE_PRESETS } from '../devices/device-schema.js';
 import { clamp, formatDecimals, uiIcon, escapeHtml } from '../utils/helpers.js';
-import { getDefaultObject3dPassThrough } from '../map/map-3d-models.js';
+import { getDefaultObject3dPassThrough, ROAD3D_PRESETS, isFence3DStyle, getRoad3DTotalLength } from '../map/map-3d-models.js';
 import { NETWORK_ICON_DEFS, getDeviceIconSvg, getDefaultIconForType } from '../devices/device-icon-factory.js';
 import { metersToPixels, calculateCoverageArea, formatCoverageArea } from '../devices/wireless-coverage.js';
 
@@ -17,9 +17,10 @@ export class PropertiesPanel {
    * @param {HTMLElement} container 
    * @param {import('../devices/device-manager.js').DeviceManager} deviceManager 
    */
-  constructor(container, deviceManager) {
+  constructor(container, deviceManager, options = {}) {
     this.container = container;
     this.deviceManager = deviceManager;
+    this.getMap3DEngine = options?.getMap3DEngine || null;
     this.currentDevice = null;
 
     this.renderEmpty();
@@ -51,6 +52,326 @@ export class PropertiesPanel {
           </div>
         </div>
       `;
+    if (window.lucide) window.lucide.createIcons();
+  }
+
+  /**
+   * Render dedicated properties editor for a selected 3D Road or Modular School Fence.
+   * @param {Object} road
+   */
+  renderRoad3dForm(road) {
+    if (!road || !this.container) return;
+    if (stateManager.getWorkspaceMode?.() !== 'build') {
+      this.renderEmpty();
+      return;
+    }
+    this.currentDevice = null;
+    this._lastRenderedSig = null;
+
+    const preset = ROAD3D_PRESETS[road.style] || ROAD3D_PRESETS['stepping-slab'];
+    const isFence = isFence3DStyle(road);
+    const isSchoolAsphalt = road.style === 'asphalt-school-gravel' || road.style === 'asphalt-courtyard';
+    const engine = this.getMap3DEngine?.() || null;
+    const totalLen = engine?.normToWorld
+      ? getRoad3DTotalLength(road, (nx, ny) => engine.normToWorld(nx, ny))
+      : 0;
+    const widthVal = Number(road.widthMeters ?? preset.widthMeters ?? (isFence ? 0.24 : 4.5));
+    const heightVal = Number(road.heightMeters ?? preset.heightMeters ?? 1.35);
+    const slabLenVal = Number(road.slabLengthMeters ?? preset.slabLengthMeters ?? (isFence ? 3.0 : 0.64));
+    const gutterVal = Number(road.sideGutterMeters ?? preset.sideGutterMeters ?? 0);
+    const gapVal = Number(road.slabGapMeters ?? preset.slabGapMeters ?? (isFence ? 0.09 : 0.14));
+    const elevVal = Number(road.elevationMeters ?? 0);
+    const hasSlots = typeof road.hasSlots === 'boolean' ? road.hasSlots : Boolean(preset.hasSlots);
+    const isPassThrough = Boolean(road.passThrough);
+    const slabColor = road.slabColor || preset.slabColor || (isFence ? '#c6dfb0' : '#8b8d8f');
+    const curbColor = road.curbColor || preset.curbColor || (isFence ? '#78a238' : '#d7d5ce');
+    const ptsCount = Array.isArray(road.points) ? road.points.length : 0;
+
+    const roadOptions = Object.values(ROAD3D_PRESETS).filter((p) => p.kind !== 'fence');
+    const fenceOptions = Object.values(ROAD3D_PRESETS).filter((p) => p.kind === 'fence');
+
+    this.container.innerHTML = `
+      <div class="prop-o3d-card" id="prop-road3d-panel" data-road3d-id="${escapeHtml(road.id)}">
+        <div class="roomdoc-header" style="margin-bottom: 2px;">
+          <div class="roomdoc-title-wrap">
+            <div class="roomdoc-eyebrow">${isFence ? 'Properti Pagar 3D Modular' : 'Properti Jalan 3D'}</div>
+            <h3 class="roomdoc-title">
+              ${escapeHtml(road.name || preset.name)}
+              ${isFence ? `
+                <span class="roomdoc-pass-badge ${isPassThrough ? '' : 'is-solid'}">
+                  ${uiIcon(isPassThrough ? 'wind' : 'shield', 10)} ${isPassThrough ? 'Bisa Ditembus' : 'Padat (Solid)'}
+                </span>
+              ` : ''}
+            </h3>
+            <div class="roomdoc-dims">
+              Panjang ${totalLen.toFixed(1)}m • ${ptsCount} titik${isFence ? ` • T ${heightVal.toFixed(2)}m • Tebal ${widthVal.toFixed(2)}m` : ` • Lebar ${widthVal.toFixed(2)}m`}
+            </div>
+          </div>
+          <button type="button" id="btn-prop-road3d-close" class="btn btn-icon btn-sm" title="Batalkan Pilihan">
+            ${uiIcon('x', 14)}
+          </button>
+        </div>
+
+        <label class="prop-o3d-field">
+          <span>Nama ${isFence ? 'Pagar' : 'Jalan'}</span>
+          <input type="text" id="prop-road3d-name" value="${escapeHtml(road.name || preset.name)}">
+        </label>
+
+        <div class="roomdoc-grid-2">
+          <label class="prop-o3d-field">
+            <span>Model / Gaya</span>
+            <select id="prop-road3d-style">
+              <optgroup label="Jalan &amp; Aspal Sekolah">
+                ${roadOptions.map((p) => `<option value="${escapeHtml(p.style)}" ${road.style === p.style ? 'selected' : ''}>${escapeHtml(p.name)}</option>`).join('')}
+              </optgroup>
+              <optgroup label="Pagar &amp; Tembok Sekolah">
+                ${fenceOptions.map((p) => `<option value="${escapeHtml(p.style)}" ${road.style === p.style ? 'selected' : ''}>${escapeHtml(p.name)}</option>`).join('')}
+              </optgroup>
+            </select>
+          </label>
+          <label class="prop-o3d-field">
+            <span>Mode Jalur</span>
+            <select id="prop-road3d-path-mode">
+              <option value="straight" ${road.pathMode === 'straight' ? 'selected' : ''}>Lurus Sudut</option>
+              <option value="smooth" ${road.pathMode !== 'straight' ? 'selected' : ''}>Lengkung Mulus</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="roomdoc-collision-card">
+          <div class="roomdoc-section-title" style="margin: 0 0 6px;">
+            ${uiIcon('ruler', 12)} <span>Ukuran Real (Meter)</span>
+          </div>
+
+          <label class="prop-o3d-field">
+            <span>Panjang Total Real (m)</span>
+            <div style="display:flex;gap:6px;align-items:center;">
+              <input type="number" id="prop-road3d-total-len" min="0.5" max="500" step="0.5" value="${totalLen.toFixed(1)}" style="flex:1;">
+              <button type="button" id="btn-prop-road3d-apply-len" class="btn btn-secondary btn-sm" title="Sesuaikan panjang total ke nilai meter ini">Terapkan</button>
+            </div>
+          </label>
+
+          <label class="prop-o3d-field">
+            <span>${isFence ? 'Tebal / Lebar Dinding (m)' : 'Lebar Jalan Aspal / Jalur (m)'}</span>
+            <div style="display:flex;gap:6px;align-items:center;">
+              <input type="range" id="prop-road3d-width-slider" min="${isFence ? '0.12' : '0.6'}" max="${isFence ? '1.5' : '24'}" step="${isFence ? '0.02' : '0.1'}" value="${widthVal.toFixed(2)}" style="flex:1;">
+              <input type="number" id="prop-road3d-width" min="${isFence ? '0.12' : '0.6'}" max="${isFence ? '1.5' : '24'}" step="${isFence ? '0.02' : '0.1'}" value="${widthVal.toFixed(2)}" style="width:68px;">
+            </div>
+            <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">
+              ${(isFence ? [0.18, 0.24, 0.35, 0.5] : [3.5, 5.2, 8.5, 12]).map((v) => `<button type="button" class="btn btn-secondary btn-xs prop-road3d-w-preset" data-val="${v}">${v}m</button>`).join('')}
+            </div>
+          </label>
+
+          ${isFence ? `
+          <label class="prop-o3d-field">
+            <span>Tinggi Pagar / Tembok (m)</span>
+            <div style="display:flex;gap:6px;align-items:center;">
+              <input type="range" id="prop-road3d-height-slider" min="0.45" max="5.5" step="0.05" value="${heightVal.toFixed(2)}" style="flex:1;">
+              <input type="number" id="prop-road3d-height" min="0.45" max="5.5" step="0.05" value="${heightVal.toFixed(2)}" style="width:68px;">
+            </div>
+            <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">
+              ${[1.35, 1.8, 2.45, 3.0].map((v) => `<button type="button" class="btn btn-secondary btn-xs prop-road3d-h-preset" data-val="${v}">${v}m</button>`).join('')}
+            </div>
+          </label>
+          ` : ''}
+
+          <div class="roomdoc-grid-2">
+            <label class="prop-o3d-field">
+              <span>${isFence ? 'Jarak Tiang (m)' : 'Segmen / Papan (m)'}</span>
+              <input type="number" id="prop-road3d-slab-len" min="${isFence ? '1.2' : '0.2'}" max="${isFence ? '8' : '6'}" step="0.1" value="${slabLenVal.toFixed(2)}">
+            </label>
+            ${isSchoolAsphalt ? `
+            <label class="prop-o3d-field">
+              <span>Bahu Kerikil (m)</span>
+              <input type="number" id="prop-road3d-gutter" min="0" max="2.5" step="0.05" value="${gutterVal.toFixed(2)}">
+            </label>
+            ` : `
+            <label class="prop-o3d-field">
+              <span>${isFence ? 'Lebar Celah (m)' : 'Jarak Celah (m)'}</span>
+              <input type="number" id="prop-road3d-slab-gap" min="${isFence ? '0.04' : '0.01'}" max="${isFence ? '0.28' : '1.5'}" step="0.01" value="${gapVal.toFixed(2)}">
+            </label>
+            `}
+          </div>
+
+          ${isSchoolAsphalt ? `
+          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">
+            <button type="button" class="btn btn-secondary btn-xs prop-road3d-g-preset" data-val="0">Polos (0m)</button>
+            <button type="button" class="btn btn-secondary btn-xs prop-road3d-g-preset" data-val="0.62">Kerikil Standar (0.62m)</button>
+            <button type="button" class="btn btn-secondary btn-xs prop-road3d-g-preset" data-val="1.1">Bahu Lebar (1.1m)</button>
+          </div>
+          ` : ''}
+
+          <label class="prop-o3d-field" style="margin-top:6px;">
+            <span>Elevasi Z Dasar (m)</span>
+            <input type="number" id="prop-road3d-elev" min="0" max="20" step="0.1" value="${elevVal.toFixed(2)}">
+          </label>
+        </div>
+
+        <div class="roomdoc-collision-card">
+          <div class="roomdoc-section-title" style="margin: 0 0 6px;">
+            ${uiIcon('palette', 12)} <span>Tampilan &amp; Fisik</span>
+          </div>
+          <div class="roomdoc-grid-2">
+            <label class="prop-o3d-field">
+              <span>${isFence ? 'Warna Dinding' : 'Warna Aspal / Jalan'}</span>
+              <input type="color" id="prop-road3d-slab-color" value="${escapeHtml(slabColor)}">
+            </label>
+            <label class="prop-o3d-field">
+              <span>${isFence ? 'Warna List Atas' : 'Warna Kanstin Tepi'}</span>
+              <input type="color" id="prop-road3d-curb-color" value="${escapeHtml(curbColor)}">
+            </label>
+          </div>
+          ${isFence ? `
+          <label class="roomdoc-collision-toggle" style="margin-top:6px;">
+            <input type="checkbox" id="prop-road3d-has-slots" ${hasSlots ? 'checked' : ''}>
+            <div>
+              <strong>Lubang Celah Vertikal (Roster)</strong>
+              <div class="roomdoc-collision-hint">Tampilkan celah ventilasi vertikal pada panel dinding pagar.</div>
+            </div>
+          </label>
+          <label class="roomdoc-collision-toggle">
+            <input type="checkbox" id="prop-road3d-pass-through" ${isPassThrough ? 'checked' : ''}>
+            <div>
+              <strong>Bisa Ditembus Avatar (Pass-Through)</strong>
+              <div class="roomdoc-collision-hint">Matikan agar pagar padat menahan karakter Mode Teknisi.</div>
+            </div>
+          </label>
+          ` : ''}
+        </div>
+
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+          <button type="button" id="btn-prop-road3d-extend" class="btn btn-primary btn-sm" style="flex:1;">
+            ${uiIcon('plus-circle', 12)} Sambung Ujung
+          </button>
+          ${ptsCount >= 3 ? `
+          <button type="button" id="btn-prop-road3d-close-loop" class="btn btn-secondary btn-sm">
+            ${uiIcon('repeat', 12)} Tutup Loop
+          </button>
+          ` : ''}
+          <button type="button" id="btn-prop-road3d-delete" class="btn btn-danger btn-sm">
+            ${uiIcon('trash-2', 12)} Hapus
+          </button>
+        </div>
+      </div>
+    `;
+
+    const root = this.container.querySelector('#prop-road3d-panel');
+    if (!root) return;
+
+    const commitPatch = (patch) => {
+      stateManager.updateRoad3d?.(road.id, patch);
+    };
+
+    root.querySelector('#btn-prop-road3d-close')?.addEventListener('click', () => {
+      stateManager.deselectRoad3d?.();
+      this.renderEmpty();
+    });
+    root.querySelector('#prop-road3d-name')?.addEventListener('change', (ev) => {
+      const val = String(ev.target.value || '').trim();
+      if (val) commitPatch({ name: val });
+    });
+    root.querySelector('#prop-road3d-style')?.addEventListener('change', (ev) => {
+      const st = ev.target.value;
+      const p = ROAD3D_PRESETS[st];
+      if (!p) return;
+      commitPatch({
+        style: p.style,
+        kind: p.kind || 'road',
+        pathMode: p.pathMode || 'smooth',
+        widthMeters: p.widthMeters,
+        heightMeters: p.heightMeters ?? 1.35,
+        curbWidthMeters: p.curbWidthMeters,
+        curbHeightMeters: p.curbHeightMeters,
+        slabLengthMeters: p.slabLengthMeters,
+        slabGapMeters: p.slabGapMeters,
+        sideGutterMeters: p.sideGutterMeters ?? 0,
+        hasSlots: p.hasSlots ?? false,
+        passThrough: p.passThrough ?? false,
+        slabColor: p.slabColor,
+        curbColor: p.curbColor,
+        gravelColor: p.gravelColor
+      });
+    });
+    root.querySelector('#prop-road3d-path-mode')?.addEventListener('change', (ev) => {
+      commitPatch({ pathMode: ev.target.value === 'straight' ? 'straight' : 'smooth' });
+    });
+    root.querySelector('#btn-prop-road3d-apply-len')?.addEventListener('click', () => {
+      const targetLen = Number(root.querySelector('#prop-road3d-total-len')?.value);
+      this.getMap3DEngine?.()?.scaleSelectedRoadToLength?.(road.id, targetLen);
+    });
+
+    const wInp = root.querySelector('#prop-road3d-width');
+    const wSlider = root.querySelector('#prop-road3d-width-slider');
+    const applyW = (rawVal) => {
+      const v = isFence ? clamp(Number(rawVal) || 0.24, 0.12, 1.5) : clamp(Number(rawVal) || 4.5, 0.6, 24);
+      if (wInp) wInp.value = v.toFixed(2);
+      if (wSlider) wSlider.value = v.toFixed(2);
+      commitPatch({ widthMeters: Number(v.toFixed(2)) });
+    };
+    wInp?.addEventListener('change', (ev) => applyW(ev.target.value));
+    wSlider?.addEventListener('input', (ev) => applyW(ev.target.value));
+    root.querySelectorAll('.prop-road3d-w-preset')?.forEach((btn) => {
+      btn.addEventListener('click', () => applyW(btn.getAttribute('data-val')));
+    });
+
+    const hInp = root.querySelector('#prop-road3d-height');
+    const hSlider = root.querySelector('#prop-road3d-height-slider');
+    const applyH = (rawVal) => {
+      const v = clamp(Number(rawVal) || 1.35, 0.45, 5.5);
+      if (hInp) hInp.value = v.toFixed(2);
+      if (hSlider) hSlider.value = v.toFixed(2);
+      commitPatch({ heightMeters: Number(v.toFixed(2)) });
+    };
+    hInp?.addEventListener('change', (ev) => applyH(ev.target.value));
+    hSlider?.addEventListener('input', (ev) => applyH(ev.target.value));
+    root.querySelectorAll('.prop-road3d-h-preset')?.forEach((btn) => {
+      btn.addEventListener('click', () => applyH(btn.getAttribute('data-val')));
+    });
+
+    root.querySelector('#prop-road3d-slab-len')?.addEventListener('change', (ev) => {
+      const v = isFence ? clamp(Number(ev.target.value) || 3.0, 1.2, 8.0) : clamp(Number(ev.target.value) || 0.64, 0.2, 6.0);
+      commitPatch({ slabLengthMeters: Number(v.toFixed(2)) });
+    });
+    root.querySelector('#prop-road3d-gutter')?.addEventListener('change', (ev) => {
+      const v = clamp(Number(ev.target.value) || 0, 0, 2.5);
+      commitPatch({ sideGutterMeters: Number(v.toFixed(2)) });
+    });
+    root.querySelectorAll('.prop-road3d-g-preset')?.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const v = clamp(Number(btn.getAttribute('data-val')) || 0, 0, 2.5);
+        commitPatch({ sideGutterMeters: Number(v.toFixed(2)) });
+      });
+    });
+    root.querySelector('#prop-road3d-slab-gap')?.addEventListener('change', (ev) => {
+      const v = isFence ? clamp(Number(ev.target.value) || 0.09, 0.04, 0.28) : clamp(Number(ev.target.value) || 0.14, 0.01, 1.5);
+      commitPatch({ slabGapMeters: Number(v.toFixed(2)) });
+    });
+    root.querySelector('#prop-road3d-elev')?.addEventListener('change', (ev) => {
+      commitPatch({ elevationMeters: Number(clamp(Number(ev.target.value) || 0, 0, 20).toFixed(2)) });
+    });
+    root.querySelector('#prop-road3d-slab-color')?.addEventListener('change', (ev) => {
+      commitPatch({ slabColor: ev.target.value });
+    });
+    root.querySelector('#prop-road3d-curb-color')?.addEventListener('change', (ev) => {
+      commitPatch({ curbColor: ev.target.value });
+    });
+    root.querySelector('#prop-road3d-has-slots')?.addEventListener('change', (ev) => {
+      commitPatch({ hasSlots: Boolean(ev.target.checked) });
+    });
+    root.querySelector('#prop-road3d-pass-through')?.addEventListener('change', (ev) => {
+      commitPatch({ passThrough: Boolean(ev.target.checked) });
+    });
+    root.querySelector('#btn-prop-road3d-extend')?.addEventListener('click', () => {
+      this.getMap3DEngine?.()?.extendSelectedRoadFromEnd?.(road.id);
+    });
+    root.querySelector('#btn-prop-road3d-close-loop')?.addEventListener('click', () => {
+      this.getMap3DEngine?.()?.closeSelectedRoadLoop?.(road.id);
+    });
+    root.querySelector('#btn-prop-road3d-delete')?.addEventListener('click', () => {
+      stateManager.deleteRoad3d?.(road.id);
+      this.renderEmpty();
+    });
+
     if (window.lucide) window.lucide.createIcons();
   }
 
@@ -122,13 +443,25 @@ export class PropertiesPanel {
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
           <label class="prop-o3d-field">
             <span>Elevasi Z (m)</span>
-            <input type="number" id="prop-o3d-elev" step="0.1" min="0" max="40" value="${Number(obj.elevationMeters ?? 0)}">
+            <input type="number" id="prop-o3d-elev" step="0.05" min="0" max="40" value="${Number(obj.elevationMeters ?? 0)}">
           </label>
           <label class="prop-o3d-field">
             <span>Rotasi Y (deg)</span>
             <input type="number" id="prop-o3d-rot" step="15" min="-360" max="360" value="${rotY}">
           </label>
         </div>
+
+        <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+          <button type="button" class="btn btn-secondary btn-sm btn-prop-o3d-elev-step" data-delta="-0.5" style="flex: 1;">-0.5m</button>
+          <button type="button" class="btn btn-secondary btn-sm btn-prop-o3d-elev-step" data-delta="-0.1" style="flex: 1;">-0.1m</button>
+          <button type="button" class="btn btn-secondary btn-sm btn-prop-o3d-elev-step" data-reset="0" style="flex: 1;">0m</button>
+          <button type="button" class="btn btn-secondary btn-sm btn-prop-o3d-elev-step" data-delta="0.1" style="flex: 1;">+0.1m</button>
+          <button type="button" class="btn btn-secondary btn-sm btn-prop-o3d-elev-step" data-delta="0.5" style="flex: 1;">+0.5m</button>
+        </div>
+
+        <button type="button" id="btn-prop-o3d-snap-surface" class="btn btn-secondary btn-sm" style="width: 100%; justify-content: center;">
+          ${uiIcon('magnet', 12)} <span>Tempel ke Atas Permukaan</span>
+        </button>
 
         <div style="display: flex; gap: 6px;">
           <button type="button" id="btn-prop-o3d-rot-left" class="btn btn-secondary btn-sm" style="flex: 1;">-15°</button>
@@ -173,8 +506,28 @@ export class PropertiesPanel {
     });
 
     panel.querySelector('#prop-o3d-elev')?.addEventListener('change', (e) => {
-      const val = Math.max(0, parseFloat(e.target.value) || 0);
+      const val = Math.max(0, Math.min(40, Math.round((parseFloat(e.target.value) || 0) * 100) / 100));
       stateManager.updateObject3d?.(obj.id, { elevationMeters: val });
+    });
+
+    panel.querySelectorAll('.btn-prop-o3d-elev-step').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const latest = stateManager.getObject3dById?.(obj.id) || obj;
+        const resetAttr = btn.getAttribute('data-reset');
+        const rawNext = resetAttr !== null
+          ? Number(resetAttr)
+          : (Number(latest.elevationMeters) || 0) + (parseFloat(btn.getAttribute('data-delta')) || 0);
+        const val = Math.max(0, Math.min(40, Math.round(rawNext * 100) / 100));
+        stateManager.updateObject3d?.(obj.id, { elevationMeters: val });
+        const refreshed = stateManager.getObject3dById?.(obj.id);
+        if (refreshed) this.renderObject3dForm(refreshed);
+      });
+    });
+
+    panel.querySelector('#btn-prop-o3d-snap-surface')?.addEventListener('click', () => {
+      this.getMap3DEngine?.()?.snapObject3dToSurface?.(obj.id);
+      const refreshed = stateManager.getObject3dById?.(obj.id);
+      if (refreshed) this.renderObject3dForm(refreshed);
     });
 
     panel.querySelector('#prop-o3d-rot')?.addEventListener('change', (e) => {
@@ -202,6 +555,7 @@ export class PropertiesPanel {
 
     if (window.lucide) window.lucide.createIcons();
   }
+
 
   renderDeviceForm(device) {
     if (stateManager.getWorkspaceMode?.() === 'build') {
@@ -1542,7 +1896,31 @@ export class PropertiesPanel {
 
     eventBus.on('object3d:deselected', () => {
       if (stateManager.getWorkspaceMode?.() !== 'build') return;
-      if (!stateManager.getInspectedRoom3dId?.() && !stateManager.getSelectedObject3dId?.()) {
+      if (!stateManager.getInspectedRoom3dId?.() && !stateManager.getSelectedObject3dId?.() && !stateManager.getSelectedRoad3dId?.()) {
+        this.renderEmpty();
+      }
+    });
+
+    eventBus.on('road3d:selected', (road) => {
+      if (!road || stateManager.getWorkspaceMode?.() !== 'build') return;
+      stateManager.clearInspectedRoom3d?.({ silent: true });
+      this.currentDevice = null;
+      this._lastRenderedSig = null;
+      this.renderRoad3dForm?.(road);
+    });
+
+    eventBus.on('road3d:changed', () => {
+      if (stateManager.getWorkspaceMode?.() !== 'build') return;
+      const selRoadId = stateManager.getSelectedRoad3dId?.();
+      const road = selRoadId ? stateManager.getRoad3dById?.(selRoadId) : null;
+      if (road && this.container?.querySelector?.('#prop-road3d-panel')) {
+        this.renderRoad3dForm?.(road);
+      }
+    });
+
+    eventBus.on('road3d:deselected', () => {
+      if (stateManager.getWorkspaceMode?.() !== 'build') return;
+      if (!stateManager.getInspectedRoom3dId?.() && !stateManager.getSelectedObject3dId?.() && !stateManager.getSelectedRoad3dId?.()) {
         this.renderEmpty();
       }
     });

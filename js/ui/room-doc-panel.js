@@ -521,10 +521,12 @@ export class RoomDocumentationPanel {
     const dimsText = `${Number(room.widthMeters || 0).toFixed(1)} × ${Number(room.depthMeters || 0).toFixed(1)} × ${Number(room.heightMeters || 0).toFixed(1)} m`;
     const scalePct = Math.round((Number(room.modelScale) || 1) * 100);
     const rotDeg = Math.round(Number(room.rotationY) || 0);
+    const elevMeters = Math.max(0, Number(room.elevationMeters) || 0);
     const subtitleParts = [
       dimsText,
       `Skala ${scalePct}%`,
-      `Rotasi ${rotDeg}°`
+      `Rotasi ${rotDeg}°`,
+      `Z ${elevMeters.toFixed(2)}m`
     ];
 
     this.container.innerHTML = `
@@ -592,6 +594,30 @@ export class RoomDocumentationPanel {
                 </div>
               </div>
             </label>
+          </div>
+        </div>
+
+        <div class="roomdoc-section">
+          <div class="roomdoc-section-title">
+            ${uiIcon('arrow-up-down', 12)} <span>Ketinggian / Elevasi Z (3D)</span>
+          </div>
+          <div class="roomdoc-collision-card" style="gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <input type="range" id="roomdoc-elev-slider" min="0" max="20" step="0.05" value="${Math.min(20, elevMeters)}"
+                     style="flex: 1; accent-color: var(--accent-blue, #2a5367);">
+              <input type="number" id="roomdoc-elev" min="0" max="40" step="0.05" value="${elevMeters.toFixed(2)}"
+                     style="width: 74px; background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #9ab7c1); border-radius: 6px; padding: 4px 6px; font-size: 12px; font-family: var(--font-mono);">
+            </div>
+            <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+              <button type="button" class="btn btn-secondary btn-sm btn-roomdoc-elev-step" data-delta="-0.5" style="flex: 1;">-0.5m</button>
+              <button type="button" class="btn btn-secondary btn-sm btn-roomdoc-elev-step" data-delta="-0.1" style="flex: 1;">-0.1m</button>
+              <button type="button" class="btn btn-secondary btn-sm btn-roomdoc-elev-step" data-reset="0" style="flex: 1;">0m</button>
+              <button type="button" class="btn btn-secondary btn-sm btn-roomdoc-elev-step" data-delta="0.1" style="flex: 1;">+0.1m</button>
+              <button type="button" class="btn btn-secondary btn-sm btn-roomdoc-elev-step" data-delta="0.5" style="flex: 1;">+0.5m</button>
+            </div>
+            <button type="button" id="btn-roomdoc-snap-surface" class="btn btn-secondary btn-sm" style="width: 100%; justify-content: center;">
+              ${uiIcon('magnet', 12)} <span>Tempel ke Atas Permukaan</span>
+            </button>
           </div>
         </div>
 
@@ -686,6 +712,51 @@ export class RoomDocumentationPanel {
     root.querySelector('#btn-roomdoc-rot-left')?.addEventListener('click', () => applyRotDelta(-15));
     root.querySelector('#btn-roomdoc-rot-90')?.addEventListener('click', () => applyRotDelta(90));
     root.querySelector('#btn-roomdoc-rot-right')?.addEventListener('click', () => applyRotDelta(15));
+
+    const elevInp = root.querySelector('#roomdoc-elev');
+    const elevSlider = root.querySelector('#roomdoc-elev-slider');
+    const previewElevMesh = (val) => {
+      const grp = map3d?.room3dMeshMap?.get(room.id);
+      if (grp) grp.position.y = val;
+    };
+    const normalizeElev = (raw) => {
+      const n = Number(raw);
+      return Number.isFinite(n) ? Math.max(0, Math.min(40, Math.round(n * 100) / 100)) : 0;
+    };
+    const commitElev = (raw) => {
+      const val = normalizeElev(raw);
+      if (elevInp) elevInp.value = val.toFixed(2);
+      if (elevSlider) elevSlider.value = String(Math.min(20, val));
+      previewElevMesh(val);
+      stateManager.updateRoom3d?.(room.id, { elevationMeters: val });
+    };
+
+    elevSlider?.addEventListener('input', (e) => {
+      const val = normalizeElev(e.target.value);
+      if (elevInp) elevInp.value = val.toFixed(2);
+      previewElevMesh(val);
+    });
+    elevSlider?.addEventListener('change', (e) => commitElev(e.target.value));
+    elevInp?.addEventListener('change', (e) => commitElev(e.target.value));
+
+    root.querySelectorAll('.btn-roomdoc-elev-step').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const latest = stateManager.getRoom3dById?.(room.id) || room;
+        const resetAttr = btn.getAttribute('data-reset');
+        const nextVal = resetAttr !== null
+          ? Number(resetAttr)
+          : (Number(latest.elevationMeters) || 0) + (parseFloat(btn.getAttribute('data-delta')) || 0);
+        commitElev(nextVal);
+        const refreshed = stateManager.getRoom3dById?.(room.id);
+        if (refreshed) this.renderRoomCard(refreshed, { skipSidebarOpen: true });
+      });
+    });
+
+    root.querySelector('#btn-roomdoc-snap-surface')?.addEventListener('click', () => {
+      map3d?.snapRoom3dToSurface?.(room.id);
+      const refreshed = stateManager.getRoom3dById?.(room.id);
+      if (refreshed) this.renderRoomCard(refreshed, { skipSidebarOpen: true });
+    });
   }
 
   _bindCardDOMEvents(room, summary) {

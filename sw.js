@@ -3,7 +3,7 @@
  * Fast app-shell & static asset caching while bypassing live API and WebSocket routes.
  */
 
-const CACHE_NAME = 'netmap-pwa-v36';
+const CACHE_NAME = 'netmap-pwa-v38';
 
 const CORE_ASSETS = [
   './',
@@ -84,8 +84,9 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Cache-first with background refresh for static binary assets (.glb, .png, .jpg, .svg, .woff2)
+  const ignoreSearch = !url.searchParams.has('rev');
   event.respondWith(
-    caches.match(req, { ignoreSearch: true }).then((cached) => {
+    caches.match(req, { ignoreSearch }).then((cached) => {
       const fetchPromise = fetch(req)
         .then((res) => {
           if (res && res.status === 200 && res.type === 'basic') {

@@ -159,7 +159,9 @@ class NetMapApp {
 
     const propertiesContainer = document.getElementById('properties-panel-container');
     if (propertiesContainer) {
-      this.propertiesPanel = new PropertiesPanel(propertiesContainer, this.deviceManager);
+      this.propertiesPanel = new PropertiesPanel(propertiesContainer, this.deviceManager, {
+        getMap3DEngine: () => this.map3DEngine
+      });
       this.connectionPanel = new ConnectionPanel(propertiesContainer, this.cableManager, this.deviceManager);
       this.roomDocPanel = new RoomDocumentationPanel({
         container: propertiesContainer,
@@ -1364,6 +1366,35 @@ class NetMapApp {
           e.preventDefault();
           this.map3DEngine?.scaleSelectedRoomIn3D(e.shiftKey ? 0.8 : 0.9);
           return;
+        }
+        if (
+          (e.key === 'PageUp' || e.key === 'PageDown')
+          && !this.map3DEngine?.activeCablePull
+          && !(this.map3DEngine?.carriedObjects?.length > 0)
+        ) {
+          const selRoomId = stateManager.getSelectedRoom3dId?.();
+          const selObjId = stateManager.getSelectedObject3dId?.();
+          const dir = e.key === 'PageUp' ? 1 : -1;
+          const step = e.shiftKey ? 0.05 : 0.25;
+          if (selRoomId) {
+            const r = stateManager.getRoom3dById?.(selRoomId);
+            if (r && !this.map3DEngine?.isRoomLocked?.(r)) {
+              e.preventDefault();
+              const nextElev = Math.max(0, Math.min(40, Math.round(((Number(r.elevationMeters) || 0) + dir * step) * 100) / 100));
+              stateManager.updateRoom3d?.(r.id, { elevationMeters: nextElev });
+              this.map3DEngine?.showStatusHint?.(`Elevasi Z "${r.name}": ${nextElev.toFixed(2)}m`);
+              return;
+            }
+          } else if (selObjId) {
+            const o = stateManager.getObject3dById?.(selObjId);
+            if (o && !this.map3DEngine?.isObject3dLocked?.(o)) {
+              e.preventDefault();
+              const nextElev = Math.max(0, Math.min(40, Math.round(((Number(o.elevationMeters) || 0) + dir * step) * 100) / 100));
+              stateManager.updateObject3d?.(o.id, { elevationMeters: nextElev });
+              this.map3DEngine?.showStatusHint?.(`Elevasi Z "${o.name}": ${nextElev.toFixed(2)}m`);
+              return;
+            }
+          }
         }
         if (lower === 'b') {
           e.preventDefault();

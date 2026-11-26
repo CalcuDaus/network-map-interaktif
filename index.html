@@ -752,9 +752,9 @@
               <span>Buat 3D</span>
             </button>
             <button id="btn-3d-tool-road" class="hud-3d-btn ws-build-only" data-tool3d="road3d"
-              title="Bangun Jalan &amp; Trotoar 3D ala City-Builder (N) — Klik titik jalur sesuai lingkungan sekolah">
+              title="Bangun Jalan Aspal &amp; Pagar Tembok 3D Modular (N) — Klik titik jalur sesuai ukuran real sekolah">
               <i data-lucide="route" style="width: 13px; height: 13px;"></i>
-              <span>Jalan 3D</span>
+              <span>Jalan &amp; Pagar</span>
             </button>
           </div>
 
@@ -999,40 +999,54 @@
           </button>
         </div>
 
-        <!-- City-Builder 3D Road & Walkway Toolbar (Floating Bottom Center in Road Mode / Selected Road) -->
+        <!-- City-Builder 3D Road & Modular School Fence Toolbar (Floating Bottom Center) -->
         <div id="hud-3d-road-bar" class="hud-3d-road-bar hidden" style="display: none;"
-          aria-label="Alat Bangun Jalan 3D">
-          <div class="road-bar-title"><i data-lucide="route" style="width: 13px; height: 13px;"></i> City-Builder Jalan
-            3D</div>
-          <label class="road-bar-field" title="Model / Permukaan Jalan 3D">
+          aria-label="Alat Bangun Jalan dan Pagar 3D">
+          <div class="road-bar-title"><i data-lucide="route" style="width: 13px; height: 13px;"></i> <span id="road3d-bar-title-text">Jalan 3D</span>
+            <span id="road3d-total-len-badge" style="padding:1px 6px;border-radius:99px;background:rgba(14,165,233,0.16);color:var(--accent-blue);font-size:10px;font-weight:700;">0.0m</span>
+          </div>
+          <label class="road-bar-field" title="Model Jalan Aspal atau Pagar Tembok 3D">
             <span>Model</span>
             <select id="select-road3d-style" class="hud-3d-select">
-              <option value="stepping-slab" selected>Setapak Kerikil + Beton Sekolah</option>
-              <option value="paving-block">Paving Block + Kanstin</option>
-              <option value="concrete-corridor">Rabat Beton + Kanstin</option>
-              <option value="asphalt-campus">Aspal Sekolah + Marka</option>
+              <optgroup label="Jalan &amp; Aspal Sekolah">
+                <option value="asphalt-school-gravel">Aspal Sekolah + Bahu Kerikil</option>
+                <option value="asphalt-courtyard">Aspal Halaman Luas (Polos)</option>
+                <option value="stepping-slab" selected>Setapak Kerikil + Beton Sekolah</option>
+                <option value="paving-block">Paving Block + Kanstin</option>
+                <option value="concrete-corridor">Rabat Beton + Kanstin</option>
+                <option value="asphalt-campus">Aspal Lingkungan + Marka</option>
+              </optgroup>
+              <optgroup label="Pagar &amp; Tembok Sekolah (Modular)">
+                <option value="school-fence-slotted">Pagar Tembok Sekolah (Celah)</option>
+                <option value="school-fence-tall">Tembok Pembatas Sekolah Tinggi</option>
+              </optgroup>
             </select>
           </label>
-          <label class="road-bar-field" title="Mode jalur: Lengkung mulus (Catmull-Rom) atau Lurus bertekuk">
+          <label class="road-bar-field" title="Mode jalur: Lengkung mulus (Catmull-Rom) atau Lurus bertekuk (Clash of Clans)">
             <span>Jalur</span>
             <select id="select-road3d-path-mode" class="hud-3d-select">
               <option value="smooth" selected>Lengkung Mulus</option>
               <option value="straight">Lurus Sudut</option>
             </select>
           </label>
-          <label class="road-bar-field" title="Total lebar jalan termasuk kanstin tepi (meter)">
-            <span>Lebar(m)</span>
-            <input type="number" id="input-road3d-width" class="road-bar-num" min="0.6" max="14" step="0.1"
+          <label class="road-bar-field" title="Lebar jalan (0.6-24m) atau tebal tembok pagar (0.12-1.5m)">
+            <span id="label-road3d-width">Lebar(m)</span>
+            <input type="number" id="input-road3d-width" class="road-bar-num" min="0.12" max="24" step="0.1"
               value="1.55">
           </label>
-          <label class="road-bar-field" title="Panjang tiap papan beton pijakan (meter)">
-            <span>Papan(m)</span>
-            <input type="number" id="input-road3d-slab-len" class="road-bar-num" min="0.2" max="4" step="0.05"
+          <label id="field-road3d-height" class="road-bar-field" style="display:none;" title="Tinggi dinding pagar (meter)">
+            <span>Tinggi(m)</span>
+            <input type="number" id="input-road3d-height" class="road-bar-num" min="0.45" max="5.5" step="0.05"
+              value="1.35">
+          </label>
+          <label class="road-bar-field" title="Jarak antar tiang pagar (m) atau panjang papan beton (m)">
+            <span id="label-road3d-slab-len">Papan(m)</span>
+            <input type="number" id="input-road3d-slab-len" class="road-bar-num" min="0.2" max="8" step="0.05"
               value="0.64">
           </label>
-          <label class="road-bar-field" title="Jarak celah batu kerikil antar papan beton (meter)">
-            <span>Celah(m)</span>
-            <input type="number" id="input-road3d-slab-gap" class="road-bar-num" min="0.01" max="1.5" step="0.02"
+          <label class="road-bar-field" title="Lebar bahu kerikil aspal (m) atau lebar celah pagar/batu (m)">
+            <span id="label-road3d-slab-gap">Celah(m)</span>
+            <input type="number" id="input-road3d-slab-gap" class="road-bar-num" min="0" max="2.5" step="0.02"
               value="0.14">
           </label>
           <select id="select-road3d-list" class="hud-3d-select" title="Pilih / lompat ke jalan 3D yang sudah dibuat">

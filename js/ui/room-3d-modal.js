@@ -103,7 +103,7 @@ export class Room3DModal {
               Ambil Koordinat dari Perangkat Terpilih
             </button>
 
-            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;">
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;">
               <div style="display: flex; flex-direction: column; gap: 3px;">
                 <label style="font-size: 10.5px; font-weight: 600; color: var(--text-primary);">Lebar (m)</label>
                 <input type="number" id="r3d-width" min="0.35" max="200" step="0.1" value="28"
@@ -117,6 +117,13 @@ export class Room3DModal {
               <div style="display: flex; flex-direction: column; gap: 3px;">
                 <label style="font-size: 10.5px; font-weight: 600; color: var(--text-primary);">Tinggi (m)</label>
                 <input type="number" id="r3d-height" min="0.35" max="40" step="0.1" value="5"
+                       style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #9ab7c1); border-radius: 6px; padding: 5px 6px; font-size: 12px; font-family: var(--font-mono);">
+              </div>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+              <div style="display: flex; flex-direction: column; gap: 3px;">
+                <label style="font-size: 10.5px; font-weight: 600; color: var(--text-primary);">Elevasi Z (m)</label>
+                <input type="number" id="r3d-elev" min="0" max="40" step="0.05" value="0"
                        style="background: var(--bg-elevated, #ffffff); border: 1px solid var(--border-color, #9ab7c1); border-radius: 6px; padding: 5px 6px; font-size: 12px; font-family: var(--font-mono);">
               </div>
               <div style="display: flex; flex-direction: column; gap: 3px;">
@@ -535,8 +542,9 @@ export class Room3DModal {
     const widthMeters = clamp(parseFloat(this.modalEl.querySelector('#r3d-width')?.value) || cur.widthMeters, minW, 200);
     const depthMeters = clamp(parseFloat(this.modalEl.querySelector('#r3d-depth')?.value) || cur.depthMeters, minD, 200);
     const heightMeters = clamp(parseFloat(this.modalEl.querySelector('#r3d-height')?.value) || cur.heightMeters, minH, 40);
+    const elevationMeters = clamp(parseFloat(this.modalEl.querySelector('#r3d-elev')?.value) || 0, 0, 40);
     this.map3DEngine.rebuildSingleRoom3dMesh(
-      { ...cur, widthMeters, depthMeters, heightMeters },
+      { ...cur, widthMeters, depthMeters, heightMeters, elevationMeters },
       stateManager.getSelectedRoom3dId?.() === cur.id
     );
   }
@@ -551,6 +559,8 @@ export class Room3DModal {
     this.modalEl.querySelector('#r3d-width').value = '24';
     this.modalEl.querySelector('#r3d-depth').value = '20';
     this.modalEl.querySelector('#r3d-height').value = '4.5';
+    const elevInput = this.modalEl.querySelector('#r3d-elev');
+    if (elevInput) elevInput.value = '0';
     this.setFormBaseAndScale({ widthMeters: 24, depthMeters: 20, heightMeters: 4.5 }, 1, true);
     const rotInput = this.modalEl.querySelector('#r3d-rot-y');
     if (rotInput) rotInput.value = '0';
@@ -600,6 +610,7 @@ export class Room3DModal {
       name,
       x: clamp(parseFloat(this.modalEl.querySelector('#r3d-x')?.value) || 0.5, 0, 1),
       y: clamp(parseFloat(this.modalEl.querySelector('#r3d-y')?.value) || 0.5, 0, 1),
+      elevationMeters: clamp(parseFloat(this.modalEl.querySelector('#r3d-elev')?.value) || 0, 0, 40),
       widthMeters,
       depthMeters,
       heightMeters,
@@ -755,6 +766,8 @@ export class Room3DModal {
     this.modalEl.querySelector('#r3d-width').value = room.widthMeters;
     this.modalEl.querySelector('#r3d-depth').value = room.depthMeters;
     this.modalEl.querySelector('#r3d-height').value = room.heightMeters;
+    const elevInput = this.modalEl.querySelector('#r3d-elev');
+    if (elevInput) elevInput.value = Number(room.elevationMeters ?? 0);
     this.modalEl.querySelector('#r3d-glb-url').value = this.uploadedRoomGlbUrl ? '[File GLB Lokal Terpilih]' : (room.customModelUrl || '');
     this.modalEl.querySelector('#btn-r3d-clear-glb').style.display = room.customModelUrl ? 'inline-flex' : 'none';
     const baseW = Number(room.baseWidthMeters) || Number(room.widthMeters) || 20;

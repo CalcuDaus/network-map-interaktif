@@ -26,6 +26,9 @@ import {
   createCustomObject3DGroup,
   create3DRoadGroup,
   ROAD3D_PRESETS,
+  isFence3DStyle,
+  getRoad3DTotalLength,
+  sampleRoad3DPathWorld,
   OBJECT3D_PRESETS,
   loadCustomGlbModel,
   applyRoomGlbScale,
@@ -236,6 +239,365 @@ class Map3DSubsystemsMixin {
       return clamp(val, -180, 180);
     }
     return ((val % 360) + 360) % 360;
+  }
+
+  _isRoomFoliagePassThrough(room) {
+    if (!room || !this.isRoomPassThrough?.(room)) return false;
+    const probe = `${room.presetId || ''} ${room.customModelUrl || ''} ${room.name || ''}`;
+    return !/lapangan|teras|panggung|lantai|pendopo|parkiran|halte|gedung|bangunan|ruang/i.test(probe);
+  }
+
+  sampleBuildSupportSurfaceAtWorld(wx, wz, {
+    excludeRoomId = '',
+    excludeObjId = '',
+    dragWidth = 0,
+    dragDepth = 0,
+    dragRotY = 0,
+    requireCompatibleSupport = true
+  } = {}) {
+    const px = Number(wx) || 0;
+    const pz = Number(wz) || 0;
+    const dW = Math.max(0, Number(dragWidth) || 0);
+    const dD = Math.max(0, Number(dragDepth) || 0);
+    const dragArea = (dW > 0 && dD > 0) ? (dW * dD) : 0;
+
+    const isCompatibleRoomSupport = (otherRoom) => {
+      if (!otherRoom || (excludeRoomId && otherRoom.id === excludeRoomId)) return false;
+      if (this._isRoomFoliagePassThrough(otherRoom)) return false;
+      if (!requireCompatibleSupport || dragArea <= 0) return true;
+      const otherW = Math.max(0.35, Number(otherRoom.widthMeters) || 14);
+      const otherD = Math.max(0.35, Number(otherRoom.depthMeters) || 12);
+      const otherH = Math.max(0.1, Number(otherRoom.heightMeters) || 3.5);
+      const otherArea = otherW * otherD;
+      return otherArea >= dragArea * 0.65 || (otherH <= 0.6 && otherArea >= dragArea * 0.45);
+    };
+
+    let bestY = 0;
+    let supportName = '';
+    const rayHitRoomIds = new Set();
+    const rayHitObjIds = new Set();
+
+    // Pass A: Live Three.js downward raycast against loaded buildings, facilities, and 3D objects
+    if (typeof Raycaster === 'function' && (this.roomsGroup?.children?.length > 0 || this.objects3dGroup?.children?.length > 0)) {
+      const candidates = [];
+      (this.roomsGroup?.children || []).forEach((roomGroup) => {
+        const rId = roomGroup?.userData?.roomId || '';
+        if (excludeRoomId && rId === excludeRoomId) return;
+        const room = rId ? stateManager.getRoom3dById?.(rId) : null;
+        if (room && !isCompatibleRoomSupport(room)) return;
+        roomGroup.traverse?.((m) => {
+          if (!m?.isMesh || m.visible === false) return;
+          if (m.userData?.gizmoType || m.userData?.isPlaceholderWireframe || m.userData?.isLabelSprite || m.userData?.isBuildingSignboard) return;
+          candidates.push(m);
+        });
+      });
+      (this.objects3dGroup?.children || []).forEach((objGroup) => {
+        const oId = objGroup?.userData?.object3dId || '';
+        if (excludeObjId && oId === excludeObjId) return;
+        const obj = oId ? stateManager.getObject3dById?.(oId) : null;
+        if (obj && (obj.visible === false || obj.shape === 'pole' || obj.shape === 'tower-lattice')) return;
+        objGroup.traverse?.((m) => {
+          if (!m?.isMesh || m.visible === false) return;
+          if (m.userData?.gizmoType || m.userData?.isLabelSprite) return;
+          candidates.push(m);
+        });
+      });
+
+      if (candidates.length > 0) {
+        const ray = new Raycaster();
+        const downDir = new Vector3(0, -1, 0);
+        const normalMat = new Matrix3();
+        const worldNorm = new Vector3();
+
+        const probeOffsets = [{ x: px, z: pz }];
+        const samplePoints = (pts) => {
+          let found = false;
+          for (const pt of pts) {
+            ray.set(new Vector3(pt.x, 80, pt.z), downDir);
+            ray.far = 100;
+            const hits = ray.intersectObjects(candidates, false);
+            for (const hit of hits) {
+              if (!hit?.point || hit.point.y < 0.01 || hit.point.y > 60) continue;
+              if (hit.face?.normal && hit.object?.matrixWorld) {
+                hit.object.updateMatrixWorld?.(true);
+                worldNorm.copy(hit.face.normal).applyMatrix3(normalMat.getNormalMatrix(hit.object.matrixWorld)).normalize();
+                if (worldNorm.y < 0.35) continue;
+              }
+              found = true;
+              const hitRoomId = hit.object?.userData?.roomId || '';
+              const hitObjId = hit.object?.userData?.object3dId || '';
+              if (hitRoomId) rayHitRoomIds.add(hitRoomId);
+              if (hitObjId) rayHitObjIds.add(hitObjId);
+              if (hit.point.y > bestY) {
+                bestY = hit.point.y;
+                const hitRoom = hitRoomId ? stateManager.getRoom3dById?.(hitRoomId) : null;
+                const hitObj = hitObjId ? stateManager.getObject3dById?.(hitObjId) : null;
+                supportName = hitRoom?.name || hitObj?.name || 'Permukaan 3D';
+              }
+              break;
+            }
+          }
+          return found;
+        };
+
+        const centerHit = samplePoints(probeOffsets);
+        if (!centerHit && (dW > 0.35 || dD > 0.35)) {
+          const cos = Math.cos(dragRotY || 0);
+          const sin = Math.sin(dragRotY || 0);
+          const hx = dW * 0.32;
+          const hz = dD * 0.32;
+          const cornerPts = [
+            { lx: -hx, lz: -hz },
+            { lx: hx, lz: -hz },
+            { lx: -hx, lz: hz },
+            { lx: hx, lz: hz }
+          ].map((c) => ({
+            x: px + c.lx * cos + c.lz * sin,
+            z: pz - c.lx * sin + c.lz * cos
+          }));
+          samplePoints(cornerPts);
+        }
+      }
+    }
+
+    // Pass B: Analytical / triangle-profile fallback (headless Node tests, procedural rooms, unloaded GLBs)
+    const rooms = typeof stateManager?.getRooms3d === 'function' ? stateManager.getRooms3d() : [];
+    for (const otherRoom of rooms) {
+      if (!isCompatibleRoomSupport(otherRoom) || rayHitRoomIds.has(otherRoom.id)) continue;
+      const wPos = this.normToWorld ? this.normToWorld(otherRoom.x ?? 0.5, otherRoom.y ?? 0.5) : { x: 0, z: 0 };
+      const rw = Math.max(0.25, Number(otherRoom.widthMeters) || 14) * 0.5;
+      const rd = Math.max(0.25, Number(otherRoom.depthMeters) || 12) * 0.5;
+      const rotY = ((Number(otherRoom.rotationY ?? otherRoom.rotationDeg) || 0) * Math.PI) / 180;
+      const inside = typeof this._isCircleOverRotatedBoxXZ === 'function'
+        ? this._isCircleOverRotatedBoxXZ(px, pz, 0.05, wPos.x, wPos.z, rw, rd, rotY)
+        : (Math.abs(px - wPos.x) <= rw + 0.05 && Math.abs(pz - wPos.z) <= rd + 0.05);
+      if (!inside) continue;
+
+      const otherElev = Math.max(0, Number(otherRoom.elevationMeters) || 0);
+      const roomGroup = this.room3dMeshMap?.get(otherRoom.id);
+      const profile = roomGroup?.userData?.roomCollisionProfile;
+      const colScale = roomGroup?.userData?.roomCollisionScale;
+
+      let sampledProfileY = null;
+      if (profile && colScale && !profile.isBoxProxy && typeof this._mapWorldToRoomFrame === 'function') {
+        const f = this._mapWorldToRoomFrame(otherRoom, colScale, px, pz);
+        const gx = Math.floor(f.px / profile.cellSize);
+        const gz = Math.floor(f.pz / profile.cellSize);
+        const cellMaps = [profile.roofCells, profile.floorCells].filter(Boolean);
+        for (const cellMap of cellMaps) {
+          for (let ix = gx - 1; ix <= gx + 1; ix++) {
+            for (let iz = gz - 1; iz <= gz + 1; iz++) {
+              const tris = cellMap.get(`${ix},${iz}`);
+              if (!tris) continue;
+              for (const tri of tris) {
+                if (f.px < tri.minX - 0.15 || f.px > tri.maxX + 0.15 || f.pz < tri.minZ - 0.15 || f.pz > tri.maxZ + 0.15) continue;
+                const v0x = tri.cx - tri.ax;
+                const v0z = tri.cz - tri.az;
+                const v1x = tri.bx - tri.ax;
+                const v1z = tri.bz - tri.az;
+                const v2x = f.px - tri.ax;
+                const v2z = f.pz - tri.az;
+                const denom = v0x * v1z - v1x * v0z;
+                if (Math.abs(denom) < 1e-6) continue;
+                const u = (v2x * v1z - v1x * v2z) / denom;
+                const v = (v0x * v2z - v2x * v0z) / denom;
+                const wBary = 1 - u - v;
+                if (u < -0.15 || v < -0.15 || wBary < -0.15) continue;
+                const uc = Math.max(0, Math.min(1, u));
+                const vc = Math.max(0, Math.min(1, v));
+                const wc = Math.max(0, 1 - uc - vc);
+                const sum = uc + vc + wc || 1;
+                const localY = (wc * tri.ay + vc * tri.by + uc * tri.cy) / sum;
+                const worldSurfY = otherElev + localY * colScale.sy + 0.025;
+                if (sampledProfileY === null || worldSurfY > sampledProfileY) {
+                  sampledProfileY = worldSurfY;
+                }
+              }
+            }
+          }
+        }
+      }
+
+      const h = Math.max(0.05, Number(otherRoom.heightMeters) || 3.5);
+      const isCutaway = Boolean(otherRoom.isCutaway) || /_cutaway\.glb$/i.test(String(otherRoom.customModelUrl || ''));
+      const candY = sampledProfileY !== null
+        ? sampledProfileY
+        : (isCutaway ? (otherElev + 0.08) : (otherElev + h));
+      if (candY > bestY) {
+        bestY = candY;
+        supportName = otherRoom.name || 'Bangunan 3D';
+      }
+    }
+
+    const objects = typeof stateManager?.getObjects3d === 'function' ? stateManager.getObjects3d() : [];
+    for (const obj of objects) {
+      if (!obj || obj.visible === false || (excludeObjId && obj.id === excludeObjId) || rayHitObjIds.has(obj.id)) continue;
+      const shape = String(obj.shape || 'box').toLowerCase();
+      if (shape === 'pole' || shape === 'tower-lattice') continue;
+      const wPos = this.normToWorld ? this.normToWorld(obj.x ?? 0.5, obj.y ?? 0.5) : { x: 0, z: 0 };
+      const ow = Math.max(0.15, Number(obj.widthMeters) || 1);
+      const od = Math.max(0.15, Number(obj.depthMeters) || 1);
+      const oh = Math.max(0.15, Number(obj.heightMeters) || 1);
+      const oElev = Math.max(0, Number(obj.elevationMeters) || 0);
+      const rotY = ((Number(obj.rotationY ?? obj.rotationDeg) || 0) * Math.PI) / 180;
+      const inside = shape === 'cylinder'
+        ? Math.hypot(px - wPos.x, pz - wPos.z) <= Math.max(ow, od) * 0.5
+        : (typeof this._isCircleOverRotatedBoxXZ === 'function'
+          ? this._isCircleOverRotatedBoxXZ(px, pz, 0.05, wPos.x, wPos.z, ow * 0.5, od * 0.5, rotY)
+          : (Math.abs(px - wPos.x) <= ow * 0.5 + 0.05 && Math.abs(pz - wPos.z) <= od * 0.5 + 0.05));
+      if (inside) {
+        const topY = oElev + oh;
+        if (topY > bestY) {
+          bestY = topY;
+          supportName = obj.name || 'Objek 3D';
+        }
+      }
+    }
+
+    return {
+      elevationMeters: Number(clamp(bestY, 0, 40).toFixed(2)),
+      surfaceSnapped: bestY > 0.01,
+      supportName
+    };
+  }
+
+  resolveBuildEntityCollision(wx, wz, elevY = 0, {
+    halfW = 0.5,
+    halfD = 0.5,
+    height = 1.0,
+    excludeRoomId = '',
+    excludeObjId = ''
+  } = {}) {
+    let x = Number(wx) || 0;
+    let z = Number(wz) || 0;
+    const elev = Math.max(0, Number(elevY) || 0);
+    if (this.buildPlacementConfig?.allowClipping) {
+      return { x, z, collided: false, blockerName: null };
+    }
+
+    const obstacles = [];
+    const rooms = typeof stateManager?.getRooms3d === 'function' ? stateManager.getRooms3d() : [];
+    for (const r of rooms) {
+      if (!r || (excludeRoomId && r.id === excludeRoomId)) continue;
+      if (this.isRoomPassThrough?.(r)) continue;
+      const wPos = this.normToWorld ? this.normToWorld(r.x ?? 0.5, r.y ?? 0.5) : { x: 0, z: 0 };
+      const rotRad = ((Number(r.rotationY ?? r.rotationDeg) || 0) * Math.PI) / 180;
+      const rw = Math.max(0.25, Number(r.widthMeters) || 14) * 0.5;
+      const rd = Math.max(0.25, Number(r.depthMeters) || 12) * 0.5;
+      const rh = Math.max(0.1, Number(r.heightMeters) || 3.5);
+      const rElev = Math.max(0, Number(r.elevationMeters) || 0);
+      obstacles.push({
+        name: r.name || r.id,
+        x: wPos.x,
+        z: wPos.z,
+        halfW: Math.abs(Math.cos(rotRad)) * rw + Math.abs(Math.sin(rotRad)) * rd,
+        halfD: Math.abs(Math.sin(rotRad)) * rw + Math.abs(Math.cos(rotRad)) * rd,
+        baseY: rElev,
+        topY: rElev + rh
+      });
+    }
+
+    const objects = typeof stateManager?.getObjects3d === 'function' ? stateManager.getObjects3d() : [];
+    for (const o of objects) {
+      if (!o || o.visible === false || (excludeObjId && o.id === excludeObjId)) continue;
+      if (this.isObject3dPassThrough?.(o)) continue;
+      const wPos = this.normToWorld ? this.normToWorld(o.x ?? 0.5, o.y ?? 0.5) : { x: 0, z: 0 };
+      const rotRad = ((Number(o.rotationY ?? o.rotationDeg) || 0) * Math.PI) / 180;
+      const ow = Math.max(0.15, Number(o.widthMeters) || 1) * 0.5;
+      const od = Math.max(0.15, Number(o.depthMeters) || 1) * 0.5;
+      const oh = Math.max(0.1, Number(o.heightMeters) || 1);
+      const oElev = Math.max(0, Number(o.elevationMeters) || 0);
+      obstacles.push({
+        name: o.name || o.id,
+        x: wPos.x,
+        z: wPos.z,
+        halfW: Math.abs(Math.cos(rotRad)) * ow + Math.abs(Math.sin(rotRad)) * od,
+        halfD: Math.abs(Math.sin(rotRad)) * ow + Math.abs(Math.cos(rotRad)) * od,
+        baseY: oElev,
+        topY: oElev + oh
+      });
+    }
+
+    if (obstacles.length === 0) {
+      return { x, z, collided: false, blockerName: null };
+    }
+
+    let collided = false;
+    let blockerName = null;
+    for (let pass = 0; pass < 3; pass++) {
+      let moved = false;
+      for (const ob of obstacles) {
+        if (elev >= ob.topY - 0.08 || elev + height <= ob.baseY + 0.08) {
+          continue;
+        }
+        const dx = x - ob.x;
+        const dz = z - ob.z;
+        const minSepX = halfW + ob.halfW + 0.04;
+        const minSepZ = halfD + ob.halfD + 0.04;
+        if (Math.abs(dx) < minSepX && Math.abs(dz) < minSepZ) {
+          const overlapX = minSepX - Math.abs(dx);
+          const overlapZ = minSepZ - Math.abs(dz);
+          if (Math.abs(dx) < 1e-4 && Math.abs(dz) < 1e-4) {
+            x += minSepX;
+          } else if (overlapX <= overlapZ) {
+            x += overlapX * (dx >= 0 ? 1 : -1);
+          } else {
+            z += overlapZ * (dz >= 0 ? 1 : -1);
+          }
+          collided = true;
+          moved = true;
+          if (!blockerName) blockerName = ob.name;
+        }
+      }
+      if (!moved) break;
+    }
+
+    return {
+      x: Number(x.toFixed(4)),
+      z: Number(z.toFixed(4)),
+      collided,
+      blockerName
+    };
+  }
+
+  snapRoom3dToSurface(roomId) {
+    const room = stateManager.getRoom3dById?.(roomId);
+    if (!room) return null;
+    const wPos = this.normToWorld ? this.normToWorld(room.x ?? 0.5, room.y ?? 0.5) : { x: 0, z: 0 };
+    const sup = this.sampleBuildSupportSurfaceAtWorld(wPos.x, wPos.z, {
+      excludeRoomId: room.id,
+      dragWidth: room.widthMeters,
+      dragDepth: room.depthMeters,
+      dragRotY: ((Number(room.rotationY ?? room.rotationDeg) || 0) * Math.PI) / 180,
+      requireCompatibleSupport: true
+    });
+    stateManager.updateRoom3d?.(room.id, { elevationMeters: sup.elevationMeters });
+    this.showStatusHint?.(
+      sup.surfaceSnapped
+        ? `"${room.name}" ditempel ke atas "${sup.supportName || 'Permukaan 3D'}" (Z: ${sup.elevationMeters.toFixed(2)}m)`
+        : `"${room.name}" diletakkan di tanah (Z: 0.00m)`
+    );
+    return sup;
+  }
+
+  snapObject3dToSurface(objId) {
+    const obj = stateManager.getObject3dById?.(objId);
+    if (!obj) return null;
+    const wPos = this.normToWorld ? this.normToWorld(obj.x ?? 0.5, obj.y ?? 0.5) : { x: 0, z: 0 };
+    const sup = this.sampleBuildSupportSurfaceAtWorld(wPos.x, wPos.z, {
+      excludeObjId: obj.id,
+      dragWidth: obj.widthMeters,
+      dragDepth: obj.depthMeters,
+      dragRotY: ((Number(obj.rotationY ?? obj.rotationDeg) || 0) * Math.PI) / 180,
+      requireCompatibleSupport: false
+    });
+    stateManager.updateObject3d?.(obj.id, { elevationMeters: sup.elevationMeters });
+    this.showStatusHint?.(
+      sup.surfaceSnapped
+        ? `"${obj.name}" ditempel ke atas "${sup.supportName || 'Permukaan 3D'}" (Z: ${sup.elevationMeters.toFixed(2)}m)`
+        : `"${obj.name}" diletakkan di tanah (Z: 0.00m)`
+    );
+    return sup;
   }
 
   resolveBuildPlacementSurfaceElevation(wx, wz, currentElev = 0, { excludeId = '', startSupportY = 0 } = {}) {
@@ -2837,7 +3199,7 @@ class Map3DSubsystemsMixin {
     rooms.forEach((room) => {
       if (!room?.id || !isBuildingSignboardEligible(room)) return;
       validIds.add(room.id);
-      let summary = buildBuildingDocumentationSummary(room, devices, connections, objects3d, spatialOpts), st = summary.statusCounts, vlansKey = summary.networkSummary.vlans.slice(0, 4).join(","), sig = [room.name || "", summary.doc.roomCode || "", summary.doc.zone || "", Number(room.x ?? 0.5).toFixed(4), Number(room.y ?? 0.5).toFixed(4), Number(room.widthMeters ?? 12).toFixed(1), Number(room.heightMeters ?? 4.5).toFixed(1), st.total, st.online, st.warning, st.offline, vlansKey, isDark ? "1" : "0", inspectedId === room.id ? "1" : "0"].join("|"), existing = this.signboardMeshMap.get(room.id);
+      let summary = buildBuildingDocumentationSummary(room, devices, connections, objects3d, spatialOpts), st = summary.statusCounts, vlansKey = summary.networkSummary.vlans.slice(0, 4).join(","), sig = [room.name || "", summary.doc.roomCode || "", summary.doc.zone || "", Number(room.x ?? 0.5).toFixed(4), Number(room.y ?? 0.5).toFixed(4), Number(room.elevationMeters ?? 0).toFixed(2), Number(room.widthMeters ?? 12).toFixed(1), Number(room.heightMeters ?? 4.5).toFixed(1), st.total, st.online, st.warning, st.offline, vlansKey, isDark ? "1" : "0", inspectedId === room.id ? "1" : "0"].join("|"), existing = this.signboardMeshMap.get(room.id);
       if (existing && existing.sig === sig) return;
       existing && (this.buildingSignboardsGroup.remove(existing.group), this._disposeObject3DResources(existing.group), this.signboardMeshMap.delete(room.id));
       let boardGroup = createBuildingSignboard3DGroup(room, summary, { isDark, normToWorldFn: (nx, ny) => this.normToWorld(nx, ny), isInspected: inspectedId === room.id });
@@ -2964,6 +3326,127 @@ class Map3DSubsystemsMixin {
     } finally {
       forceXray && !prevXray && this.setBuildingXrayMode(false, { silent: true });
     }
+  }
+  _appendFenceRoadColliders(colliders) {
+    if (!Array.isArray(colliders)) return;
+    const roads = typeof stateManager?.getRoads3d === 'function' ? stateManager.getRoads3d() : [];
+    for (const road of roads) {
+      if (!road || road.visible === false || !Array.isArray(road.points) || road.points.length < 2) continue;
+      if (!isFence3DStyle(road) || road.passThrough === true) continue;
+      const preset = ROAD3D_PRESETS[road.style] || ROAD3D_PRESETS['school-fence-slotted'];
+      const elev = Math.max(0, Number(road.elevationMeters ?? preset.elevationMeters) || 0);
+      const wallThick = Math.max(0.12, Math.min(1.5, Number(road.widthMeters ?? preset.widthMeters) || 0.24));
+      const wallH = Math.max(0.45, Math.min(5.5, Number(road.heightMeters ?? preset.heightMeters) || 1.35));
+      const pillarW = Math.max(wallThick * 1.72, 0.36);
+      const pillarH = wallH + Math.max(0.24, Math.min(0.48, wallH * 0.22));
+      const { controlWorldPts, samples } = sampleRoad3DPathWorld(road, (nx, ny) => this.normToWorld(nx, ny));
+      const pts = road.pathMode === 'smooth' && samples.length >= 3
+        ? samples.filter((_, idx) => idx === 0 || idx === samples.length - 1 || idx % 4 === 0).map((s) => s.pos)
+        : controlWorldPts;
+      for (let i = 0; i < pts.length - 1; i++) {
+        const a = pts[i];
+        const b = pts[i + 1];
+        const dx = b.x - a.x;
+        const dz = b.z - a.z;
+        const segLen = Math.hypot(dx, dz);
+        if (segLen < 0.08) continue;
+        colliders.push({
+          id: `${road.id}:seg:${i}`,
+          category: 'fence',
+          kind: 'box',
+          x: (a.x + b.x) * 0.5,
+          z: (a.z + b.z) * 0.5,
+          halfW: Math.max(0.08, wallThick * 0.52),
+          halfD: segLen * 0.5,
+          rotY: Math.atan2(dx, dz),
+          baseY: elev,
+          topY: elev + wallH,
+          supportable: true
+        });
+      }
+      for (let i = 0; i < controlWorldPts.length; i++) {
+        const wp = controlWorldPts[i];
+        colliders.push({
+          id: `${road.id}:pillar:${i}`,
+          category: 'fence',
+          kind: 'box',
+          x: wp.x,
+          z: wp.z,
+          halfW: pillarW * 0.5,
+          halfD: pillarW * 0.5,
+          rotY: 0,
+          baseY: elev,
+          topY: elev + pillarH,
+          supportable: true
+        });
+      }
+    }
+  }
+  setRoadBuildStyle(style) {
+    const preset = ROAD3D_PRESETS[style];
+    if (!preset) return false;
+    this.activeRoad3dConfig = {
+      ...this.activeRoad3dConfig,
+      ...preset
+    };
+    this.syncRoadBuildPreview?.();
+    this.renderRoad3dHudBar?.();
+    return true;
+  }
+  extendSelectedRoadFromEnd(roadId = null) {
+    const id = roadId || stateManager.getSelectedRoad3dId?.();
+    const road = id ? stateManager.getRoad3dById?.(id) : null;
+    if (!road || !Array.isArray(road.points) || road.points.length < 2) return false;
+    const preset = ROAD3D_PRESETS[road.style] || ROAD3D_PRESETS['stepping-slab'];
+    this.activeRoad3dConfig = { ...preset, ...road };
+    delete this.activeRoad3dConfig.id;
+    delete this.activeRoad3dConfig.points;
+    this.roadBuildState = {
+      roadId: road.id,
+      points: road.points.map((p) => ({ x: p.x, y: p.y })),
+      cursorPoint: { ...road.points[road.points.length - 1] }
+    };
+    this.setNavTool?.('road3d');
+    this.syncRoadBuildPreview?.();
+    this.renderRoad3dHudBar?.();
+    const label = isFence3DStyle(road) ? 'Pagar 3D' : 'Jalan 3D';
+    this.showStatusHint(`Menyambung "${road.name || label}" dari ujung terakhir — Klik titik berikutnya (Klik Kanan / Enter selesai).`);
+    return true;
+  }
+  closeSelectedRoadLoop(roadId = null) {
+    const id = roadId || stateManager.getSelectedRoad3dId?.();
+    const road = id ? stateManager.getRoad3dById?.(id) : null;
+    if (!road || !Array.isArray(road.points) || road.points.length < 3) return false;
+    const first = road.points[0];
+    const last = road.points[road.points.length - 1];
+    const wFirst = this.normToWorld(first.x, first.y);
+    const wLast = this.normToWorld(last.x, last.y);
+    if (Math.hypot(wFirst.x - wLast.x, wFirst.z - wLast.z) < 0.25) return true;
+    const nextPts = [...road.points.map((p) => ({ ...p })), { x: first.x, y: first.y }];
+    stateManager.updateRoad3d?.(road.id, { points: nextPts });
+    this.showStatusHint(`Keliling "${road.name || 'Pagar 3D'}" ditutup menjadi loop penuh.`);
+    return true;
+  }
+  scaleSelectedRoadToLength(roadId, targetMeters) {
+    const id = roadId || stateManager.getSelectedRoad3dId?.();
+    const road = id ? stateManager.getRoad3dById?.(id) : null;
+    const target = Number(targetMeters);
+    if (!road || !Array.isArray(road.points) || road.points.length < 2 || !Number.isFinite(target) || target < 0.5) return false;
+    const curLen = getRoad3DTotalLength(road, (nx, ny) => this.normToWorld(nx, ny));
+    if (curLen < 0.1) return false;
+    const ratio = clamp(target / curLen, 0.05, 25);
+    const originW = this.normToWorld(road.points[0].x, road.points[0].y);
+    const nextPts = road.points.map((pt, idx) => {
+      if (idx === 0) return { x: pt.x, y: pt.y };
+      const w = this.normToWorld(pt.x, pt.y);
+      const sx = originW.x + (w.x - originW.x) * ratio;
+      const sz = originW.z + (w.z - originW.z) * ratio;
+      const n = this.worldToNorm(sx, sz);
+      return { x: Number(clamp(n.normX, 0.005, 0.995).toFixed(5)), y: Number(clamp(n.normY, 0.005, 0.995).toFixed(5)) };
+    });
+    stateManager.updateRoad3d?.(road.id, { points: nextPts });
+    this.showStatusHint(`Panjang "${road.name || 'Jalur 3D'}" disesuaikan ke ${target.toFixed(1)}m.`);
+    return true;
   }
 }
 
