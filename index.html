@@ -1104,14 +1104,20 @@
               </button>
             </div>
             <div class="mob-action-row">
-              <button type="button" id="btn-mob-persp" class="mob-action-btn is-persp" title="Ganti TPP / FPP">
+              <button type="button" id="btn-mob-persp" class="mob-action-btn is-persp hidden" style="display: none;"
+                aria-hidden="true" title="Ganti TPP / FPP">
                 <i data-lucide="eye" style="width: 16px; height: 16px;"></i>
                 <span>TPP</span>
               </button>
-              <button type="button" id="btn-mob-inspect" class="mob-action-btn is-inspect ws-network-only"
-                title="Inspeksi Port Terdekat">
+              <button type="button" id="btn-mob-inspect" class="mob-action-btn is-inspect ws-network-only hidden"
+                style="display: none;" aria-hidden="true" title="Inspeksi Port Terdekat">
                 <i data-lucide="scan-search" style="width: 16px; height: 16px;"></i>
                 <span>Port</span>
+              </button>
+              <button type="button" id="btn-mob-door" class="mob-action-btn is-door hidden"
+                style="display: none;" title="Buka / Tutup Pintu Terdekat">
+                <i data-lucide="door-open" style="width: 16px; height: 16px;"></i>
+                <span>Buka</span>
               </button>
               <button type="button" id="btn-mob-pickup" class="mob-action-btn is-carry"
                 title="Angkat Objek/Perangkat Terdekat">

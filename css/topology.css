@@ -719,3 +719,49 @@
     flex-wrap: wrap;
   }
 }
+
+/* Mobile Fullscreen: push Topology toolbar & hint pill cleanly below #mobile-fs-dock */
+body.is-mobile-touch.workspace-fullscreen .pt-topo-dock {
+  top: 50px;
+  max-width: calc(100vw - 16px);
+  padding: 4px 7px;
+  gap: 4px;
+  border-radius: 10px;
+  -webkit-overflow-scrolling: touch;
+}
+
+body.is-mobile-touch.workspace-fullscreen .pt-topo-hint-pill {
+  top: 94px;
+}
+
+body.is-mobile-touch.workspace-fullscreen.is-mobile-portrait .pt-topo-dock {
+  top: 48px;
+}
+
+body.is-mobile-touch.workspace-fullscreen.is-mobile-portrait .pt-topo-hint-pill {
+  top: 92px;
+}
+
+body.is-mobile-touch.workspace-fullscreen.mobile-dock-minimized .pt-topo-dock {
+  top: 8px;
+}
+
+body.is-mobile-touch.workspace-fullscreen.mobile-dock-minimized .pt-topo-hint-pill {
+  top: 52px;
+}
+
+body.is-mobile-touch .pt-topo-dock .pt-topo-btn {
+  padding: 4px 7px;
+  font-size: 10.5px;
+  gap: 4px;
+}
+
+body.is-mobile-touch .pt-topo-dock .pt-topo-select {
+  height: 24px;
+  padding: 1px 5px;
+  font-size: 10px;
+}
+
+body.is-mobile-touch .pt-topo-dock .pt-topo-divider {
+  height: 18px;
+}

@@ -33,6 +33,8 @@ export class WorkspaceController {
     this.deviceManager = deviceManager;
     this.cableManager = cableManager;
     this._applying = false;
+    this._popoverEntries = [];
+    this._activePopoverEntry = null;
   }
 
   init() {
@@ -73,10 +75,87 @@ export class WorkspaceController {
   }
 
   /**
+   * Position an opened 3D HUD popover cleanly inside viewport bounds, escaping
+   * horizontal scroll clipping on mobile `#hud-3d-controls`.
+   * @param {{ wrap: HTMLElement, trigger: HTMLElement, panel: HTMLElement }} entry
+   */
+  position3dPopover(entry) {
+    if (!entry?.trigger || !entry?.panel || typeof window === 'undefined') return;
+    const rect = entry.trigger.getBoundingClientRect?.();
+    if (!rect) return;
+    const vw = window.innerWidth || 1024;
+    const vh = window.innerHeight || 768;
+    if (rect.right < 4 || rect.left > vw - 4) {
+      this.close3dPopovers();
+      return;
+    }
+    const measuredW = entry.panel.offsetWidth || entry.panel.getBoundingClientRect?.().width || 260;
+    const panelW = Math.min(Math.max(measuredW, 220), Math.max(220, vw - 16));
+    let top = Math.round(rect.bottom + 6);
+    if (top > vh - 140) top = Math.max(8, vh - 150);
+    top = Math.max(8, top);
+    const maxHeight = Math.max(130, Math.floor(vh - top - 12));
+    const idealLeft = rect.left + (rect.width / 2) - (panelW / 2);
+    const left = Math.round(Math.max(8, Math.min(idealLeft, vw - panelW - 8)));
+
+    entry.panel.style.position = 'fixed';
+    entry.panel.style.top = `${top}px`;
+    entry.panel.style.left = `${left}px`;
+    entry.panel.style.right = 'auto';
+    entry.panel.style.bottom = 'auto';
+    entry.panel.style.transform = 'none';
+    entry.panel.style.maxHeight = `${maxHeight}px`;
+    entry.panel.style.zIndex = '260';
+  }
+
+  /**
+   * Open a compact 3D HUD popover and portal its panel to document.body so it is
+   * never clipped by `#hud-3d-controls` horizontal overflow on touch devices.
+   * @param {{ wrap: HTMLElement, trigger: HTMLElement, panel: HTMLElement }} entry
+   */
+  open3dPopover(entry) {
+    if (!entry?.wrap || !entry?.trigger || !entry?.panel || typeof document === 'undefined') return;
+    this.close3dPopovers();
+    entry.wrap.classList.add('open');
+    entry.trigger.setAttribute?.('aria-expanded', 'true');
+    if (document.body && entry.panel.parentElement !== document.body) {
+      document.body.appendChild(entry.panel);
+    }
+    entry.panel.classList.add('open', 'is-floating');
+    entry.panel.setAttribute?.('data-popover-for', entry.wrap.id || '');
+    this._activePopoverEntry = entry;
+    this.position3dPopover(entry);
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => {
+        if (this._activePopoverEntry === entry) this.position3dPopover(entry);
+      });
+    }
+  }
+
+  /**
    * Close compact 3D HUD popovers ('Kamera' & 'Tampilan 3D').
    */
   close3dPopovers() {
     if (typeof document === 'undefined') return;
+    this._popoverEntries.forEach((entry) => {
+      entry.wrap?.classList?.remove('open');
+      entry.trigger?.setAttribute?.('aria-expanded', 'false');
+      if (entry.panel) {
+        entry.panel.classList?.remove('open', 'is-floating');
+        entry.panel.style.position = '';
+        entry.panel.style.top = '';
+        entry.panel.style.left = '';
+        entry.panel.style.right = '';
+        entry.panel.style.bottom = '';
+        entry.panel.style.transform = '';
+        entry.panel.style.maxHeight = '';
+        entry.panel.style.zIndex = '';
+        if (entry.wrap && entry.panel.parentElement !== entry.wrap) {
+          entry.wrap.appendChild(entry.panel);
+        }
+      }
+    });
+    this._activePopoverEntry = null;
     document.querySelectorAll('.hud-3d-popover-wrap.open')?.forEach((w) => {
       w.classList.remove('open');
       w.querySelector('.hud-3d-pop-trigger')?.setAttribute?.('aria-expanded', 'false');
@@ -352,20 +431,28 @@ export class WorkspaceController {
     });
 
     // Compact 3D HUD Popovers ('Kamera' & 'Tampilan 3D')
+    this._popoverEntries = [];
     const popWraps = document.querySelectorAll('.hud-3d-popover-wrap');
     popWraps.forEach((wrap) => {
       const trigger = wrap.querySelector('.hud-3d-pop-trigger');
       const panel = wrap.querySelector('.hud-3d-popover-panel');
-      trigger?.addEventListener('click', (e) => {
+      if (!trigger || !panel) return;
+      const entry = { wrap, trigger, panel };
+      this._popoverEntries.push(entry);
+
+      trigger.addEventListener('pointerdown', (e) => e.stopPropagation());
+      trigger.addEventListener('click', (e) => {
         e.stopPropagation();
         const willOpen = !wrap.classList.contains('open');
-        this.close3dPopovers();
         if (willOpen) {
-          wrap.classList.add('open');
-          trigger.setAttribute('aria-expanded', 'true');
+          this.open3dPopover(entry);
+        } else {
+          this.close3dPopovers();
         }
       });
-      panel?.addEventListener('click', (e) => {
+
+      panel.addEventListener('pointerdown', (e) => e.stopPropagation());
+      panel.addEventListener('click', (e) => {
         e.stopPropagation();
         if (e.target?.closest?.('button') && !e.target.closest('.hud-3d-pop-keep-open')) {
           this.close3dPopovers();
@@ -373,10 +460,24 @@ export class WorkspaceController {
       });
     });
 
-    document.addEventListener('click', (e) => {
-      if (!e.target?.closest?.('.hud-3d-popover-wrap')) {
+    const dismissIfOutside = (e) => {
+      if (!this._activePopoverEntry) return;
+      if (!e.target?.closest?.('.hud-3d-popover-wrap') && !e.target?.closest?.('.hud-3d-popover-panel')) {
         this.close3dPopovers();
       }
-    });
+    };
+    document.addEventListener('pointerdown', dismissIfOutside);
+    document.addEventListener('click', dismissIfOutside);
+
+    const repositionActive = () => {
+      if (this._activePopoverEntry) {
+        this.position3dPopover(this._activePopoverEntry);
+      }
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener?.('resize', repositionActive);
+      window.addEventListener?.('orientationchange', repositionActive);
+    }
+    document.getElementById('hud-3d-controls')?.addEventListener?.('scroll', repositionActive, { passive: true });
   }
 }

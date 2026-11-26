@@ -1,7 +1,7 @@
 
 
 # Project Memory — network-map-interaktif
-> 86 notes | Score threshold: >40
+> 94 notes | Score threshold: >40
 
 ## Safety — Never Run Destructive Commands
 
@@ -20,6 +20,7 @@
 
 ## 📝 NOTE: 1 uncommitted file(s) in working tree.\n\n## Project Standards
 
+- Git Commit: feat: add core UI components, layout, topology simulation, a — confirmed 3x
 - Git Commit: feat: implement interactive 3D map engine, models, and UI co — confirmed 3x
 
 ## Learned Patterns

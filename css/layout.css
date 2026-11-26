@@ -1777,7 +1777,7 @@ body.is-mobile-touch.workspace-fullscreen #hud-3d-controls {
 
 body.is-mobile-touch.workspace-fullscreen #hud-3d-controls,
 body.is-mobile-touch.workspace-fullscreen #hud-3d-controls.is-minimized {
-  top: 42px !important;
+  top: 48px !important;
 }
 
 body.is-mobile-touch #hud-3d-controls::-webkit-scrollbar,

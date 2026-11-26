@@ -8016,6 +8016,12 @@ export class Map3DEngine {
     if (!show) {
       this.mobileJumpHeld = false;
       this.resetMobileJoystick();
+      const doorBtn = document.getElementById('btn-mob-door');
+      if (doorBtn) {
+        doorBtn.classList.add('hidden');
+        doorBtn.style.display = 'none';
+        if (doorBtn.dataset) delete doorBtn.dataset.doorKey;
+      }
     } else {
       this.bindMobileRobloxControls();
       const perspBtn = document.getElementById('btn-mob-persp');
@@ -8121,6 +8127,13 @@ export class Map3DEngine {
     bindTap('btn-mob-persp', () => {
       this.toggleAvatarPerspective();
       this.syncMobileRobloxControlsVisibility();
+    });
+    bindTap('btn-mob-door', () => {
+      const btn = document.getElementById('btn-mob-door');
+      const doorKey = btn?.dataset?.doorKey || this.findTargetInteractiveDoorForAvatar?.()?.doorKey || null;
+      if (doorKey) {
+        this.toggleInteractiveDoor?.(doorKey);
+      }
     });
     bindTap('btn-mob-inspect', () => this.inspectNearestDeviceFromAvatar());
     bindTap('btn-mob-pickup', () => this.pickupNearestObjectFromAvatar());

@@ -759,6 +759,20 @@ class Map3DSubsystemsMixin {
     const tipEl = document.getElementById('hud-3d-houseflipper-tip');
     if (!tipEl) return;
 
+    const mobDoorBtn = document.getElementById('btn-mob-door');
+    const hideMobDoorBtn = () => {
+      if (!mobDoorBtn) return;
+      mobDoorBtn.classList?.add('hidden');
+      if (mobDoorBtn.style) mobDoorBtn.style.display = 'none';
+      if (mobDoorBtn.dataset) delete mobDoorBtn.dataset.doorKey;
+    };
+    const isMobileTouch = Boolean(
+      this._touchActiveInSession
+      || document.body?.classList?.contains('is-mobile-touch')
+      || this.forceMobileHud
+      || (typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)')?.matches)
+    );
+
     if (!tipEl.dataset.hfBound) {
       tipEl.dataset.hfBound = '1';
       tipEl.addEventListener('pointerdown', (ev) => ev.stopPropagation());
@@ -826,6 +840,7 @@ class Map3DSubsystemsMixin {
     }
 
     if (!this.isActive || this.simulatorFocusedDeviceId) {
+      hideMobDoorBtn();
       if (this._lastHouseFlipperHudKey !== 'hidden') {
         this._lastHouseFlipperHudKey = 'hidden';
         tipEl.className = 'hud-3d-houseflipper-tip hidden';
@@ -836,6 +851,7 @@ class Map3DSubsystemsMixin {
     }
 
     if (this.avatarMode && this.activeCablePull) {
+      hideMobDoorBtn();
       const pull = this.activeCablePull;
       const aim = this.computeAvatarCableAimTarget();
       const cat = pull.cableCategory || 'cat6';
@@ -916,6 +932,7 @@ class Map3DSubsystemsMixin {
     }
 
     if (this.avatarMode && Array.isArray(this.carriedObjects) && this.carriedObjects.length > 0) {
+      hideMobDoorBtn();
       const topItem = this.carriedObjects[this.carriedObjects.length - 1];
       const aim = this.computeAvatarAimPlacementTarget({ item: topItem });
       const targetElevStr = Number(aim?.elevationMeters ?? 0).toFixed(2);
@@ -949,6 +966,25 @@ class Map3DSubsystemsMixin {
       );
       if (preferDoor) {
         const rig = doorTarget.rig;
+        if (mobDoorBtn) {
+          mobDoorBtn.classList?.remove('hidden');
+          mobDoorBtn.classList?.toggle('is-open', Boolean(rig.isOpen));
+          if (mobDoorBtn.style) mobDoorBtn.style.display = 'inline-flex';
+          if (mobDoorBtn.dataset) mobDoorBtn.dataset.doorKey = rig.key;
+          mobDoorBtn.title = `${rig.isOpen ? 'Tutup' : 'Buka'} ${rig.labelKind} ${rig.roomName}`;
+          const sp = mobDoorBtn.querySelector?.('span');
+          if (sp) sp.textContent = rig.isOpen ? 'Tutup' : 'Buka';
+        }
+        if (isMobileTouch) {
+          const mobileDoorKey = `door-mobile:${rig.key}:${rig.isOpen ? 1 : 0}`;
+          if (this._lastHouseFlipperHudKey !== mobileDoorKey) {
+            this._lastHouseFlipperHudKey = mobileDoorKey;
+            tipEl.className = 'hud-3d-houseflipper-tip hidden';
+            tipEl.style.display = 'none';
+            tipEl.innerHTML = '';
+          }
+          return;
+        }
         const key = `door:${rig.key}:${rig.isOpen ? 1 : 0}`;
         if (this._lastHouseFlipperHudKey !== key) {
           this._lastHouseFlipperHudKey = key;
@@ -963,6 +999,7 @@ class Map3DSubsystemsMixin {
         }
         return;
       }
+      hideMobDoorBtn();
 
       const isDevicePick = Boolean(nearestPick?.id && (nearestPick.kind === 'device' || Boolean(this.deviceManager?.getDeviceById?.(nearestPick.id))));
       const shouldShowPick = Boolean(
@@ -996,6 +1033,7 @@ class Map3DSubsystemsMixin {
     }
 
     if (!this.avatarMode && this.navTool === 'move' && !this.transformGizmoGroup?.visible && !this.isBuildingEditWorkspace?.()) {
+      hideMobDoorBtn();
       const selId = this.dragMoveState?.deviceId || this.deviceManager?.selectedDeviceId;
       const dev = selId ? this.deviceManager?.getDeviceById?.(selId) : null;
       if (dev && dev.layerVisible !== false) {
@@ -1019,6 +1057,7 @@ class Map3DSubsystemsMixin {
       }
     }
 
+    hideMobDoorBtn();
     if (this._lastHouseFlipperHudKey !== 'hidden') {
       this._lastHouseFlipperHudKey = 'hidden';
       tipEl.className = 'hud-3d-houseflipper-tip hidden';
@@ -1424,6 +1463,9 @@ class Map3DSubsystemsMixin {
 
   zoomExtents() {
     if (!this.camera || !this.controls) return;
+    if (this.avatarMode) {
+      this.setAvatarMode?.(false);
+    }
     const box = new THREE.Box3();
     if (this.devicesGroup.children.length > 0) box.expandByObject(this.devicesGroup);
     if (this.roomsGroup.children.length > 0) box.expandByObject(this.roomsGroup);
@@ -1452,6 +1494,9 @@ class Map3DSubsystemsMixin {
 
   setCameraPreset(preset) {
     if (!this.camera || !this.controls) return;
+    if (this.avatarMode) {
+      this.setAvatarMode?.(false);
+    }
     if (preset === 'extents') {
       this.zoomExtents();
       return;

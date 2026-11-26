@@ -1362,6 +1362,23 @@ body.is-mobile-touch.workspace-fullscreen .mobile-fs-dock {
   border-color: #facc15;
 }
 
+#btn-mob-persp,
+#btn-mob-inspect {
+  display: none !important;
+}
+
+.mob-action-btn.is-door {
+  border-color: #4ade80;
+  background: rgba(21, 128, 61, 0.9);
+  color: #ffffff;
+}
+
+.mob-action-btn.is-door.is-open {
+  border-color: #fbbf24;
+  background: rgba(180, 83, 9, 0.88);
+  color: #ffffff;
+}
+
 .mob-jump-btn {
   width: 72px;
   height: 72px;
@@ -2295,7 +2312,11 @@ body:not(.is-mobile-touch) #map-viewport:has(#hud-3d-avatar-bar:not(.hidden):not
 }
 
 body.is-mobile-touch .hud-3d-houseflipper-tip {
-  bottom: 174px;
+  bottom: 58px;
+}
+
+body.is-mobile-touch.is-mobile-portrait .hud-3d-houseflipper-tip {
+  bottom: 132px;
 }
 
 .hud-3d-houseflipper-tip.hidden {
@@ -3028,8 +3049,45 @@ body.is-mobile-touch .hud-3d-sim-inspector .sim-action-btn {
   gap: 8px;
 }
 
-.hud-3d-popover-wrap.open .hud-3d-popover-panel {
+.hud-3d-popover-wrap.open .hud-3d-popover-panel,
+.hud-3d-popover-panel.open,
+.hud-3d-popover-panel.is-floating {
   display: flex;
+}
+
+.hud-3d-popover-panel.is-floating {
+  position: fixed;
+  transform: none;
+  z-index: 260;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+body.is-mobile-touch .hud-3d-popover-panel.is-floating {
+  width: min(296px, calc(100vw - 16px));
+  max-width: calc(100vw - 16px);
+  padding: 9px 10px;
+  gap: 7px;
+  border-radius: 12px;
+}
+
+body.is-mobile-touch .hud-3d-popover-panel.is-floating .hud-3d-btn {
+  min-height: 30px;
+  height: auto;
+  padding: 4px 8px;
+  font-size: 11px;
+  gap: 4px;
+}
+
+body.is-mobile-touch .hud-3d-popover-panel.is-floating .hud-3d-inline {
+  font-size: 11px;
+  gap: 6px;
+}
+
+body.is-mobile-touch .hud-3d-popover-panel.is-floating .hud-3d-select {
+  height: 30px;
+  padding: 2px 8px;
+  font-size: 11px;
 }
 
 .hud-3d-popover-wrap.open .hud-3d-pop-trigger {
