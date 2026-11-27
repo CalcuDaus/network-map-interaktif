@@ -311,9 +311,12 @@ export function attachMap3DNextGenPerf(Map3DEngine) {
     if (!this.sceneBvh) {
       this.sceneBvh = new BvhSceneAccelerator();
     }
+    const dprNow = (typeof window !== 'undefined' && window.devicePixelRatio) || 1.25;
     const maxDpr = this.graphicsQuality === 'lite'
       ? 1.0
-      : Math.min((typeof window !== 'undefined' && window.devicePixelRatio) || 1.25, 1.5);
+      : (this.graphicsQuality === 'ultra'
+        ? Math.min(dprNow, 3.0)
+        : (this.graphicsQuality === 'high' ? Math.min(dprNow, 2.0) : Math.min(dprNow, 1.5)));
     if (!this.drsController) {
       this.drsController = new DynamicResolutionScaler({
         windowSize: 60,
@@ -673,6 +676,11 @@ export function attachMap3DNextGenPerf(Map3DEngine) {
    */
   proto.updateDynamicResolutionScaling = function updateDynamicResolutionScaling(dtSeconds = 0.016) {
     this.initNextGenPerfPipeline();
+    if (this.graphicsQuality === 'ultra') {
+      const fixedDpr = this.drsController.maxPixelRatio;
+      if (this.renderPerfStats) this.renderPerfStats.activePixelRatio = fixedDpr;
+      return { changed: false, pixelRatio: fixedDpr, rollingFrameTimeMs: dtSeconds * 1000, rollingFps: 60 };
+    }
     const frameTimeMs = Math.max(1.0, Number(dtSeconds) * 1000);
     const res = this.drsController.recordFrame(frameTimeMs);
     if (res.changed && this.renderer?.setPixelRatio) {

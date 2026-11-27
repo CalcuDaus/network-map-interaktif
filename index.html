@@ -481,7 +481,7 @@
                   <span id="badge-menu-3d-hints" class="gs-status-badge">Tampil</span>
                 </button>
                 <button id="btn-settings-3d-quality" type="button" class="gs-action-item"
-                  title="Pilih Preset Performa 3D: Hemat HP (tanpa bayangan, DPR rendah) atau Standar">
+                  title="Pilih Preset Kualitas Grafis 3D: Hemat HP, Standar, Tinggi (Shadow Halus &amp; PBR), atau Ultra Tinggi (Rata Kanan Full Tekstur)">
                   <span class="gs-action-label">
                     <i data-lucide="gauge" style="width: 12px; height: 12px; color: var(--accent-green);"></i>
                     <span>Kualitas 3D</span>
@@ -889,11 +889,23 @@
                   <span>Regangkan</span>
                 </button>
                 <button id="btn-3d-quality-quick" class="hud-3d-btn hud-3d-pop-keep-open" type="button"
-                  title="Tukar kualitas 3D Standar / Hemat HP">
+                  title="Ganti kualitas grafis 3D: Hemat HP / Standar / Tinggi / Ultra Tinggi (Rata Kanan)">
                   <i data-lucide="gauge" style="width: 13px; height: 13px;"></i>
                   <span>Kualitas: Standar</span>
                 </button>
               </div>
+              <div class="hud-3d-pop-title" style="margin-top:4px;">Preset Kualitas Grafis</div>
+              <div id="hud-3d-quality-pills" class="hud-3d-quality-pills" role="radiogroup" aria-label="Pilih Kualitas Grafis 3D">
+                <button type="button" class="hud-3d-q-pill hud-3d-pop-keep-open" data-quality-3d="lite"
+                  title="Hemat GPU &amp; baterai HP: tanpa bayangan, DPR 1.0x">Hemat</button>
+                <button type="button" class="hud-3d-q-pill hud-3d-pop-keep-open active" data-quality-3d="standard"
+                  title="Seimbang: bayangan 1024px, DPR 1.5x, tekstur 4x">Standar</button>
+                <button type="button" class="hud-3d-q-pill hud-3d-pop-keep-open is-high" data-quality-3d="high"
+                  title="Tinggi: bayangan halus 2048px, ACES tone mapping, refleksi PBR &amp; tekstur 8x">Tinggi</button>
+                <button type="button" class="hud-3d-q-pill hud-3d-pop-keep-open is-ultra" data-quality-3d="ultra"
+                  title="Ultra Tinggi (Rata Kanan): Shadow 4096px, full tekstur 16x aniso, PBR IBL penuh &amp; detail maksimal">Ultra</button>
+              </div>
+              <div id="hud-3d-quality-desc" class="hud-3d-quality-desc">Seimbang: bayangan 1024px, DPR 1.5x, tekstur 4x</div>
               <button id="btn-3d-device-models" class="hud-3d-btn hud-3d-btn-accent ws-network-only"
                 style="width:100%;justify-content:center;" title="Pasang Model 3D Kustom (.glb/.gltf) untuk Perangkat">
                 <i data-lucide="cpu" style="width: 13px; height: 13px;"></i>

@@ -3670,6 +3670,19 @@ export const BUILTIN_ROOM_BUILDING_PRESETS = [
     customModelUrl: 'assets/models/joglo_kolam_ikan_web.glb'
   },
   {
+    id: 'halte-tempat-duduk-web',
+    name: 'Halte Tempat Duduk (Web PBR)',
+    subtitle: 'Halte sekolah beratap dengan bangku duduk PBR 1K (4.8×3.8×3.0m)',
+    widthMeters: 4.8,
+    depthMeters: 3.82,
+    heightMeters: 3.03,
+    wallColor: '#0f766e',
+    floorColor: '#475569',
+    opacity: 0.18,
+    isCutaway: false,
+    customModelUrl: 'assets/models/halte_tempat_duduk_web.glb'
+  },
+  {
     id: 'ruang-guru-web',
     name: 'Ruang Guru (Web PBR)',
     subtitle: 'Gedung Ruang Guru sekolah PBR 1K dengan pintu interaktif (15.6×8.8×5.7m)',

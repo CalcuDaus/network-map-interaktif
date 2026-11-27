@@ -72,7 +72,8 @@ const FACILITY_PRESET_IDS = new Set([
   'pohon-cemara-rindang',
   'batu-kolam-hiasan',
   'joglo-web',
-  'joglo-kolam-ikan-web'
+  'joglo-kolam-ikan-web',
+  'halte-tempat-duduk-web'
 ]);
 
 const OBJECT_ICON_MAP = {

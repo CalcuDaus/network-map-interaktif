@@ -3127,6 +3127,65 @@ body.is-mobile-touch .hud-3d-popover-panel.is-floating .hud-3d-select {
   width: 100%;
 }
 
+.hud-3d-quality-pills {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  width: 100%;
+}
+
+.hud-3d-q-pill {
+  appearance: none;
+  border: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-radius: 7px;
+  padding: 5px 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.1;
+  cursor: pointer;
+  transition: background-color 0.14s ease, border-color 0.14s ease, color 0.14s ease, box-shadow 0.14s ease;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.hud-3d-q-pill:hover {
+  border-color: var(--accent-blue);
+  background: var(--bg-hover);
+}
+
+.hud-3d-q-pill.active {
+  background: var(--accent-blue);
+  border-color: var(--accent-blue);
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(30, 64, 175, 0.28);
+}
+
+.hud-3d-q-pill.is-high.active {
+  background: #0f766e;
+  border-color: #0f766e;
+  color: #ffffff;
+  box-shadow: 0 2px 7px rgba(15, 118, 110, 0.34);
+}
+
+.hud-3d-q-pill.is-ultra.active {
+  background: linear-gradient(135deg, #b45309 0%, #d97706 100%);
+  border-color: #b45309;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(217, 119, 6, 0.38);
+}
+
+.hud-3d-quality-desc {
+  font-size: 9.5px;
+  line-height: 1.35;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 4px 7px;
+}
+
 .hud-3d-pop-row {
   display: flex;
   align-items: center;

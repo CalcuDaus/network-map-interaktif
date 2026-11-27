@@ -339,10 +339,14 @@ export class Map3DEngine {
     try {
       savedQuality = typeof localStorage !== 'undefined' ? localStorage.getItem('netmap_3d_quality_v1') : null;
     } catch { /* ignore storage restrictions */ }
-    this.graphicsQuality = (savedQuality === 'lite' || savedQuality === 'standard')
+    const validQualities = ['lite', 'standard', 'high', 'ultra'];
+    this.graphicsQuality = validQualities.includes(savedQuality)
       ? savedQuality
       : (isMobileTouchDevice() ? 'lite' : 'standard');
     this.dirLight = null;
+    this.hemiLight = null;
+    this.fillLight = null;
+    this.rimLight = null;
 
     // Mobile 3D Rendering Performance State (LOD, Frustum/Indoor Occlusion Culling & Smart Frame Pacing)
     this._dirtyFramesRemaining = 45;
@@ -418,10 +422,11 @@ export class Map3DEngine {
 
     // Lighting
     const hemiLight = new THREE.HemisphereLight(0xfffbeb, 0x334155, 1.15);
+    this.hemiLight = hemiLight;
     this.scene.add(hemiLight);
 
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.1);
-    dirLight.position.set(120, 220, 140);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.15);
+    dirLight.position.set(115, 200, 125);
     dirLight.castShadow = true;
     dirLight.shadow.mapSize.width = 1024;
     dirLight.shadow.mapSize.height = 1024;
@@ -980,6 +985,8 @@ export class Map3DEngine {
       const plane = new THREE.Mesh(geo, mat);
       plane.receiveShadow = true;
       this.groundGroup.add(plane);
+      this._applyMaterialAndTextureQuality?.(this.groundGroup);
+      this._configureCampusShadowFrustum?.();
       this.apply3dViewFilters?.();
     };
 
@@ -1094,6 +1101,7 @@ export class Map3DEngine {
     glb.traverse((c) => {
       c.userData.roomId = room.id;
     });
+    this._applyMaterialAndTextureQuality?.(glb);
     roomGroup.add(glb);
     roomGroup.userData.attachedRoomGlb = glb;
     roomGroup.userData.attachedRoomUrl = room.customModelUrl;
@@ -1626,6 +1634,7 @@ export class Map3DEngine {
     }
     this.updateAvatarDeviceLabelsVisibility?.();
     this.syncTransformGizmo?.();
+    this._applyMaterialAndTextureQuality?.(this.objects3dGroup);
     this.apply3dViewFilters?.();
     this.requestShadowUpdate?.();
   }
@@ -1640,6 +1649,7 @@ export class Map3DEngine {
     const next = createCustomObject3DGroup(obj, (nx, ny) => this.normToWorld(nx, ny), isSelected);
     this.objects3dGroup.add(next);
     this.object3dMeshMap.set(obj.id, next);
+    this._applyMaterialAndTextureQuality?.(next);
     this.apply3dViewFilters?.();
     this.requestShadowUpdate?.();
     return next;
@@ -1675,6 +1685,7 @@ export class Map3DEngine {
       this.road3dMeshMap.set(road.id, meshGroup);
     });
     this.renderRoad3dHudBar?.();
+    this._applyMaterialAndTextureQuality?.(this.roadsGroup);
     this.apply3dViewFilters?.();
     this.updateSceneLOD?.(true);
     this.requestShadowUpdate?.();
@@ -1691,6 +1702,7 @@ export class Map3DEngine {
     this._annotateRoadCenter(next, road);
     this.roadsGroup.add(next);
     this.road3dMeshMap.set(road.id, next);
+    this._applyMaterialAndTextureQuality?.(next);
     this.apply3dViewFilters?.();
     this.requestShadowUpdate?.();
     return next;
@@ -2455,6 +2467,7 @@ export class Map3DEngine {
 
             modelContainer.clear();
             modelContainer.add(glb);
+            this._applyMaterialAndTextureQuality?.(glb);
             modelContainer.add(create3DPortsSubGroup(devPorts, updatedStatusMap, true));
             this.tagDescendantDeviceId(modelContainer, dev.id);
             this.syncCables();
@@ -2579,6 +2592,7 @@ export class Map3DEngine {
     }
     this.updateAvatarDeviceLabelsVisibility?.();
     this.syncTransformGizmo?.();
+    this._applyMaterialAndTextureQuality?.(this.devicesGroup);
     this.apply3dViewFilters?.();
     this.updateSceneLOD?.(true);
     this.updateSceneOcclusionCulling?.(true);
@@ -3018,10 +3032,11 @@ export class Map3DEngine {
         0.005,
         portMatchedLocalRadius * avgPortScale * this.cableDiameterMultiplier * perCableScale * selectBoost
       );
+      const isUltra = this.graphicsQuality === 'ultra';
       const tubularSegs = this.graphicsQuality === 'lite'
         ? Math.max(24, cleanPts.length * 10)
-        : Math.max(40, cleanPts.length * 16);
-      const tubeGeo = new THREE.TubeGeometry(curve, tubularSegs, radius, this.graphicsQuality === 'lite' ? 8 : 12, false);
+        : (isUltra ? Math.max(64, cleanPts.length * 24) : Math.max(40, cleanPts.length * 16));
+      const tubeGeo = new THREE.TubeGeometry(curve, tubularSegs, radius, this.graphicsQuality === 'lite' ? 8 : (isUltra ? 16 : 12), false);
       const tubeMat = new THREE.MeshStandardMaterial({
         color: color,
         emissive: color,

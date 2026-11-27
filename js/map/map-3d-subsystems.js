@@ -2488,7 +2488,14 @@ class Map3DSubsystemsMixin {
   }
 
   getLodThresholds() {
-    const isLite = this.graphicsQuality === 'lite' || isMobileTouchDevice();
+    const q = this.graphicsQuality || 'standard';
+    if (q === 'ultra') {
+      return { nearMax: 140, midMax: 320, farPropCull: 9999, labelCull: 220 };
+    }
+    if (q === 'high') {
+      return { nearMax: 64, midMax: 145, farPropCull: 150, labelCull: 115 };
+    }
+    const isLite = q === 'lite' || (q === 'standard' && isMobileTouchDevice());
     return isLite
       ? { nearMax: 24, midMax: 55, farPropCull: 48, labelCull: 42 }
       : { nearMax: 38, midMax: 88, farPropCull: 76, labelCull: 72 };
@@ -2712,25 +2719,444 @@ class Map3DSubsystemsMixin {
       holder.userData.occlusionCulled = culled, culled && (occlusionCulledCount += 1), holder.visible = baseVis && !culled;
     }), this.renderPerfStats = { ...this.renderPerfStats || {}, occlusionCulledCount, activeIndoorRoomId: indoorId }, this.renderPerfStats;
   }
+  getGraphicsQualityProfile(mode = this.graphicsQuality) {
+    const key = (mode === 'lite' || mode === 'standard' || mode === 'high' || mode === 'ultra') ? mode : 'standard';
+    const profiles = {
+      lite: {
+        key: 'lite',
+        label: 'Hemat HP',
+        shortLabel: 'Hemat',
+        desc: 'Hemat GPU & baterai: tanpa bayangan, DPR 1.0x, tekstur ringan',
+        maxDpr: 1.0,
+        shadows: false,
+        shadowMapSize: 512,
+        shadowType: 'pcf',
+        shadowRadius: 1,
+        shadowBias: -0.0006,
+        shadowNormalBias: 0.04,
+        shadowSpanScale: 0.42,
+        anisotropy: 1,
+        toneMapping: 'none',
+        exposure: 1.0,
+        useEnvMap: false,
+        envMapIntensity: 0.0,
+        sunColor: 0xffffff,
+        sunIntensity: 1.1,
+        hemiIntensity: 1.15,
+        fillIntensity: 0,
+        rimIntensity: 0,
+        normalBoost: 1.0,
+        groundMicroDetail: false,
+        disableDrs: false
+      },
+      standard: {
+        key: 'standard',
+        label: 'Standar',
+        shortLabel: 'Standar',
+        desc: 'Seimbang: bayangan 1024px, DPR 1.5x, tekstur 4x',
+        maxDpr: 1.5,
+        shadows: true,
+        shadowMapSize: 1024,
+        shadowType: 'pcf',
+        shadowRadius: 1.5,
+        shadowBias: -0.0005,
+        shadowNormalBias: 0.038,
+        shadowSpanScale: 0.50,
+        anisotropy: 4,
+        toneMapping: 'none',
+        exposure: 1.0,
+        useEnvMap: false,
+        envMapIntensity: 0.25,
+        sunColor: 0xffffff,
+        sunIntensity: 1.15,
+        hemiIntensity: 1.15,
+        fillIntensity: 0,
+        rimIntensity: 0,
+        normalBoost: 1.0,
+        groundMicroDetail: false,
+        disableDrs: false
+      },
+      high: {
+        key: 'high',
+        label: 'Tinggi',
+        shortLabel: 'Tinggi',
+        desc: 'Shadow halus 2048px • ACES Tone Mapping • Refleksi PBR • Tekstur 8x',
+        maxDpr: 2.0,
+        shadows: true,
+        shadowMapSize: 2048,
+        shadowType: 'pcf-soft',
+        shadowRadius: 2.5,
+        shadowBias: -0.00035,
+        shadowNormalBias: 0.032,
+        shadowSpanScale: 0.62,
+        anisotropy: 8,
+        toneMapping: 'aces',
+        exposure: 1.06,
+        useEnvMap: true,
+        envMapIntensity: 0.68,
+        sunColor: 0xfff5e4,
+        sunIntensity: 1.48,
+        hemiIntensity: 1.02,
+        fillIntensity: 0.42,
+        rimIntensity: 0.14,
+        normalBoost: 1.05,
+        groundMicroDetail: false,
+        disableDrs: false
+      },
+      ultra: {
+        key: 'ultra',
+        label: 'Ultra Tinggi',
+        shortLabel: 'Ultra',
+        desc: 'Rata Kanan: Shadow 4096px • Full Tekstur 16x • PBR IBL Penuh • Jarak Detail Maks',
+        maxDpr: 3.0,
+        shadows: true,
+        shadowMapSize: 4096,
+        shadowType: 'pcf-soft',
+        shadowRadius: 3.0,
+        shadowBias: -0.00025,
+        shadowNormalBias: 0.025,
+        shadowSpanScale: 0.72,
+        anisotropy: 16,
+        toneMapping: 'aces',
+        exposure: 1.12,
+        useEnvMap: true,
+        envMapIntensity: 1.05,
+        sunColor: 0xfff1d6,
+        sunIntensity: 1.68,
+        hemiIntensity: 1.08,
+        fillIntensity: 0.54,
+        rimIntensity: 0.28,
+        normalBoost: 1.18,
+        groundMicroDetail: true,
+        disableDrs: true
+      }
+    };
+    return profiles[key];
+  }
+  _ensureCampusEnvMap() {
+    if (this._campusEnvMap) return this._campusEnvMap;
+    if (!this.renderer || typeof THREE.PMREMGenerator !== 'function') return null;
+    if (typeof this.renderer.getContext !== 'function') return null;
+    try {
+      const pmrem = new THREE.PMREMGenerator(this.renderer);
+      pmrem.compileEquirectangularShader?.();
+      const envScene = new THREE.Scene();
+      envScene.background = new THREE.Color(0xc8e3f8);
+      // Sky zenith & warm sun studio panels + green ground bounce for rich outdoor architectural PBR reflections
+      const skyDome = new THREE.Mesh(
+        new THREE.SphereGeometry(24, 16, 12),
+        new THREE.MeshBasicMaterial({ color: 0x93c5fd, side: THREE.BackSide })
+      );
+      envScene.add(skyDome);
+      const groundBounce = new THREE.Mesh(
+        new THREE.PlaneGeometry(48, 48),
+        new THREE.MeshBasicMaterial({ color: 0x4b6b38, side: THREE.DoubleSide })
+      );
+      groundBounce.rotation.x = -Math.PI / 2;
+      groundBounce.position.y = -4;
+      envScene.add(groundBounce);
+      const sunDisc = new THREE.Mesh(
+        new THREE.SphereGeometry(3.2, 12, 12),
+        new THREE.MeshBasicMaterial({ color: 0xfff7dc })
+      );
+      sunDisc.position.set(12, 14, 10);
+      envScene.add(sunDisc);
+      const cloudPanelA = new THREE.Mesh(
+        new THREE.PlaneGeometry(14, 6),
+        new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide })
+      );
+      cloudPanelA.position.set(-11, 10, -8);
+      cloudPanelA.lookAt(0, 0, 0);
+      envScene.add(cloudPanelA);
+      const cloudPanelB = new THREE.Mesh(
+        new THREE.PlaneGeometry(12, 5),
+        new THREE.MeshBasicMaterial({ color: 0xe0f2fe, side: THREE.DoubleSide })
+      );
+      cloudPanelB.position.set(0, 12, -14);
+      cloudPanelB.lookAt(0, 0, 0);
+      envScene.add(cloudPanelB);
+
+      const rt = pmrem.fromScene(envScene, 0.04);
+      this._campusEnvRenderTarget = rt;
+      this._campusEnvMap = rt.texture;
+      pmrem.dispose();
+      skyDome.geometry.dispose(); skyDome.material.dispose();
+      groundBounce.geometry.dispose(); groundBounce.material.dispose();
+      sunDisc.geometry.dispose(); sunDisc.material.dispose();
+      cloudPanelA.geometry.dispose(); cloudPanelA.material.dispose();
+      cloudPanelB.geometry.dispose(); cloudPanelB.material.dispose();
+      return this._campusEnvMap;
+    } catch {
+      return null;
+    }
+  }
+  _getGroundMicroBumpTexture() {
+    if (this._groundMicroBumpTex) return this._groundMicroBumpTex;
+    if (typeof document === 'undefined' || !document.createElement) return null;
+    try {
+      const c = document.createElement('canvas');
+      const ctx = c.getContext?.('2d');
+      if (!ctx) return null;
+      c.width = 128;
+      c.height = 128;
+      ctx.fillStyle = '#808080';
+      ctx.fillRect(0, 0, 128, 128);
+      let s = 918273;
+      const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+      for (let i = 0; i < 1600; i++) {
+        const v = 92 + Math.floor(rnd() * 72);
+        ctx.fillStyle = `rgb(${v},${v},${v})`;
+        ctx.fillRect(rnd() * 128, rnd() * 128, 1 + rnd() * 2.5, 1 + rnd() * 2.5);
+      }
+      const tex = new THREE.CanvasTexture(c);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(42, 42);
+      this._groundMicroBumpTex = tex;
+      return tex;
+    } catch {
+      return null;
+    }
+  }
+  _applyMaterialAndTextureQuality(rootObj, profile = this.getGraphicsQualityProfile()) {
+    if (!rootObj || !profile) return;
+    const maxGpuAniso = this.renderer?.capabilities?.getMaxAnisotropy?.() || 16;
+    const targetAniso = Math.max(1, Math.min(profile.anisotropy || 1, maxGpuAniso));
+    const useTrilinear = profile.key === 'high' || profile.key === 'ultra';
+    const allowShadows = Boolean(profile.shadows);
+    const texSlots = ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'bumpMap', 'emissiveMap', 'alphaMap'];
+
+    rootObj.traverse?.((obj) => {
+      if (!obj || (!obj.isMesh && !obj.isInstancedMesh)) return;
+      const ud = obj.userData || {};
+      const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+      const isHelper = Boolean(
+        ud.gizmoType || ud.isDeviceLabel || ud.isSignboard || ud.isHitbox || ud.isDoorHitbox
+        || ud.isWireframe || ud.isCoverage || ud.isCoverageOverlay || ud.isElevationGuide
+        || ud.isSelectionRing || ud.isDevicePort || ud.isPortHitbox || ud.isCableHandle
+        || ud.isRoadNodeHandle || obj.name === 'RoadGravelBed' || obj.name === 'SelectionRing'
+        || mats.every((m) => m && m.visible === false)
+      );
+      if (!isHelper) {
+        const isThinGlass = mats.every((m) => m && m.transparent && (Number(m.opacity) || 1) < 0.45);
+        if (obj.parent !== this.groundGroup) {
+          obj.castShadow = allowShadows && !isThinGlass;
+        }
+        obj.receiveShadow = allowShadows;
+      }
+
+      if (obj.parent === this.groundGroup && obj.material && !Array.isArray(obj.material)) {
+        const bump = profile.groundMicroDetail ? this._getGroundMicroBumpTexture() : null;
+        obj.material.bumpMap = bump;
+        obj.material.bumpScale = bump ? 0.045 : 0;
+        if (typeof obj.material.roughness === 'number') {
+          obj.material.roughness = profile.groundMicroDetail ? 0.86 : 0.92;
+        }
+        obj.material.needsUpdate = true;
+      }
+
+      for (const mat of mats) {
+        if (!mat) continue;
+        for (const slot of texSlots) {
+          const tex = mat[slot];
+          if (!tex) continue;
+          if (tex.anisotropy !== targetAniso) {
+            tex.anisotropy = targetAniso;
+            tex.needsUpdate = true;
+          }
+          const wantedMin = useTrilinear ? THREE.LinearMipmapLinearFilter : THREE.LinearMipmapNearestFilter;
+          if (tex.minFilter !== wantedMin && tex.generateMipmaps !== false) {
+            tex.minFilter = wantedMin;
+            tex.magFilter = THREE.LinearFilter;
+            tex.needsUpdate = true;
+          }
+        }
+        if (typeof mat.envMapIntensity === 'number') {
+          mat.envMapIntensity = profile.envMapIntensity;
+        }
+        if (mat.normalMap && mat.normalScale && typeof mat.normalScale.set === 'function') {
+          if (!mat.userData) mat.userData = {};
+          if (!mat.userData._origNormalScale) {
+            mat.userData._origNormalScale = { x: mat.normalScale.x, y: mat.normalScale.y };
+          }
+          const orig = mat.userData._origNormalScale;
+          mat.normalScale.set(orig.x * profile.normalBoost, orig.y * profile.normalBoost);
+        }
+        if (mat.bumpMap && typeof mat.bumpScale === 'number') {
+          if (!mat.userData) mat.userData = {};
+          if (mat.userData._origBumpScale === undefined) {
+            mat.userData._origBumpScale = mat.bumpScale;
+          }
+          mat.bumpScale = mat.userData._origBumpScale * profile.normalBoost;
+        }
+        if (mat.isMeshStandardMaterial || mat.isMeshPhysicalMaterial) {
+          mat.needsUpdate = true;
+        }
+      }
+    });
+  }
+  _configureCampusShadowFrustum(profile = this.getGraphicsQualityProfile()) {
+    if (!this.dirLight?.shadow) return;
+    const { worldW, worldD } = this.getWorldDimensions ? this.getWorldDimensions() : { worldW: 170, worldD: 140 };
+    const span = Math.max(45, Math.min(180, Math.max(worldW, worldD) * (profile.shadowSpanScale || 0.55)));
+    const cam = this.dirLight.shadow.camera;
+    if (cam) {
+      cam.left = -span;
+      cam.right = span;
+      cam.top = span;
+      cam.bottom = -span;
+      cam.near = 10;
+      cam.far = Math.max(550, span * 5);
+      cam.updateProjectionMatrix?.();
+    }
+    if ('bias' in this.dirLight.shadow) this.dirLight.shadow.bias = profile.shadowBias;
+    if ('normalBias' in this.dirLight.shadow) this.dirLight.shadow.normalBias = profile.shadowNormalBias;
+    if ('radius' in this.dirLight.shadow) this.dirLight.shadow.radius = profile.shadowRadius;
+  }
   setGraphicsQuality(mode = "standard") {
-    let normalized = mode === "lite" ? "lite" : "standard";
+    const valid = mode === "lite" || mode === "standard" || mode === "high" || mode === "ultra";
+    const normalized = valid ? mode : "standard";
+    const prev = this.graphicsQuality;
     this.graphicsQuality = normalized;
     try {
       typeof localStorage !== 'undefined' && localStorage.setItem("netmap_3d_quality_v1", normalized);
     } catch {
     }
-    return this.applyGraphicsQuality(), eventBus.emit("map3d:quality-changed", { quality: normalized }), normalized;
+    const res = this.applyGraphicsQuality();
+    if (prev !== normalized && this.isActive && this.isInitialized && (normalized === 'ultra' || prev === 'ultra' || normalized === 'lite' || prev === 'lite')) {
+      this.syncCables?.();
+    }
+    eventBus.emit("map3d:quality-changed", { quality: normalized, profile: this.getGraphicsQualityProfile(normalized) });
+    return normalized;
   }
   getGraphicsQuality() {
     return this.graphicsQuality || "standard";
   }
   applyGraphicsQuality() {
-    let isLite = this.graphicsQuality === "lite", dpr = typeof window !== 'undefined' && window.devicePixelRatio || 1, targetRatio = isLite ? Math.min(dpr, 1) : Math.min(dpr, 1.5);
-    if (this.renderer?.setPixelRatio?.(targetRatio), this.renderer?.shadowMap && (this.renderer.shadowMap.enabled = !isLite, this.renderer.shadowMap.autoUpdate = false, this.renderer.shadowMap.needsUpdate = true), this.dirLight && (this.dirLight.castShadow = !isLite, this.dirLight.shadow?.mapSize)) {
-      let sz = isLite ? 512 : 1024;
-      this.dirLight.shadow.mapSize.width = sz, this.dirLight.shadow.mapSize.height = sz;
+    const profile = this.getGraphicsQualityProfile(this.graphicsQuality);
+    const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+    const targetRatio = Math.min(dpr, profile.maxDpr);
+    const maxGpuTex = this.renderer?.capabilities?.maxTextureSize || 4096;
+    const targetShadowSize = Math.min(profile.shadowMapSize, maxGpuTex);
+
+    if (this.renderer) {
+      this.renderer.setPixelRatio?.(targetRatio);
+      if ('toneMapping' in this.renderer) {
+        this.renderer.toneMapping = profile.toneMapping === 'aces'
+          ? THREE.ACESFilmicToneMapping
+          : THREE.NoToneMapping;
+      }
+      if ('toneMappingExposure' in this.renderer) {
+        this.renderer.toneMappingExposure = profile.exposure;
+      }
+      if (this.renderer.shadowMap) {
+        const wantedType = profile.shadowType === 'pcf-soft' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+        this.renderer.shadowMap.enabled = profile.shadows;
+        this.renderer.shadowMap.type = wantedType;
+        this.renderer.shadowMap.autoUpdate = false;
+        this.renderer.shadowMap.needsUpdate = true;
+      }
     }
-    return this.updateSceneLOD?.(true), this.markSceneDirty?.(12), { quality: this.graphicsQuality, pixelRatio: targetRatio, shadows: !isLite };
+
+    if (this.dirLight) {
+      this.dirLight.castShadow = profile.shadows;
+      this.dirLight.intensity = profile.sunIntensity;
+      this.dirLight.color?.setHex?.(profile.sunColor);
+      if (this.dirLight.shadow?.mapSize) {
+        const sizeChanged = this.dirLight.shadow.mapSize.width !== targetShadowSize || this.dirLight.shadow.mapSize.height !== targetShadowSize;
+        this.dirLight.shadow.mapSize.width = targetShadowSize;
+        this.dirLight.shadow.mapSize.height = targetShadowSize;
+        if (sizeChanged && this.dirLight.shadow.map) {
+          this.dirLight.shadow.map.dispose?.();
+          this.dirLight.shadow.map = null;
+        }
+      }
+      this._configureCampusShadowFrustum(profile);
+    }
+
+    if (this.hemiLight) {
+      this.hemiLight.intensity = profile.hemiIntensity;
+    }
+
+    // Secondary cool sky bounce fill light + warm rim light for High / Ultra architectural depth
+    if (this.scene) {
+      if (profile.fillIntensity > 0) {
+        if (!this.fillLight) {
+          this.fillLight = new THREE.DirectionalLight(0xbae6fd, profile.fillIntensity);
+          this.fillLight.position.set(-110, 95, -90);
+          this.scene.add(this.fillLight);
+        }
+        this.fillLight.visible = true;
+        this.fillLight.intensity = profile.fillIntensity;
+      } else if (this.fillLight) {
+        this.fillLight.visible = false;
+      }
+
+      if (profile.rimIntensity > 0) {
+        if (!this.rimLight) {
+          this.rimLight = new THREE.DirectionalLight(0xfde68a, profile.rimIntensity);
+          this.rimLight.position.set(-45, 70, 145);
+          this.scene.add(this.rimLight);
+        }
+        this.rimLight.visible = true;
+        this.rimLight.intensity = profile.rimIntensity;
+      } else if (this.rimLight) {
+        this.rimLight.visible = false;
+      }
+
+      // Procedural outdoor PBR PMREM environment reflections on High & Ultra
+      if (profile.useEnvMap) {
+        const envTex = this._ensureCampusEnvMap();
+        if (envTex) {
+          this.scene.environment = envTex;
+          if ('environmentIntensity' in this.scene) {
+            this.scene.environmentIntensity = profile.envMapIntensity;
+          }
+        }
+      } else {
+        this.scene.environment = null;
+      }
+    }
+
+    // Apply micro-bump relief texture to campus ground on Ultra Tinggi
+    if (this.groundGroup?.children?.length > 0) {
+      const groundMesh = this.groundGroup.children[0];
+      if (groundMesh?.material) {
+        const bump = profile.groundMicroDetail ? this._getGroundMicroBumpTexture() : null;
+        groundMesh.material.bumpMap = bump;
+        groundMesh.material.bumpScale = bump ? 0.045 : 0;
+        groundMesh.material.roughness = profile.groundMicroDetail ? 0.86 : 0.92;
+        groundMesh.material.needsUpdate = true;
+      }
+    }
+
+    // Upgrade anisotropy, trilinear filtering, shadow flags & PBR envMapIntensity across all scene groups
+    [this.groundGroup, this.roomsGroup, this.roadsGroup, this.objects3dGroup, this.devicesGroup, this.cablesGroup].forEach((grp) => {
+      if (grp) this._applyMaterialAndTextureQuality(grp, profile);
+    });
+
+    // Sync Dynamic Resolution Scaler bounds so High/Ultra never get silently crushed by DRS
+    if (this.drsController) {
+      this.drsController.maxPixelRatio = targetRatio;
+      this.drsController.minPixelRatio = profile.key === 'ultra' ? targetRatio : (profile.key === 'high' ? Math.min(targetRatio, 1.25) : 0.75);
+      this.drsController.reset(targetRatio);
+    }
+
+    this.updateSceneLOD?.(true);
+    this.requestShadowUpdate?.();
+    this.markSceneDirty?.(16);
+
+    return {
+      quality: profile.key,
+      label: profile.label,
+      pixelRatio: targetRatio,
+      shadows: profile.shadows,
+      shadowMapSize: targetShadowSize,
+      shadowType: profile.shadowType,
+      anisotropy: profile.anisotropy,
+      toneMapping: profile.toneMapping,
+      useEnvMap: profile.useEnvMap
+    };
   }
   setPausedByModal(paused) {
     return this.isPausedByModal = !!paused, !this.isPausedByModal && this.isActive && this.renderer && this.scene && this.camera && this.renderer.render(this.scene, this.camera), this.isPausedByModal;

@@ -495,20 +495,67 @@ class NetMapApp {
       this.onboardingModal?.showShortcuts?.();
     });
 
-    // Quick-toggle triggers inside 'Tampilan 3D' popover
+    // Quick-toggle triggers & 4-tier quality selector inside 'Tampilan 3D' popover
+    const QUALITY_TIERS = ['lite', 'standard', 'high', 'ultra'];
+    const QUALITY_LABELS = {
+      lite: 'Hemat HP',
+      standard: 'Standar',
+      high: 'Tinggi',
+      ultra: 'Ultra Tinggi'
+    };
+    const QUALITY_DESC_FALLBACK = {
+      lite: 'Hemat GPU & baterai: tanpa bayangan, DPR 1.0x, tekstur ringan',
+      standard: 'Seimbang: bayangan 1024px, DPR 1.5x, tekstur 4x',
+      high: 'Shadow halus 2048px, ACES Tone Mapping, Refleksi PBR, Tekstur 8x',
+      ultra: 'Rata Kanan: Shadow 4096px, Full Tekstur 16x, PBR IBL Penuh, Jarak Detail Maks'
+    };
+    const syncQuickQualityUi = (overrideQuality = null) => {
+      const q = overrideQuality || this.map3DEngine?.getGraphicsQuality?.() || 'standard';
+      const label = QUALITY_LABELS[q] || 'Standar';
+      const quickBtn = document.getElementById('btn-3d-quality-quick');
+      const quickLbl = quickBtn?.querySelector?.('span');
+      if (quickLbl) quickLbl.textContent = `Kualitas: ${label}`;
+      if (quickBtn) {
+        quickBtn.classList.toggle('active', q === 'high' || q === 'ultra');
+      }
+      document.querySelectorAll('#hud-3d-quality-pills [data-quality-3d]').forEach((pill) => {
+        const isSel = pill.dataset.quality3d === q;
+        pill.classList.toggle('active', isSel);
+        pill.setAttribute('aria-checked', String(isSel));
+      });
+      const descEl = document.getElementById('hud-3d-quality-desc');
+      if (descEl) {
+        const profileDesc = this.map3DEngine?.getGraphicsQualityProfile?.(q)?.desc || QUALITY_DESC_FALLBACK[q] || '';
+        descEl.textContent = profileDesc;
+      }
+      const badge3d = document.getElementById('badge-menu-3d-quality');
+      if (badge3d) badge3d.textContent = label;
+    };
+    this._sync3dQualityUi = syncQuickQualityUi;
+    syncQuickQualityUi();
+
     document.getElementById('btn-3d-building-labels-quick')?.addEventListener('click', (e) => {
       if (!this.map3DEngine) return;
       const next = !Boolean(this.map3DEngine.showBuildingSignboards);
       this.map3DEngine.setShowBuildingSignboards(next);
       e.currentTarget?.classList?.toggle('active', next);
     });
-    document.getElementById('btn-3d-quality-quick')?.addEventListener('click', (e) => {
+    document.getElementById('btn-3d-quality-quick')?.addEventListener('click', () => {
       if (!this.map3DEngine) return;
-      const next = this.map3DEngine.getGraphicsQuality?.() === 'lite' ? 'standard' : 'lite';
+      const cur = this.map3DEngine.getGraphicsQuality?.() || 'standard';
+      const next = QUALITY_TIERS[(QUALITY_TIERS.indexOf(cur) + 1) % QUALITY_TIERS.length];
       this.map3DEngine.setGraphicsQuality?.(next);
-      const lbl = e.currentTarget?.querySelector?.('span');
-      if (lbl) lbl.textContent = next === 'lite' ? 'Kualitas: Hemat HP' : 'Kualitas: Standar';
+      syncQuickQualityUi(next);
     });
+    document.querySelectorAll('#hud-3d-quality-pills [data-quality-3d]').forEach((pill) => {
+      pill.addEventListener('click', () => {
+        if (!this.map3DEngine) return;
+        const targetQ = pill.dataset.quality3d || 'standard';
+        this.map3DEngine.setGraphicsQuality?.(targetQ);
+        syncQuickQualityUi(targetQ);
+      });
+    });
+    eventBus.on('map3d:quality-changed', (payload) => syncQuickQualityUi(payload?.quality));
 
     eventBus.on('ui:open-sandbox-fork', openForkDialog);
     eventBus.on('auth:changed', () => {
@@ -1081,22 +1128,17 @@ class NetMapApp {
       this.map3DEngine?.setAllInteractiveDoorsOpen?.(false);
     });
 
-    // Mode Hemat Grafis HP ('lite' <-> 'standard') in Settings dropdown
+    // 4-Tier 3D Graphics Quality ('lite' -> 'standard' -> 'high' -> 'ultra') in Settings dropdown
     const btn3dQuality = document.getElementById('btn-settings-3d-quality');
-    const badge3dQuality = document.getElementById('badge-menu-3d-quality');
-    const syncQualityBadge = () => {
-      if (!badge3dQuality || !this.map3DEngine) return;
-      const q = this.map3DEngine.getGraphicsQuality?.() || 'standard';
-      badge3dQuality.textContent = q === 'lite' ? 'Hemat HP' : 'Standar';
-    };
-    syncQualityBadge();
+    const QUALITY_CYCLE = ['lite', 'standard', 'high', 'ultra'];
+    this._sync3dQualityUi?.();
     btn3dQuality?.addEventListener('click', () => {
       if (!this.map3DEngine) return;
-      const next = this.map3DEngine.getGraphicsQuality?.() === 'lite' ? 'standard' : 'lite';
+      const cur = this.map3DEngine.getGraphicsQuality?.() || 'standard';
+      const next = QUALITY_CYCLE[(QUALITY_CYCLE.indexOf(cur) + 1) % QUALITY_CYCLE.length];
       this.map3DEngine.setGraphicsQuality?.(next);
-      syncQualityBadge();
+      this._sync3dQualityUi?.(next);
     });
-    eventBus.on('map3d:quality-changed', syncQualityBadge);
 
     // Direct 1-tap open simulator from 3D Port Inspector (#hud-3d-sim-inspector)
     eventBus.on('modal:open-simulator', ({ deviceId = null, tab = 'winbox' } = {}) => {
